@@ -36,11 +36,32 @@ trait Workflow[-I, +E, +A] { self =>
 
   final def as[B](b: => B): Workflow[I, E, B] = self.map(_ => b)
 
+  final def catchAll[I1 <: I, E1 >: E, E2, A1 >: A](f: E => Workflow[I1, E2, A1]): Workflow[I1, E2, A1] =
+    self.foldM(f, Workflow(_))
+
   final def flatMap[I1 <: I, E1 >: E, B](f: A => Workflow[I1, E1, B]): Workflow[I1, E1, B] =
-    Workflow.FlatMap(self, f)
+    Workflow.Fold(self, (cause: Cause[E1]) => Workflow.Halt(cause), f)
+
+  final def foldCauseM[I1 <: I, E1 >: E, E2, B](
+    error: Cause[E] => Workflow[I1, E2, B],
+    success: A => Workflow[I1, E2, B]
+  ): Workflow[I1, E2, B] =
+    Workflow.Fold(self, error, success)
+
+  final def foldM[I1 <: I, E1 >: E, E2, B](
+    error: E => Workflow[I1, E2, B],
+    success: A => Workflow[I1, E2, B]
+  ): Workflow[I1, E2, B] =
+    self.foldCauseM(c => c.failureOrCause.fold(error, Workflow.Halt(_)), success)
 
   final def map[B](f: A => B): Workflow[I, E, B] =
     self.flatMap(a => Workflow(f(a)))
+
+  final def orElse[I1 <: I, E2, A1 >: A](that: Workflow[I1, E2, A1]): Workflow[I1, E2, A1] =
+    self.catchAll(_ => that)
+
+  final def orElseEither[I1 <: I, E2, B](that: Workflow[I1, E2, B]): Workflow[I1, E2, Either[A, B]] =
+    self.map(Left(_)).catchAll(_ => that.map(Right(_)))
 
   final def unit: Workflow[I, E, Unit] = as(())
 
@@ -48,13 +69,18 @@ trait Workflow[-I, +E, +A] { self =>
     self.flatMap(a => that.map(b => a -> b))
 }
 object Workflow            {
-  final case class Return[A](value: () => A)                                                extends Workflow[Any, Nothing, A]
-  final case class FlatMap[I, E, A, B](value: Workflow[I, E, A], k: A => Workflow[I, E, B]) extends Workflow[I, E, B]
-  final case class Modify[A, B](svar: StateVar[A], f: A => (B, A))                          extends Workflow[Any, Nothing, B]
-  final case class RunActivity[E, A](activity: Activity[E, A])                              extends Workflow[Any, E, A]
-  final case class Transaction[I, E, A](workflow: Workflow[I, E, A])                        extends Workflow[I, E, A]
+  final case class Return[A](value: A)                                         extends Workflow[Any, Nothing, A]
+  final case class Halt[E](value: Cause[E])                                    extends Workflow[Any, E, Nothing]
+  final case class Modify[A, B](svar: StateVar[A], f: A => (B, A))             extends Workflow[Any, Nothing, B]
+  final case class Fold[I, E1, E2, A, B](
+    value: Workflow[I, E1, A],
+    ke: Cause[E1] => Workflow[I, E2, B],
+    ks: A => Workflow[I, E2, B]
+  )                                                                            extends Workflow[I, E2, B]
+  final case class RunActivity[I, E, A](input: I, activity: Activity[I, E, A]) extends Workflow[Any, E, A]
+  final case class Transaction[I, E, A](workflow: Workflow[I, E, A])           extends Workflow[I, E, A]
 
-  def apply[A](a: => A): Workflow[Any, Nothing, A] = Return(() => a)
+  def apply[A](a: A): Workflow[Any, Nothing, A] = Return(a)
 
   def define[I, S, E, A](name: String, constructor: Constructor[S])(body: S => Workflow[I, E, A]) = ???
 
@@ -99,15 +125,17 @@ trait StateVar[A] { self =>
   def update(f: A => A): Workflow[Any, Nothing, Unit] = updateAndGet(f).unit
 }
 
-sealed trait Activity[+E, +A] { self =>
-  def run: Workflow[Any, E, A] = Workflow.RunActivity(self)
+sealed trait Activity[-I, +E, +A] { self =>
+  def run(input: I): Workflow[Any, E, A] = Workflow.RunActivity(input, self)
 }
-object Activity               {
-  final case class Effect[E, A](
-    effect: ZIO[Any, E, A],
+object Activity                   {
+  final case class Effect[I, E, A](
+    uniqueIdentifier: String,
+    effect: I => ZIO[Any, E, A],
     completed: ZIO[Any, E, Boolean],
-    compensation: A => ZIO[Any, E, Unit]
-  ) extends Activity[E, A]
+    compensation: A => ZIO[Any, E, Unit],
+    description: String
+  ) extends Activity[I, E, A]
 }
 
 object Example {
@@ -115,7 +143,8 @@ object Example {
 
   type OrderId = Int
 
-  def refundOrder(orderId: OrderId): Activity[Nothing, Unit] = ???
+  lazy val refundOrder: Activity[OrderId, Nothing, Unit] =
+    Activity.Effect("refund-order", ???, ???, ???, "Refunds an order with the specified orderId")
 
   val stateConstructor =
     for {
@@ -132,7 +161,7 @@ object Example {
           Workflow.transaction {
             intVar.set(orderId) *>
               boolVar.set(true) *>
-              refundOrder(orderId).run *>
+              refundOrder.run(orderId) *>
               listVar.set(Nil)
           }
         )
