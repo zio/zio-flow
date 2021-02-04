@@ -23,7 +23,7 @@ addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("fix", "; all compile:scalafix test:scalafix; all scalafmtSbt scalafmtAll")
 addCommandAlias("check", "; scalafmtSbtCheck; scalafmtCheckAll; compile:scalafix --check; test:scalafix --check")
 
-val zioVersion = "1.0.4"
+val zioVersion = "1.0.4-2"
 
 lazy val root = project
   .in(file("."))
@@ -72,4 +72,5 @@ lazy val docs = project
     docusaurusCreateSite := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
     docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(unidoc in Compile).value
   )
+  .dependsOn(zioFlowJVM)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
