@@ -2,6 +2,8 @@ package zio.flow
 
 import zio._
 
+import scala.language.implicitConversions
+
 //
 // Workflow - models a workflow
 //  - terminate, either error or value
@@ -21,23 +23,35 @@ import zio._
 // zio.schema
 trait Schema[A]
 object Schema {
-  implicit def listSchema[A: Schema]: Schema[List[A]] = ???
-  implicit def stringSchema: Schema[String]           = ???
-  implicit def intSchema: Schema[Int]                 = ???
-  implicit def boolSchema: Schema[Boolean]            = ???
+  implicit def nilSchema: Schema[Nil.type]                              = ???
+  implicit def listSchema[A: Schema]: Schema[List[A]]                   = ???
+  implicit def stringSchema: Schema[String]                             = ???
+  implicit def intSchema: Schema[Int]                                   = ???
+  implicit def unitSchema: Schema[Unit]                                 = ???
+  implicit def boolSchema: Schema[Boolean]                              = ???
+  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]]          = ???
+  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]]        = ???
+  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]       = ???
+  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
 }
 
-trait Workflow[-I, +E, +A] { self =>
-  final def *>[I1 <: I, E1 >: E, B](that: Workflow[I1, E1, B]): Workflow[I1, E1, B] =
-    self.zip(that).map(_._2)
+sealed trait Workflow[-I, +E, +A] { self =>
+  final def *>[I1 <: I, E1 >: E, A1 >: A, B](
+    that: Workflow[I1, E1, B]
+  )(implicit A1: Schema[A1], B: Schema[B]): Workflow[I1, E1, B] =
+    (self: Workflow[I, E, A1]).zip(that).map(_._2)
 
-  final def <*[I1 <: I, E1 >: E](that: Workflow[I1, E1, Any]): Workflow[I1, E1, A] =
-    self.zip(that).map(_._1)
+  final def <*[I1 <: I, E1 >: E, A1 >: A, B](
+    that: Workflow[I1, E1, B]
+  )(implicit A1: Schema[A1], B: Schema[B]): Workflow[I1, E1, A1] =
+    (self: Workflow[I, E, A1]).zip(that).map(_._1)
 
-  final def as[B](b: => B): Workflow[I, E, B] = self.map(_ => b)
+  final def as[B](b: => B)(implicit s: Schema[B]): Workflow[I, E, B] = self.map(_ => b)
 
-  final def catchAll[I1 <: I, E1 >: E, E2, A1 >: A](f: E => Workflow[I1, E2, A1]): Workflow[I1, E2, A1] =
-    self.foldM(f, Workflow(_))
+  final def catchAll[I1 <: I, E1 >: E, A1 >: A, E2](f: E => Workflow[I1, E2, A1])(implicit
+    A1: Schema[A1]
+  ): Workflow[I1, E2, A1] =
+    (self: Workflow[I, E, A1]).foldM(f, Workflow(_))
 
   final def flatMap[I1 <: I, E1 >: E, B](f: A => Workflow[I1, E1, B]): Workflow[I1, E1, B] =
     Workflow.Fold(self, (cause: Cause[E1]) => Workflow.Halt(cause), f)
@@ -54,79 +68,85 @@ trait Workflow[-I, +E, +A] { self =>
   ): Workflow[I1, E2, B] =
     self.foldCauseM(c => c.failureOrCause.fold(error, Workflow.Halt(_)), success)
 
-  final def map[B](f: A => B): Workflow[I, E, B] =
+  final def map[B: Schema](f: A => B): Workflow[I, E, B] =
     self.flatMap(a => Workflow(f(a)))
 
-  final def orElse[I1 <: I, E2, A1 >: A](that: Workflow[I1, E2, A1]): Workflow[I1, E2, A1] =
-    self.catchAll(_ => that)
+  final def orElse[I1 <: I, E2, A1 >: A](that: Workflow[I1, E2, A1])(implicit A1: Schema[A1]): Workflow[I1, E2, A1] =
+    (self: Workflow[I, E, A1]).catchAll(_ => that)
 
-  final def orElseEither[I1 <: I, E2, B](that: Workflow[I1, E2, B]): Workflow[I1, E2, Either[A, B]] =
-    self.map(Left(_)).catchAll(_ => that.map(Right(_)))
+  final def orElseEither[I1 <: I, E2, A1 >: A, B](
+    that: Workflow[I1, E2, B]
+  )(implicit A1: Schema[A1], b: Schema[B]): Workflow[I1, E2, Either[A1, B]] =
+    (self: Workflow[I, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
 
   final def unit: Workflow[I, E, Unit] = as(())
 
-  final def zip[I1 <: I, E1 >: E, B](that: Workflow[I1, E1, B]): Workflow[I1, E1, (A, B)] =
-    self.flatMap(a => that.map(b => a -> b))
+  final def zip[I1 <: I, E1 >: E, A1 >: A, B](
+    that: Workflow[I1, E1, B]
+  )(implicit A1: Schema[A1], B: Schema[B]): Workflow[I1, E1, (A1, B)] =
+    (self: Workflow[I, E, A1]).flatMap(a => that.map(b => a -> b))
 }
-object Workflow            {
-  final case class Return[A](value: A)                                         extends Workflow[Any, Nothing, A]
-  final case class Halt[E](value: Cause[E])                                    extends Workflow[Any, E, Nothing]
-  final case class Modify[A, B](svar: StateVar[A], f: A => (B, A))             extends Workflow[Any, Nothing, B]
+object Workflow                   {
+  final case class Return[A](value: A, schema: Schema[A])                            extends Workflow[Any, Nothing, A]
+  final case class Halt[E](value: Cause[E])                                          extends Workflow[Any, E, Nothing]
+  final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])       extends Workflow[Any, Nothing, Expr[B]]
   final case class Fold[I, E1, E2, A, B](
     value: Workflow[I, E1, A],
     ke: Cause[E1] => Workflow[I, E2, B],
     ks: A => Workflow[I, E2, B]
-  )                                                                            extends Workflow[I, E2, B]
-  final case class RunActivity[I, E, A](input: I, activity: Activity[I, E, A]) extends Workflow[Any, E, A]
-  final case class Transaction[I, E, A](workflow: Workflow[I, E, A])           extends Workflow[I, E, A]
+  )                                                                                  extends Workflow[I, E2, B]
+  final case class RunActivity[I, E, A](input: Expr[I], activity: Activity[I, E, A]) extends Workflow[Any, E, A]
+  final case class Transaction[I, E, A](workflow: Workflow[I, E, A])                 extends Workflow[I, E, A]
 
-  def apply[A](a: A): Workflow[Any, Nothing, A] = Return(a)
+  def apply[A: Schema](a: A): Workflow[Any, Nothing, A] = Return(a, implicitly[Schema[A]])
 
   def define[I, S, E, A](name: String, constructor: Constructor[S])(body: S => Workflow[I, E, A]) = ???
 
-  def input[I: Schema]: Workflow[I, Nothing, I] = ???
+  def input[I: Schema]: Workflow[I, Nothing, Expr[I]] = ???
 
   def transaction[I, E, A](workflow: Workflow[I, E, A]): Workflow[I, E, A] = Transaction(workflow)
 }
 
 sealed trait Constructor[+A] { self =>
-  final def flatMap[B](f: A => Constructor[B]): Constructor[B] =
+  final def flatMap[B](f: Expr[A] => Constructor[B]): Constructor[B] =
     Constructor.FlatMap(self, f)
 
-  final def map[B](f: A => B): Constructor[B] =
+  final def map[B](f: Expr[A] => Expr[B]): Constructor[B] =
     self.flatMap(a => Constructor.Return(f(a)))
 
   final def zip[B](that: Constructor[B]): Constructor[(A, B)] =
     self.flatMap(a => that.map(b => a -> b))
 }
 object Constructor           {
-  final case class Return[A](value: A)                                          extends Constructor[A]
-  final case class NewVar[A](defaultValue: A, schema: Schema[A])                extends Constructor[StateVar[A]]
-  final case class FlatMap[A, B](value: Constructor[A], k: A => Constructor[B]) extends Constructor[B]
+  final case class Return[A](value: Expr[A])                                          extends Constructor[A]
+  final case class NewVar[A](defaultValue: Expr[A])                                   extends Constructor[StateVar[A]]
+  final case class FlatMap[A, B](value: Constructor[A], k: Expr[A] => Constructor[B]) extends Constructor[B]
 
-  def apply[A](a: A): Constructor[A] = Return(a)
+  def apply[A: Schema](a: A): Constructor[A] = Return(a)
 
-  def newVar[A: Schema](value: A): Constructor[StateVar[A]] = NewVar(value, implicitly[Schema[A]])
+  def newVar[A](value: Expr[A]): Constructor[StateVar[A]] = NewVar(value)
 }
 
 trait StateVar[A] { self =>
-  def get: Workflow[Any, Nothing, A] = modify(a => (a, a))
+  def get: Workflow[Any, Nothing, Expr[A]] = modify(a => (a, a))
 
-  def set(a: A): Workflow[Any, Nothing, Unit] = modify(_ => ((), a))
+  def set(a: Expr[A]): Workflow[Any, Nothing, Expr[Unit]] =
+    modify[Unit](_ => ((), a))
 
-  def modify[B](f: A => (B, A)): Workflow[Any, Nothing, B] =
-    Workflow.Modify(self, f)
+  def modify[B](f: Expr[A] => (Expr[B], Expr[A])): Workflow[Any, Nothing, Expr[B]] =
+    Workflow.Modify(self, (e: Expr[A]) => Expr.tuple2(f(e)))
 
-  def updateAndGet(f: A => A): Workflow[Any, Nothing, A] =
+  def updateAndGet(f: Expr[A] => Expr[A]): Workflow[Any, Nothing, Expr[A]] =
     modify { a =>
-      val a2 = f(a); (a2, a2)
+      val a2 = f(a)
+      (a2, a2)
     }
 
-  def update(f: A => A): Workflow[Any, Nothing, Unit] = updateAndGet(f).unit
+  def update(f: Expr[A] => Expr[A]): Workflow[Any, Nothing, Unit] = updateAndGet(f).unit
 }
 
 sealed trait Activity[-I, +E, +A] { self =>
-  def run(input: I): Workflow[Any, E, A] = Workflow.RunActivity(input, self)
+  def run(input: Expr[I]): Workflow[Any, E, A] = Workflow.RunActivity(input, self)
 }
 object Activity                   {
   final case class Effect[I, E, A](
@@ -138,7 +158,42 @@ object Activity                   {
   ) extends Activity[I, E, A]
 }
 
+sealed trait Expr[+A] { self =>
+  final def ->[B](that: Expr[B]): Expr[(A, B)] = Expr.tuple2((self, that))
+
+  final def +(that: Expr[Int])(implicit ev: A <:< Int): Expr[Int] =
+    Expr.AddInt(self.widen[Int], that)
+
+  final def widen[B](implicit ev: A <:< B): Expr[B] = {
+    val _ = ev
+
+    self.asInstanceOf[Expr[B]]
+  }
+}
+object Expr           {
+  final case class Literal[A](value: A, schema: Schema[A])                extends Expr[A]
+  final case class Variable[A](identifier: String)                        extends Expr[A]
+  final case class AddInt(left: Expr[Int], right: Expr[Int])              extends Expr[Int]
+  final case class Tuple2[A, B](left: Expr[A], right: Expr[B])            extends Expr[(A, B)]
+  final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)]
+
+  implicit def apply[A: Schema](value: A): Expr[A] =
+    Literal(value, implicitly[Schema[A]])
+
+  implicit def tuple2[A, B](t: (Expr[A], Expr[B])): Expr[(A, B)] =
+    Tuple2(t._1, t._2)
+
+  implicit def tuple3[A, B, C](t: (Expr[A], Expr[B], Expr[C])): Expr[(A, B, C)] =
+    Tuple3(t._1, t._2, t._3)
+
+  val unit: Expr[Unit] = Expr(())
+
+  implicit def schemaExpr[A]: Schema[A] = ???
+}
+
 object Example {
+  // Expr[A] => Expr[(B, A)]
+
   import Constructor._
 
   type OrderId = Int
@@ -159,7 +214,7 @@ object Example {
         .input[OrderId]
         .flatMap(orderId =>
           Workflow.transaction {
-            intVar.set(orderId) *>
+            intVar.update(_ + orderId) *>
               boolVar.set(true) *>
               refundOrder.run(orderId) *>
               listVar.set(Nil)
