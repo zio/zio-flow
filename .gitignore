@@ -409,6 +409,7 @@ project/plugins/project/
 metals.sbt
 .bloop/
 project/secret
+.bsp/
 
 # mdoc
 website/node_modules

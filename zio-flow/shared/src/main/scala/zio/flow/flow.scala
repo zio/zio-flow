@@ -146,14 +146,14 @@ object Example {
   lazy val refundOrder: Activity[OrderId, Nothing, Unit] =
     Activity.Effect("refund-order", ???, ???, ???, "Refunds an order with the specified orderId")
 
-  val stateConstructor =
+  val stateConstructor: Constructor[(StateVar[Int], StateVar[Boolean], StateVar[List[String]])] =
     for {
       intVar  <- newVar[Int](0)
       boolVar <- newVar[Boolean](false)
       listVar <- newVar[List[String]](Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess =
+  val orderProcess: Nothing =
     Workflow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
       Workflow
         .input[OrderId]
