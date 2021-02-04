@@ -1,8 +1,8 @@
 package zio.flow
 
-import zio._
-
 import scala.language.implicitConversions
+
+import zio._
 
 //
 // Workflow - models a workflow
