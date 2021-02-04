@@ -22,7 +22,7 @@ jobs:
       - name: Cache scala dependencies
         uses: coursier/cache-action@v5
       - name: Lint code
-        run: sbt check
+        run: sbt fmtCheck fixCheck
   
   test:
     runs-on: ubuntu-20.04
@@ -48,7 +48,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-20.04
-    needs: [test, lint]
+    needs: [lint, test]
     if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v2.3.4

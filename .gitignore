@@ -410,6 +410,7 @@ metals.sbt
 .bloop/
 project/secret
 .bsp/
+.vscode/
 
 # mdoc
 website/node_modules
