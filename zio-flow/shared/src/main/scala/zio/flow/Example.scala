@@ -17,12 +17,12 @@ object Example {
       listVar <- newVar[List[String]](Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess: Nothing =
-    Workflow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
-      Workflow
+  val orderProcess =
+    ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
+      ZFlow
         .input[OrderId]
         .flatMap(orderId =>
-          Workflow.transaction {
+          ZFlow.transaction {
             intVar.update(_ + orderId) *>
               boolVar.set(true) *>
               refundOrder.run(orderId) *>

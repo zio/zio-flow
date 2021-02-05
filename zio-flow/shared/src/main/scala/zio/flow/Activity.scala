@@ -3,7 +3,7 @@ package zio.flow
 import zio.ZIO
 
 sealed trait Activity[-I, +E, +A] { self =>
-  def run(input: Expr[I]): Workflow[Any, E, A] = Workflow.RunActivity(input, self)
+  def run(input: Expr[I]): ZFlow[Any, E, A] = ZFlow.RunActivity(input, self)
 }
 object Activity                   {
   final case class Effect[I, E, A](
