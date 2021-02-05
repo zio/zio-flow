@@ -2,7 +2,6 @@ package zio.flow
 
 import zio.ZIO
 
-
 sealed trait Activity[-I, +E, +A] { self =>
   def run(input: Expr[I]): Workflow[Any, E, A] = Workflow.RunActivity(input, self)
 }

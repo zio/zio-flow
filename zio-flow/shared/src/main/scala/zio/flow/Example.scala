@@ -2,7 +2,7 @@ package zio.flow
 
 object Example {
   import Constructor._
-  
+
   // Expr[A] => Expr[(B, A)]
 
   type OrderId = Int
