@@ -71,12 +71,18 @@ object ZFlow                   {
   final case class Define[I, S, E, A](name: String, constructor: Constructor[S], body: S => ZFlow[I, E, A])
       extends ZFlow[I, E, A]
 
+  final case class Foreach[I, E, A, B](values: Expr[List[A]], body: Expr[A] => ZFlow[I, E, B])
+      extends ZFlow[I, E, List[B]]
+
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Expr(a))
 
   def apply[A](expr: Expr[A]): ZFlow[Any, Nothing, A] = Return(expr)
 
   def define[I, S, E, A](name: String, constructor: Constructor[S])(body: S => ZFlow[I, E, A]): ZFlow[I, E, A] =
     Define(name, constructor, body)
+
+  def foreach[I, E, A, B](values: Expr[List[A]])(body: Expr[A] => ZFlow[I, E, B]): ZFlow[I, E, List[B]] =
+    Foreach(values, body)
 
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
 

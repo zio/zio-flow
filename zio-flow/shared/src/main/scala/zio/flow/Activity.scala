@@ -1,16 +1,12 @@
 package zio.flow
 
-import zio.ZIO
-
-sealed trait Activity[-I, +E, +A] { self =>
-  def run(input: Expr[I]): ZFlow[Any, E, A] = ZFlow.RunActivity(input, self)
+final case class Activity[-I, +E, A](
+  name: String,
+  description: String,
+  perform: Operation[I, E, A],
+  check: Option[Operation[I, E, A]],
+  compensate: Operation[A, E, Unit]
+)               { self =>
+  def apply(input: Expr[I]): ZFlow[Any, E, A] = ZFlow.RunActivity(input, self)
 }
-object Activity                   {
-  final case class Effect[I, E, A](
-    uniqueIdentifier: String,
-    effect: I => ZIO[Any, E, A],
-    completed: ZIO[Any, E, Boolean],
-    compensation: A => ZIO[Any, E, Unit],
-    description: String
-  ) extends Activity[I, E, A]
-}
+object Activity {}
