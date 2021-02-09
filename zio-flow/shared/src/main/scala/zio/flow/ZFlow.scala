@@ -39,6 +39,11 @@ sealed trait ZFlow[-I, +E, +A] { self =>
     success: Expr[A] => ZFlow[I1, E2, B]
   ): ZFlow[I1, E2, B] = ZFlow.Fold(self, error, success)
 
+  final def ifThenElse[I1 <: I, E1 >: E, B](ifTrue: ZFlow[I1, E1, B], ifFalse: ZFlow[I1, E1, B])(implicit
+    ev: A <:< Boolean
+  ): ZFlow[I1, E1, B] =
+    self.widen[Boolean].flatMap(bool => ZFlow.unwrap(bool.ifThenElse(Expr(ifTrue), Expr(ifFalse))))
+
   final def map[B](f: Expr[A] => Expr[B]): ZFlow[I, E, B] =
     self.flatMap(a => ZFlow(f(a)))
 
@@ -56,10 +61,17 @@ sealed trait ZFlow[-I, +E, +A] { self =>
     that: ZFlow[I1, E1, B]
   )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[I1, E1, (A1, B)] =
     (self: ZFlow[I, E, A1]).flatMap(a => that.map(b => a -> b))
+
+  final def widen[A0](implicit ev: A <:< A0): ZFlow[I, E, A0] = {
+    val _ = ev
+
+    self.asInstanceOf[ZFlow[I, E, A0]]
+  }
 }
 object ZFlow                   {
   final case class Return[A](value: Expr[A])                                         extends ZFlow[Any, Nothing, A]
   final case class Halt[E](value: Expr[E])                                           extends ZFlow[Any, E, Nothing]
+  final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])       extends ZFlow[Any, Nothing, B]
   final case class Fold[I, E1, E2, A, B](
     value: ZFlow[I, E1, A],
     ke: Expr[E1] => ZFlow[I, E2, B],
@@ -70,6 +82,7 @@ object ZFlow                   {
   final case class Input[I](schema: Schema[I])                                       extends ZFlow[I, Nothing, I]
   final case class Define[I, S, E, A](name: String, constructor: Constructor[S], body: S => ZFlow[I, E, A])
       extends ZFlow[I, E, A]
+  final case class Unwrap[I, E, A](expr: Expr[ZFlow[I, E, A]])                       extends ZFlow[I, E, A]
 
   final case class Foreach[I, E, A, B](values: Expr[List[A]], body: Expr[A] => ZFlow[I, E, B])
       extends ZFlow[I, E, List[B]]
@@ -88,4 +101,9 @@ object ZFlow                   {
 
   def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
     Transaction(workflow)
+
+  def unwrap[I, E, A](expr: Expr[ZFlow[I, E, A]]): ZFlow[I, E, A] =
+    Unwrap(expr)
+
+  implicit def schemaZFlow[I, E, A]: Schema[ZFlow[I, E, A]] = ???
 }

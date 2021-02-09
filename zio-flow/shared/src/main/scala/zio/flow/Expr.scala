@@ -61,6 +61,9 @@ sealed trait Expr[+A] { self =>
   final def ifThenElse[B](ifTrue: Expr[B], ifFalse: Expr[B])(implicit ev: A <:< Boolean): Expr[B] =
     Expr.Branch(self.widen[Boolean], ifTrue, ifFalse)
 
+  final def iterate[A1 >: A](iterate: Expr[A1] => Expr[A1])(predicate: Expr[A1] => Expr[Boolean]): Expr[A1] =
+    Expr.Iterate(self, iterate, predicate)
+
   final def length[A0](implicit ev: A <:< List[A0]): Expr[Int] =
     self.fold[A0, Int](0)((len, _) => len + 1)
 
@@ -92,8 +95,9 @@ object Expr           {
   final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A])           extends Expr[Boolean]
   final case class Not[A](value: Expr[Boolean])                                                     extends Expr[Boolean]
   final case class And[A](left: Expr[Boolean], right: Expr[Boolean])                                extends Expr[Boolean]
-  final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])                      extends Expr[B]
   final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B]
+  final case class Iterate[A](initial: Expr[A], iterate: Expr[A] => Expr[A], predicate: Expr[A] => Expr[Boolean])
+      extends Expr[A]
 
   implicit def apply[A: Schema](value: A): Expr[A] =
     Literal(value, implicitly[Schema[A]])
