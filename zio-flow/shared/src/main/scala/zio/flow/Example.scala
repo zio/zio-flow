@@ -7,7 +7,7 @@ object Example {
 
   type OrderId = Int
 
-  lazy val refundOrder: Activity[OrderId,Nothing,Unit] =
+  lazy val refundOrder: Activity[OrderId, Nothing, Unit] =
     Activity[OrderId, Nothing, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
   val stateConstructor: Constructor[(StateVar[Int], StateVar[Boolean], StateVar[List[String]])] =
@@ -17,7 +17,7 @@ object Example {
       listVar <- newVar[List[String]](Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess: ZFlow[OrderId,Nothing,Unit] =
+  val orderProcess: ZFlow[OrderId, Nothing, Unit] =
     ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
       ZFlow
         .input[OrderId]
@@ -39,7 +39,7 @@ object EmailCampaign {
   type Review     = Int
   type Restaurant = String
 
-  lazy val getRestaurants: Activity[(City, Cuisine),Nothing,List[Restaurant]] =
+  lazy val getRestaurants: Activity[(City, Cuisine), Nothing, List[Restaurant]] =
     Activity[(City, Cuisine), Nothing, List[Restaurant]](
       "get-restaurants",
       "Gets the restaurants for a given city and cuisine",
@@ -48,10 +48,10 @@ object EmailCampaign {
       ???
     )
 
-  lazy val getReviews: Activity[Restaurant,Nothing,Review] =
+  lazy val getReviews: Activity[Restaurant, Nothing, Review] =
     Activity[Restaurant, Nothing, Review]("get-reviews", "Gets the reviews of a specified restaurant", ???, ???, ???)
 
-  lazy val sendEmail: Activity[EmailRequest,Throwable,Unit] =
+  lazy val sendEmail: Activity[EmailRequest, Throwable, Unit] =
     Activity[EmailRequest, Throwable, Unit]("send-email", "sends an email", ???, ???, ???)
 
   /**
@@ -59,13 +59,23 @@ object EmailCampaign {
    * 2. If there are 2 days of good reviews, we send a coupon to people
    *    in that city for restaurants in that category.
    */
-  lazy val emailCampaign: ZFlow[(City, Cuisine), Throwable, Any] =
+  lazy val emailCampaign: ZFlow[(City, Cuisine), Throwable, Any] = {
+    def waitForPositiveReviews(restaurants: Expr[List[Restaurant]]) =
+      ZFlow(0).iterate((count: Expr[Int]) =>
+        for {
+          reviews  <- ZFlow.foreach(restaurants) { restaurant =>
+                        getReviews(restaurant)
+                      }
+          good     <- ZFlow(reviews.fold[Review, Review](0)((total, cur) => total + cur) / reviews.length)
+          newCount <- (good > 5).ifThenElse(count + 1, 0)
+        } yield newCount
+      )(_ < 3)
+
     for {
       tuple       <- ZFlow.input[(City, Cuisine)]
       restaurants <- getRestaurants(tuple)
-      reviews     <- ZFlow.foreach(restaurants) { restaurant =>
-                       getReviews(restaurant)
-                     }
-      good        <- ZFlow(reviews.fold[Review, Review](0)((total, cur) => total + cur) / reviews.length)
-    } yield good
+      _           <- waitForPositiveReviews(restaurants)
+      _           <- sendEmail(???)
+    } yield ()
+  }
 }

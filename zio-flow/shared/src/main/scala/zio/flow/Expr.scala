@@ -46,6 +46,8 @@ object Expr             {
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]]
+  final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
+      extends Expr[C]
   final case class Tuple2[A, B](left: Expr[A], right: Expr[B])                                      extends Expr[(A, B)]
   final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C])                           extends Expr[(A, B, C)]
   final case class First[A, B](tuple: Expr[(A, B)])                                                 extends Expr[A]
