@@ -39,10 +39,22 @@ sealed trait ZFlow[-I, +E, +A] { self =>
     success: Expr[A] => ZFlow[I1, E2, B]
   ): ZFlow[I1, E2, B] = ZFlow.Fold(self, error, success)
 
-  final def ifThenElse[I1 <: I, E1 >: E, B](ifTrue: ZFlow[I1, E1, B], ifFalse: ZFlow[I1, E1, B])(implicit
+  final def ifThenElse[I1 <: I, E1 >: E, B](ifTrue: => ZFlow[I1, E1, B], ifFalse: => ZFlow[I1, E1, B])(implicit
     ev: A <:< Boolean
   ): ZFlow[I1, E1, B] =
     self.widen[Boolean].flatMap(bool => ZFlow.unwrap(bool.ifThenElse(Expr(ifTrue), Expr(ifFalse))))
+
+  final def iterate[I1 <: I, E1 >: E, A1 >: A](
+    step: Expr[A1] => ZFlow[I1, E1, A1]
+  )(predicate: Expr[A1] => Expr[Boolean]): ZFlow[I1, E1, A1] =
+    self.flatMap { a =>
+      predicate(a).flatMap { bool =>
+        ZFlow(bool).ifThenElse(
+          step(a),
+          ZFlow(a)
+        )
+      }
+    }
 
   final def map[B](f: Expr[A] => Expr[B]): ZFlow[I, E, B] =
     self.flatMap(a => ZFlow(f(a)))

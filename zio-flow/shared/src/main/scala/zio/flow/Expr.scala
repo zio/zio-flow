@@ -1,6 +1,7 @@
 package zio.flow
 import scala.language.implicitConversions
 
+// TODO: Replace by ZIO Schema
 trait Schema[A]
 object Schema {
   implicit def nilSchema: Schema[Nil.type]                              = ???
@@ -16,56 +17,17 @@ object Schema {
   implicit def schemaNothing: Schema[Nothing]                           = ???
 }
 
-sealed trait Expr[+A] { self =>
-  final def _1[X, Y](implicit ev: A <:< (X, Y)): Expr[X] =
-    Expr.First(self.widen[(X, Y)])
-
-  final def _2[X, Y](implicit ev: A <:< (X, Y)): Expr[Y] =
-    Expr.Second(self.widen[(X, Y)])
-
-  final def ->[B](that: Expr[B]): Expr[(A, B)] = Expr.tuple2((self, that))
-
-  final def &&(that: Expr[Boolean])(implicit ev: A <:< Boolean): Expr[Boolean] =
-    Expr.And(self.widen[Boolean], that)
-
-  final def ||(that: Expr[Boolean])(implicit ev: A <:< Boolean): Expr[Boolean] =
-    !(!self && !that)
-
-  final def +(that: Expr[Int])(implicit ev: A <:< Int): Expr[Int] =
-    Expr.AddInt(self.widen[Int], that)
-
-  final def /(that: Expr[Int])(implicit ev: A <:< Int): Expr[Int] =
-    Expr.DivInt(self.widen[Int], that)
-
-  final def <[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    (self <= that) && (self !== that)
-
-  final def <=[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    Expr.LessThanEqual(self, that, implicitly[Sortable[A1]])
-
-  final def >[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    !(self <= that)
-
-  final def >=[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    (self > that) || (self === that)
-
-  final def !==[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    !(self === that)
-
-  final def ===[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
-    (self <= that) && (that <= self)
-
-  final def fold[A0, B](initial: Expr[B])(f: (Expr[B], Expr[A0]) => Expr[B])(implicit ev: A <:< List[A0]): Expr[B] =
-    Expr.Fold(self.widen[List[A0]], initial, (tuple: Expr[(B, A0)]) => f(tuple._1, tuple._2))
-
-  final def ifThenElse[B](ifTrue: Expr[B], ifFalse: Expr[B])(implicit ev: A <:< Boolean): Expr[B] =
-    Expr.Branch(self.widen[Boolean], ifTrue, ifFalse)
-
-  final def iterate[A1 >: A](iterate: Expr[A1] => Expr[A1])(predicate: Expr[A1] => Expr[Boolean]): Expr[A1] =
-    Expr.Iterate(self, iterate, predicate)
-
-  final def length[A0](implicit ev: A <:< List[A0]): Expr[Int] =
-    self.fold[A0, Int](0)((len, _) => len + 1)
+sealed trait Expr[+A]
+    extends ExprSortable[A]
+    with ExprBoolean[A]
+    with ExprTuple[A]
+    with ExprList[A]
+    with ExprNumeric[A] { self =>
+  final def iterate[A1 >: A](step: Expr[A1] => Expr[A1])(predicate: Expr[A1] => Expr[Boolean]): Expr[A1] =
+    predicate(self).ifThenElse(
+      step(self).iterate(step)(predicate),
+      self
+    )
 
   final def toFlow: ZFlow[Any, Nothing, A] = ZFlow(self)
 
@@ -76,16 +38,13 @@ sealed trait Expr[+A] { self =>
   }
 
   final def unit: Expr[Unit] = Expr.Ignore(self)
-
-  final def unary_!(implicit ev: A <:< Boolean): Expr[Boolean] =
-    Expr.Not(self.widen[Boolean])
 }
-object Expr           {
+object Expr             {
   final case class Literal[A](value: A, schema: Schema[A])                                          extends Expr[A]
   final case class Ignore[A](value: Expr[A])                                                        extends Expr[Unit]
   final case class Variable[A](identifier: String)                                                  extends Expr[A]
-  final case class AddInt(left: Expr[Int], right: Expr[Int])                                        extends Expr[Int]
-  final case class DivInt(left: Expr[Int], right: Expr[Int])                                        extends Expr[Int]
+  final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
+  final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]]
   final case class Tuple2[A, B](left: Expr[A], right: Expr[B])                                      extends Expr[(A, B)]
   final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C])                           extends Expr[(A, B, C)]
