@@ -7,7 +7,7 @@ object Example {
 
   type OrderId = Int
 
-  lazy val refundOrder =
+  lazy val refundOrder: Activity[OrderId,Nothing,Unit] =
     Activity[OrderId, Nothing, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
   val stateConstructor: Constructor[(StateVar[Int], StateVar[Boolean], StateVar[List[String]])] =
@@ -17,7 +17,7 @@ object Example {
       listVar <- newVar[List[String]](Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess =
+  val orderProcess: ZFlow[OrderId,Nothing,Unit] =
     ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
       ZFlow
         .input[OrderId]
@@ -39,7 +39,7 @@ object EmailCampaign {
   type Review     = Int
   type Restaurant = String
 
-  lazy val getRestaurants =
+  lazy val getRestaurants: Activity[(City, Cuisine),Nothing,List[Restaurant]] =
     Activity[(City, Cuisine), Nothing, List[Restaurant]](
       "get-restaurants",
       "Gets the restaurants for a given city and cuisine",
@@ -48,10 +48,10 @@ object EmailCampaign {
       ???
     )
 
-  lazy val getReviews =
+  lazy val getReviews: Activity[Restaurant,Nothing,Review] =
     Activity[Restaurant, Nothing, Review]("get-reviews", "Gets the reviews of a specified restaurant", ???, ???, ???)
 
-  lazy val sendEmail =
+  lazy val sendEmail: Activity[EmailRequest,Throwable,Unit] =
     Activity[EmailRequest, Throwable, Unit]("send-email", "sends an email", ???, ???, ???)
 
   /**
