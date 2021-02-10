@@ -1,6 +1,8 @@
 package zio.flow
 
-trait ExprSortable[+A] { self: Expr[A] =>
+trait ExprSortable[+A] {
+  def self: Expr[A]
+
   final def <[A1 >: A: Sortable](that: Expr[A1]): Expr[Boolean] =
     (self <= that) && (self !== that)
 

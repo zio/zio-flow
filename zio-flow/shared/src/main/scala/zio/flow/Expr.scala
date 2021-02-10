@@ -22,7 +22,9 @@ sealed trait Expr[+A]
     with ExprBoolean[A]
     with ExprTuple[A]
     with ExprList[A]
-    with ExprNumeric[A] { self =>
+    with ExprNumeric[A] {
+  def self: Expr[A] = this
+
   final def iterate[A1 >: A](step: Expr[A1] => Expr[A1])(predicate: Expr[A1] => Expr[Boolean]): Expr[A1] =
     predicate(self).ifThenElse(
       step(self).iterate(step)(predicate),

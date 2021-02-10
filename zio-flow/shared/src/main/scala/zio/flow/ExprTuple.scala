@@ -1,6 +1,8 @@
 package zio.flow
 
-trait ExprTuple[+A] { self: Expr[A] =>
+trait ExprTuple[+A] {
+  def self: Expr[A]
+
   final def _1[X, Y](implicit ev: A <:< (X, Y)): Expr[X] =
     Expr.First(self.widen[(X, Y)])
 

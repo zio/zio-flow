@@ -1,6 +1,8 @@
 package zio.flow
 
-trait ExprList[+A] { self: Expr[A] =>
+trait ExprList[+A] {
+  def self: Expr[A]
+
   final def fold[A0, B](initial: Expr[B])(f: (Expr[B], Expr[A0]) => Expr[B])(implicit ev: A <:< List[A0]): Expr[B] =
     Expr.Fold(self.widen[List[A0]], initial, (tuple: Expr[(B, A0)]) => f(tuple._1, tuple._2))
 
