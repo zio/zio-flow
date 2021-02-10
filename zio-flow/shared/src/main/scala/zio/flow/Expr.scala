@@ -70,7 +70,7 @@ object Expr              {
   final case class PowIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
     def schema = numeric.schema
   }
-  final case class Negation[A](value: Expr[A], numeric: Integral[A])                                 extends Expr[A]            {
+  final case class Negation[A](value: Expr[A], numeric: Integral[A])                                extends Expr[A]            {
     def schema = numeric.schema
   }
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]] {
