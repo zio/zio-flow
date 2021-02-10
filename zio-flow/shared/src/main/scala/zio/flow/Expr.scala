@@ -1,4 +1,4 @@
-package zio.flow
+gtpackage zio.flow
 import scala.language.implicitConversions
 
 // TODO: Replace by ZIO Schema
