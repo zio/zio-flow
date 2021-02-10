@@ -15,6 +15,10 @@ object Schema {
   implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]       = ???
   implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
   implicit def schemaNothing: Schema[Nothing]                           = ???
+  implicit def schemaDouble: Schema[Double]                             = ???
+  implicit def schemaShort: Schema[Short]                               = ???
+  implicit def schemaFloat: Schema[Float]                               = ???
+  implicit def schemaLong: Schema[Long]                                 = ???
 }
 
 sealed trait Expr[+A]
@@ -48,7 +52,8 @@ object Expr             {
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class MulNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
-  final case class SubNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
+  final case class DiffNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])               extends Expr[A]
+  final case class PowNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]]
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
       extends Expr[C]
