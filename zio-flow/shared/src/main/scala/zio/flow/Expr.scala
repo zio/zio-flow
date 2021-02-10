@@ -45,6 +45,8 @@ object Expr             {
   final case class Variable[A](identifier: String)                                                  extends Expr[A]
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
+  final case class MulNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
+  final case class SubNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A])                extends Expr[A]
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]]
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
       extends Expr[C]
