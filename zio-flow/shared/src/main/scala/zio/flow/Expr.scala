@@ -1,12 +1,15 @@
 package zio.flow
 import scala.language.implicitConversions
+
 import zio.schema._
 
 //TODO : Support for these needs to be added in zio-schema. Adding here to make the current code compile.
 object SchemaImplicit {
-  implicit def bigIntSchema: Schema[BigInt]         = ???
-  implicit def bigDecimalSchema: Schema[BigDecimal] = ???
-  implicit def nilSchema: Schema[Nil.type]          = ???
+  implicit def bigIntSchema: Schema[BigInt]                                      = ???
+  implicit def bigDecimalSchema: Schema[BigDecimal]                              = ???
+  implicit def nilSchema: Schema[Nil.type]                                       = ???
+  implicit def zip2[A, B](implicit c1: Schema[A], c2: Schema[B]): Schema[(A, B)] =
+    c1.zip(c2)
 }
 
 sealed trait Expr[+A]

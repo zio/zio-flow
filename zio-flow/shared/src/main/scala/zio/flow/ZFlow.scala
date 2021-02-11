@@ -112,10 +112,6 @@ object ZFlow                   {
 
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
 
-  def tuple2[A: Schema, B: Schema]: ZFlow[(A, B), Nothing, (A, B)] = Input(
-    Schema.zipN(implicitly[Schema[A]], implicitly[Schema[B]])
-  )
-
   def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
     Transaction(workflow)
 
