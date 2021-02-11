@@ -2,35 +2,11 @@ package zio.flow
 import scala.language.implicitConversions
 import zio.schema._
 
-// TODO: Replace by ZIO Schema
-// trait Schema[A]
-// object Schema {
-//   def apply[A](implicit schema: Schema[A]): Schema[A] = schema
-
-//   implicit def nilSchema: Schema[Nil.type]                                      = ???
-//   implicit def listSchema[A: Schema]: Schema[List[A]]                           = ???
-//   implicit def stringSchema: Schema[String]                                     = ???
-//   implicit def shortSchema: Schema[Short]                                       = ???
-//   implicit def intSchema: Schema[Int]                                           = ???
-//   implicit def longSchema: Schema[Long]                                         = ???
-//   implicit def floatSchema: Schema[Float]                                       = ???
-//   implicit def doubleSchema: Schema[Double]                                     = ???
-//   implicit def bigIntSchema: Schema[BigInt]                                     = ???
-//   implicit def bigDecimalSchema: Schema[BigDecimal]                             = ???
-//   implicit def unitSchema: Schema[Unit]                                         = ???
-//   implicit def boolSchema: Schema[Boolean]                                      = ???
-//   implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]]                  = ???
-//   implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]]                = ???
-//   implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]               = ???
-//   implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
-//   implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]]         = ???
-//   implicit def schemaNothing: Schema[Nothing]                                   = ???
-// }
-
+//TODO : Support for these needs to be added in zio-schema. Adding here to make the current code compile.
 object SchemaImplicit {
-  implicit def bigIntSchema: Schema[BigInt] = ???
+  implicit def bigIntSchema: Schema[BigInt]         = ???
   implicit def bigDecimalSchema: Schema[BigDecimal] = ???
-  implicit def nilSchema: Schema[Nil.type]                                      = ???
+  implicit def nilSchema: Schema[Nil.type]          = ???
 }
 
 sealed trait Expr[+A]

@@ -72,7 +72,7 @@ object EmailCampaign {
       )(_ < 3)
 
     for {
-      tuple       <- ZFlow.tuple2[String, String] 
+      tuple       <- ZFlow.tuple2[String, String]
       restaurants <- getRestaurants(tuple)
       _           <- waitForPositiveReviews(restaurants)
       _           <- sendEmail(???)

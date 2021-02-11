@@ -19,7 +19,7 @@ sealed trait IntegralImplicits0 {
   }
   implicit object IntegralFloat      extends Integral[Float]      {
     def schema: Schema[Float] = implicitly[Schema[Float]]
-  } 
+  }
   implicit object IntegralDouble     extends Integral[Double]     {
     def schema: Schema[Double] = implicitly[Schema[Double]]
   }
