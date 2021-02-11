@@ -1,4 +1,5 @@
 package zio.flow
+import zio.schema._
 
 //
 // ZFlow - models a workflow
@@ -64,7 +65,7 @@ sealed trait ZFlow[-I, +E, +A] { self =>
 
   final def orElseEither[I1 <: I, E2, A1 >: A, B](
     that: ZFlow[I1, E2, B]
-  )(implicit A1: Schema[A1], b: Schema[B]): ZFlow[I1, E2, Either[A1, B]] =
+  )(implicit A1: Schema[Either[A1, B]]): ZFlow[I1, E2, Either[A1, B]] =
     (self: ZFlow[I, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
 
   final def unit: ZFlow[I, E, Unit] = as(())
@@ -110,6 +111,8 @@ object ZFlow                   {
     Foreach(values, body)
 
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
+
+  def tuple2[A: Schema, B: Schema]: ZFlow[(A,B), Nothing, (A,B)] = Input(Schema.zipN(implicitly[Schema[A]],implicitly[Schema[B]]))
 
   def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
     Transaction(workflow)

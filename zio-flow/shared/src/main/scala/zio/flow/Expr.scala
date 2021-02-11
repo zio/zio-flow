@@ -1,29 +1,36 @@
 package zio.flow
 import scala.language.implicitConversions
+import zio.schema._
 
 // TODO: Replace by ZIO Schema
-trait Schema[A]
-object Schema {
-  def apply[A](implicit schema: Schema[A]): Schema[A] = schema
+// trait Schema[A]
+// object Schema {
+//   def apply[A](implicit schema: Schema[A]): Schema[A] = schema
 
+//   implicit def nilSchema: Schema[Nil.type]                                      = ???
+//   implicit def listSchema[A: Schema]: Schema[List[A]]                           = ???
+//   implicit def stringSchema: Schema[String]                                     = ???
+//   implicit def shortSchema: Schema[Short]                                       = ???
+//   implicit def intSchema: Schema[Int]                                           = ???
+//   implicit def longSchema: Schema[Long]                                         = ???
+//   implicit def floatSchema: Schema[Float]                                       = ???
+//   implicit def doubleSchema: Schema[Double]                                     = ???
+//   implicit def bigIntSchema: Schema[BigInt]                                     = ???
+//   implicit def bigDecimalSchema: Schema[BigDecimal]                             = ???
+//   implicit def unitSchema: Schema[Unit]                                         = ???
+//   implicit def boolSchema: Schema[Boolean]                                      = ???
+//   implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]]                  = ???
+//   implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]]                = ???
+//   implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]               = ???
+//   implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
+//   implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]]         = ???
+//   implicit def schemaNothing: Schema[Nothing]                                   = ???
+// }
+
+object SchemaImplicit {
+  implicit def bigIntSchema: Schema[BigInt] = ???
+  implicit def bigDecimalSchema: Schema[BigDecimal] = ???
   implicit def nilSchema: Schema[Nil.type]                                      = ???
-  implicit def listSchema[A: Schema]: Schema[List[A]]                           = ???
-  implicit def stringSchema: Schema[String]                                     = ???
-  implicit def shortSchema: Schema[Short]                                       = ???
-  implicit def intSchema: Schema[Int]                                           = ???
-  implicit def longSchema: Schema[Long]                                         = ???
-  implicit def floatSchema: Schema[Float]                                       = ???
-  implicit def doubleSchema: Schema[Double]                                     = ???
-  implicit def bigIntSchema: Schema[BigInt]                                     = ???
-  implicit def bigDecimalSchema: Schema[BigDecimal]                             = ???
-  implicit def unitSchema: Schema[Unit]                                         = ???
-  implicit def boolSchema: Schema[Boolean]                                      = ???
-  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]]                  = ???
-  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]]                = ???
-  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]               = ???
-  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
-  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]]         = ???
-  implicit def schemaNothing: Schema[Nothing]                                   = ???
 }
 
 sealed trait Expr[+A]
@@ -59,10 +66,10 @@ object Expr              {
   }
   final case class Variable[A](identifier: String, schema: Schema[A])                               extends Expr[A]
   final case class AddIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
-    def schema = numeric.schema
+    def schema = ???
   }
   final case class DivIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
-    def schema = numeric.schema
+    def schema = ???
   }
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]] {
     def schema = ???
@@ -71,7 +78,7 @@ object Expr              {
       extends Expr[C] {
     def schema = ???
   }
-  final case class Tuple2[A, B](left: Expr[A], right: Expr[B])                                      extends Expr[(A, B)]       {
+  final case class Tuple2[A, B](tuple: (Expr[A], Expr[B]))                                          extends Expr[(A, B)]       {
     def schema = ???
   }
   final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C])                           extends Expr[(A, B, C)]    {
@@ -107,7 +114,7 @@ object Expr              {
     Literal(value, implicitly[Schema[A]])
 
   implicit def tuple2[A, B](t: (Expr[A], Expr[B])): Expr[(A, B)] =
-    Tuple2(t._1, t._2)
+    Tuple2(t)
 
   implicit def tuple3[A, B, C](t: (Expr[A], Expr[B], Expr[C])): Expr[(A, B, C)] =
     Tuple3(t._1, t._2, t._3)

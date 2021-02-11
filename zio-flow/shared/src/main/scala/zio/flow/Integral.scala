@@ -1,4 +1,5 @@
 package zio.flow
+import zio.schema._
 
 sealed trait Integral[A] {
   def schema: Schema[A]
@@ -9,6 +10,7 @@ object Integral extends IntegralImplicits0 {
   }
 }
 sealed trait IntegralImplicits0 {
+  import SchemaImplicit._
   implicit object IntegralShort      extends Integral[Short]      {
     def schema: Schema[Short] = implicitly[Schema[Short]]
   }
@@ -17,7 +19,7 @@ sealed trait IntegralImplicits0 {
   }
   implicit object IntegralFloat      extends Integral[Float]      {
     def schema: Schema[Float] = implicitly[Schema[Float]]
-  }
+  } 
   implicit object IntegralDouble     extends Integral[Double]     {
     def schema: Schema[Double] = implicitly[Schema[Double]]
   }

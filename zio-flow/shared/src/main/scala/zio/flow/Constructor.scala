@@ -1,4 +1,5 @@
 package zio.flow
+import zio.schema._
 
 sealed trait Constructor[+A] { self =>
   final def flatMap[B](f: Expr[A] => Constructor[B]): Constructor[B] =

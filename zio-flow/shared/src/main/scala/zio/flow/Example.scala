@@ -1,7 +1,7 @@
 package zio.flow
-
 object Example {
   import Constructor._
+  import SchemaImplicit._
 
   // Expr[A] => Expr[(B, A)]
 
@@ -59,7 +59,7 @@ object EmailCampaign {
    * 2. If there are 2 days of good reviews, we send a coupon to people
    *    in that city for restaurants in that category.
    */
-  lazy val emailCampaign: ZFlow[(City, Cuisine), Throwable, Any] = {
+  lazy val emailCampaign = {
     def waitForPositiveReviews(restaurants: Expr[List[Restaurant]]) =
       ZFlow(0).iterate((count: Expr[Int]) =>
         for {
@@ -72,7 +72,7 @@ object EmailCampaign {
       )(_ < 3)
 
     for {
-      tuple       <- ZFlow.input[(City, Cuisine)]
+      tuple       <- ZFlow.tuple2[String, String] 
       restaurants <- getRestaurants(tuple)
       _           <- waitForPositiveReviews(restaurants)
       _           <- sendEmail(???)
