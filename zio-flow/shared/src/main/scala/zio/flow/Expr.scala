@@ -31,7 +31,9 @@ sealed trait Expr[+A]
     with ExprBoolean[A]
     with ExprTuple[A]
     with ExprList[A]
-    with ExprIntegral[A] {
+    with ExprIntegral[A]
+    with ExprInstant[A]
+    with ExprDuration[A] {
   def self: Expr[A] = this
 
   def schema: Schema[_ <: A]
@@ -51,6 +53,12 @@ sealed trait Expr[+A]
   }
 
   final def unit: Expr[Unit] = Expr.Ignore(self)
+
+  override def equals(that: Any): Boolean =
+    that match {
+      case that: Expr[a] => Expr.checkEquality(self, that)
+      case _             => false
+    }
 }
 object Expr              {
   final case class Literal[A](value: A, schema: Schema[A])                                          extends Expr[A]
@@ -111,9 +119,141 @@ object Expr              {
       extends Expr[A] {
     def schema = initial.schema
   }
+  final case class Lazy[A] private (value: () => Expr[A])                                           extends Expr[A]            {
+    def schema: Schema[_ <: A] = value().schema
+  }
+  object Lazy {
+    def apply[A](value: () => Expr[A]): Expr[A] = {
+      lazy val expr = value()
+
+      val value2: () => Expr[A] = () => expr
+
+      new Lazy(value2)
+    }
+  }
 
   implicit def apply[A: Schema](value: A): Expr[A] =
     Literal(value, implicitly[Schema[A]])
+
+  def checkEquality[A](self: Expr[A], that: Expr[Any]): Boolean = {
+    var counter: Int = 0
+
+    def freshIdentifier(): String = {
+      counter = counter + 1
+
+      s"var${counter}"
+    }
+
+    def loop[A](self: Expr[A], that: Expr[Any]): Boolean =
+      (self, that) match {
+        case (Literal(value1, schema1), Literal(value2, schema2)) =>
+          // TODO: Ensure ZIO Schema supports `==` and `hashCode`.
+          (value1 == value2) && (schema1 == schema2)
+
+        case (l: Ignore[l], Ignore(value2)) =>
+          loop(l.value, value2)
+
+        case (Variable(identifier1, schema1), Variable(identifier2, schema2)) =>
+          (identifier1 == identifier2) && (schema1 == schema2)
+
+        case (AddIntegral(left1, right1, numeric1), AddIntegral(left2, right2, numeric2)) =>
+          loop(left1, left2) &&
+            loop(right1, right1) &&
+            (numeric1 == numeric2)
+
+        case (DivIntegral(left1, right1, numeric1), DivIntegral(left2, right2, numeric2)) =>
+          loop(left1, left2) &&
+            loop(right1, right1) &&
+            (numeric1 == numeric2)
+
+        case (MulIntegral(left1, right1, numeric1), MulIntegral(left2, right2, numeric2)) =>
+          loop(left1, left2) &&
+            loop(right1, right1) &&
+            (numeric1 == numeric2)
+
+        case (PowIntegral(left1, right1, numeric1), PowIntegral(left2, right2, numeric2)) =>
+          loop(left1, left2) &&
+            loop(right1, right1) &&
+            (numeric1 == numeric2)
+
+        case (Negation(value1, numeric1), Negation(value2, numeric2)) =>
+          loop(value1, value2) && (numeric1 == numeric2)
+
+        case (l: Either0[l1, l2], Either0(either2)) =>
+          (l.either, either2) match {
+            case (Left(l), Left(r))   => loop(l, r)
+            case (Right(l), Right(r)) => loop(l, r)
+            case _                    => false
+          }
+
+        case (FoldEither(either1, left1, right1), FoldEither(either2, left2, right2)) =>
+          // TODO: FoldEither must capture Schema[C]
+          val leftId  = Variable(freshIdentifier(), ???)
+          val rightId = Variable(freshIdentifier(), ???)
+
+          loop(either1, either2) &&
+          loop(left1(leftId), left2(leftId)) &&
+          loop(right1(rightId), right2(rightId))
+
+        case (l: Tuple2[l1, l2], Tuple2(left2, right2)) =>
+          loop(l.left, left2) && loop(l.right, right2)
+
+        case (l: Tuple3[l1, l2, l3], Tuple3(a2, b2, c2)) =>
+          loop(l._1, a2) &&
+            loop(l._2, b2) &&
+            loop(l._3, c2)
+
+        case (First(tuple1), First(tuple2)) =>
+          loop(tuple1, tuple2)
+
+        case (Second(tuple1), Second(tuple2)) =>
+          loop(tuple1, tuple2)
+
+        case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
+          loop(predicate1, predicate2) &&
+            loop(ifTrue1, ifTrue2) &&
+            loop(ifFalse2, ifFalse2)
+
+        case (l: LessThanEqual[l], LessThanEqual(left2, right2, sortable2)) =>
+          // TODO: Support `==` and `hashCode` for `Sortable`.
+          loop(l.left, left2) &&
+            loop(l.right, right2) &&
+            l.sortable == sortable2
+
+        case (l: Not[l], Not(value2)) =>
+          loop(l.value, value2)
+
+        case (l: And[l], And(left2, right2)) =>
+          loop(l.left, left2) && loop(l.right, right2)
+
+        case (Fold(list1, initial1, body1), Fold(list2, initial2, body2)) =>
+          ???
+          // TODO: Need Schema[(B, A)]
+          // Fold can capture Schema[A] (???), and we already have Schema[B]
+          // We can use these to make Schema[(B, A)]
+          val identifier = Variable(freshIdentifier(), ???)
+
+          loop(list1, list2) &&
+          loop(initial1, initial2) &&
+          loop(body1(identifier), body2(identifier))
+
+        case (Iterate(initial1, iterate1, predicate1), Iterate(initial2, iterate2, predicate2)) =>
+          val var1 = Variable(freshIdentifier(), ???)
+          val var2 = Variable(freshIdentifier(), ???)
+
+          loop(initial1, initial2) &&
+          loop(iterate1(var1), iterate2(var1)) &&
+          loop(predicate1(var2), predicate2(var2))
+
+        case (Lazy(value1), Lazy(value2)) =>
+          // TODO: Handle loops in the graph appropriately
+          loop(value1(), value2())
+
+        case _ => false
+      }
+
+    loop(self, that)
+  }
 
   implicit def tuple2[A, B](t: (Expr[A], Expr[B])): Expr[(A, B)] =
     Tuple2(t._1, t._2)
@@ -123,6 +263,8 @@ object Expr              {
 
   implicit def either[A, B](either0: Either[Expr[A], Expr[B]]): Expr[Either[A, B]] =
     Either0(either0)
+
+  def suspend[A](expr: => Expr[A]): Expr[A] = Lazy(() => expr)
 
   implicit def toFlow[A](expr: Expr[A]): ZFlow[Any, Nothing, A] = expr.toFlow
 

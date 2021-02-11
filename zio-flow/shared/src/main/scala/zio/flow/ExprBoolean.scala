@@ -11,8 +11,8 @@ trait ExprBoolean[+A]           {
   final def ||(that: Expr[Boolean])(implicit ev: A <:< Boolean): Expr[Boolean] =
     not(not(self.widen[Boolean]) && not(that))
 
-  final def ifThenElse[B](ifTrue: Expr[B], ifFalse: Expr[B])(implicit ev: A <:< Boolean): Expr[B] =
-    Expr.Branch(self.widen[Boolean], ifTrue, ifFalse)
+  final def ifThenElse[B](ifTrue: => Expr[B], ifFalse: => Expr[B])(implicit ev: A <:< Boolean): Expr[B] =
+    Expr.Branch(self.widen[Boolean], Expr.suspend(ifTrue), Expr.suspend(ifFalse))
 
   final def unary_!(implicit ev: A <:< Boolean): Expr[Boolean] =
     not(self.widen[Boolean])

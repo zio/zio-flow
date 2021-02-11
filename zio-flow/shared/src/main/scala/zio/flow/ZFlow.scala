@@ -1,5 +1,7 @@
 package zio.flow
 
+import java.time.Instant
+
 //
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -82,6 +84,8 @@ sealed trait ZFlow[-I, +E, +A] { self =>
 }
 object ZFlow                   {
   final case class Return[A](value: Expr[A])                                         extends ZFlow[Any, Nothing, A]
+  final case object Now                                                              extends ZFlow[Any, Nothing, Instant]
+  final case class WaitTill(time: Expr[Instant])                                     extends ZFlow[Any, Nothing, Unit]
   final case class Halt[E](value: Expr[E])                                           extends ZFlow[Any, E, Nothing]
   final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])       extends ZFlow[Any, Nothing, B]
   final case class Fold[I, E1, E2, A, B](
@@ -111,11 +115,15 @@ object ZFlow                   {
 
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
 
+  def now: ZFlow[Any, Nothing, Instant] = Now
+
   def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
     Transaction(workflow)
 
   def unwrap[I, E, A](expr: Expr[ZFlow[I, E, A]]): ZFlow[I, E, A] =
     Unwrap(expr)
+
+  def waitTill(instant: Expr[Instant]): ZFlow[Any, Nothing, Unit] = WaitTill(instant)
 
   implicit def schemaZFlow[I, E, A]: Schema[ZFlow[I, E, A]] = ???
 }
