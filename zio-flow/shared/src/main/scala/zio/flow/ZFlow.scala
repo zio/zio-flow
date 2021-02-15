@@ -84,7 +84,7 @@ sealed trait ZFlow[-I, +E, +A] { self =>
 }
 object ZFlow                   {
   final case class Return[A](value: Expr[A])                                         extends ZFlow[Any, Nothing, A]
-  final case object Now                                                              extends ZFlow[Any, Nothing, Instant]
+  case object Now                                                                    extends ZFlow[Any, Nothing, Instant]
   final case class WaitTill(time: Expr[Instant])                                     extends ZFlow[Any, Nothing, Unit]
   final case class Halt[E](value: Expr[E])                                           extends ZFlow[Any, E, Nothing]
   final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])       extends ZFlow[Any, Nothing, B]
