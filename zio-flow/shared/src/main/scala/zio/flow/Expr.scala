@@ -1,29 +1,48 @@
 package zio.flow
+
 import scala.language.implicitConversions
 
 // TODO: Replace by ZIO Schema
 trait Schema[A]
+
 object Schema {
   def apply[A](implicit schema: Schema[A]): Schema[A] = schema
 
-  implicit def nilSchema: Schema[Nil.type]                                      = ???
-  implicit def listSchema[A: Schema]: Schema[List[A]]                           = ???
-  implicit def stringSchema: Schema[String]                                     = ???
-  implicit def shortSchema: Schema[Short]                                       = ???
-  implicit def intSchema: Schema[Int]                                           = ???
-  implicit def longSchema: Schema[Long]                                         = ???
-  implicit def floatSchema: Schema[Float]                                       = ???
-  implicit def doubleSchema: Schema[Double]                                     = ???
-  implicit def bigIntSchema: Schema[BigInt]                                     = ???
-  implicit def bigDecimalSchema: Schema[BigDecimal]                             = ???
-  implicit def unitSchema: Schema[Unit]                                         = ???
-  implicit def boolSchema: Schema[Boolean]                                      = ???
-  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]]                  = ???
-  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]]                = ???
-  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)]               = ???
+  implicit def nilSchema: Schema[Nil.type] = ???
+
+  implicit def listSchema[A: Schema]: Schema[List[A]] = ???
+
+  implicit def stringSchema: Schema[String] = ???
+
+  implicit def shortSchema: Schema[Short] = ???
+
+  implicit def intSchema: Schema[Int] = ???
+
+  implicit def longSchema: Schema[Long] = ???
+
+  implicit def floatSchema: Schema[Float] = ???
+
+  implicit def doubleSchema: Schema[Double] = ???
+
+  implicit def bigIntSchema: Schema[BigInt] = ???
+
+  implicit def bigDecimalSchema: Schema[BigDecimal] = ???
+
+  implicit def unitSchema: Schema[Unit] = ???
+
+  implicit def boolSchema: Schema[Boolean] = ???
+
+  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]] = ???
+
+  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]] = ???
+
+  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = ???
+
   implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
-  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]]         = ???
-  implicit def schemaNothing: Schema[Nothing]                                   = ???
+
+  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
+
+  implicit def schemaNothing: Schema[Nothing] = ???
 }
 
 sealed trait Expr[+A]
@@ -31,7 +50,8 @@ sealed trait Expr[+A]
     with ExprBoolean[A]
     with ExprTuple[A]
     with ExprList[A]
-    with ExprIntegral[A]
+    with ExprNumeric[A]
+    with ExprFractional[A]
     with ExprInstant[A]
     with ExprDuration[A] {
   def self: Expr[A] = this
@@ -60,68 +80,109 @@ sealed trait Expr[+A]
       case _             => false
     }
 }
-object Expr              {
-  final case class Literal[A](value: A, schema: Schema[A])                                          extends Expr[A]
-  final case class Ignore[A](value: Expr[A])                                                        extends Expr[Unit]         {
+
+object Expr {
+
+  final case class Literal[A](value: A, schema: Schema[A]) extends Expr[A]
+
+  final case class Ignore[A](value: Expr[A]) extends Expr[Unit] {
     def schema: Schema[Unit] = Schema[Unit]
   }
-  final case class Variable[A](identifier: String, schema: Schema[A])                               extends Expr[A]
-  final case class AddIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
+
+  final case class Variable[A](identifier: String, schema: Schema[A])                extends Expr[A]
+  final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class DivIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
+
+  final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class MulIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
+
+  final case class MulNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class PowIntegral[A](left: Expr[A], right: Expr[A], numeric: Integral[A])              extends Expr[A]            {
+
+  final case class PowNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class Negation[A](value: Expr[A], numeric: Integral[A])                                extends Expr[A]            {
+
+  final case class NegationNumeric[A](value: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class Either0[A, B](either: Either[Expr[A], Expr[B]])                                  extends Expr[Either[A, B]] {
+
+  final case class RootNumeric[A](value: Expr[A], n: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    def schema = numeric.schema
+  }
+
+  final case class LogNumeric[A](value: Expr[A], base: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    def schema = numeric.schema
+  }
+
+  final case class LogFractional[A](value: Expr[A], base: Expr[A], numeric: Fractional[A]) extends Expr[A] {
+    def schema = numeric.schema
+  }
+  final case class SinFractional[A](value: Expr[A], fractional: Fractional[A])             extends Expr[A] {
+    def schema = fractional.schema
+  }
+
+  final case class SinInverseFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
+    def schema = fractional.schema
+  }
+
+  final case class Either0[A, B](either: Either[Expr[A], Expr[B]]) extends Expr[Either[A, B]] {
     def schema = ???
   }
+
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
       extends Expr[C] {
     def schema = ???
   }
-  final case class Tuple2[A, B](left: Expr[A], right: Expr[B])                                      extends Expr[(A, B)]       {
+
+  final case class Tuple2[A, B](left: Expr[A], right: Expr[B]) extends Expr[(A, B)] {
     def schema = ???
   }
-  final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C])                           extends Expr[(A, B, C)]    {
+
+  final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)] {
     def schema = ???
   }
-  final case class First[A, B](tuple: Expr[(A, B)])                                                 extends Expr[A]            {
+
+  final case class First[A, B](tuple: Expr[(A, B)]) extends Expr[A] {
     def schema = ???
   }
-  final case class Second[A, B](tuple: Expr[(A, B)])                                                extends Expr[B]            {
+
+  final case class Second[A, B](tuple: Expr[(A, B)]) extends Expr[B] {
     def schema = ???
   }
-  final case class Branch[A](predicate: Expr[Boolean], ifTrue: Expr[A], ifFalse: Expr[A])           extends Expr[A]            {
+
+  final case class Branch[A](predicate: Expr[Boolean], ifTrue: Expr[A], ifFalse: Expr[A]) extends Expr[A] {
     def schema = ifTrue.schema
   }
-  final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A])           extends Expr[Boolean]      {
+
+  final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A]) extends Expr[Boolean] {
     def schema: Schema[Boolean] = Schema[Boolean]
   }
-  final case class Not[A](value: Expr[Boolean])                                                     extends Expr[Boolean]      {
+
+  final case class Not[A](value: Expr[Boolean]) extends Expr[Boolean] {
     def schema: Schema[Boolean] = Schema[Boolean]
   }
-  final case class And[A](left: Expr[Boolean], right: Expr[Boolean])                                extends Expr[Boolean]      {
+
+  final case class And[A](left: Expr[Boolean], right: Expr[Boolean]) extends Expr[Boolean] {
     def schema: Schema[Boolean] = Schema[Boolean]
   }
-  final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B]            {
+
+  final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
     def schema = initial.schema
   }
+
   final case class Iterate[A](initial: Expr[A], iterate: Expr[A] => Expr[A], predicate: Expr[A] => Expr[Boolean])
       extends Expr[A] {
     def schema = initial.schema
   }
-  final case class Lazy[A] private (value: () => Expr[A])                                           extends Expr[A]            {
+
+  final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A] {
     def schema: Schema[_ <: A] = value().schema
   }
+
   object Lazy {
     def apply[A](value: () => Expr[A]): Expr[A] = {
       lazy val expr = value()
@@ -156,27 +217,27 @@ object Expr              {
         case (Variable(identifier1, schema1), Variable(identifier2, schema2)) =>
           (identifier1 == identifier2) && (schema1 == schema2)
 
-        case (AddIntegral(left1, right1, numeric1), AddIntegral(left2, right2, numeric2)) =>
+        case (AddNumeric(left1, right1, numeric1), AddNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
             loop(right1, right1) &&
             (numeric1 == numeric2)
 
-        case (DivIntegral(left1, right1, numeric1), DivIntegral(left2, right2, numeric2)) =>
+        case (DivNumeric(left1, right1, numeric1), DivNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
             loop(right1, right1) &&
             (numeric1 == numeric2)
 
-        case (MulIntegral(left1, right1, numeric1), MulIntegral(left2, right2, numeric2)) =>
+        case (MulNumeric(left1, right1, numeric1), MulNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
             loop(right1, right1) &&
             (numeric1 == numeric2)
 
-        case (PowIntegral(left1, right1, numeric1), PowIntegral(left2, right2, numeric2)) =>
+        case (PowNumeric(left1, right1, numeric1), PowNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
             loop(right1, right1) &&
             (numeric1 == numeric2)
 
-        case (Negation(value1, numeric1), Negation(value2, numeric2)) =>
+        case (NegationNumeric(value1, numeric1), NegationNumeric(value2, numeric2)) =>
           loop(value1, value2) && (numeric1 == numeric2)
 
         case (l: Either0[l1, l2], Either0(either2)) =>
