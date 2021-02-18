@@ -2,6 +2,9 @@ package zio.flow
 
 sealed trait Numeric[A] {
   def schema: Schema[A]
+
+  def plus(left: A, right: A): A  = ???
+  def times(left: A, right: A): A = ???
 }
 
 object Numeric extends NumericImplicits0 {

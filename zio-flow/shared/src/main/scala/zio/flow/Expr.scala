@@ -8,6 +8,14 @@ trait Schema[A]
 object Schema {
   def apply[A](implicit schema: Schema[A]): Schema[A] = schema
 
+  // FIXME: Add this to ZIO Schema
+  def fail[A](message: String): Schema[A] = ???
+
+  final case class SchemaTuple2[A: Schema, B: Schema]() extends Schema[(A, B)] {
+    def leftSchema: Schema[A]  = Schema[A]
+    def rightSchema: Schema[B] = Schema[B]
+  }
+
   implicit def nilSchema: Schema[Nil.type] = ???
 
   implicit def listSchema[A: Schema]: Schema[List[A]] = ???
@@ -54,6 +62,8 @@ sealed trait Expr[+A]
     with ExprFractional[A]
     with ExprInstant[A]
     with ExprDuration[A] {
+  def eval: Either[Expr[A], A] = ???
+
   def self: Expr[A] = this
 
   def schema: Schema[_ <: A]
@@ -83,14 +93,37 @@ sealed trait Expr[+A]
 
 object Expr {
 
-  final case class Literal[A](value: A, schema: Schema[A]) extends Expr[A]
+  final case class Literal[A](value: A, schema: Schema[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = Right(value)
+  }
 
   final case class Ignore[A](value: Expr[A]) extends Expr[Unit] {
+    override def eval: Either[Expr[Unit], Unit] = Right(())
+
     def schema: Schema[Unit] = Schema[Unit]
   }
 
-  final case class Variable[A](identifier: String, schema: Schema[A])                extends Expr[A]
+  final case class Variable[A](identifier: String, schema: Schema[A])                extends Expr[A] { self =>
+    override def eval: Either[Expr[A], A] = Left(self)
+  }
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      val leftEither  = left.eval
+      val rightEither = right.eval
+
+      (for {
+        l <- leftEither
+        r <- rightEither
+      } yield numeric.plus(l, r)) match {
+        case Left(_)  =>
+          val reducedLeft  = leftEither.fold(identity, Expr(_)(numeric.schema))
+          val reducedRight = rightEither.fold(identity, Expr(_)(numeric.schema))
+
+          Left(AddNumeric(reducedLeft, reducedRight, numeric))
+        case Right(v) => Right(v)
+      }
+    }
+
     def schema = numeric.schema
   }
 
@@ -130,7 +163,10 @@ object Expr {
   }
 
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]]) extends Expr[Either[A, B]] {
-    def schema = ???
+    def schema: Schema[_ <: Either[_ <: A, _ <: B]] = either match {
+      case Left(value)  => Schema.schemaEither(value.schema, Schema.fail[B]("Must be left"))
+      case Right(value) => Schema.schemaEither(Schema.fail[A]("Must be right"), value.schema)
+    }
   }
 
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
@@ -139,27 +175,29 @@ object Expr {
   }
 
   final case class Tuple2[A, B](left: Expr[A], right: Expr[B]) extends Expr[(A, B)] {
-    def schema = ???
+    def schema: Schema[_ <: (_ <: A, _ <: B)] =
+      Schema.schemaTuple2(left.schema, right.schema)
   }
 
   final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)] {
-    def schema = ???
+    def schema: Schema[_ <: (_ <: A, _ <: B, _ <: C)] =
+      Schema.schemaTuple3(_1.schema, _2.schema, _3.schema)
   }
 
   final case class First[A, B](tuple: Expr[(A, B)]) extends Expr[A] {
-    def schema = ???
+    def schema: Schema[_ <: A] = ??? // FIXME: ZIO Schema
   }
 
   final case class Second[A, B](tuple: Expr[(A, B)]) extends Expr[B] {
-    def schema = ???
+    def schema: Schema[_ <: B] = ??? // FIXME: ZIO Schema
   }
 
   final case class Branch[A](predicate: Expr[Boolean], ifTrue: Expr[A], ifFalse: Expr[A]) extends Expr[A] {
-    def schema = ifTrue.schema
+    def schema = ifTrue.schema // FIXME: Schema fallback
   }
 
   final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A]) extends Expr[Boolean] {
-    def schema: Schema[Boolean] = Schema[Boolean]
+    def schema: Schema[Boolean] = Schema[Boolean] // FIXME: Schema fallback
   }
 
   final case class Not[A](value: Expr[Boolean]) extends Expr[Boolean] {
@@ -171,12 +209,12 @@ object Expr {
   }
 
   final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
-    def schema = initial.schema
+    def schema = initial.schema // FIXME: There can be schemas for other B's
   }
 
   final case class Iterate[A](initial: Expr[A], iterate: Expr[A] => Expr[A], predicate: Expr[A] => Expr[Boolean])
       extends Expr[A] {
-    def schema = initial.schema
+    def schema = initial.schema // FIXME: There can be schemas for other A's
   }
 
   final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A] {
@@ -194,7 +232,7 @@ object Expr {
   }
 
   implicit def apply[A: Schema](value: A): Expr[A] =
-    Literal(value, implicitly[Schema[A]])
+    Literal(value, Schema[A])
 
   def checkEquality[A](self: Expr[A], that: Expr[Any]): Boolean = {
     var counter: Int = 0
@@ -288,7 +326,6 @@ object Expr {
           loop(l.left, left2) && loop(l.right, right2)
 
         case (Fold(list1, initial1, body1), Fold(list2, initial2, body2)) =>
-          ???
           // TODO: Need Schema[(B, A)]
           // Fold can capture Schema[A] (???), and we already have Schema[B]
           // We can use these to make Schema[(B, A)]
