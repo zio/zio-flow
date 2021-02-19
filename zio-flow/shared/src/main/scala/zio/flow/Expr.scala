@@ -223,10 +223,6 @@ object Expr {
     def schema = ???
   }
 
-  final case class IsAfter[A](first: Expr[Instant], second: Expr[Instant]) extends Expr[Boolean] {
-    def schema = ???
-  }
-
   final case class PlusDuration[A](first: Expr[Duration], second: Expr[Duration]) extends Expr[Duration] {
     def schema = ???
   }

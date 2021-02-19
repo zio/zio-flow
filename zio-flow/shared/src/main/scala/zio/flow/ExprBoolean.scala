@@ -1,6 +1,6 @@
 package zio.flow
 
-trait ExprBoolean[+A]           {
+trait ExprBoolean[+A] {
   def self: Expr[A]
 
   import ExprBoolean._
@@ -17,6 +17,7 @@ trait ExprBoolean[+A]           {
   final def unary_!(implicit ev: A <:< Boolean): Expr[Boolean] =
     not(self.widen[Boolean])
 }
+
 private[zio] object ExprBoolean {
   final def not(expr: Expr[Boolean]): Expr[Boolean] =
     Expr.Not(expr)

@@ -14,4 +14,6 @@ trait ExprDuration[+A] {
 
   def get(temporalUnit: TemporalUnit)(implicit ev: A <:< Duration): Expr[Long] =
     Expr.LongDuration(self.widen[Duration], Expr(temporalUnit))
+
+
 }
