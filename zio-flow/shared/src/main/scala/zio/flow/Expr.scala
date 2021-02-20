@@ -59,6 +59,8 @@ object Schema {
   implicit def chronoUnitSchema: Schema[ChronoUnit] = ???
 
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
+
+  implicit def noneSchema: Schema[None.type] = ???
 }
 
 sealed trait Expr[+A]
@@ -324,6 +326,14 @@ object Expr {
 
   final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A] {
     def schema: Schema[_ <: A] = value().schema
+  }
+
+  final case class Some[A](value: Expr[A]) extends Expr[Option[A]] {
+    def schema = ???
+  }
+
+  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], some: Expr[A] => Expr[B]) extends Expr[B] {
+    def schema = ???
   }
 
   object Lazy {
