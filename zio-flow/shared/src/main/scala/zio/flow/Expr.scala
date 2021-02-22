@@ -1,5 +1,8 @@
 package zio.flow
 
+import java.time.temporal.{ ChronoUnit, TemporalUnit }
+import java.time.{ Duration, Instant }
+
 import scala.language.implicitConversions
 
 // TODO: Replace by ZIO Schema
@@ -12,7 +15,8 @@ object Schema {
   def fail[A](message: String): Schema[A] = ???
 
   final case class SchemaTuple2[A: Schema, B: Schema]() extends Schema[(A, B)] {
-    def leftSchema: Schema[A]  = Schema[A]
+    def leftSchema: Schema[A] = Schema[A]
+
     def rightSchema: Schema[B] = Schema[B]
   }
 
@@ -51,6 +55,10 @@ object Schema {
   implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
 
   implicit def schemaNothing: Schema[Nothing] = ???
+
+  implicit def chronoUnitSchema: Schema[ChronoUnit] = ???
+
+  implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
 }
 
 sealed trait Expr[+A]
@@ -103,9 +111,10 @@ object Expr {
     def schema: Schema[Unit] = Schema[Unit]
   }
 
-  final case class Variable[A](identifier: String, schema: Schema[A])                extends Expr[A] { self =>
+  final case class Variable[A](identifier: String, schema: Schema[A]) extends Expr[A] {
     override def eval: Either[Expr[A], A] = Left(self)
   }
+
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     override def eval: Either[Expr[A], A] = {
       val leftEither  = left.eval
@@ -154,7 +163,8 @@ object Expr {
   final case class LogFractional[A](value: Expr[A], base: Expr[A], numeric: Fractional[A]) extends Expr[A] {
     def schema = numeric.schema
   }
-  final case class SinFractional[A](value: Expr[A], fractional: Fractional[A])             extends Expr[A] {
+
+  final case class SinFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
     def schema = fractional.schema
   }
 
@@ -209,7 +219,20 @@ object Expr {
   }
 
   final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
+
     def schema = initial.schema // FIXME: There can be schemas for other B's
+  }
+
+  final case class LongInstant[A](instant: Expr[Instant], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
+    def schema = ???
+  }
+
+  final case class LongDuration[A](duration: Expr[Duration], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
+    def schema = ???
+  }
+
+  final case class SecDuration(seconds: Expr[Long]) extends Expr[Duration] {
+    def schema = ???
   }
 
   final case class Iterate[A](initial: Expr[A], iterate: Expr[A] => Expr[A], predicate: Expr[A] => Expr[Boolean])
