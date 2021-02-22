@@ -18,7 +18,6 @@ object Numeric extends NumericImplicits0 {
     def schema: Schema[Int] = implicitly[Schema[Int]]
   }
 }
-
 sealed trait NumericImplicits0 {
 
   implicit case object NumericShort extends Numeric[Short] {
@@ -44,7 +43,6 @@ sealed trait NumericImplicits0 {
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
   }
-
 }
 sealed trait Fractional[A] extends Numeric[A] {
   def fromDouble(const: Double): A

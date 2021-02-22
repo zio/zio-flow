@@ -1,6 +1,6 @@
 package zio.flow
 
-trait ExprOption[+A] {
+trait ExprOption[A] {
   def self: Expr[A]
 
   def option[A1, B](forNone: Expr[B], f: Expr[A1] => Expr[B])(implicit ev: A <:< Option[A1]): Expr[B] =
@@ -12,12 +12,16 @@ trait ExprOption[+A] {
 
   def isNone[A1](implicit ev: A <:< Option[A1]): Expr[Boolean] = option(Expr(true), (_: Expr[A1]) => Expr(false))
 
-  def filter[A1](predicate: Expr[A1] => ExprBoolean[Boolean])(implicit ev: A <:< Option[A1]): Expr[Option[A]] =
-    option(Expr(None), (a: Expr[A1]) => predicate(a).ifThenElse(some, Expr(None)))
+  def filter[A1](
+    predicate: Expr[A1] => Expr[Boolean]
+  )(implicit ev: A <:< Option[A1], impl: Mappable[Option]): Expr[Option[A1]] =
+    impl.performFilter(self.widen[Option[A1]], predicate)
 
-  def map[A1, B](f: Expr[A1] => Expr[B])(implicit ev1: A <:< Option[A1]): Expr[Option[B]] =
-    option(Expr(None), (a1: Expr[A1]) => Expr.Some(f(a1)))
+  def map[A1, B](f: Expr[A1] => Expr[B])(implicit ev: A <:< Option[A1], impl: Mappable[Option]): Expr[Option[B]] =
+    impl.performMap(self.widen[Option[A1]], f)
 
-  def flatMap[A1, B](f: Expr[A1] => Expr[Option[B]])(implicit ev: A <:< Option[A1]): Expr[Option[B]] =
-    option(Expr(None), f)
+  def flatMap[A1, B](
+    f: Expr[A1] => Expr[Option[B]]
+  )(implicit ev: A <:< Option[A1], impl: Mappable[Option]): Expr[Option[B]] =
+    impl.performFlatmap(self.widen[Option[A1]], f)
 }
