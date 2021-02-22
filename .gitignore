@@ -411,6 +411,7 @@ metals.sbt
 project/secret
 .bsp/
 .vscode/
+null
 
 # mdoc
 website/node_modules

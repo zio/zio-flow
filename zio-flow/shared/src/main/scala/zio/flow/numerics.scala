@@ -3,8 +3,13 @@ package zio.flow
 sealed trait Numeric[A] {
   def schema: Schema[A]
 
-  def plus(left: A, right: A): A  = ???
-  def times(left: A, right: A): A = ???
+  def add(left: A, right: A): A      = ???
+  def multiply(left: A, right: A): A = ???
+  def divide(left: A, right: A): A   = ???
+  def pow(left: A, right: A): A      = ???
+  def negate(left: A): A             = ???
+  def root(left: A, right: A): A     = ???
+  def log(left: A, right: A): A      = ???
 }
 
 object Numeric extends NumericImplicits0 {
@@ -45,6 +50,10 @@ sealed trait Fractional[A] extends Numeric[A] {
   def fromDouble(const: Double): A
 
   def schema: Schema[A]
+
+  def sin(a: A): A = ???
+
+  def inverseSin(a: A): A = ???
 }
 
 object Fractional {

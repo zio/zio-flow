@@ -117,62 +117,101 @@ object Expr {
 
   final case class AddNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     override def eval: Either[Expr[A], A] = {
-      val leftEither  = left.eval
-      val rightEither = right.eval
+      implicit val schemaA = numeric.schema
 
-      (for {
-        l <- leftEither
-        r <- rightEither
-      } yield numeric.plus(l, r)) match {
-        case Left(_)  =>
-          val reducedLeft  = leftEither.fold(identity, Expr(_)(numeric.schema))
-          val reducedRight = rightEither.fold(identity, Expr(_)(numeric.schema))
-
-          Left(AddNumeric(reducedLeft, reducedRight, numeric))
-        case Right(v) => Right(v)
-      }
+      Expr.binaryEval(left, right)(numeric.add(_, _), AddNumeric(_, _, numeric))
     }
 
     def schema = numeric.schema
   }
 
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
+
+      Expr.binaryEval(left, right)(numeric.divide(_, _), DivNumeric(_, _, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class MulNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
+
+      Expr.binaryEval(left, right)(numeric.multiply(_, _), MulNumeric(_, _, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class PowNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
+
+      Expr.binaryEval(left, right)(numeric.pow(_, _), PowNumeric(_, _, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class NegationNumeric[A](value: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
+
+      Expr.unaryEval(value)(numeric.negate(_), NegationNumeric(_, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class RootNumeric[A](value: Expr[A], n: Expr[A], numeric: Numeric[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
+
+      Expr.binaryEval(value, n)(numeric.root(_, _), RootNumeric(_, _, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class LogNumeric[A](value: Expr[A], base: Expr[A], numeric: Numeric[A]) extends Expr[A] {
-    def schema = numeric.schema
-  }
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = numeric.schema
 
-  final case class LogFractional[A](value: Expr[A], base: Expr[A], numeric: Fractional[A]) extends Expr[A] {
+      Expr.binaryEval(value, base)(numeric.log(_, _), PowNumeric(_, _, numeric))
+    }
+
     def schema = numeric.schema
   }
 
   final case class SinFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = fractional.schema
+
+      Expr.unaryEval(value)(fractional.sin(_), SinFractional(_, fractional))
+    }
+
     def schema = fractional.schema
   }
 
   final case class SinInverseFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
+    override def eval: Either[Expr[A], A] = {
+      implicit val schemaA = fractional.schema
+
+      Expr.unaryEval(value)(fractional.inverseSin(_), SinInverseFractional(_, fractional))
+    }
+
     def schema = fractional.schema
   }
 
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]]) extends Expr[Either[A, B]] {
+    override def eval: Either[Expr[Either[A, B]], Either[A, B]] =
+      either match {
+        case Left(exprA)  => exprA.eval.fold(exprA => Left(Either0(Left(exprA))), a => Right(Left(a)))
+        case Right(exprB) => exprB.eval.fold(exprB => Left(Either0(Right(exprB))), b => Right(Right(b)))
+      }
+
     def schema: Schema[_ <: Either[_ <: A, _ <: B]] = either match {
       case Left(value)  => Schema.schemaEither(value.schema, Schema.fail[B]("Must be left"))
       case Right(value) => Schema.schemaEither(Schema.fail[A]("Must be right"), value.schema)
@@ -181,6 +220,22 @@ object Expr {
 
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
       extends Expr[C] {
+    override def eval: Either[Expr[C], C] =
+      either.eval match {
+        case Left(exprEither) => Left(FoldEither(exprEither, left, right))
+
+        case Right(Left(a)) =>
+          implicit val schemaA: Schema[A] = null.asInstanceOf[Schema[A]]
+
+          left(Expr(a)).eval
+
+        case Right(Right(b)) =>
+          implicit val schemaB: Schema[B] = null.asInstanceOf[Schema[B]]
+
+          right(Expr(b)).eval
+
+      }
+
     def schema = ???
   }
 
@@ -251,6 +306,29 @@ object Expr {
       val value2: () => Expr[A] = () => expr
 
       new Lazy(value2)
+    }
+  }
+
+  private[zio] def unaryEval[A: Schema, B](expr: Expr[A])(f: A => B, g: Expr[A] => Expr[B]): Either[Expr[B], B] =
+    expr.eval.fold(expr => Left(g(expr)), a => Right(f(a)))
+
+  private[zio] def binaryEval[A: Schema, B: Schema, C](
+    left: Expr[A],
+    right: Expr[B]
+  )(f: (A, B) => C, g: (Expr[A], Expr[B]) => Expr[C]): Either[Expr[C], C] = {
+    val leftEither  = left.eval
+    val rightEither = right.eval
+
+    (for {
+      l <- leftEither
+      r <- rightEither
+    } yield f(l, r)) match {
+      case Left(_)  =>
+        val reducedLeft  = leftEither.fold(identity, Expr(_))
+        val reducedRight = rightEither.fold(identity, Expr(_))
+
+        Left(g(reducedLeft, reducedRight))
+      case Right(v) => Right(v)
     }
   }
 
@@ -375,6 +453,14 @@ object Expr {
 
     loop(self, that)
   }
+
+  def ofSeconds(seconds: Expr[Long]): Expr[Duration] = Expr.SecDuration(seconds)
+
+  def ofMinutes(minutes: Expr[Long]): Expr[Duration] = Expr.ofSeconds(minutes * Expr(60))
+
+  def ofHours(hours: Expr[Long]): Expr[Duration] = Expr.ofMinutes(hours * Expr(60))
+
+  def ofDays(days: Expr[Long]): Expr[Duration] = Expr.ofHours(days * Expr(24))
 
   implicit def tuple2[A, B](t: (Expr[A], Expr[B])): Expr[(A, B)] =
     Tuple2(t._1, t._2)
