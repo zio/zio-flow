@@ -125,6 +125,33 @@ object Expr {
     def schema = numeric.schema
   }
 
+  final case class ExprFunction[A, B](fn: Expr[A] => Expr[B]) extends Expr[A => B] {
+    override def eval: Either[Expr[A => B], A => B] = Left(this)
+
+    def schema = ???
+  }
+
+  final case class ExprApply[A, B](fn: Expr[A => B], a: Expr[A]) extends Expr[B] {
+    override def eval: Either[Expr[B], B] = {
+      val leftEither  = fn.eval
+      val rightEither = a.eval
+
+      (for {
+        l <- leftEither
+        r <- rightEither
+      } yield l(r)) match {
+        case Left(_)  =>
+          val reducedLeft  = leftEither.fold(identity, _ => fn)
+          val reducedRight = rightEither.fold(identity, _ => a)
+
+          Left(ExprApply(reducedLeft, reducedRight))
+        case Right(v) => Right(v)
+      }
+    }
+
+    def schema = ???
+  }
+
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
     override def eval: Either[Expr[A], A] = {
       implicit val schemaA = numeric.schema
@@ -453,6 +480,9 @@ object Expr {
 
     loop(self, that)
   }
+
+  def let[A, B](expr: Expr[A])(fn: Expr[A] => Expr[B]): Expr[B] =
+    Expr.ExprApply(Expr.ExprFunction(fn), expr)
 
   def ofSeconds(seconds: Expr[Long]): Expr[Duration] = Expr.SecDuration(seconds)
 
