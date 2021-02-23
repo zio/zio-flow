@@ -24,7 +24,7 @@ object Example {
         .flatMap(orderId =>
           ZFlow.transaction {
             intVar.update(_ + orderId) *>
-              (orderId > 2).ifThenElse(boolVar.set(true), boolVar.set(false)) *>
+              ZFlow.ifThenElse(orderId > 2)(boolVar.set(true), boolVar.set(false)) *>
               refundOrder(orderId) *>
               listVar.set(Nil)
           }
