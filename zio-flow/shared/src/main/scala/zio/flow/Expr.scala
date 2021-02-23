@@ -59,6 +59,10 @@ object Schema {
   implicit def chronoUnitSchema: Schema[ChronoUnit] = ???
 
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
+
+  implicit def noneSchema: Schema[None.type] = ???
+
+  implicit def optionSchema[A]: Schema[Option[A]] = ???
 }
 
 sealed trait Expr[+A]
@@ -69,6 +73,7 @@ sealed trait Expr[+A]
     with ExprNumeric[A]
     with ExprFractional[A]
     with ExprInstant[A]
+    with ExprOption[A]
     with ExprDuration[A] {
   def eval: Either[Expr[A], A] = ???
 
@@ -301,8 +306,15 @@ object Expr {
   }
 
   final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
-
     def schema = initial.schema // FIXME: There can be schemas for other B's
+  }
+
+  final case class Cons[A](list: Expr[List[A]], head: Expr[A]) extends Expr[List[A]] {
+    def schema = ???
+  }
+
+  final case class UnCons[A](list: Expr[List[A]]) extends Expr[Option[(A, List[A])]] {
+    def schema = ???
   }
 
   final case class LongInstant[A](instant: Expr[Instant], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
@@ -324,6 +336,14 @@ object Expr {
 
   final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A] {
     def schema: Schema[_ <: A] = value().schema
+  }
+
+  final case class Some[A](value: Expr[A]) extends Expr[Option[A]] {
+    def schema = ???
+  }
+
+  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], f: Expr[A] => Expr[B]) extends Expr[B] {
+    def schema = ???
   }
 
   object Lazy {
