@@ -71,7 +71,7 @@ object Fractional {
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
-    def fromDouble(const: Double): BigDecimal = const.toFloat
+    def fromDouble(const: Double): BigDecimal = BigDecimal(const)
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
   }
