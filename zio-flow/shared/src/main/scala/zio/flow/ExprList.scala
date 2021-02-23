@@ -9,5 +9,4 @@ trait ExprList[+A] {
   final def length[A0](implicit ev: A <:< List[A0]): Expr[Int] =
     self.fold[A0, Int](0)((len, _) => len + 1)
 
-  //def map[A1, B](f: Expr[A1] => Expr[B])(implicit ev1: A <:< List[A1], ev2: A <:< Mappable[A1]): Expr[List[B]] = ???
 }

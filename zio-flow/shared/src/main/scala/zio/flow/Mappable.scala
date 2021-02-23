@@ -21,4 +21,11 @@ object Mappable {
       Expr.FoldOption(fa, Expr(None), ab)
   }
 
+  implicit case object MappableList extends Mappable[List] {
+    override def performMap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[B]): Expr[List[B]] = ???
+
+    override def performFilter[A](fa: Expr[List[A]], predicate: Expr[A] => Expr[Boolean]): Expr[List[A]] = ???
+
+    override def performFlatmap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[List[B]]): Expr[List[B]] = ???
+  }
 }

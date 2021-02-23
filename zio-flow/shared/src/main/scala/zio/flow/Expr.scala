@@ -61,6 +61,8 @@ object Schema {
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
 
   implicit def noneSchema: Schema[None.type] = ???
+
+  implicit def optionSchema[A]: Schema[Option[A]] = ???
 }
 
 sealed trait Expr[+A]
