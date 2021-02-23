@@ -73,6 +73,7 @@ sealed trait Expr[+A]
     with ExprNumeric[A]
     with ExprFractional[A]
     with ExprInstant[A]
+    with ExprOption[A]
     with ExprDuration[A] {
   def eval: Either[Expr[A], A] = ???
 
@@ -341,7 +342,7 @@ object Expr {
     def schema = ???
   }
 
-  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], some: Expr[A] => Expr[B]) extends Expr[B] {
+  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], f: Expr[A] => Expr[B]) extends Expr[B] {
     def schema = ???
   }
 
