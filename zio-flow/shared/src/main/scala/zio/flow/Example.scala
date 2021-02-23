@@ -66,8 +66,9 @@ object EmailCampaign {
           reviews  <- ZFlow.foreach(restaurants) { restaurant =>
                         getReviews(restaurant)
                       }
-          good     <- ZFlow(reviews.fold[Review, Review](0)((total, cur) => total + cur) / reviews.length)
-          newCount <- (good > 5).ifThenElse(count + 1, 0)
+          average  <- ZFlow(reviews.sum / reviews.length)
+          newCount <- ZFlow.ifThenElse(average > 5)(count + 1, 0)
+          _        <- ZFlow.ifThenElse(newCount !== 3)(ZFlow.sleep(Expr.ofDays(1L)), ZFlow.unit)
         } yield newCount
       )(_ < 3)
 

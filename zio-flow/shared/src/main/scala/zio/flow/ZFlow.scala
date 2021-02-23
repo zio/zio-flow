@@ -1,6 +1,6 @@
 package zio.flow
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 
 //
 // ZFlow - models a workflow
@@ -41,6 +41,7 @@ sealed trait ZFlow[-I, +E, +A] { self =>
     success: Expr[A] => ZFlow[I1, E2, B]
   ): ZFlow[I1, E2, B] = ZFlow.Fold(self, error, success)
 
+  // TODO: Make these parameters eager, all the way down.
   final def ifThenElse[I1 <: I, E1 >: E, B](ifTrue: => ZFlow[I1, E1, B], ifFalse: => ZFlow[I1, E1, B])(implicit
     ev: A <:< Boolean
   ): ZFlow[I1, E1, B] =
@@ -49,10 +50,10 @@ sealed trait ZFlow[-I, +E, +A] { self =>
   final def iterate[I1 <: I, E1 >: E, A1 >: A](
     step: Expr[A1] => ZFlow[I1, E1, A1]
   )(predicate: Expr[A1] => Expr[Boolean]): ZFlow[I1, E1, A1] =
-    self.flatMap { a =>
+    self.flatMap { a => // TODO: Make this primitive rather than relying on recursion
       predicate(a).flatMap { bool =>
         ZFlow(bool).ifThenElse(
-          step(a),
+          step(a).iterate(step)(predicate),
           ZFlow(a)
         )
       }
@@ -113,12 +114,24 @@ object ZFlow                   {
   def foreach[I, E, A, B](values: Expr[List[A]])(body: Expr[A] => ZFlow[I, E, B]): ZFlow[I, E, List[B]] =
     Foreach(values, body)
 
+  def ifThenElse[A](p: Expr[Boolean])(ifTrue: Expr[A], ifFalse: Expr[A]): Expr[A] =
+    p.ifThenElse(ifTrue, ifFalse)
+
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
 
   def now: ZFlow[Any, Nothing, Instant] = Now
 
+  def sleep(duration: Expr[Duration]): ZFlow[Any, Nothing, Unit] =
+    for {
+      now   <- ZFlow.now
+      later <- ZFlow(now.plusDuration(duration))
+      _     <- ZFlow.waitTill(later)
+    } yield Expr.unit
+
   def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
     Transaction(workflow)
+
+  val unit: ZFlow[Any, Nothing, Unit] = ZFlow(Expr.unit)
 
   def unwrap[I, E, A](expr: Expr[ZFlow[I, E, A]]): ZFlow[I, E, A] =
     Unwrap(expr)

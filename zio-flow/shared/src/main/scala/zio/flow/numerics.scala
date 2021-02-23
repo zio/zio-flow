@@ -3,6 +3,7 @@ package zio.flow
 sealed trait Numeric[A] {
   def schema: Schema[A]
 
+  def fromLong(l: Long): Expr[A]     = ???
   def add(left: A, right: A): A      = ???
   def multiply(left: A, right: A): A = ???
   def divide(left: A, right: A): A   = ???

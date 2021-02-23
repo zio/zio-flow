@@ -1,7 +1,7 @@
 package zio.flow
 
-import java.time.Instant
 import java.time.temporal._
+import java.time.{ Duration, Instant }
 
 trait ExprInstant[+A] {
   def self: Expr[A]
@@ -15,4 +15,6 @@ trait ExprInstant[+A] {
 
   def getEpochSec(implicit ev: A <:< Instant): Expr[Long] =
     Expr.LongInstant(self.widen[Instant], Expr(ChronoUnit.SECONDS))
+
+  def plusDuration(duration: Expr[Duration]): Expr[Instant] = ???
 }
