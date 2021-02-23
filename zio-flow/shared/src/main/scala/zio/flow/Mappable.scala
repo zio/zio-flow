@@ -22,10 +22,19 @@ object Mappable {
   }
 
   implicit case object MappableList extends Mappable[List] {
-    override def performMap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[B]): Expr[List[B]] = ???
 
-    override def performFilter[A](fa: Expr[List[A]], predicate: Expr[A] => Expr[Boolean]): Expr[List[A]] = ???
+    override def performMap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[B]): Expr[List[B]] =
+      Expr.Fold(fa, Expr(Nil), (tuple: Expr[(List[B], A)]) => Expr.Cons(tuple._1, ab(tuple._2)))
 
-    override def performFlatmap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[List[B]]): Expr[List[B]] = ???
+    override def performFilter[A](fa: Expr[List[A]], predicate: Expr[A] => Expr[Boolean]): Expr[List[A]] =
+      Expr.Fold(
+        fa,
+        Expr(Nil),
+        (tuple: Expr[(List[A], A)]) => predicate(tuple._2).ifThenElse(Expr.Cons(tuple._1, tuple._2), tuple._1)
+      )
+
+    override def performFlatmap[A, B](fa: Expr[List[A]], ab: Expr[A] => Expr[List[B]]): Expr[List[B]] =
+      Expr.Fold(fa, Expr(Nil), (tuple: Expr[(List[B], A)]) => tuple._1 ++ ab(tuple._2))
   }
+
 }

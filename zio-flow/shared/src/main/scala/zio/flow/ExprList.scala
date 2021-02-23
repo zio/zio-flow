@@ -9,4 +9,6 @@ trait ExprList[+A] {
   final def length[A0](implicit ev: A <:< List[A0]): Expr[Int] =
     self.fold[A0, Int](0)((len, _) => len + 1)
 
+  def ++[A](other: Expr[List[A]]): Expr[List[A]] = ???
+
 }

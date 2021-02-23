@@ -305,8 +305,15 @@ object Expr {
   }
 
   final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
-
     def schema = initial.schema // FIXME: There can be schemas for other B's
+  }
+
+  final case class Cons[A](list: Expr[List[A]], head: Expr[A]) extends Expr[List[A]] {
+    def schema = ???
+  }
+
+  final case class UnCons[A](list: Expr[List[A]]) extends Expr[Option[(A, List[A])]] {
+    def schema = ???
   }
 
   final case class LongInstant[A](instant: Expr[Instant], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
