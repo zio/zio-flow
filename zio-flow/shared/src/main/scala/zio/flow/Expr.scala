@@ -79,8 +79,6 @@ sealed trait Expr[+A]
 
   def self: Expr[A] = this
 
-  def schema: Schema[_ <: A]
-
   final def iterate[A1 >: A](step: Expr[A1] => Expr[A1])(predicate: Expr[A1] => Expr[Boolean]): Expr[A1] =
     predicate(self).ifThenElse(
       step(self).iterate(step)(predicate),
@@ -126,14 +124,10 @@ object Expr {
 
       Expr.binaryEval(left, right)(numeric.add(_, _), AddNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class ExprFunction[A, B](fn: Expr[A] => Expr[B]) extends Expr[A => B] {
     override def eval: Either[Expr[A => B], A => B] = Left(this)
-
-    def schema = ???
   }
 
   final case class ExprApply[A, B](fn: Expr[A => B], a: Expr[A]) extends Expr[B] {
@@ -153,8 +147,6 @@ object Expr {
         case Right(v) => Right(v)
       }
     }
-
-    def schema = ???
   }
 
   final case class DivNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -163,8 +155,6 @@ object Expr {
 
       Expr.binaryEval(left, right)(numeric.divide(_, _), DivNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class MulNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -173,8 +163,6 @@ object Expr {
 
       Expr.binaryEval(left, right)(numeric.multiply(_, _), MulNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class PowNumeric[A](left: Expr[A], right: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -183,8 +171,6 @@ object Expr {
 
       Expr.binaryEval(left, right)(numeric.pow(_, _), PowNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class NegationNumeric[A](value: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -193,8 +179,6 @@ object Expr {
 
       Expr.unaryEval(value)(numeric.negate(_), NegationNumeric(_, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class RootNumeric[A](value: Expr[A], n: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -203,8 +187,6 @@ object Expr {
 
       Expr.binaryEval(value, n)(numeric.root(_, _), RootNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class LogNumeric[A](value: Expr[A], base: Expr[A], numeric: Numeric[A]) extends Expr[A] {
@@ -213,8 +195,6 @@ object Expr {
 
       Expr.binaryEval(value, base)(numeric.log(_, _), PowNumeric(_, _, numeric))
     }
-
-    def schema = numeric.schema
   }
 
   final case class SinFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
@@ -223,8 +203,6 @@ object Expr {
 
       Expr.unaryEval(value)(fractional.sin(_), SinFractional(_, fractional))
     }
-
-    def schema = fractional.schema
   }
 
   final case class SinInverseFractional[A](value: Expr[A], fractional: Fractional[A]) extends Expr[A] {
@@ -233,8 +211,6 @@ object Expr {
 
       Expr.unaryEval(value)(fractional.inverseSin(_), SinInverseFractional(_, fractional))
     }
-
-    def schema = fractional.schema
   }
 
   final case class Either0[A, B](either: Either[Expr[A], Expr[B]]) extends Expr[Either[A, B]] {
@@ -243,11 +219,6 @@ object Expr {
         case Left(exprA)  => exprA.eval.fold(exprA => Left(Either0(Left(exprA))), a => Right(Left(a)))
         case Right(exprB) => exprB.eval.fold(exprB => Left(Either0(Right(exprB))), b => Right(Right(b)))
       }
-
-    def schema: Schema[_ <: Either[_ <: A, _ <: B]] = either match {
-      case Left(value)  => Schema.schemaEither(value.schema, Schema.fail[B]("Must be left"))
-      case Right(value) => Schema.schemaEither(Schema.fail[A]("Must be right"), value.schema)
-    }
   }
 
   final case class FoldEither[A, B, C](either: Expr[Either[A, B]], left: Expr[A] => Expr[C], right: Expr[B] => Expr[C])
@@ -267,84 +238,46 @@ object Expr {
           right(Expr(b)).eval
 
       }
-
-    def schema = ???
   }
 
-  final case class Tuple2[A, B](left: Expr[A], right: Expr[B]) extends Expr[(A, B)] {
-    def schema: Schema[_ <: (_ <: A, _ <: B)] =
-      Schema.schemaTuple2(left.schema, right.schema)
-  }
+  final case class Tuple2[A, B](left: Expr[A], right: Expr[B]) extends Expr[(A, B)]
 
-  final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)] {
-    def schema: Schema[_ <: (_ <: A, _ <: B, _ <: C)] =
-      Schema.schemaTuple3(_1.schema, _2.schema, _3.schema)
-  }
+  final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)]
 
-  final case class First[A, B](tuple: Expr[(A, B)]) extends Expr[A] {
-    def schema: Schema[_ <: A] = ??? // FIXME: ZIO Schema
-  }
+  final case class First[A, B](tuple: Expr[(A, B)]) extends Expr[A]
 
-  final case class Second[A, B](tuple: Expr[(A, B)]) extends Expr[B] {
-    def schema: Schema[_ <: B] = ??? // FIXME: ZIO Schema
-  }
+  final case class Second[A, B](tuple: Expr[(A, B)]) extends Expr[B]
 
-  final case class Branch[A](predicate: Expr[Boolean], ifTrue: Expr[A], ifFalse: Expr[A]) extends Expr[A] {
-    def schema = ifTrue.schema // FIXME: Schema fallback
-  }
+  final case class Branch[A](predicate: Expr[Boolean], ifTrue: Expr[A], ifFalse: Expr[A]) extends Expr[A]
 
-  final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A]) extends Expr[Boolean] {
-    def schema: Schema[Boolean] = Schema[Boolean] // FIXME: Schema fallback
-  }
+  final case class LessThanEqual[A](left: Expr[A], right: Expr[A], sortable: Sortable[A]) extends Expr[Boolean]
 
-  final case class Not[A](value: Expr[Boolean]) extends Expr[Boolean] {
-    def schema: Schema[Boolean] = Schema[Boolean]
-  }
+  final case class Not[A](value: Expr[Boolean]) extends Expr[Boolean]
 
-  final case class And[A](left: Expr[Boolean], right: Expr[Boolean]) extends Expr[Boolean] {
-    def schema: Schema[Boolean] = Schema[Boolean]
-  }
+  final case class And[A](left: Expr[Boolean], right: Expr[Boolean]) extends Expr[Boolean]
 
-  final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B] {
-    def schema = initial.schema // FIXME: There can be schemas for other B's
-  }
+  final case class Fold[A, B](list: Expr[List[A]], initial: Expr[B], body: Expr[(B, A)] => Expr[B]) extends Expr[B]
 
-  final case class Cons[A](list: Expr[List[A]], head: Expr[A]) extends Expr[List[A]] {
-    def schema = ???
-  }
+  final case class Cons[A](list: Expr[List[A]], head: Expr[A]) extends Expr[List[A]]
 
-  final case class UnCons[A](list: Expr[List[A]]) extends Expr[Option[(A, List[A])]] {
-    def schema = ???
-  }
+  final case class UnCons[A](list: Expr[List[A]]) extends Expr[Option[(A, List[A])]]
 
-  final case class LongInstant[A](instant: Expr[Instant], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
-    def schema = ???
-  }
+  final case class InstantFromLong[A](seconds: Expr[Long]) extends Expr[Instant]
 
-  final case class LongDuration[A](duration: Expr[Duration], temporalUnit: Expr[TemporalUnit]) extends Expr[Long] {
-    def schema = ???
-  }
+  final case class InstantToLong[A](instant: Expr[Instant], temporalUnit: Expr[TemporalUnit]) extends Expr[Long]
 
-  final case class SecDuration(seconds: Expr[Long]) extends Expr[Duration] {
-    def schema = ???
-  }
+  final case class DurationToLong[A](duration: Expr[Duration], temporalUnit: Expr[TemporalUnit]) extends Expr[Long]
+
+  final case class LongToDuration(seconds: Expr[Long]) extends Expr[Duration]
 
   final case class Iterate[A](initial: Expr[A], iterate: Expr[A] => Expr[A], predicate: Expr[A] => Expr[Boolean])
-      extends Expr[A] {
-    def schema = initial.schema // FIXME: There can be schemas for other A's
-  }
+      extends Expr[A]
 
-  final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A] {
-    def schema: Schema[_ <: A] = value().schema
-  }
+  final case class Lazy[A] private (value: () => Expr[A]) extends Expr[A]
 
-  final case class Some[A](value: Expr[A]) extends Expr[Option[A]] {
-    def schema = ???
-  }
+  final case class Some[A](value: Expr[A]) extends Expr[Option[A]]
 
-  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], f: Expr[A] => Expr[B]) extends Expr[B] {
-    def schema = ???
-  }
+  final case class FoldOption[A, B](option: Expr[Option[A]], none: Expr[B], f: Expr[A] => Expr[B]) extends Expr[B]
 
   object Lazy {
     def apply[A](value: () => Expr[A]): Expr[A] = {
@@ -501,10 +434,16 @@ object Expr {
     loop(self, that)
   }
 
+  implicit def either[A, B](either0: Either[Expr[A], Expr[B]]): Expr[Either[A, B]] =
+    Either0(either0)
+
+  def fromEpochSec(seconds: Expr[Long]): Expr[Instant] =
+    Expr.InstantFromLong(seconds)
+
   def let[A, B](expr: Expr[A])(fn: Expr[A] => Expr[B]): Expr[B] =
     Expr.ExprApply(Expr.ExprFunction(fn), expr)
 
-  def ofSeconds(seconds: Expr[Long]): Expr[Duration] = Expr.SecDuration(seconds)
+  def ofSeconds(seconds: Expr[Long]): Expr[Duration] = Expr.LongToDuration(seconds)
 
   def ofMinutes(minutes: Expr[Long]): Expr[Duration] = Expr.ofSeconds(minutes * Expr(60))
 
@@ -517,9 +456,6 @@ object Expr {
 
   implicit def tuple3[A, B, C](t: (Expr[A], Expr[B], Expr[C])): Expr[(A, B, C)] =
     Tuple3(t._1, t._2, t._3)
-
-  implicit def either[A, B](either0: Either[Expr[A], Expr[B]]): Expr[Either[A, B]] =
-    Either0(either0)
 
   def suspend[A](expr: => Expr[A]): Expr[A] = Lazy(() => expr)
 

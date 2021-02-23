@@ -13,7 +13,7 @@ trait ExprDuration[+A] {
     Expr.ofSeconds(self.seconds - that.seconds)
 
   def get(temporalUnit: Expr[TemporalUnit])(implicit ev: A <:< Duration): Expr[Long] =
-    Expr.LongDuration(self.widen[Duration], temporalUnit)
+    Expr.DurationToLong(self.widen[Duration], temporalUnit)
 
   def seconds(implicit ev: A <:< Duration): Expr[Long] = self.get(Expr(ChronoUnit.SECONDS))
 }

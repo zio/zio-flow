@@ -1,6 +1,6 @@
 package zio.flow
 
-import java.time.{Duration, Instant}
+import java.time.{ Duration, Instant }
 
 //
 // ZFlow - models a workflow
