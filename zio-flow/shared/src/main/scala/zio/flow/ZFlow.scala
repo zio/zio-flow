@@ -1,8 +1,8 @@
 package zio.flow
 
-import zio.flow.ExprTuple._
-
 import java.time.{ Duration, Instant }
+
+import zio.flow.ExprTuple._
 
 //
 // ZFlow - models a workflow

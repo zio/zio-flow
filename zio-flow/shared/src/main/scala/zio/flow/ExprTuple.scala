@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.ExprTuple.{Has_2, Has_3, Has_4}
+import zio.flow.ExprTuple.{ Has_2, Has_3, Has_4 }
 
 trait ExprTuple[+A] {
   def self: Expr[A]
