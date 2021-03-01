@@ -168,13 +168,13 @@ object UberEatsExample {
     implicit val sortableOrderState: Sortable[OrderState] = ???
 
     def updateOrderState(
-      tuple3: Expr[(User, Restaurant, Order)]
+      user: Expr[User], restaurant: Expr[Restaurant], order: Expr[Order]
     ): ZFlow[Any, Throwable, OrderState] =
       ZFlow(OrderState.Waiting: OrderState).iterate((orderState: Expr[OrderState]) =>
         for {
-          currOrderState <- getOrderState(tuple3)
+          currOrderState <- getOrderState(user, restaurant, order)
           _              <- ZFlow.ifThenElse(currOrderState !== orderState)(
-                              pushOrderStatusNotification(tuple3),
+                              pushOrderStatusNotification(user, restaurant, order),
                               ZFlow.unit
                             )
           _              <- ZFlow.sleep(Expr.ofMinutes(2L))
@@ -183,7 +183,7 @@ object UberEatsExample {
 
     for {
       tuple4 <- ZFlow.input[(User, Address, Restaurant, Order)]
-      _      <- updateOrderState((tuple4._1, tuple4._3, tuple4._4))
+      _      <- updateOrderState(Expr.tuple3((tuple4._1, tuple4._3, tuple4._4)))
     } yield (tuple4._1, tuple4._2)
   }
 
@@ -192,10 +192,10 @@ object UberEatsExample {
 
     implicit val sortableRiderState: Sortable[RiderState] = ???
 
-    def updateRiderState(tuple2: Expr[(Rider, Address)]): ZFlow[Any, Throwable, RiderState] =
+    def updateRiderState(rider: Expr[Rider], address: Expr[Address]): ZFlow[Any, Throwable, RiderState] =
       ZFlow(RiderState.RiderAssigned: RiderState).iterate((riderState: Expr[RiderState]) =>
         for {
-          currRiderState <- getRiderState(tuple2)
+          currRiderState <- getRiderState(rider, address)
           _              <- ZFlow.ifThenElse(currRiderState !== riderState)(pushRideStatusNotification(tuple2), ZFlow.unit)
           _              <- ZFlow.sleep(Expr.ofMinutes(2L))
         } yield currRiderState
@@ -203,7 +203,7 @@ object UberEatsExample {
 
     for {
       rider <- assignRider(tuple2)
-      _     <- updateRiderState((rider, tuple2._2))
+      _     <- updateRiderState(rider, tuple2._2)
     } yield ()
   }
 
