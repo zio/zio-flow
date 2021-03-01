@@ -168,7 +168,9 @@ object UberEatsExample {
     implicit val sortableOrderState: Sortable[OrderState] = ???
 
     def updateOrderState(
-      user: Expr[User], restaurant: Expr[Restaurant], order: Expr[Order]
+      user: Expr[User],
+      restaurant: Expr[Restaurant],
+      order: Expr[Order]
     ): ZFlow[Any, Throwable, OrderState] =
       ZFlow(OrderState.Waiting: OrderState).iterate((orderState: Expr[OrderState]) =>
         for {
