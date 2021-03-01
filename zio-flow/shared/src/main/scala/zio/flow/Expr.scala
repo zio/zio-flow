@@ -52,6 +52,8 @@ object Schema {
 
   implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
 
+  implicit def schemaTuple4[A: Schema, B: Schema, C: Schema, D: Schema]: Schema[(A, B, C, D)] = ???
+
   implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
 
   implicit def schemaNothing: Schema[Nothing] = ???
@@ -243,6 +245,8 @@ object Expr {
   final case class Tuple2[A, B](left: Expr[A], right: Expr[B]) extends Expr[(A, B)]
 
   final case class Tuple3[A, B, C](_1: Expr[A], _2: Expr[B], _3: Expr[C]) extends Expr[(A, B, C)]
+
+  final case class Tuple4[A, B, C, D](_1: Expr[A], _2: Expr[B], _3: Expr[C], _4: Expr[D]) extends Expr[(A, B, C, D)]
 
   final case class First[A, B](tuple: Expr[(A, B)]) extends Expr[A]
 
@@ -456,6 +460,9 @@ object Expr {
 
   implicit def tuple3[A, B, C](t: (Expr[A], Expr[B], Expr[C])): Expr[(A, B, C)] =
     Tuple3(t._1, t._2, t._3)
+
+  implicit def tuple4[A, B, C, D](t: (Expr[A], Expr[B], Expr[C], Expr[D])): Expr[(A, B, C, D)] =
+    Tuple4(t._1, t._2, t._3, t._4)
 
   def suspend[A](expr: => Expr[A]): Expr[A] = Lazy(() => expr)
 
