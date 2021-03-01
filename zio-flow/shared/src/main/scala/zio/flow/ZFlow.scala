@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.flow.ExprTuple._
+
 import java.time.{ Duration, Instant }
 
 //
