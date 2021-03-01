@@ -2,6 +2,8 @@ package zio.flow
 
 import java.time.{ Duration, Instant }
 
+import zio.flow.ExprTuple._
+
 //
 // ZFlow - models a workflow
 //  - terminate, either error or value
