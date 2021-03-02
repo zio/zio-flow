@@ -185,7 +185,7 @@ object UberEatsExample {
 
     for {
       tuple4 <- ZFlow.input[(User, Address, Restaurant, Order)]
-      _      <- updateOrderState(Expr.tuple3((tuple4._1, tuple4._3, tuple4._4)))
+      _      <- updateOrderState(tuple4._1, tuple4._3, tuple4._4)
     } yield (tuple4._1, tuple4._2)
   }
 
