@@ -67,6 +67,11 @@ object Schema {
   implicit def optionSchema[A]: Schema[Option[A]] = ???
 }
 
+/**
+ * A `Remote[A]` is a blueprint for constructing a value of type `A` on a 
+ * remote machine. Remote values can always be serialized, because they are 
+ * mere blueprints, and they do not contain any Scala code.
+ */
 sealed trait Expr[+A]
     extends ExprSortable[A]
     with ExprBoolean[A]
