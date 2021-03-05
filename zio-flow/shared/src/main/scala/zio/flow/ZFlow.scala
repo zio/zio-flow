@@ -90,7 +90,7 @@ object ZFlow                   {
   case object Now                                                                    extends ZFlow[Any, Nothing, Instant]
   final case class WaitTill(time: Expr[Instant])                                     extends ZFlow[Any, Nothing, Unit]
   final case class Halt[E](value: Expr[E])                                           extends ZFlow[Any, E, Nothing]
-  final case class Modify[A, B](svar: StateVar[A], f: Expr[A] => Expr[(B, A)])       extends ZFlow[Any, Nothing, B]
+  final case class Modify[A, B](svar: Variable[A], f: Expr[A] => Expr[(B, A)])       extends ZFlow[Any, Nothing, B]
   final case class Fold[I, E1, E2, A, B](
     value: ZFlow[I, E1, A],
     ke: Expr[E1] => ZFlow[I, E2, B],

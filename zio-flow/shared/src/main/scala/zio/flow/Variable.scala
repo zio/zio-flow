@@ -1,6 +1,6 @@
 package zio.flow
 
-trait StateVar[A] { self =>
+trait Variable[A] { self =>
   def get: ZFlow[Any, Nothing, A] = modify(a => (a, a))
 
   def set(a: Expr[A]): ZFlow[Any, Nothing, Unit] =

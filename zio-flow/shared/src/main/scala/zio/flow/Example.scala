@@ -11,7 +11,7 @@ object Example {
   lazy val refundOrder: Activity[OrderId, Nothing, Unit] =
     Activity[OrderId, Nothing, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
-  val stateConstructor: Constructor[(StateVar[Int], StateVar[Boolean], StateVar[List[String]])] =
+  val stateConstructor: Constructor[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
       intVar  <- newVar[Int](0)
       boolVar <- newVar[Boolean](false)

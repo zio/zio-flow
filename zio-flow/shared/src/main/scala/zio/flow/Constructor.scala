@@ -13,10 +13,10 @@ sealed trait Constructor[+A] { self =>
 
 object Constructor {
   final case class Return[A](value: Expr[A])                                          extends Constructor[A]
-  final case class NewVar[A](defaultValue: Expr[A])                                   extends Constructor[StateVar[A]]
+  final case class NewVar[A](defaultValue: Expr[A])                                   extends Constructor[Variable[A]]
   final case class FlatMap[A, B](value: Constructor[A], k: Expr[A] => Constructor[B]) extends Constructor[B]
 
   def apply[A: Schema](a: A): Constructor[A] = Return(a)
 
-  def newVar[A](value: Expr[A]): Constructor[StateVar[A]] = NewVar(value)
+  def newVar[A](value: Expr[A]): Constructor[Variable[A]] = NewVar(value)
 }
