@@ -4,7 +4,7 @@ object Example {
 
   import Constructor._
 
-  // Expr[A] => Expr[(B, A)]
+  // Remote[A] => Remote[(B, A)]
 
   type OrderId = Int
 
@@ -60,15 +60,15 @@ object EmailCampaign {
    * in that city for restaurants in that category.
    */
   lazy val emailCampaign: ZFlow[(City, Cuisine), Throwable, Any] = {
-    def waitForPositiveReviews(restaurants: Expr[List[Restaurant]]) =
-      ZFlow(0).iterate((count: Expr[Int]) =>
+    def waitForPositiveReviews(restaurants: Remote[List[Restaurant]]) =
+      ZFlow(0).iterate((count: Remote[Int]) =>
         for {
           reviews  <- ZFlow.foreach(restaurants) { restaurant =>
                         getReviews(restaurant)
                       }
           average  <- ZFlow(reviews.sum / reviews.length)
           newCount <- ZFlow.ifThenElse(average > 5)(count + 1, 0)
-          _        <- ZFlow.ifThenElse(newCount !== 3)(ZFlow.sleep(Expr.ofDays(1L)), ZFlow.unit)
+          _        <- ZFlow.ifThenElse(newCount !== 3)(ZFlow.sleep(Remote.ofDays(1L)), ZFlow.unit)
         } yield newCount
       )(_ < 3)
 
@@ -149,7 +149,7 @@ object UberEatsExample {
     for {
       tuple           <- ZFlow.input[(Restaurant, Order)]
       orderConfStatus <- getOrderConfirmationStatus(tuple)
-      _               <- ZFlow.ifThenElse(orderConfStatus == Expr(OrderConfirmationStatus.Confirmed))(
+      _               <- ZFlow.ifThenElse(orderConfStatus == Remote(OrderConfirmationStatus.Confirmed))(
                            processOrderWorkflow,
                            cancelOrderWorkflow
                          )
@@ -168,18 +168,18 @@ object UberEatsExample {
     implicit val sortableOrderState: Sortable[OrderState] = ???
 
     def updateOrderState(
-      user: Expr[User],
-      restaurant: Expr[Restaurant],
-      order: Expr[Order]
+      user: Remote[User],
+      restaurant: Remote[Restaurant],
+      order: Remote[Order]
     ): ZFlow[Any, Throwable, OrderState] =
-      ZFlow(OrderState.Waiting: OrderState).iterate((orderState: Expr[OrderState]) =>
+      ZFlow(OrderState.Waiting: OrderState).iterate((orderState: Remote[OrderState]) =>
         for {
           currOrderState <- getOrderState(user, restaurant, order)
           _              <- ZFlow.ifThenElse(currOrderState !== orderState)(
                               pushOrderStatusNotification(user, restaurant, order),
                               ZFlow.unit
                             )
-          _              <- ZFlow.sleep(Expr.ofMinutes(2L))
+          _              <- ZFlow.sleep(Remote.ofMinutes(2L))
         } yield currOrderState
       )(_ !== (OrderState.FoodPacked: OrderState))
 
@@ -189,19 +189,19 @@ object UberEatsExample {
     } yield (tuple4._1, tuple4._2)
   }
 
-  def riderWorkflow(tuple2: Expr[(User, Address)]): ZFlow[Any, Throwable, Any] = {
+  def riderWorkflow(tuple2: Remote[(User, Address)]): ZFlow[Any, Throwable, Any] = {
     implicit def schemaRiderState: Schema[RiderState] = ???
 
     implicit val sortableRiderState: Sortable[RiderState] = ???
 
-    def updateRiderState(rider: Expr[Rider], address: Expr[Address]): ZFlow[Any, Throwable, RiderState] =
-      ZFlow(RiderState.RiderAssigned: RiderState).iterate((riderState: Expr[RiderState]) =>
+    def updateRiderState(rider: Remote[Rider], address: Remote[Address]): ZFlow[Any, Throwable, RiderState] =
+      ZFlow(RiderState.RiderAssigned: RiderState).iterate((riderState: Remote[RiderState]) =>
         for {
           currRiderState <- getRiderState(rider, address)
           _              <- ZFlow.ifThenElse(currRiderState !== riderState)(pushRideStatusNotification(tuple2), ZFlow.unit)
-          _              <- ZFlow.sleep(Expr.ofMinutes(2L))
+          _              <- ZFlow.sleep(Remote.ofMinutes(2L))
         } yield currRiderState
-      )(_ !== Expr(RiderState.Delivered: RiderState))
+      )(_ !== Remote(RiderState.Delivered: RiderState))
 
     for {
       rider <- assignRider(tuple2)
