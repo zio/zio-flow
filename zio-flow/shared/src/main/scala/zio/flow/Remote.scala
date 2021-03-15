@@ -65,6 +65,10 @@ object Schema {
   implicit def noneSchema: Schema[None.type] = ???
 
   implicit def optionSchema[A]: Schema[Option[A]] = ???
+
+  implicit def instantSchema: Schema[Instant] = ???
+
+  implicit def durationSchema: Schema[Duration] = ???
 }
 
 /**
@@ -357,14 +361,28 @@ object Remote {
     )
   }
 
-  final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant]
+  final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
+    override def eval: Either[Remote[Instant], Instant] =
+      unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
+  }
 
-  final case class InstantToLong[A](instant: Remote[Instant], temporalUnit: Remote[TemporalUnit]) extends Remote[Long]
+  final case class InstantToLong[A](instant: Remote[Instant]) extends Remote[Long] {
+    override def eval: Either[Remote[Long], Long] =
+      unaryEval(instant)(_.toEpochMilli, remoteS => InstantToLong(remoteS))
+  }
 
   final case class DurationToLong[A](duration: Remote[Duration], temporalUnit: Remote[TemporalUnit])
-      extends Remote[Long]
+      extends Remote[Long] {
+    override def eval: Either[Remote[Long], Long] = binaryEval(duration, temporalUnit)(
+      (d, tUnit) => d.get(tUnit),
+      (remoteDuration, remoteUnit) => DurationToLong(remoteDuration, remoteUnit)
+    )
+  }
 
-  final case class LongToDuration(seconds: Remote[Long]) extends Remote[Duration]
+  final case class LongToDuration(seconds: Remote[Long]) extends Remote[Duration] {
+    override def eval: Either[Remote[Duration], Duration] =
+      unaryEval(seconds)(Duration.ofSeconds, remoteS => LongToDuration(remoteS))
+  }
 
   final case class Iterate[A](
     initial: Remote[A],
@@ -372,12 +390,23 @@ object Remote {
     predicate: Remote[A] => Remote[Boolean]
   ) extends Remote[A]
 
-  final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A]
+  final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A] {
+    override def eval: Either[Remote[A], A] = Left(self)
+  }
 
-  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]]
+  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
+    implicit val schemaA: Schema[A]                         = ???
+    override def eval: Either[Remote[Option[A]], Option[A]] = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
+  }
 
   final case class FoldOption[A, B](option: Remote[Option[A]], none: Remote[B], f: Remote[A] => Remote[B])
-      extends Remote[B]
+      extends Remote[B] {
+    implicit val schemaA: Schema[A]         = ???
+    override def eval: Either[Remote[B], B] = option.eval match {
+      case Left(remoteOption) => Left(FoldOption(remoteOption, none, f))
+      case Right(op)          => op.fold(none.eval)(v => f(Remote(v)).eval)
+    }
+  }
 
   object Lazy {
     def apply[A](value: () => Remote[A]): Remote[A] = {
