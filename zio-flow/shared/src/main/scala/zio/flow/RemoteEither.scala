@@ -8,7 +8,10 @@ trait RemoteEither[+A] {
   ): Remote[D] =
     Remote.FoldEither(self.widen[Either[B, C]], left, right)
 
-  final def left: Remote[Either[A, Nothing]] = Remote.Either0(Left(self))
+  final def toLeft: Remote[Either[A, Nothing]] = Remote.Either0(Left(self))
 
-  final def right: Remote[Either[Nothing, A]] = Remote.Either0(Right(self))
+  final def merge[B](implicit ev: A <:< Either[B, B]): Remote[B] =
+    Remote.FoldEither[B, B, B](self.widen[Either[B, B]], identity(_), identity(_))
+
+  final def toRight: Remote[Either[Nothing, A]] = Remote.Either0(Right(self))
 }

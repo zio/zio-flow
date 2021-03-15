@@ -72,6 +72,12 @@ sealed trait ZFlow[-I, +E, +A] { self =>
   )(implicit A1: Schema[A1], b: Schema[B]): ZFlow[I1, E2, Either[A1, B]] =
     (self: ZFlow[I, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
 
+  final def race[I1 <: I, E1 >: E, A1 >: A](that: ZFlow[I1, E1, A1]): ZFlow[I1, E1, A1] =
+    self.widen[A1].raceEither(that).map(_.merge)
+
+  final def raceEither[I1 <: I, E1 >: E, B](that: ZFlow[I1, E1, B]): ZFlow[I1, E1, Either[A, B]] =
+    ZFlow.Race(self, that)
+
   final def unit: ZFlow[I, E, Unit] = as(())
 
   final def zip[I1 <: I, E1 >: E, A1 >: A, B](
@@ -106,9 +112,14 @@ object ZFlow                   {
   final case class Foreach[I, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[I, E, B])
       extends ZFlow[I, E, List[B]]
 
+  final case class Race[I, E, L, R](left: ZFlow[I, E, L], right: ZFlow[I, E, R]) extends ZFlow[I, E, Either[L, R]]
+
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
   def apply[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = Return(remote)
+
+  // TODO: For events
+  // def await[M]: ZFlow[Any, M, Nothing, M]
 
   def define[I, S, E, A](name: String, constructor: Constructor[S])(body: S => ZFlow[I, E, A]): ZFlow[I, E, A] =
     Define(name, constructor, body)
