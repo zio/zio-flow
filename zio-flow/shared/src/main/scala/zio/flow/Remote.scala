@@ -306,13 +306,22 @@ object Remote {
     }
   }
 
-  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A]
+  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
+    implicit val schemaAB: Schema[(A, B)]   = ???
+    override def eval: Either[Remote[A], A] = unaryEval(tuple)(t => t._1, remoteT => First(remoteT))
+  }
 
-  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B]
+  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
+    implicit val schemaAB: Schema[(A, B)]   = ???
+    override def eval: Either[Remote[B], B] = unaryEval(tuple)(t => t._2, remoteT => Second(remoteT))
+  }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A]
 
-  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], sortable: Sortable[A]) extends Remote[Boolean]
+  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], sortable: Sortable[A]) extends Remote[Boolean] {
+    implicit val schemaA : Schema[A] = ???
+    override def eval: Either[Remote[Boolean], Boolean] = binaryEval(left, right)((l,r) => sortable.lessThan(l,r), (rL, rR) => LessThanEqual(rL, rR, sortable))
+  }
 
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean]
 
