@@ -1,10 +1,10 @@
 package zio.flow
 
 sealed trait Constructor[+A] { self =>
-  final def flatMap[B](f: Expr[A] => Constructor[B]): Constructor[B] =
+  final def flatMap[B](f: Remote[A] => Constructor[B]): Constructor[B] =
     Constructor.FlatMap(self, f)
 
-  final def map[B](f: Expr[A] => Expr[B]): Constructor[B] =
+  final def map[B](f: Remote[A] => Remote[B]): Constructor[B] =
     self.flatMap(a => Constructor.Return(f(a)))
 
   final def zip[B](that: Constructor[B]): Constructor[(A, B)] =
@@ -12,11 +12,11 @@ sealed trait Constructor[+A] { self =>
 }
 
 object Constructor {
-  final case class Return[A](value: Expr[A])                                          extends Constructor[A]
-  final case class NewVar[A](defaultValue: Expr[A])                                   extends Constructor[StateVar[A]]
-  final case class FlatMap[A, B](value: Constructor[A], k: Expr[A] => Constructor[B]) extends Constructor[B]
+  final case class Return[A](value: Remote[A])                                          extends Constructor[A]
+  final case class NewVar[A](defaultValue: Remote[A])                                   extends Constructor[Variable[A]]
+  final case class FlatMap[A, B](value: Constructor[A], k: Remote[A] => Constructor[B]) extends Constructor[B]
 
   def apply[A: Schema](a: A): Constructor[A] = Return(a)
 
-  def newVar[A](value: Expr[A]): Constructor[StateVar[A]] = NewVar(value)
+  def newVar[A](value: Remote[A]): Constructor[Variable[A]] = NewVar(value)
 }
