@@ -319,20 +319,43 @@ object Remote {
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A]
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A], sortable: Sortable[A]) extends Remote[Boolean] {
-    implicit val schemaA : Schema[A] = ???
-    override def eval: Either[Remote[Boolean], Boolean] = binaryEval(left, right)((l,r) => sortable.lessThan(l,r), (rL, rR) => LessThanEqual(rL, rR, sortable))
+    implicit val schemaA: Schema[A]                     = ???
+    override def eval: Either[Remote[Boolean], Boolean] =
+      binaryEval(left, right)((l, r) => sortable.lessThan(l, r), (rL, rR) => LessThanEqual(rL, rR, sortable))
   }
 
-  final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean]
+  final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
+    override def eval: Either[Remote[Boolean], Boolean] = unaryEval(value)(a => !a, remoteA => Not(remoteA))
+  }
 
-  final case class And[A](left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean]
+  final case class And[A](left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
+    override def eval: Either[Remote[Boolean], Boolean] =
+      binaryEval(left, right)((l, r) => l && r, (remoteL, remoteR) => And(remoteL, remoteR))
+  }
 
   final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: Remote[(B, A)] => Remote[B])
       extends Remote[B]
 
-  final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]]
+  final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
+    implicit val schemaListA: Schema[List[A]]           = ???
+    implicit val schemaA: Schema[A]                     = ???
+    override def eval: Either[Remote[List[A]], List[A]] =
+      binaryEval(list, head)((l, h) => h :: l, (remoteL, remoteH) => Cons(remoteL, remoteH))
+  }
 
-  final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]]
+  final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
+    implicit val schemaListA: Schema[List[A]] = ???
+    implicit val schemaA: Schema[A]           = ???
+
+    override def eval: Either[Remote[Option[(A, List[A])]], Option[(A, List[A])]] = unaryEval(list)(
+      l =>
+        l.headOption match {
+          case scala.Some(v) => Some((v, l.tail))
+          case None          => None
+        },
+      remoteList => UnCons(remoteList)
+    )
+  }
 
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant]
 
@@ -351,7 +374,7 @@ object Remote {
 
   final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A]
 
-  final case class Some[A](value: Remote[A]) extends Remote[Option[A]]
+  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]]
 
   final case class FoldOption[A, B](option: Remote[Option[A]], none: Remote[B], f: Remote[A] => Remote[B])
       extends Remote[B]
