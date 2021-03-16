@@ -73,15 +73,15 @@ object Fractional {
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
-    def fromDouble(const: Double): Double = const.toDouble
+    def fromDouble(const: Double): Double          = const.toDouble
     override def fromLong(l: Long): Remote[Double] = Remote(l.toDouble)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
-    def fromDouble(const: Double): BigDecimal = BigDecimal(const)
+    def fromDouble(const: Double): BigDecimal          = BigDecimal(const)
     override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
-    def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+    def schema: Schema[BigDecimal]                     = implicitly[Schema[BigDecimal]]
   }
 }
