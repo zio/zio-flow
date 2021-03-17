@@ -294,7 +294,7 @@ object Remote {
 
   final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A]
 
-  final case class Some[A](value: Remote[A]) extends Remote[Option[A]]
+  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]]
 
   final case class FoldOption[A, B](option: Remote[Option[A]], none: Remote[B], f: Remote[A] => Remote[B])
       extends Remote[B]
