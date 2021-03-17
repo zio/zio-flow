@@ -56,7 +56,6 @@ trait RemoteList[+A] {
     .widen[Option[(A1, List[A1])]]
     .option(Remote(None), (tuple: Remote[(A1, List[A1])]) => Remote.Some0(tuple._1))
 
-
   final def length[A0](implicit ev: A <:< List[A0]): Remote[Int] =
     self.fold[A0, Int](0)((len, _) => len + 1)
 
