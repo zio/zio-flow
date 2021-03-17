@@ -3,7 +3,7 @@ package zio.flow
 sealed trait Numeric[A] {
   def schema: Schema[A]
 
-  def fromLong(l: Long): Remote[A]   = ???
+  def fromLong(l: Long): Remote[A]
   def add(left: A, right: A): A      = ???
   def multiply(left: A, right: A): A = ???
   def divide(left: A, right: A): A   = ???
@@ -16,33 +16,40 @@ sealed trait Numeric[A] {
 object Numeric extends NumericImplicits0 {
 
   implicit object NumericlInt extends Numeric[Int] {
-    def schema: Schema[Int] = implicitly[Schema[Int]]
+    override def fromLong(l: Long): Remote[Int] = Remote(l.toInt)
+    def schema: Schema[Int]                     = implicitly[Schema[Int]]
   }
 }
 sealed trait NumericImplicits0 {
 
   implicit case object NumericShort extends Numeric[Short] {
-    def schema: Schema[Short] = implicitly[Schema[Short]]
+    override def fromLong(l: Long): Remote[Short] = Remote(l.toShort)
+    def schema: Schema[Short]                     = implicitly[Schema[Short]]
   }
 
   implicit case object NumericLong extends Numeric[Long] {
-    def schema: Schema[Long] = implicitly[Schema[Long]]
+    override def fromLong(l: Long): Remote[Long] = Remote(l)
+    def schema: Schema[Long]                     = implicitly[Schema[Long]]
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
-    def schema: Schema[BigInt] = implicitly[Schema[BigInt]]
+    override def fromLong(l: Long): Remote[BigInt] = Remote(BigInt(l))
+    def schema: Schema[BigInt]                     = implicitly[Schema[BigInt]]
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
-    def schema: Schema[Float] = implicitly[Schema[Float]]
+    override def fromLong(l: Long): Remote[Float] = Remote(l.toFloat)
+    def schema: Schema[Float]                     = implicitly[Schema[Float]]
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
-    def schema: Schema[Double] = implicitly[Schema[Double]]
+    override def fromLong(l: Long): Remote[Double] = Remote(l.toDouble)
+    def schema: Schema[Double]                     = implicitly[Schema[Double]]
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
-    def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+    override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
+    def schema: Schema[BigDecimal]                     = implicitly[Schema[BigDecimal]]
   }
 }
 sealed trait Fractional[A] extends Numeric[A] {
@@ -60,18 +67,21 @@ object Fractional {
   implicit case object FractionalFloat extends Fractional[Float] {
     def fromDouble(const: Double): Float = const.toFloat
 
+    override def fromLong(l: Long): Remote[Float] = Remote(l.toFloat)
+
     def schema: Schema[Float] = implicitly[Schema[Float]]
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
-    def fromDouble(const: Double): Double = const.toDouble
+    def fromDouble(const: Double): Double          = const.toDouble
+    override def fromLong(l: Long): Remote[Double] = Remote(l.toDouble)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
-    def fromDouble(const: Double): BigDecimal = BigDecimal(const)
-
-    def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+    def fromDouble(const: Double): BigDecimal          = BigDecimal(const)
+    override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
+    def schema: Schema[BigDecimal]                     = implicitly[Schema[BigDecimal]]
   }
 }

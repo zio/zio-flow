@@ -12,7 +12,7 @@ object Mappable {
 
   implicit case object MappableOption extends Mappable[Option] {
     override def performMap[A, B](fa: Remote[Option[A]], ab: Remote[A] => Remote[B]): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), (a: Remote[A]) => Remote.Some(ab(a)))
+      Remote.FoldOption(fa, Remote(None), (a: Remote[A]) => Remote.Some0(ab(a)))
 
     override def performFilter[A](fa: Remote[Option[A]], predicate: Remote[A] => Remote[Boolean]): Remote[Option[A]] =
       Remote.FoldOption(fa, Remote(None), (a: Remote[A]) => predicate(a).ifThenElse(fa, Remote(None)))
