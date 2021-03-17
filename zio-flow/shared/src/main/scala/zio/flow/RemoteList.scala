@@ -6,8 +6,8 @@ trait RemoteList[+A] {
   def self: Remote[A]
 
   def ++[A1](other: Remote[List[A1]])(implicit ev: A <:< List[A1]): Remote[List[A1]] = {
-    val reversedSelf : Remote[List[A1]] = self.reverse
-    reversedSelf.fold[A1, List[A1]](other)((l,a) => Remote.Cons(l,a))
+    val reversedSelf: Remote[List[A1]] = self.reverse
+    reversedSelf.fold[A1, List[A1]](other)((l, a) => Remote.Cons(l, a))
   }
 
   def reverse[A0](implicit ev: A <:< List[A0]): Remote[List[A0]] =
@@ -40,9 +40,11 @@ trait RemoteList[+A] {
     (num > Remote(0)).ifThenElse(ifTrue, self.widen[List[A1]])
   }
 
-  def dropWhile[A1](predicate: Remote[A1] => Remote[Boolean])(implicit ev : A<:< List[A1]): Remote[List[A1]] = {
-    Remote.UnCons(self.widen[List[A1]]).widen[Option[(A1, List[A1])]].option(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.dropWhile[A1](predicate))
-  }
+  def dropWhile[A1](predicate: Remote[A1] => Remote[Boolean])(implicit ev: A <:< List[A1]): Remote[List[A1]] =
+    Remote
+      .UnCons(self.widen[List[A1]])
+      .widen[Option[(A1, List[A1])]]
+      .option(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.dropWhile[A1](predicate))
 
   final def fold[A0, B](initial: Remote[B])(f: (Remote[B], Remote[A0]) => Remote[B])(implicit
     ev: A <:< List[A0]
