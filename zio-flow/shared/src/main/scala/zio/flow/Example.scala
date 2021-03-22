@@ -23,7 +23,7 @@ object Example {
       ZFlow
         .input[OrderId]
         .flatMap(orderId =>
-          ZFlow.transaction {
+          ZFlow.transaction { _ =>
             intVar.update(_ + orderId) *>
               ZFlow.ifThenElse(orderId > 2)(boolVar.set(true), boolVar.set(false)) *>
               refundOrder(orderId) *>
@@ -67,7 +67,7 @@ object EmailCampaign {
                         getReviews(restaurant)
                       }
           average  <- ZFlow(reviews.sum / reviews.length)
-          newCount <- ZFlow.ifThenElse(average > 5)(count + 1, 0)
+          newCount <- ZFlow((average > 5).ifThenElse(count + 1, 0))
           _        <- ZFlow.ifThenElse(newCount !== 3)(ZFlow.sleep(Remote.ofDays(1L)), ZFlow.unit)
         } yield newCount
       )(_ < 3)
@@ -145,16 +145,17 @@ object UberEatsExample {
       ???
     )
 
-  lazy val restaurantOrderStatus: ZFlow[(Restaurant, Order), Throwable, Unit] = {
-    for {
-      tuple           <- ZFlow.input[(Restaurant, Order)]
-      orderConfStatus <- getOrderConfirmationStatus(tuple)
-      _               <- ZFlow.ifThenElse(orderConfStatus == Remote(OrderConfirmationStatus.Confirmed))(
-                           processOrderWorkflow,
-                           cancelOrderWorkflow
-                         )
-    } yield ()
-  }
+  lazy val restaurantOrderStatus: ZFlow[(Restaurant, Order), Throwable, Unit] = ???
+  // {
+  //   for {
+  //     tuple           <- ZFlow.input[(Restaurant, Order)]
+  //     orderConfStatus <- getOrderConfirmationStatus(tuple)
+  //     _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+  //                          processOrderWorkflow,
+  //                          cancelOrderWorkflow
+  //                        )
+  //   } yield ()
+  // }
 
   lazy val getOrderState: Activity[(User, Restaurant, Order), Throwable, OrderState]         = ???
   lazy val pushOrderStatusNotification: Activity[(User, Restaurant, Order), Throwable, Unit] = ???
