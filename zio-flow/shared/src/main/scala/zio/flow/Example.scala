@@ -136,8 +136,8 @@ object UberEatsExample {
 
   implicit def orderConfirmationStatusSchema: Schema[OrderConfirmationStatus.Confirmed.type] = ???
 
-  lazy val getOrderConfirmationStatus: Activity[(Restaurant, Order), Throwable, OrderConfirmationStatus] =
-    Activity[(Restaurant, Order), Throwable, OrderConfirmationStatus](
+  lazy val getOrderConfirmationStatus: Activity[(User, Address, Restaurant, Order), Throwable, OrderConfirmationStatus] =
+    Activity[(User, Address, Restaurant, Order), Throwable, OrderConfirmationStatus](
       "get-order-confirmation-status",
       "Gets whether or not an order is confirmed by the restaurant",
       ???,
@@ -145,17 +145,18 @@ object UberEatsExample {
       ???
     )
 
-  lazy val restaurantOrderStatus: ZFlow[(Restaurant, Order), Throwable, Unit] = ???
-  // {
-  //   for {
-  //     tuple           <- ZFlow.input[(Restaurant, Order)]
-  //     orderConfStatus <- getOrderConfirmationStatus(tuple)
-  //     _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
-  //                          processOrderWorkflow,
-  //                          cancelOrderWorkflow
-  //                        )
-  //   } yield ()
-  // }
+  lazy val restaurantOrderStatus: ZFlow[(User, Address, Restaurant, Order), Throwable, Unit] =
+   {
+     implicit val sortable : Sortable[OrderConfirmationStatus] = ???
+     for {
+       tuple           <- ZFlow.input[(User, Address, Restaurant, Order)]
+       orderConfStatus <- getOrderConfirmationStatus(tuple)
+       _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+                            processOrderWorkflow,
+                            cancelOrderWorkflow
+                          )
+     } yield ()
+   }
 
   lazy val getOrderState: Activity[(User, Restaurant, Order), Throwable, OrderState]         = ???
   lazy val pushOrderStatusNotification: Activity[(User, Restaurant, Order), Throwable, Unit] = ???
@@ -211,5 +212,5 @@ object UberEatsExample {
   }
 
   processOrderWorkflow.flatMap(riderWorkflow)
-  lazy val cancelOrderWorkflow: ZFlow[(Restaurant, Order), Throwable, Any] = ???
+  lazy val cancelOrderWorkflow: ZFlow[(User, Address, Restaurant, Order), Throwable, Any] = ???
 }
