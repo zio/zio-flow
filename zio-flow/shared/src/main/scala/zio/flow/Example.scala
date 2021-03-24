@@ -13,12 +13,12 @@ object Example {
 
   val stateConstructor: Constructor[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
-      intVar  <- newVar[Int](0)
-      boolVar <- newVar[Boolean](false)
-      listVar <- newVar[List[String]](Nil)
+      intVar  <- newVar[Int]("intVar", 0)
+      boolVar <- newVar[Boolean]("boolVar", false)
+      listVar <- newVar[List[String]]("listVar", Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess: ZFlow[OrderId, Nothing, Unit] =
+  val orderProcess: ZFlow[OrderId, Throwable, Unit] =
     ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
       ZFlow
         .input[OrderId]
@@ -30,6 +30,7 @@ object Example {
               listVar.set(Nil)
           }
         )
+        .refineToOrDie[Throwable]
     }
 }
 
@@ -136,7 +137,8 @@ object UberEatsExample {
 
   implicit def orderConfirmationStatusSchema: Schema[OrderConfirmationStatus.Confirmed.type] = ???
 
-  lazy val getOrderConfirmationStatus: Activity[(User, Address, Restaurant, Order), Throwable, OrderConfirmationStatus] =
+  lazy val getOrderConfirmationStatus
+    : Activity[(User, Address, Restaurant, Order), Throwable, OrderConfirmationStatus] =
     Activity[(User, Address, Restaurant, Order), Throwable, OrderConfirmationStatus](
       "get-order-confirmation-status",
       "Gets whether or not an order is confirmed by the restaurant",
@@ -145,18 +147,17 @@ object UberEatsExample {
       ???
     )
 
-  lazy val restaurantOrderStatus: ZFlow[(User, Address, Restaurant, Order), Throwable, Unit] =
-   {
-     implicit val sortable : Sortable[OrderConfirmationStatus] = ???
-     for {
-       tuple           <- ZFlow.input[(User, Address, Restaurant, Order)]
-       orderConfStatus <- getOrderConfirmationStatus(tuple)
-       _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
-                            processOrderWorkflow,
-                            cancelOrderWorkflow
-                          )
-     } yield ()
-   }
+  lazy val restaurantOrderStatus: ZFlow[(User, Address, Restaurant, Order), Throwable, Unit] = {
+    implicit val sortable: Sortable[OrderConfirmationStatus] = ???
+    for {
+      tuple           <- ZFlow.input[(User, Address, Restaurant, Order)]
+      orderConfStatus <- getOrderConfirmationStatus(tuple)
+      _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+                           processOrderWorkflow,
+                           cancelOrderWorkflow
+                         )
+    } yield ()
+  }
 
   lazy val getOrderState: Activity[(User, Restaurant, Order), Throwable, OrderState]         = ???
   lazy val pushOrderStatusNotification: Activity[(User, Restaurant, Order), Throwable, Unit] = ???
