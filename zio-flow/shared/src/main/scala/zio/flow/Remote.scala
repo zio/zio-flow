@@ -1,7 +1,7 @@
 package zio.flow
 
 import java.time.temporal.{ ChronoUnit, TemporalUnit }
-import java.time.{ Duration, Instant }
+import java.time.{ Duration, Instant, Period }
 
 import scala.language.implicitConversions
 
@@ -72,6 +72,8 @@ object Schema {
   implicit def instantSchema: Schema[Instant] = ???
 
   implicit def durationSchema: Schema[Duration] = ???
+
+  implicit def periodSchema: Schema[Period] = ???
 }
 
 /**

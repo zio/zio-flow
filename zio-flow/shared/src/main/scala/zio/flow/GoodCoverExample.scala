@@ -1,5 +1,7 @@
 package zio.flow
 
+import java.time.Period
+
 /**
  * 1. Get all policies that will expire in the next 60 days.
  * 2. For each of these policies, do the following -
@@ -21,17 +23,82 @@ package zio.flow
  * 2.7 If policy is successfully renewed, send out emails to all subscribers (landlords etc.)
  */
 object PolicyRenewalExample {
-  type PolicyId = String
+  type PolicyId        = String
   type PropertyAddress = String
-  type Email = String
-  type PaymentMethod = String
+  type Email           = String
+  type PaymentMethod   = String
+  type Year            = Int
+  type Probability     = Float
 
-  case class Policy(id: PolicyId, address : PropertyAddress, userEmail : Email)
+  case class Policy(id: PolicyId, address: PropertyAddress, userEmail: Email)
 
-  val riskDeterminationFlow: ZFlow[(PolicyId, PropertyAddress), Throwable, Option[Policy]] = ???
-  val manualEvaluationReminderFlow : ZFlow[(Email, PolicyId), Nothing, Unit] = ???
-  val policyRenewalReminderFlow : ZFlow[(Email, Policy), Nothing, Unit] = ???
-  val paymentFlow : ZFlow[PaymentMethod, Throwable, Boolean] = ???
+  implicit val policySchema: Schema[Policy] = ???
 
+  def policyClaimStatus: Activity[Policy, Nothing, Boolean] =
+    Activity[Policy, Nothing, Boolean](
+      "get-policy-claim-status",
+      "Returns whether or not claim was made on a policy for a certain year",
+      ???,
+      ???,
+      ???
+    )
 
+  def getFireRisk: Activity[Policy, Nothing, Probability] =
+    Activity[Policy, Nothing, Probability](
+      "get-fire-risk",
+      "Gets the probability of fire hazard for a particular property",
+      ???,
+      ???,
+      ???
+    )
+
+  def createRenewedPolicy: Activity[(Boolean, Probability), Nothing, Option[Policy]] =
+    Activity[(Boolean, Probability), Nothing, Option[Policy]](
+      "create-renewed-policy",
+      "Creates a new Insurance Policy based on external params like previous claim, fire risk etc.",
+      ???,
+      ???,
+      ???
+    )
+
+  def riskDeterminationFlow(policy: Remote[Policy]): ZFlow[Any, Throwable, Option[Policy]] =
+    for {
+      claimStatus  <- policyClaimStatus(policy)
+      fireRisk     <- getFireRisk(policy)
+      policyOption <- createRenewedPolicy(claimStatus, fireRisk)
+    } yield policyOption
+
+  def manualEvaluationReminderFlow(policy: Remote[Policy]): ZFlow[Email, Nothing, Unit] = ???
+
+  def policyRenewalReminderFlow(policy: Remote[Policy]): ZFlow[Email, Nothing, Unit] = ???
+
+  def paymentFlow: ZFlow[PaymentMethod, Throwable, Boolean] = ???
+
+  lazy val getPoliciesDueExpiration: Activity[Period, Throwable, List[Policy]] =
+    Activity[Period, Throwable, List[Policy]](
+      "get-expiring-policies",
+      "gets a list of all Policies that are about to expire in `Period` timePeriod",
+      ???,
+      ???,
+      ???
+    )
+
+  lazy val policyRenewalFlow: ZFlow[PaymentMethod with Policy, Throwable, Unit] = {
+
+    def performPolicyRenewal(policy: Remote[Policy]): ZFlow[PaymentMethod, Throwable, Unit] =
+      for {
+        policyOption <- riskDeterminationFlow(policy)
+        _            <- policyOption.option(Remote.unit, (p: Remote[Policy]) => manualEvaluationReminderFlow(p))
+        _            <- policyOption.option(Remote.unit, (p: Remote[Policy]) => policyRenewalReminderFlow(p))
+        _            <- paymentFlow
+      } yield ()
+
+    for {
+      tuple    <- ZFlow.input[Policy]
+      policies <- getPoliciesDueExpiration(Remote(Period.ofDays(60)))
+      _        <- ZFlow.foreach(policies) { policy =>
+                    performPolicyRenewal(policy)
+                  }
+    } yield ()
+  }
 }
