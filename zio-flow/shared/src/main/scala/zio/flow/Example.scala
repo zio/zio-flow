@@ -13,12 +13,12 @@ object Example {
 
   val stateConstructor: Constructor[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
-      intVar  <- newVar[Int](0)
-      boolVar <- newVar[Boolean](false)
-      listVar <- newVar[List[String]](Nil)
+      intVar  <- newVar[Int]("intVar",0)
+      boolVar <- newVar[Boolean]("boolVar",false)
+      listVar <- newVar[List[String]]("ListVar", Nil)
     } yield (intVar, boolVar, listVar)
 
-  val orderProcess: ZFlow[OrderId, Nothing, Unit] =
+  val orderProcess: ZFlow[OrderId, Throwable, Unit] =
     ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
       ZFlow
         .input[OrderId]
@@ -29,7 +29,7 @@ object Example {
               refundOrder(orderId) *>
               listVar.set(Nil)
           }
-        )
+        ).refineToOrDie[Throwable]
     }
 }
 
