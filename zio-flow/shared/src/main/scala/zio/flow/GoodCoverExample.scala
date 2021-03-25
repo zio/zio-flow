@@ -30,7 +30,9 @@ object PolicyRenewalExample {
   type Year            = Int
   type Probability     = Float
 
-  case class Policy(id: PolicyId, address: PropertyAddress, userEmail: Email)
+  case class Policy(id: PolicyId, address: PropertyAddress, userEmail: Email, evaluatorEmail: Email)
+
+  case class Buyer(id: String, address: PropertyAddress, email: Email)
 
   implicit val policySchema: Schema[Policy] = ???
 
@@ -43,8 +45,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def getFireRisk: Activity[Policy, Nothing, Probability] =
-    Activity[Policy, Nothing, Probability](
+  def getFireRisk: Activity[Policy, Throwable, Probability] =
+    Activity[Policy, Throwable, Probability](
       "get-fire-risk",
       "Gets the probability of fire hazard for a particular property",
       ???,
@@ -52,8 +54,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def createRenewedPolicy: Activity[(Boolean, Probability), Nothing, Option[Policy]] =
-    Activity[(Boolean, Probability), Nothing, Option[Policy]](
+  def createRenewedPolicy: Activity[(Boolean, Probability), Throwable, Option[Policy]] =
+    Activity[(Boolean, Probability), Throwable, Option[Policy]](
       "create-renewed-policy",
       "Creates a new Insurance Policy based on external params like previous claim, fire risk etc.",
       ???,
@@ -61,14 +63,32 @@ object PolicyRenewalExample {
       ???
     )
 
-  def riskDeterminationFlow(policy: Remote[Policy]): ZFlow[Any, Throwable, Option[Policy]] =
-    for {
-      claimStatus  <- policyClaimStatus(policy)
-      fireRisk     <- getFireRisk(policy)
-      policyOption <- createRenewedPolicy(claimStatus, fireRisk)
-    } yield policyOption
+  def isManualEvaluationRequired: Activity[(Boolean, Probability), Throwable, Boolean] =
+    Activity[(Boolean, Probability), Throwable, Boolean](
+      "is-manual-evaluation-required",
+      "Returns whether or not manual evaluation is required for this policy.",
+      ???,
+      ???,
+      ???
+    )
 
-  def manualEvaluationReminderFlow(policy: Remote[Policy]): ZFlow[Email, Nothing, Unit] = ???
+  def sendReminderEmail: Activity[Policy, Nothing, Unit] =
+    Activity[Policy, Nothing, Unit](
+      "is-manual-evaluation-required",
+      "Returns whether or not manual evaluation is required for this policy.",
+      ???,
+      ???,
+      ???
+    )
+
+  def manualEvalReminderFlow(policy: Remote[Policy], evaluationDone: Variable[Boolean]): ZFlow[Any, Nothing, Any] =
+    ZFlow.doWhile {
+      for {
+        option <- evaluationDone.waitUntil(_ === true).timeout(Remote.ofDays(1L))
+        loop   <- option.isNone.toFlow
+        _      <- ZFlow.when(loop)(sendReminderEmail(policy))
+      } yield loop
+    }
 
   def policyRenewalReminderFlow(policy: Remote[Policy]): ZFlow[Email, Nothing, Unit] = ???
 
@@ -87,14 +107,16 @@ object PolicyRenewalExample {
 
     def performPolicyRenewal(policy: Remote[Policy]): ZFlow[PaymentMethod, Throwable, Unit] =
       for {
-        policyOption <- riskDeterminationFlow(policy)
-        _            <- policyOption.option(Remote.unit, (p: Remote[Policy]) => manualEvaluationReminderFlow(p))
-        _            <- policyOption.option(Remote.unit, (p: Remote[Policy]) => policyRenewalReminderFlow(p))
-        _            <- paymentFlow
+        claimStatus     <- policyClaimStatus(policy)
+        fireRisk        <- getFireRisk(policy)
+        isManualEvalReq <- isManualEvaluationRequired(claimStatus, fireRisk)
+        _               <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(policy))
+        policyOption    <- createRenewedPolicy(claimStatus, fireRisk)
+        _               <- policyOption.handleOption(ZFlow.unit, (p: Remote[Policy]) => policyRenewalReminderFlow(p))
+        _               <- paymentFlow
       } yield ()
 
     for {
-      tuple    <- ZFlow.input[Policy]
       policies <- getPoliciesDueExpiration(Remote(Period.ofDays(60)))
       _        <- ZFlow.foreach(policies) { policy =>
                     performPolicyRenewal(policy)
