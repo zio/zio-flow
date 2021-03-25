@@ -12,12 +12,11 @@ sealed trait Constructor[+A] { self =>
 }
 
 object Constructor {
-  // TODO: Add name to NewVar and propagate to `newVar`.
   final case class Return[A](value: Remote[A])                                          extends Constructor[A]
-  final case class NewVar[A](defaultValue: Remote[A])                                   extends Constructor[Variable[A]]
+  final case class NewVar[A](name: String, defaultValue: Remote[A])                     extends Constructor[Variable[A]]
   final case class FlatMap[A, B](value: Constructor[A], k: Remote[A] => Constructor[B]) extends Constructor[B]
 
   def apply[A: Schema](a: A): Constructor[A] = Return(a)
 
-  def newVar[A](value: Remote[A]): Constructor[Variable[A]] = NewVar(value)
+  def newVar[A](name: String, value: Remote[A]): Constructor[Variable[A]] = NewVar(name, value)
 }

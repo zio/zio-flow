@@ -2,6 +2,8 @@ package zio.flow
 
 import java.time.{ Duration, Instant }
 
+import scala.reflect.ClassTag
+
 import zio.flow.RemoteTuple._
 
 //
@@ -19,7 +21,8 @@ import zio.flow.RemoteTuple._
 //  - compensation (undo an activity), "saga pattern"
 //  - examples: microservice interaction, REST API call, GraphQL query, database query
 //
-sealed trait ZFlow[-I, +E, +A] { self =>
+sealed trait ZFlow[-I, +E, +A] {
+  self =>
   final def *>[I1 <: I, E1 >: E, A1 >: A, B](
     that: ZFlow[I1, E1, B]
   )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[I1, E1, B] =
@@ -98,29 +101,48 @@ sealed trait ZFlow[-I, +E, +A] { self =>
 
     self.asInstanceOf[ZFlow[I, E, A0]]
   }
+
+  final def refineToOrDie[Narrowed: ClassTag](implicit v: CanFail[Narrowed]): ZFlow[I, Narrowed, A] =
+    ZFlow.RefineToOrDie[I, E, Narrowed, A](self)
 }
-object ZFlow                   {
-  final case class Return[A](value: Remote[A])                                         extends ZFlow[Any, Nothing, A]
-  case object Now                                                                      extends ZFlow[Any, Nothing, Instant]
-  final case class WaitTill(time: Remote[Instant])                                     extends ZFlow[Any, Nothing, Unit]
-  final case class Halt[E](value: Remote[E])                                           extends ZFlow[Any, E, Nothing]
-  final case class Modify[A, B](svar: Variable[A], f: Remote[A] => Remote[(B, A)])     extends ZFlow[Any, Nothing, B]
+
+object ZFlow {
+
+  final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A]
+
+  case object Now extends ZFlow[Any, Nothing, Instant]
+
+  final case class WaitTill(time: Remote[Instant]) extends ZFlow[Any, Nothing, Unit]
+
+  final case class Halt[E](value: Remote[E]) extends ZFlow[Any, E, Nothing]
+
+  final case class Modify[A, B](svar: Variable[A], f: Remote[A] => Remote[(B, A)]) extends ZFlow[Any, Nothing, B]
+
   final case class Fold[I, E1, E2, A, B](
     value: ZFlow[I, E1, A],
     ke: Remote[E1] => ZFlow[I, E2, B],
     ks: Remote[A] => ZFlow[I, E2, B]
-  )                                                                                    extends ZFlow[I, E2, B]
+  ) extends ZFlow[I, E2, B]
+
   final case class RunActivity[I, E, A](input: Remote[I], activity: Activity[I, E, A]) extends ZFlow[Any, E, A]
-  final case class Transaction[I, E, A](workflow: ZFlow[I, E, A])                      extends ZFlow[I, E, A]
-  final case class Input[I](schema: Schema[I])                                         extends ZFlow[I, Nothing, I]
+
+  final case class Transaction[I, E, A](workflow: ZFlow[I, E, A]) extends ZFlow[I, E, A]
+
+  final case class Input[I](schema: Schema[I]) extends ZFlow[I, Nothing, I]
+
   final case class Define[I, S, E, A](name: String, constructor: Constructor[S], body: S => ZFlow[I, E, A])
       extends ZFlow[I, E, A]
-  final case class Unwrap[I, E, A](remote: Remote[ZFlow[I, E, A]])                     extends ZFlow[I, E, A]
+
+  final case class Unwrap[I, E, A](remote: Remote[ZFlow[I, E, A]]) extends ZFlow[I, E, A]
 
   final case class Foreach[I, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[I, E, B])
       extends ZFlow[I, E, List[B]]
 
   final case class Timeout[I, E, A](value: ZFlow[I, E, A], duration: Remote[Duration]) extends ZFlow[I, E, Option[A]]
+
+  case object Die extends ZFlow[Any, Nothing, Nothing]
+
+  final case class RefineToOrDie[I, E, E1, A](value: ZFlow[I, E, A])(implicit tag: ClassTag[E1]) extends ZFlow[I, E1, A]
 
   case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
 
