@@ -13,8 +13,8 @@ object Example {
 
   val stateConstructor: Constructor[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
-      intVar  <- newVar[Int]("intVar",0)
-      boolVar <- newVar[Boolean]("boolVar",false)
+      intVar  <- newVar[Int]("intVar", 0)
+      boolVar <- newVar[Boolean]("boolVar", false)
       listVar <- newVar[List[String]]("ListVar", Nil)
     } yield (intVar, boolVar, listVar)
 
@@ -29,7 +29,8 @@ object Example {
               refundOrder(orderId) *>
               listVar.set(Nil)
           }
-        ).refineToOrDie[Throwable]
+        )
+        .refineToOrDie[Throwable]
     }
 }
 
