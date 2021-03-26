@@ -29,13 +29,13 @@ object Schema {
 
   implicit def stringSchema: Schema[String] = ???
 
-  implicit def shortSchema: Schema[Short] = ???
+  implicit def shortSchema: Schema[Short] = Schema.fail("")
 
-  implicit def intSchema: Schema[Int] = ???
+  implicit def intSchema: Schema[Int] = Schema.fail("Failed Int")
 
-  implicit def longSchema: Schema[Long] = ???
+  implicit def longSchema: Schema[Long] = Schema.fail("")
 
-  implicit def floatSchema: Schema[Float] = ???
+  implicit def floatSchema: Schema[Float] = Schema.fail("")
 
   implicit def doubleSchema: Schema[Double] = ???
 
@@ -43,7 +43,7 @@ object Schema {
 
   implicit def bigDecimalSchema: Schema[BigDecimal] = ???
 
-  implicit def unitSchema: Schema[Unit] = ???
+  implicit def unitSchema: Schema[Unit] = Schema.fail("")
 
   implicit def boolSchema: Schema[Boolean] = ???
 
@@ -72,6 +72,7 @@ object Schema {
   implicit def instantSchema: Schema[Instant] = ???
 
   implicit def durationSchema: Schema[Duration] = ???
+
 }
 
 /**
