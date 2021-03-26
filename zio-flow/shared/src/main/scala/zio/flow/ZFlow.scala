@@ -72,11 +72,19 @@ sealed trait ZFlow[-I, +E, +A] { self =>
   )(implicit A1: Schema[A1], b: Schema[B]): ZFlow[I1, E2, Either[A1, B]] =
     (self: ZFlow[I, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
 
-  final def race[I1 <: I, E1 >: E, A1 >: A](that: ZFlow[I1, E1, A1]): ZFlow[I1, E1, A1] =
-    self.widen[A1].raceEither(that).map(_.merge)
+  /**
+   * Attempts to execute this flow, but then, if this flow is suspended due to performing a retry
+   * operation inside a transaction (because conditions necessary for executing this flow are not
+   * yet ready), then will switch over to the specified flow.
+   *
+   * If this flow never suspends, then it will always execute to success or failure, and the
+   * specified flow will never be executed.
+   */
+  final def orTry[I1 <: I, E1 >: E, A1 >: A](that: ZFlow[I1, E1, A1]): ZFlow[I1, E1, A1] =
+    ZFlow.OrTry(self, that)
 
-  final def raceEither[I1 <: I, E1 >: E, B](that: ZFlow[I1, E1, B]): ZFlow[I1, E1, Either[A, B]] =
-    ZFlow.Race(self, that)
+  final def timeout(duration: Remote[Duration]): ZFlow[I, E, Option[A]] =
+    ZFlow.Timeout(self, duration)
 
   final def unit: ZFlow[I, E, Unit] = as(())
 
@@ -112,7 +120,11 @@ object ZFlow                   {
   final case class Foreach[I, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[I, E, B])
       extends ZFlow[I, E, List[B]]
 
-  final case class Race[I, E, L, R](left: ZFlow[I, E, L], right: ZFlow[I, E, R]) extends ZFlow[I, E, Either[L, R]]
+  final case class Timeout[I, E, A](value: ZFlow[I, E, A], duration: Remote[Duration]) extends ZFlow[I, E, Option[A]]
+
+  case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
+
+  final case class OrTry[I, E, A](left: ZFlow[I, E, A], right: ZFlow[I, E, A]) extends ZFlow[I, E, A]
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
@@ -124,11 +136,17 @@ object ZFlow                   {
   def define[I, S, E, A](name: String, constructor: Constructor[S])(body: S => ZFlow[I, E, A]): ZFlow[I, E, A] =
     Define(name, constructor, body)
 
+  def doUntil[I, E](flow: ZFlow[I, E, Boolean]): ZFlow[I, E, Any] =
+    ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ == false)
+
+  def doWhile[I, E](flow: ZFlow[I, E, Boolean]): ZFlow[I, E, Any] =
+    ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ == true)
+
   def foreach[I, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[I, E, B]): ZFlow[I, E, List[B]] =
     Foreach(values, body)
 
-  def ifThenElse[A](p: Remote[Boolean])(ifTrue: Remote[A], ifFalse: Remote[A]): Remote[A] =
-    p.ifThenElse(ifTrue, ifFalse)
+  def ifThenElse[I, E, A](p: Remote[Boolean])(ifTrue: ZFlow[I, E, A], ifFalse: ZFlow[I, E, A]): ZFlow[I, E, A] =
+    ???
 
   def input[I: Schema]: ZFlow[I, Nothing, I] = Input(implicitly[Schema[I]])
 
@@ -141,8 +159,8 @@ object ZFlow                   {
       _     <- ZFlow.waitTill(later)
     } yield Remote.unit
 
-  def transaction[I, E, A](workflow: ZFlow[I, E, A]): ZFlow[I, E, A] =
-    Transaction(workflow)
+  def transaction[I, E, A](make: ZFlowTransaction => ZFlow[I, E, A]): ZFlow[I, E, A] =
+    Transaction(make(ZFlowTransaction.instance))
 
   val unit: ZFlow[Any, Nothing, Unit] = ZFlow(Remote.unit)
 

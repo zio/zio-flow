@@ -12,6 +12,7 @@ sealed trait Constructor[+A] { self =>
 }
 
 object Constructor {
+  // TODO: Add name to NewVar and propagate to `newVar`.
   final case class Return[A](value: Remote[A])                                          extends Constructor[A]
   final case class NewVar[A](defaultValue: Remote[A])                                   extends Constructor[Variable[A]]
   final case class FlatMap[A, B](value: Constructor[A], k: Remote[A] => Constructor[B]) extends Constructor[B]

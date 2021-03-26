@@ -1,5 +1,51 @@
 package zio.flow
+/*
 
+agentApproves:       Variable[Boolean]
+userAgrees:          Variable[Boolean]
+underwriterApproves: Variable[Boolean]
+
+val agentWorkflow =
+  ZFlow.transaction { txn =>
+    for {
+      approves <- agentApproves.get
+      _        <- txn.retryUntil(approves == true)
+      _        <- sendEmails(...)
+    } yield ()
+  }
+
+val userWorkflow =
+  ZFlow.transaction { txn =>
+    for {
+      approves <- userAgrees.get
+      _        <- txn.retryUntil(approves == true)
+      _        <- sendEmails(...)
+    } yield ()
+  }
+
+val underwriterWorkflow =
+  ZFlow.transaction { txn =>
+    for {
+      approves <- underwriterApproves.get
+      _        <- txn.retryUntil(approves == true)
+      _        <- sendEmails(...)
+    } yield ()
+  }
+
+  val allDone =
+    for {
+      done1 <- underwriterApproves.get
+      done2 <- userAgrees.get
+      done3 <- agentApproves.get
+    } yield done1 && done2 && done3
+
+
+  ZFlow.agentWorkflow orTry userWorkflow orTry underwriterWorkflow
+
+  ZFlow.doUntil {
+    (ZFlow.agentWorkflow orTry userWorkflow orTry underwriterWorkflow) *> allDone
+  }
+ */
 trait Variable[A] { self =>
   def get: ZFlow[Any, Nothing, A] = modify(a => (a, a))
 
