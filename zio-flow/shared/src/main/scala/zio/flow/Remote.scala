@@ -37,11 +37,11 @@ object Schema {
 
   implicit def floatSchema: Schema[Float] = Schema.fail("")
 
-  implicit def doubleSchema: Schema[Double] = ???
+  implicit def doubleSchema: Schema[Double] = Schema.fail("")
 
-  implicit def bigIntSchema: Schema[BigInt] = ???
+  implicit def bigIntSchema: Schema[BigInt] = Schema.fail("")
 
-  implicit def bigDecimalSchema: Schema[BigDecimal] = ???
+  implicit def bigDecimalSchema: Schema[BigDecimal] = Schema.fail("")
 
   implicit def unitSchema: Schema[Unit] = Schema.fail("")
 
