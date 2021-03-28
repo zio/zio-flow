@@ -30,11 +30,11 @@ object Numeric extends NumericImplicits0 {
 
     override def divide(left: Int, right: Int): Int = left/right
 
-    override def pow(left: Int, right: Int): Int = Math.pow(left, right).toInt
+    override def pow(left: Int, right: Int): Int = Math.pow(left.toDouble, right.toDouble).toInt
 
-    override def root(left: Int, right: Int): Int = Math.pow(left, 1/right).toInt
+    override def root(left: Int, right: Int): Int = Math.pow(left.toDouble, 1/right.toDouble).toInt
 
-    override def log(left: Int, right: Int): Int = (Math.log(left)/Math.log(right)).toInt
+    override def log(left: Int, right: Int): Int = (Math.log(left.toDouble)/Math.log(right.toDouble)).toInt
 
     def schema: Schema[Int] = implicitly[Schema[Int]]
 
@@ -53,11 +53,11 @@ sealed trait NumericImplicits0 {
 
     override def divide(left: Short, right: Short): Short = (left/right).toShort
 
-    override def pow(left: Short, right: Short): Short = Math.pow(left, right).toShort
+    override def pow(left: Short, right: Short): Short = Math.pow(left.toDouble, right.toDouble).toShort
 
-    override def root(left: Short, right: Short): Short = Math.pow(left, 1/right).toShort
+    override def root(left: Short, right: Short): Short = Math.pow(left.toDouble, 1/right.toDouble).toShort
 
-    override def log(left: Short, right: Short): Short = (Math.log(left)/Math.log(right)).toShort
+    override def log(left: Short, right: Short): Short = (Math.log(left.toDouble)/Math.log(right.toDouble)).toShort
 
     override def negate(left: Short): Short = (-1 * left).toShort
 
@@ -73,13 +73,13 @@ sealed trait NumericImplicits0 {
 
     override def divide(left: Long, right: Long): Long = left/right
 
-    override def pow(left: Long, right: Long): Long = Math.pow(left, right).toLong
+    override def pow(left: Long, right: Long): Long = Math.pow(left.toDouble, right.toDouble).toLong
 
-    override def root(left: Long, right: Long): Long = Math.pow(left, 1/right).toLong
+    override def root(left: Long, right: Long): Long = Math.pow(left.toDouble, 1/right.toDouble).toLong
 
     override def negate(left: Long): Long = -1 * left
 
-    override def log(left: Long, right: Long): Long = (Math.log(left)/Math.log(right)).toLong
+    override def log(left: Long, right: Long): Long = (Math.log(left.toDouble)/Math.log(right.toDouble)).toLong
 
     def schema: Schema[Long] = implicitly[Schema[Long]]
   }
@@ -113,13 +113,13 @@ sealed trait NumericImplicits0 {
 
     override def divide(left: Float, right: Float): Float = left/right
 
-    override def pow(left: Float, right: Float): Float = Math.pow(left, right).toFloat
+    override def pow(left: Float, right: Float): Float = Math.pow(left.toDouble, right.toDouble).toFloat
 
-    override def root(left: Float, right: Float): Float = Math.pow(left, 1/right).toFloat
+    override def root(left: Float, right: Float): Float = Math.pow(left.toDouble, 1/right.toDouble).toFloat
 
     override def negate(left: Float): Float = -1 * left
 
-    override def log(left: Float, right: Float): Float = (Math.log(left)/Math.log(right)).toFloat
+    override def log(left: Float, right: Float): Float = (Math.log(left.toDouble)/Math.log(right.toDouble)).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
   }
@@ -147,7 +147,7 @@ sealed trait NumericImplicits0 {
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
     override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
 
-    override def add(left: BigDecimal, right: BigDecimal): BigDecimal = ???
+    override def add(left: BigDecimal, right: BigDecimal): BigDecimal = left + right
 
     override def multiply(left: BigDecimal, right: BigDecimal): BigDecimal = left * right
 
@@ -170,7 +170,7 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def schema: Schema[A]
 
-  def sin(a: A): A = ???
+  def sin(a: A): A
 
   def inverseSin(a: A): A = ???
 }
@@ -188,13 +188,15 @@ object Fractional {
 
     override def divide(left: Float, right: Float): Float = left/right
 
-    override def pow(left: Float, right: Float): Float = Math.pow(left, right).toFloat
+    override def pow(left: Float, right: Float): Float = Math.pow(left.toDouble, right.toDouble).toFloat
 
-    override def root(left: Float, right: Float): Float = Math.pow(left, 1/right).toFloat
+    override def root(left: Float, right: Float): Float = Math.pow(left.toDouble, 1/right.toDouble).toFloat
 
     override def negate(left: Float): Float = -1 * left
 
-    override def log(left: Float, right: Float): Float = (Math.log(left)/Math.log(right)).toFloat
+    override def log(left: Float, right: Float): Float = (Math.log(left.toDouble)/Math.log(right.toDouble)).toFloat
+
+    override def sin(a: Float): Float = Math.sin(a.toDouble).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
   }
@@ -218,6 +220,8 @@ object Fractional {
 
     override def negate(left: Double): Double = -1 * left
 
+    override def sin(a: Double): Double = Math.sin(a)
+
     def schema: Schema[Double] = implicitly[Schema[Double]]
   }
 
@@ -239,6 +243,8 @@ object Fractional {
     override def negate(left: BigDecimal): BigDecimal = -1 * left
 
     override def log(left: BigDecimal, right: BigDecimal): BigDecimal = Math.log(left.doubleValue)/Math.log(right.doubleValue)
+
+    override def sin(a: BigDecimal): BigDecimal = Math.sin(a.doubleValue)
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
   }
