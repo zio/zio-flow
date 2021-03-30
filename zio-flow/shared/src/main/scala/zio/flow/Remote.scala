@@ -122,25 +122,39 @@ sealed trait Remote[+A]
 object Remote {
 
   final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
+      Right((schema, value))
+
     override def eval: Either[Remote[A], A] = Right(value)
   }
 
   final case class Ignore[A](value: Remote[A]) extends Remote[Unit] {
+    def evalWithSchema: Either[Remote[Unit], (Schema[Unit], Unit)] =
+      Right((Schema[Unit], ()))
+
     override def eval: Either[Remote[Unit], Unit] = Right(())
 
     def schema: Schema[Unit] = Schema[Unit]
   }
 
   final case class Variable[A](identifier: String, schema: Schema[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] = Left(self)
+
     override def eval: Either[Remote[A], A] = Left(self)
   }
 
   final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
+      Remote.binaryEval(left, right)((l, r) => (numeric.schema, numeric.add(l, r)), AddNumeric(_, _, numeric))
+
     override def eval: Either[Remote[A], A] =
       Remote.binaryEval(left, right)(numeric.add, AddNumeric(_, _, numeric))
   }
 
   final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[A => B] {
+    def evalWithSchema: Either[Remote[A => B], (Schema[A => B], A => B)] = Left(this)
+
+    // TODO: Actually eval?
     override def eval: Either[Remote[A => B], A => B] = Left(this)
   }
 
@@ -292,9 +306,12 @@ object Remote {
     }
   }
 
+  // def eval: Either[Remote[Boolean], Boolean]
+  // def eval: Either[Remote[A], (Schema[A], A)]
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
     override def eval: Either[Remote[Boolean], Boolean] =
       // FIXME: Compare two values of type A
+      // NOTE: Can do this when `evalWithSchema` is done!
       binaryEval(left, right)((_, _) => ???, (rL, rR) => LessThanEqual(rL, rR))
   }
 
@@ -404,10 +421,10 @@ object Remote {
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
     remote.eval.fold(remote => Left(g(remote)), a => Right(f(a)))
 
-  private[zio] def binaryEval[A, B, C](
+  private[zio] def binaryEval[A, B, C, D](
     left: Remote[A],
     right: Remote[B]
-  )(f: (A, B) => C, g: (Remote[A], Remote[B]) => Remote[C]): Either[Remote[C], C] = {
+  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C]): Either[Remote[C], D] = {
     val leftEither  = left.eval
     val rightEither = right.eval
 
