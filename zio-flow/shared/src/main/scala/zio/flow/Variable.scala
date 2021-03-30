@@ -1,4 +1,5 @@
 package zio.flow
+
 /*
 
 agentApproves:       Variable[Boolean]
@@ -46,7 +47,8 @@ val underwriterWorkflow =
     (ZFlow.agentWorkflow orTry userWorkflow orTry underwriterWorkflow) *> allDone
   }
  */
-trait Variable[A] { self =>
+trait Variable[A] {
+  self =>
   def get: ZFlow[Any, Nothing, A] = modify(a => (a, a))
 
   def set(a: Remote[A]): ZFlow[Any, Nothing, Unit] =
@@ -62,4 +64,11 @@ trait Variable[A] { self =>
     }
 
   def update(f: Remote[A] => Remote[A]): ZFlow[Any, Nothing, Unit] = updateAndGet(f).unit
+
+  def waitUntil(predicate: Remote[A] => Remote[Boolean]): ZFlow[Any, Nothing, Any] = ZFlow.transaction { txn =>
+    for {
+      v <- self.get
+      _ <- txn.retryUntil(predicate(v))
+    } yield ()
+  }
 }

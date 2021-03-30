@@ -53,8 +53,8 @@ trait RemoteList[+A] {
 
   final def headOption[A1](implicit ev: A <:< List[A1]): Remote[Option[A1]] = Remote
     .UnCons(self.widen[List[A1]])
-    .widen[Option[(A1, List[A1])]]
-    .option(Remote(None), (tuple: Remote[(A1, List[A1])]) => Remote.Some0(tuple._1))
+    .widen[Option[(A1, List[A1])]])
+    .handleOption(Remote(None), (tuple: Remote[(A1, List[A1])]) => Remote.Some0(tuple._1))
 
   final def length[A0](implicit ev: A <:< List[A0]): Remote[Int] =
     self.fold[A0, Int](0)((len, _) => len + 1)
