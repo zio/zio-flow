@@ -1,31 +1,31 @@
 package zio.flow
 
-final case class Activity[-I, +E, A](
+final case class Activity[-R, A](
   name: String,
   description: String,
-  perform: Operation[I, E, A],
-  check: Option[Operation[I, E, A]],
-  compensate: Operation[A, E, Unit]
+  operation: Operation[R, A],
+  check: ZFlow[R, ActivityError, A],
+  compensate: ZFlow[A, ActivityError, Any]
 )               { self =>
-  def apply(input: Remote[I]): ZFlow[Any, E, A] = ZFlow.RunActivity(input, self)
+  def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] = ZFlow.RunActivity(input, self)
 
-  def apply[I1, I2](i1: Remote[I1], i2: Remote[I2])(implicit ev: (I1, I2) <:< I): ZFlow[Any, E, A] =
-    self.narrow[(I1, I2)].apply(Remote.tuple2((i1, i2)))
+  def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit ev: (R1, R2) <:< R): ZFlow[Any, ActivityError, A] =
+    self.narrow[(R1, R2)].apply(Remote.tuple2((R1, R2)))
 
-  def apply[I1, I2, I3](i1: Remote[I1], i2: Remote[I2], i3: Remote[I3])(implicit
-    ev: (I1, I2, I3) <:< I
-  ): ZFlow[Any, E, A] =
-    self.narrow[(I1, I2, I3)].apply(Remote.tuple3((i1, i2, i3)))
+  def apply[R1, R2, I3](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3])(implicit
+    ev: (R1, R2, I3) <:< R
+  ): ZFlow[Any, ActivityError, A] =
+    self.narrow[(R1, R2, I3)].apply(Remote.tuple3((R1, R2, i3)))
 
-  def apply[I1, I2, I3, I4](i1: Remote[I1], i2: Remote[I2], i3: Remote[I3], i4: Remote[I4])(implicit
-    ev: (I1, I2, I3, I4) <:< I
-  ): ZFlow[Any, E, A] =
-    self.narrow[(I1, I2, I3, I4)].apply(Remote.tuple4((i1, i2, i3, i4)))
+  def apply[R1, R2, I3, I4](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3], i4: Remote[I4])(implicit
+    ev: (R1, R2, I3, I4) <:< R
+  ): ZFlow[Any, ActivityError, A] =
+    self.narrow[(R1, R2, I3, I4)].apply(Remote.tuple4((R1, R2, i3, i4)))
 
-  final def narrow[I0](implicit ev: I0 <:< I): Activity[I0, E, A] = {
+  final def narrow[R0](implicit ev: R0 <:< R): Activity[R0, A] = {
     val _ = ev
 
-    self.asInstanceOf[Activity[I0, E, A]]
+    self.asInstanceOf[Activity[R0, A]]
   }
 }
 object Activity {}

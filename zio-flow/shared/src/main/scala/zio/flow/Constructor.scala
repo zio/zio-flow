@@ -12,6 +12,8 @@ sealed trait Constructor[+A] { self =>
 }
 
 object Constructor {
+  // TODO: Change Constructor => ZFlowState?????
+  // TODO: Change `value` to be an `A` and the `Schema[A]`.
   final case class Return[A](value: Remote[A])                                          extends Constructor[A]
   final case class NewVar[A](name: String, defaultValue: Remote[A])                     extends Constructor[Variable[A]]
   final case class FlatMap[A, B](value: Constructor[A], k: Remote[A] => Constructor[B]) extends Constructor[B]

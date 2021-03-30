@@ -49,8 +49,8 @@ object PolicyRenewalExample {
   implicit val policySchema: Schema[Policy] = ???
   implicit val buyerSchema: Schema[Buyer]   = ???
 
-  def policyClaimStatus: Activity[Policy, Nothing, Boolean] =
-    Activity[Policy, Nothing, Boolean](
+  def policyClaimStatus: Activity[Policy, Boolean] =
+    Activity[Policy, Boolean](
       "get-policy-claim-status",
       "Returns whether or not claim was made on a policy for a certain year",
       ???,
@@ -58,8 +58,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def makePayment: Activity[Policy, Nothing, Unit] =
-    Activity[Policy, Nothing, Unit](
+  def makePayment: Activity[Policy, Unit] =
+    Activity[Policy, Unit](
       "make-payment",
       "Make payment",
       ???,
@@ -67,8 +67,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def getFireRisk: Activity[Policy, Throwable, Probability] =
-    Activity[Policy, Throwable, Probability](
+  def getFireRisk: Activity[Policy, Probability] =
+    Activity[Policy, Probability](
       "get-fire-risk",
       "Gets the probability of fire hazard for a particular property",
       ???,
@@ -76,8 +76,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def createRenewedPolicy: Activity[(Boolean, Probability), Throwable, Option[Policy]] =
-    Activity[(Boolean, Probability), Throwable, Option[Policy]](
+  def createRenewedPolicy: Activity[(Boolean, Probability), Option[Policy]] =
+    Activity[(Boolean, Probability), Option[Policy]](
       "create-renewed-policy",
       "Creates a new Insurance Policy based on external params like previous claim, fire risk etc.",
       ???,
@@ -85,8 +85,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def isManualEvaluationRequired: Activity[(Boolean, Probability), Throwable, Boolean] =
-    Activity[(Boolean, Probability), Throwable, Boolean](
+  def isManualEvaluationRequired: Activity[(Boolean, Probability), Boolean] =
+    Activity[(Boolean, Probability), Boolean](
       "is-manual-evaluation-required",
       "Returns whether or not manual evaluation is required for this policy.",
       ???,
@@ -94,8 +94,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def sendReminderEmailToEvaluator: Activity[Policy, Nothing, Unit] =
-    Activity[Policy, Nothing, Unit](
+  def sendReminderEmailToEvaluator: Activity[Policy, Unit] =
+    Activity[Policy, Unit](
       "send-reminder-email",
       "Send out emails, can use third party service.",
       ???,
@@ -103,8 +103,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def sendReminderEmailToInsured: Activity[Policy, Nothing, Unit] =
-    Activity[Policy, Nothing, Unit](
+  def sendReminderEmailToInsured: Activity[Policy, Unit] =
+    Activity[Policy, Unit](
       "send-reminder-email",
       "Send out emails, can use third party service.",
       ???,
@@ -112,8 +112,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def sendEmail: Activity[Any, Nothing, Unit] =
-    Activity[Any, Nothing, Unit](
+  def sendEmail: Activity[Any, Unit] =
+    Activity[Any, Unit](
       "send-reminder-email",
       "Send out emails, can use third party service.",
       ???,
@@ -121,8 +121,8 @@ object PolicyRenewalExample {
       ???
     )
 
-  def attemptPayment: Activity[Buyer, Nothing, Unit] =
-    Activity[Buyer, Nothing, Unit](
+  def attemptPayment: Activity[Buyer, Unit] =
+    Activity[Buyer, Unit](
       "is-manual-evaluation-required",
       "Returns whether or not manual evaluation is required for this policy.",
       ???,
@@ -130,7 +130,10 @@ object PolicyRenewalExample {
       ???
     )
 
-  def manualEvalReminderFlow(policy: Remote[Policy], evaluationDone: Variable[Boolean]): ZFlow[Any, Nothing, Any] =
+  def manualEvalReminderFlow(
+    policy: Remote[Policy],
+    evaluationDone: Variable[Boolean]
+  ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
         option <- evaluationDone.waitUntil(_ === true).timeout(Remote.ofDays(1L))
@@ -142,7 +145,7 @@ object PolicyRenewalExample {
   def policyRenewalReminderFlow(
     policy: Remote[Policy],
     buyerResponded: Variable[Option[Boolean]]
-  ): ZFlow[Any, Nothing, Any] =
+  ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
         option <- buyerResponded.waitUntil(_.isSome).timeout(Remote.ofDays(2L))
@@ -153,8 +156,8 @@ object PolicyRenewalExample {
 
   val paymentStateConstructor: Constructor[Variable[Boolean]] = newVar("payment-successful", false)
 
-  lazy val paymentFlow: ZFlow[Buyer, Nothing, Boolean] = ZFlow.define("Payment-Workflow", paymentStateConstructor) {
-    case paymentSuccessful =>
+  lazy val paymentFlow: ZFlow[Buyer, ActivityError, Boolean] =
+    ZFlow.define("Payment-Workflow", paymentStateConstructor) { case paymentSuccessful =>
       ZFlow.doWhile {
         for {
           user   <- ZFlow.input[Buyer]
@@ -163,10 +166,10 @@ object PolicyRenewalExample {
           _      <- ZFlow.when(loop)(attemptPayment(user))
         } yield loop
       }.timeout(Remote.ofDays(30L)).map(_.isSome)
-  }
+    }
 
-  lazy val getPoliciesAboutToExpire: Activity[Period, Throwable, List[Policy]] =
-    Activity[Period, Throwable, List[Policy]](
+  lazy val getPoliciesAboutToExpire: Activity[Period, List[Policy]] =
+    Activity[Period, List[Policy]](
       "get-expiring-policies",
       "gets a list of all Policies that are about to expire in `Period` timePeriod",
       ???,
@@ -179,13 +182,13 @@ object PolicyRenewalExample {
     renewPolicy    <- newVar[Option[Boolean]]("renewPolicy", None)
   } yield (evaluationDone, renewPolicy)
 
-  lazy val policyRenewalFlow: ZFlow[PaymentMethod with Policy, Throwable, Unit] =
+  lazy val policyRenewalFlow: ZFlow[PaymentMethod with Policy, ActivityError, Unit] =
     ZFlow.define("Policy-Renewal-Workflow", stateConstructor) { case (manualEvalDone, renewPolicy) =>
       def performPolicyRenewal(
         policy: Remote[Policy],
         manualEvalDone: Variable[Boolean],
         renewPolicy: Variable[Option[Boolean]]
-      ): ZFlow[PaymentMethod, Throwable, Unit] =
+      ): ZFlow[PaymentMethod, ActivityError, Unit] =
         for {
           claimStatus     <- policyClaimStatus(policy)
           fireRisk        <- getFireRisk(policy)

@@ -1,16 +1,16 @@
 package zio.flow
 
-sealed trait Operation[-I, +E, +A]
+sealed trait Operation[-R, +A]
 object Operation {
-  final case class Http[I, E, A](
+  final case class Http[R, A](
     url: java.net.URI,
     method: String = "GET",
-    contentType: String
-  ) extends Operation[I, E, A]
+    headers: Map[String, String]
+  ) extends Operation[R, A]
   final case class SendEmail(
     server: String,
     port: Int
-  ) extends Operation[EmailRequest, Throwable, Unit]
+  ) extends Operation[EmailRequest, Unit]
 }
 
 final case class EmailRequest(
