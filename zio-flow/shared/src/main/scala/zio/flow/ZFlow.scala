@@ -38,6 +38,8 @@ sealed trait ZFlow[-R, +E, +A] {
   final def catchAll[R1 <: R, E1 >: E, A1 >: A: Schema, E2](f: Remote[E] => ZFlow[R1, E2, A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).foldM(f, ZFlow(_))
 
+  final def ensuring(flow: ZFlow[Any, Nothing, Any]): ZFlow[R, E, A] = ZFlow.Ensuring(self, flow)
+
   final def flatMap[R1 <: R, E1 >: E, B](f: Remote[A] => ZFlow[R1, E1, B]): ZFlow[R1, E1, B] =
     self.foldM(ZFlow.Halt(_), f)
 
@@ -90,7 +92,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def orTry[R1 <: R, E1 >: E, A1 >: A](that: ZFlow[R1, E1, A1]): ZFlow[R1, E1, A1] =
     ZFlow.OrTry(self, that)
 
-  // TODO: Add ZFlow#provide
+  final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
   final def timeout(duration: Remote[Duration]): ZFlow[R, E, Option[A]] =
     ZFlow.Timeout(self, duration)
@@ -140,6 +142,8 @@ object ZFlow {
   final case class Define[R, S, E, A](name: String, constructor: Constructor[S], body: S => ZFlow[R, E, A])
       extends ZFlow[R, E, A]
 
+  final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
+
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
   final case class Foreach[R, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[R, E, B])
@@ -148,6 +152,8 @@ object ZFlow {
   final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]]
 
   final case class Timeout[R, E, A](value: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]]
+
+  final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A]
 
   case object Die extends ZFlow[Any, Nothing, Nothing]
 
@@ -176,6 +182,11 @@ object ZFlow {
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     Foreach(values, body)
 
+  // TODO: Try to implement this one in terms of `foreach`, `fork`, and `await`.
+  def foreachPar[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
+    ???
+
+  // TODO: Add operator for this
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ???
 
