@@ -17,7 +17,7 @@ trait RemoteList[+A] {
     val ifTrue = Remote
       .UnCons(self.widen[List[A1]])
       .widen[Option[(A1, List[A1])]]
-      .option(Nil, (tuple: Remote[(A1, List[A1])]) => Cons(tuple._2.take[A1](num - Remote(1)), tuple._1))
+      .handleOption(Nil, (tuple: Remote[(A1, List[A1])]) => Cons(tuple._2.take[A1](num - Remote(1)), tuple._1))
     (num > Remote(0)).ifThenElse(ifTrue, Nil)
   }
 
@@ -25,7 +25,7 @@ trait RemoteList[+A] {
     Remote
       .UnCons(self.widen[List[A1]])
       .widen[Option[(A1, List[A1])]]
-      .option(
+      .handleOption(
         Remote(Nil),
         (tuple: Remote[(A1, List[A1])]) =>
           predicate(tuple._1).ifThenElse(Cons(tuple._2.takeWhile[A1](predicate), tuple._1), Nil)
@@ -35,7 +35,7 @@ trait RemoteList[+A] {
     val ifTrue = Remote
       .UnCons(self.widen[List[A1]])
       .widen[Option[(A1, List[A1])]]
-      .option(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.drop[A1](num - Remote(1)))
+      .handleOption(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.drop[A1](num - Remote(1)))
 
     (num > Remote(0)).ifThenElse(ifTrue, self.widen[List[A1]])
   }
@@ -44,7 +44,7 @@ trait RemoteList[+A] {
     Remote
       .UnCons(self.widen[List[A1]])
       .widen[Option[(A1, List[A1])]]
-      .option(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.dropWhile[A1](predicate))
+      .handleOption(Nil, (tuple: Remote[(A1, List[A1])]) => tuple._2.dropWhile[A1](predicate))
 
   final def fold[A0, B](initial: Remote[B])(f: (Remote[B], Remote[A0]) => Remote[B])(implicit
     ev: A <:< List[A0]
@@ -53,7 +53,7 @@ trait RemoteList[+A] {
 
   final def headOption[A1](implicit ev: A <:< List[A1]): Remote[Option[A1]] = Remote
     .UnCons(self.widen[List[A1]])
-    .widen[Option[(A1, List[A1])]])
+    .widen[Option[(A1, List[A1])]]
     .handleOption(Remote(None), (tuple: Remote[(A1, List[A1])]) => Remote.Some0(tuple._1))
 
   final def length[A0](implicit ev: A <:< List[A0]): Remote[Int] =

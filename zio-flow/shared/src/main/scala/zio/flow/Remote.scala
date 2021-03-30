@@ -82,7 +82,7 @@ object Schema {
  * mere blueprints, and they do not contain any Scala code.
  */
 sealed trait Remote[+A]
-    extends RemoteSortable[A]
+    extends RemoteRelational[A]
     with RemoteBoolean[A]
     with RemoteTuple[A]
     with RemoteList[A]
@@ -292,9 +292,10 @@ object Remote {
     }
   }
 
-  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], sortable: Sortable[A]) extends Remote[Boolean] {
+  final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
     override def eval: Either[Remote[Boolean], Boolean] =
-      binaryEval(left, right)((l, r) => sortable.lessThan(l, r), (rL, rR) => LessThanEqual(rL, rR, sortable))
+      // FIXME: Compare two values of type A
+      binaryEval(left, right)((_, _) => ???, (rL, rR) => LessThanEqual(rL, rR))
   }
 
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
@@ -502,11 +503,10 @@ object Remote {
             loop(ifTrue1, ifTrue2) &&
             loop(ifFalse2, ifFalse2)
 
-        case (l: LessThanEqual[l], LessThanEqual(left2, right2, sortable2)) =>
+        case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
           // TODO: Support `==` and `hashCode` for `Sortable`.
           loop(l.left, left2) &&
-            loop(l.right, right2) &&
-            l.sortable == sortable2
+            loop(l.right, right2)
 
         case (l: Not[l], Not(value2)) =>
           loop(l.value, value2)

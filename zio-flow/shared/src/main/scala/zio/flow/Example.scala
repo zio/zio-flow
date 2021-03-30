@@ -146,17 +146,26 @@ object UberEatsExample {
       ???
     )
 
-  lazy val restaurantOrderStatus: ZFlow[(Restaurant, Order), Throwable, Unit] = ???
-  // {
-  //   for {
-  //     tuple           <- ZFlow.input[(Restaurant, Order)]
-  //     orderConfStatus <- getOrderConfirmationStatus(tuple)
-  //     _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
-  //                          processOrderWorkflow,
-  //                          cancelOrderWorkflow
-  //                        )
-  //   } yield ()
-  // }
+  /*
+ found   : zio.flow.ZFlow[(zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order) with (zio.flow.UberEatsExample.User, zio.flow.UberEatsExample.Address, zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order),Throwable,Unit]
+[error]     (which expands to)  zio.flow.ZFlow[(String, List[(String, Int)]) with (String, String, String, List[(String, Int)]),Throwable,Unit]
+[error]  required: zio.flow.ZFlow[(zio.flow.UberEatsExample.User, zio.flow.UberEatsExample.Address, zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order),Throwable,Unit]
+[error]     (which expands to)  zio.flow.ZFlow[(String, String, String, List[(String, Int)]),Throwable,Unit]
+[error]       _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+[error]                       ^
+[info] zio.flow.ZFlow[(zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order) with (zio.flow.UberEatsExample.User, zio.flow.UberEatsExample.Address, zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order),Throwable,Unit] <: zio.flow.ZFlow[(zio.flow.UberEatsExample.User, zio.flow.UberEatsExample.Address, zio.flow.UberEatsExample.Restaurant, zio.flow.UberEatsExample.Order),Throwable,Unit]?
+[info] false    */
+  def restaurantOrderStatus(
+    restaurant: Remote[Restaurant],
+    order: Remote[Order]
+  ): ZFlow[(User, Address, Restaurant, Order), Throwable, Unit] =
+    for {
+      orderConfStatus <- getOrderConfirmationStatus(restaurant, order)
+      _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+                           processOrderWorkflow,
+                           cancelOrderWorkflow(restaurant, order)
+                         )
+    } yield ()
 
   lazy val getOrderState: Activity[(User, Restaurant, Order), Throwable, OrderState]         = ???
   lazy val pushOrderStatusNotification: Activity[(User, Restaurant, Order), Throwable, Unit] = ???
@@ -166,8 +175,6 @@ object UberEatsExample {
 
   lazy val processOrderWorkflow: ZFlow[(User, Address, Restaurant, Order), Throwable, (User, Address)] = {
     implicit def schemaOrderStateWaiting: Schema[OrderState] = ???
-
-    implicit val sortableOrderState: Sortable[OrderState] = ???
 
     def updateOrderState(
       user: Remote[User],
@@ -194,8 +201,6 @@ object UberEatsExample {
   def riderWorkflow(tuple2: Remote[(User, Address)]): ZFlow[Any, Throwable, Any] = {
     implicit def schemaRiderState: Schema[RiderState] = ???
 
-    implicit val sortableRiderState: Sortable[RiderState] = ???
-
     def updateRiderState(rider: Remote[Rider], address: Remote[Address]): ZFlow[Any, Throwable, RiderState] =
       ZFlow(RiderState.RiderAssigned: RiderState).iterate((riderState: Remote[RiderState]) =>
         for {
@@ -212,5 +217,5 @@ object UberEatsExample {
   }
 
   processOrderWorkflow.flatMap(riderWorkflow)
-  lazy val cancelOrderWorkflow: ZFlow[(Restaurant, Order), Throwable, Any] = ???
+  lazy val cancelOrderWorkflow: Activity[(Restaurant, Order), Throwable, Any] = ???
 }
