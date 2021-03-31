@@ -55,7 +55,7 @@ sealed trait ZFlow[-R, +E, +A] {
   ): ZFlow[R1, E1, B] =
     self.widen[Boolean].flatMap(bool => ZFlow.unwrap(bool.ifThenElse(Remote(ifTrue), Remote(ifFalse))))
 
-  final def iterate[R1 <: R, E1 >: E, A1 >: A](
+  final def iterate1[R1 <: R, E1 >: E, A1 >: A](
     step: Remote[A1] => ZFlow[R1, E1, A1]
   )(predicate: Remote[A1] => Remote[Boolean]): ZFlow[R1, E1, A1] =
     self.flatMap { a => // TODO: Make this primitive rather than relying on recursion
@@ -66,6 +66,11 @@ sealed trait ZFlow[-R, +E, +A] {
         )
       }
     }
+
+  final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
+    predicate: Remote[A1] => Remote[Boolean]
+  ): ZFlow[R1, E1, A1] =
+    ZFlow.Iterate(self, step, predicate)
 
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
@@ -161,6 +166,12 @@ object ZFlow {
   case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A]
+
+  case class Iterate[R, E, A](
+    self: ZFlow[R, E, A],
+    step: Remote[A] => ZFlow[R, E, A],
+    predicate: Remote[A] => Remote[Boolean]
+  ) extends ZFlow[R, E, A]
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
