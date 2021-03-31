@@ -5,8 +5,8 @@ import java.time.{ Duration, Instant }
 import scala.reflect.ClassTag
 
 import zio.flow.RemoteTuple._
+import zio.flow.ZFlow.Die
 
-//
 // ZFlow - models a workflow
 //  - terminate, either error or value
 //  - create instances that represent running executions of a workflow in progress
@@ -50,8 +50,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def fork: ZFlow[R, Nothing, ExecutingFlow[E, A]] = ZFlow.Fork(self)
 
-  // TODO: Make these parameters eager, all the way down.
-  final def ifThenElse[R1 <: R, E1 >: E, B](ifTrue: => ZFlow[R1, E1, B], ifFalse: => ZFlow[R1, E1, B])(implicit
+  final def ifThenElse[R1 <: R, E1 >: E, B](ifTrue: ZFlow[R1, E1, B], ifFalse: ZFlow[R1, E1, B])(implicit
     ev: A <:< Boolean
   ): ZFlow[R1, E1, B] =
     self.widen[Boolean].flatMap(bool => ZFlow.unwrap(bool.ifThenElse(Remote(ifTrue), Remote(ifFalse))))
@@ -71,7 +70,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
 
-  final def orDie: ZFlow[R, Nothing, A] = ??? // TODO: Make this a primitive operation
+  final def orDie: ZFlow[R, Nothing, A] = Die
 
   final def orElse[R1 <: R, E2, A1 >: A](that: ZFlow[R1, E2, A1])(implicit A1: Schema[A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).catchAll(_ => that)
@@ -139,7 +138,7 @@ object ZFlow {
 
   final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R]
 
-  final case class Define[R, S, E, A](name: String, constructor: Constructor[S], body: S => ZFlow[R, E, A])
+  final case class Define[R, S, E, A](name: String, constructor: ZFlowState[S], body: S => ZFlow[R, E, A])
       extends ZFlow[R, E, A]
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
@@ -170,7 +169,7 @@ object ZFlow {
   // TODO: For events
   // def await[M]: ZFlow[Any, M, Nothing, M]
 
-  def define[R, S, E, A](name: String, constructor: Constructor[S])(body: S => ZFlow[R, E, A]): ZFlow[R, E, A] =
+  def define[R, S, E, A](name: String, constructor: ZFlowState[S])(body: S => ZFlow[R, E, A]): ZFlow[R, E, A] =
     Define(name, constructor, body)
 
   def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =

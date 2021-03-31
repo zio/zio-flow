@@ -585,7 +585,7 @@ object Remote {
   implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
     Tuple4(t._1, t._2, t._3, t._4)
 
-  def suspend[A](remote: => Remote[A]): Remote[A] = Lazy(() => remote)
+  def suspend[A](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 

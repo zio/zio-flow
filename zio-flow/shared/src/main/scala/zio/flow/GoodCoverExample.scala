@@ -2,7 +2,7 @@ package zio.flow
 
 import java.time.Period
 
-import zio.flow.Constructor.newVar
+import zio.flow.ZFlowState.newVar
 
 /**
  * 1. Get all policies that will expire in the next 60 days.
@@ -154,7 +154,7 @@ object PolicyRenewalExample {
       } yield loop
     }
 
-  val paymentStateConstructor: Constructor[Variable[Boolean]] = newVar("payment-successful", false)
+  val paymentStateConstructor: ZFlowState[Variable[Boolean]] = newVar("payment-successful", false)
 
   lazy val paymentFlow: ZFlow[Buyer, ActivityError, Boolean] =
     ZFlow.define("Payment-Workflow", paymentStateConstructor) { case paymentSuccessful =>
@@ -177,7 +177,7 @@ object PolicyRenewalExample {
       ???
     )
 
-  val stateConstructor: Constructor[(Variable[Boolean], Variable[Option[Boolean]])] = for {
+  val stateConstructor: ZFlowState[(Variable[Boolean], Variable[Option[Boolean]])] = for {
     evaluationDone <- newVar[Boolean]("evaluationDone", false)
     renewPolicy    <- newVar[Option[Boolean]]("renewPolicy", None)
   } yield (evaluationDone, renewPolicy)
