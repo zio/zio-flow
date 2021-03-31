@@ -55,18 +55,6 @@ sealed trait ZFlow[-R, +E, +A] {
   ): ZFlow[R1, E1, B] =
     self.widen[Boolean].flatMap(bool => ZFlow.unwrap(bool.ifThenElse(Remote(ifTrue), Remote(ifFalse))))
 
-  final def iterate1[R1 <: R, E1 >: E, A1 >: A](
-    step: Remote[A1] => ZFlow[R1, E1, A1]
-  )(predicate: Remote[A1] => Remote[Boolean]): ZFlow[R1, E1, A1] =
-    self.flatMap { a => // TODO: Make this primitive rather than relying on recursion
-      predicate(a).flatMap { bool =>
-        ZFlow(bool).ifThenElse(
-          step(a).iterate(step)(predicate),
-          ZFlow(a)
-        )
-      }
-    }
-
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]
   ): ZFlow[R1, E1, A1] =
@@ -177,9 +165,6 @@ object ZFlow {
 
   def apply[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = Return(remote)
 
-  // TODO: For events
-  // def await[M]: ZFlow[Any, M, Nothing, M]
-
   def define[R, S, E, A](name: String, constructor: ZFlowState[S])(body: S => ZFlow[R, E, A]): ZFlow[R, E, A] =
     Define(name, constructor, body)
 
@@ -196,9 +181,8 @@ object ZFlow {
   def foreachPar[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     ???
 
-  // TODO: Add operator for this
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
-    ???
+    ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
   def input[R: Schema]: ZFlow[R, Nothing, R] = Input(implicitly[Schema[R]])
 
