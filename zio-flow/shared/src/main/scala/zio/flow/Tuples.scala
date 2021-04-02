@@ -19,7 +19,6 @@ object Tuple {
 
   implicit def tuple3[A, B, C]: Aux[(A, B, C), (Remote[A], Remote[B], Remote[C])] = new Tuple[(A, B, C)] {
     override type out = (Remote[A], Remote[B], Remote[C])
-
     override def unapply(remote: Remote[(A, B, C)]): Option[out] = Some((remote._1, remote._2, remote._3))
   }
 
