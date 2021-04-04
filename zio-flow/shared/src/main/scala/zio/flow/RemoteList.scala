@@ -64,4 +64,10 @@ trait RemoteList[+A] {
 
   final def sum[A0](implicit ev: A <:< List[A0], numeric: Numeric[A0]): Remote[A0] =
     fold[A0, A0](numeric.fromLong(0L))(_ + _)
+
+  final def filter[A0](predicate: Remote[A0] => Remote[Boolean])(implicit ev: A <:< List[A0]): Remote[List[A0]] =
+    self.fold[A0, List[A0]](Nil)((a2: Remote[List[A0]], a1: Remote[A0]) => predicate(a1).ifThenElse(Cons(a2, a1), a2))
+
+  final def isEmpty[A0](implicit ev: A <:< List[A0]): Remote[Boolean] =
+    self.headOption.isNone.ifThenElse(Remote(true), Remote(false))
 }
