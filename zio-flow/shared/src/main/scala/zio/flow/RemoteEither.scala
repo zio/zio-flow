@@ -19,10 +19,14 @@ trait RemoteEither[+A] {
     Remote.FoldEither[B, B, B](self.widen[Either[B, B]], identity(_), identity(_))
 
   final def toRight: Remote[Either[Nothing, A]] = Remote.Either0(Right(self))
+
+  final def isLeft[B,C](implicit ev: A <:< Either[B,C]): Remote[Boolean] = self.handleEither((_: Remote[B]) => Remote(true), (_: Remote[C]) => Remote(false))
+  final def isRight[B,C](implicit ev: A <:< Either[B,C]): Remote[Boolean] = self.handleEither((_: Remote[B]) => Remote(false), (_: Remote[C]) => Remote(true))
 }
 
 object RemoteEither {
 
   //TODO
   def collectAll[E, A](values: Remote[List[Either[E, A]]]): Remote[Either[E, List[A]]] = ???
+
 }
