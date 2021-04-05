@@ -27,11 +27,11 @@ object Schema {
 
   implicit def listSchema[A: Schema]: Schema[List[A]] = ???
 
-  implicit def stringSchema: Schema[String] = ???
+  implicit def stringSchema: Schema[String] = Schema.fail("")
 
   implicit def shortSchema: Schema[Short] = ???
 
-  implicit def intSchema: Schema[Int] = ???
+  implicit def intSchema: Schema[Int] = Schema.fail("")
 
   implicit def longSchema: Schema[Long] = ???
 
@@ -43,17 +43,17 @@ object Schema {
 
   implicit def bigDecimalSchema: Schema[BigDecimal] = ???
 
-  implicit def unitSchema: Schema[Unit] = ???
+  implicit def unitSchema: Schema[Unit] = Schema.fail("")
 
-  implicit def boolSchema: Schema[Boolean] = ???
+  implicit def boolSchema: Schema[Boolean] = Schema.fail("")
 
   implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]] = ???
 
   implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]] = ???
 
-  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = ???
+  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = Schema.fail("")
 
-  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
+  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = Schema.fail("")
 
   implicit def schemaTuple4[A: Schema, B: Schema, C: Schema, D: Schema]: Schema[(A, B, C, D)] = ???
 
@@ -592,4 +592,5 @@ object Remote {
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
+
 }
