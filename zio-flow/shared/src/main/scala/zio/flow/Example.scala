@@ -2,7 +2,7 @@ package zio.flow
 
 object Example {
 
-  import Constructor._
+  import ZFlowState._
 
   // Remote[A] => Remote[(B, A)]
 
@@ -11,7 +11,7 @@ object Example {
   lazy val refundOrder: Activity[OrderId, Unit] =
     Activity[OrderId, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
-  val stateConstructor: Constructor[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
+  val stateConstructor: ZFlowState[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
       intVar  <- newVar[Int]("intVar", 0)
       boolVar <- newVar[Boolean]("boolVar", false)
