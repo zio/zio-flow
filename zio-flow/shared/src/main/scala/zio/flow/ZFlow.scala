@@ -159,6 +159,8 @@ object ZFlow {
 
   final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Any]
 
+  final case class FromEither[E, A](either: Remote[Either[E, A]]) extends ZFlow[Any, E, A]
+
   case class Iterate[R, E, A](
     self: ZFlow[R, E, A],
     step: Remote[A] => ZFlow[R, E, A],
@@ -187,13 +189,15 @@ object ZFlow {
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     Foreach(values, body)
 
-  // TODO: Try to implement this one in terms of `foreach`, `fork`, and `await`.
+  //TODO: Try to implement this one in terms of `foreach`, `fork`, and `await`.
   //TODO : Add a method FoldEitherM on RemoteEither
+
   def foreachPar[R, A, B](
     values: Remote[List[A]]
-  )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] = ???
-//    (foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)).flatMap(exFlowList =>
-//      foreach(exFlowList)(_.await)).map(eitherList => RemoteEither.collectAll(eitherList)).flatMap(either)
+  )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
+    (foreach(values)((remoteA: Remote[A]) => body(remoteA).fork))
+      .flatMap(exFlowList => foreach(exFlowList)(_.await))
+      .flatMap(eitherList => ZFlow.fromEither(RemoteEither.collectAll(eitherList)))
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
@@ -223,5 +227,7 @@ object ZFlow {
 
   def when[R, E](predicate: Remote[Boolean])(flow: ZFlow[R, E, Any]): ZFlow[R, E, Any] =
     ZFlow.ifThenElse(predicate)(flow, ZFlow.unit)
+
+  def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] = ZFlow.FromEither(either)
 
 }
