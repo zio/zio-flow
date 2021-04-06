@@ -159,19 +159,13 @@ object ZFlow {
 
   final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Any]
 
-  final case class FromEither[E, A](either: Remote[Either[E, A]]) extends ZFlow[Any, E, A]
+  final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing]
 
   case class Iterate[R, E, A](
     self: ZFlow[R, E, A],
     step: Remote[A] => ZFlow[R, E, A],
     predicate: Remote[A] => Remote[Boolean]
   ) extends ZFlow[R, E, A]
-
-  final case class FoldEither[R, E, A, B, C](
-    either: Remote[Either[A, B]],
-    left: Remote[A] => ZFlow[R, E, C],
-    right: Remote[B] => ZFlow[R, E, C]
-  ) extends ZFlow[R, E, C]
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
@@ -181,23 +175,22 @@ object ZFlow {
     Define(name, constructor, body)
 
   def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
-    ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ == false)
+    ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
 
   def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
-    ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ == true)
+    ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     Foreach(values, body)
 
-  //TODO: Try to implement this one in terms of `foreach`, `fork`, and `await`.
-  //TODO : Add a method FoldEitherM on RemoteEither
-
   def foreachPar[R, A, B](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
-    (foreach(values)((remoteA: Remote[A]) => body(remoteA).fork))
-      .flatMap(exFlowList => foreach(exFlowList)(_.await))
-      .flatMap(eitherList => ZFlow.fromEither(RemoteEither.collectAll(eitherList)))
+    for {
+      executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
+      eithers        <- ZFlow.foreach(executingFlows)(_.await)
+      bs             <- ZFlow.fromEither(RemoteEither.collectAll(eithers))
+    } yield bs
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
@@ -228,6 +221,11 @@ object ZFlow {
   def when[R, E](predicate: Remote[Boolean])(flow: ZFlow[R, E, Any]): ZFlow[R, E, Any] =
     ZFlow.ifThenElse(predicate)(flow, ZFlow.unit)
 
-  def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] = ZFlow.FromEither(either)
+  def fail[E](error: Remote[E]): ZFlow[Any, E, Nothing] = ZFlow.Fail(error)
+
+  def succeed[A](value: Remote[A]): ZFlow[Any, Nothing, A] = ZFlow.Return(value)
+
+  def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
+    ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
 }
