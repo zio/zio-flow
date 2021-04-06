@@ -91,7 +91,8 @@ sealed trait Remote[+A]
     with RemoteFractional[A]
     with RemoteInstant[A]
     with RemoteOption[A]
-    with RemoteDuration[A] {
+    with RemoteDuration[A]
+    with RemoteExecutingFlow[A] {
   def eval: Either[Remote[A], A]
 
   def self: Remote[A] = this
