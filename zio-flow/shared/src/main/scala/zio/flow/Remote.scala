@@ -29,19 +29,19 @@ object Schema {
 
   implicit def stringSchema: Schema[String] = Schema.fail("")
 
-  implicit def shortSchema: Schema[Short] = ???
+  implicit def shortSchema: Schema[Short] = Schema.fail("")
 
-  implicit def intSchema: Schema[Int] = Schema.fail("")
+  implicit def intSchema: Schema[Int] = Schema.fail("Failed Int")
 
-  implicit def longSchema: Schema[Long] = ???
+  implicit def longSchema: Schema[Long] = Schema.fail("")
 
-  implicit def floatSchema: Schema[Float] = ???
+  implicit def floatSchema: Schema[Float] = Schema.fail("")
 
-  implicit def doubleSchema: Schema[Double] = ???
+  implicit def doubleSchema: Schema[Double] = Schema.fail("")
 
-  implicit def bigIntSchema: Schema[BigInt] = ???
+  implicit def bigIntSchema: Schema[BigInt] = Schema.fail("")
 
-  implicit def bigDecimalSchema: Schema[BigDecimal] = ???
+  implicit def bigDecimalSchema: Schema[BigDecimal] = Schema.fail("")
 
   implicit def unitSchema: Schema[Unit] = Schema.fail("")
 
@@ -593,5 +593,4 @@ object Remote {
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
-
 }
