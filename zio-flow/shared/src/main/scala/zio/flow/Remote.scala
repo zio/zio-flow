@@ -593,5 +593,4 @@ object Remote {
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
-
 }
