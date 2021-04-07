@@ -117,7 +117,8 @@ object ZFlow {
 
   final case class Halt[E](value: Remote[E]) extends ZFlow[Any, E, Nothing]
 
-  final case class Modify[A, B](svar: Variable[A], f: Remote[A] => Remote[(B, A)]) extends ZFlow[Any, Nothing, B]
+  final case class Modify[A, B](svar: Remote[Variable[A]], f: Remote[A] => Remote[(B, A)])
+      extends ZFlow[Any, Nothing, B]
 
   final case class Fold[R, E1, E2, A, B](
     value: ZFlow[R, E1, A],
@@ -130,9 +131,6 @@ object ZFlow {
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
   final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R]
-
-  final case class Define[R, S, E, A](name: String, constructor: ZFlowState[S], body: S => ZFlow[R, E, A])
-      extends ZFlow[R, E, A]
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
 
@@ -161,6 +159,8 @@ object ZFlow {
 
   final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing]
 
+  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]]
+
   case class Iterate[R, E, A](
     self: ZFlow[R, E, A],
     step: Remote[A] => ZFlow[R, E, A],
@@ -170,9 +170,6 @@ object ZFlow {
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
   def apply[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = Return(remote)
-
-  def define[R, S, E, A](name: String, constructor: ZFlowState[S])(body: S => ZFlow[R, E, A]): ZFlow[R, E, A] =
-    Define(name, constructor, body)
 
   def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
     ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
@@ -196,6 +193,8 @@ object ZFlow {
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
   def input[R: Schema]: ZFlow[R, Nothing, R] = Input(implicitly[Schema[R]])
+
+  def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Variable[A]] = NewVar(name, initial)
 
   def now: ZFlow[Any, Nothing, Instant] = Now
 

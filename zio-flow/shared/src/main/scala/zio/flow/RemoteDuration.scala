@@ -6,14 +6,14 @@ import java.time.temporal.{ ChronoUnit, TemporalUnit }
 trait RemoteDuration[+A] {
   def self: Remote[A]
 
-  def plus(that: Remote[Duration])(implicit ev: A <:< Duration): Remote[Duration] =
-    Remote.ofSeconds(self.seconds + that.seconds)
+  def plusDuration2(that: Remote[Duration])(implicit ev: A <:< Duration): Remote[Duration] =
+    Remote.ofSeconds(self.toSeconds + that.toSeconds)
 
-  def minus(that: Remote[Duration])(implicit ev: A <:< Duration): Remote[Duration] =
-    Remote.ofSeconds(self.seconds - that.seconds)
+  def minusDuration(that: Remote[Duration])(implicit ev: A <:< Duration): Remote[Duration] =
+    Remote.ofSeconds(self.toSeconds - that.toSeconds)
 
-  def get(temporalUnit: Remote[TemporalUnit])(implicit ev: A <:< Duration): Remote[Long] =
+  def durationToLong(temporalUnit: Remote[TemporalUnit])(implicit ev: A <:< Duration): Remote[Long] =
     Remote.DurationToLong(self.widen[Duration], temporalUnit)
 
-  def seconds(implicit ev: A <:< Duration): Remote[Long] = self.get(Remote(ChronoUnit.SECONDS))
+  def toSeconds(implicit ev: A <:< Duration): Remote[Long] = self.durationToLong(Remote(ChronoUnit.SECONDS))
 }

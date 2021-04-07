@@ -1,9 +1,6 @@
 package zio.flow
 
 object Example {
-
-  import ZFlowState._
-
   // Remote[A] => Remote[(B, A)]
 
   type OrderId = Int
@@ -11,15 +8,17 @@ object Example {
   lazy val refundOrder: Activity[OrderId, Unit] =
     Activity[OrderId, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
-  val stateConstructor: ZFlowState[(Variable[Int], Variable[Boolean], Variable[List[String]])] =
+  val stateConstructor: ZFlow[Any, Nothing, (Variable[Int], Variable[Boolean], Variable[List[String]])] =
     for {
-      intVar  <- newVar[Int]("intVar", 0)
-      boolVar <- newVar[Boolean]("boolVar", false)
-      listVar <- newVar[List[String]]("ListVar", Nil)
+      intVar  <- ZFlow.newVar[Int]("intVar", 0)
+      boolVar <- ZFlow.newVar[Boolean]("boolVar", false)
+      listVar <- ZFlow.newVar[List[String]]("ListVar", Nil)
     } yield (intVar, boolVar, listVar)
 
   val orderProcess: ZFlow[OrderId, ActivityError, Unit] =
-    ZFlow.define("order-process", stateConstructor) { case (intVar, boolVar, listVar) =>
+    stateConstructor.flatMap { tuple =>
+      val Tuple(intVar, boolVar, listVar) = tuple
+
       ZFlow
         .input[OrderId]
         .flatMap(orderId =>
