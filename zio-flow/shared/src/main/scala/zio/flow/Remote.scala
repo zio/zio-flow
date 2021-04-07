@@ -1,7 +1,7 @@
 package zio.flow
 
 import java.time.temporal.{ ChronoUnit, TemporalUnit }
-import java.time.{ Duration, Instant }
+import java.time.{ Duration, Instant, Period }
 
 import scala.language.implicitConversions
 
@@ -27,7 +27,7 @@ object Schema {
 
   implicit def listSchema[A: Schema]: Schema[List[A]] = ???
 
-  implicit def stringSchema: Schema[String] = ???
+  implicit def stringSchema: Schema[String] = Schema.fail("")
 
   implicit def shortSchema: Schema[Short] = Schema.fail("")
 
@@ -45,15 +45,15 @@ object Schema {
 
   implicit def unitSchema: Schema[Unit] = Schema.fail("")
 
-  implicit def boolSchema: Schema[Boolean] = ???
+  implicit def boolSchema: Schema[Boolean] = Schema.fail("")
 
   implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]] = ???
 
   implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]] = ???
 
-  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = ???
+  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = Schema.fail("")
 
-  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = ???
+  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = Schema.fail("")
 
   implicit def schemaTuple4[A: Schema, B: Schema, C: Schema, D: Schema]: Schema[(A, B, C, D)] = ???
 
@@ -73,6 +73,7 @@ object Schema {
 
   implicit def durationSchema: Schema[Duration] = ???
 
+  implicit def periodSchema: Schema[Period] = ???
 }
 
 /**
@@ -81,15 +82,17 @@ object Schema {
  * mere blueprints, and they do not contain any Scala code.
  */
 sealed trait Remote[+A]
-    extends RemoteSortable[A]
+    extends RemoteRelational[A]
     with RemoteBoolean[A]
     with RemoteTuple[A]
     with RemoteList[A]
     with RemoteNumeric[A]
+    with RemoteEither[A]
     with RemoteFractional[A]
     with RemoteInstant[A]
     with RemoteOption[A]
-    with RemoteDuration[A] {
+    with RemoteDuration[A]
+    with RemoteExecutingFlow[A] {
   def eval: Either[Remote[A], A]
 
   def self: Remote[A] = this
@@ -120,25 +123,39 @@ sealed trait Remote[+A]
 object Remote {
 
   final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
+      Right((schema, value))
+
     override def eval: Either[Remote[A], A] = Right(value)
   }
 
   final case class Ignore[A](value: Remote[A]) extends Remote[Unit] {
+    def evalWithSchema: Either[Remote[Unit], (Schema[Unit], Unit)] =
+      Right((Schema[Unit], ()))
+
     override def eval: Either[Remote[Unit], Unit] = Right(())
 
     def schema: Schema[Unit] = Schema[Unit]
   }
 
   final case class Variable[A](identifier: String, schema: Schema[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] = Left(self)
+
     override def eval: Either[Remote[A], A] = Left(self)
   }
 
   final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
+      Remote.binaryEval(left, right)((l, r) => (numeric.schema, numeric.add(l, r)), AddNumeric(_, _, numeric))
+
     override def eval: Either[Remote[A], A] =
       Remote.binaryEval(left, right)(numeric.add, AddNumeric(_, _, numeric))
   }
 
   final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[A => B] {
+    def evalWithSchema: Either[Remote[A => B], (Schema[A => B], A => B)] = Left(this)
+
+    // TODO: Actually eval?
     override def eval: Either[Remote[A => B], A => B] = Left(this)
   }
 
@@ -290,9 +307,13 @@ object Remote {
     }
   }
 
-  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], sortable: Sortable[A]) extends Remote[Boolean] {
+  // def eval: Either[Remote[Boolean], Boolean]
+  // def eval: Either[Remote[A], (Schema[A], A)]
+  final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
     override def eval: Either[Remote[Boolean], Boolean] =
-      binaryEval(left, right)((l, r) => sortable.lessThan(l, r), (rL, rR) => LessThanEqual(rL, rR, sortable))
+      // FIXME: Compare two values of type A
+      // NOTE: Can do this when `evalWithSchema` is done!
+      binaryEval(left, right)((_, _) => ???, (rL, rR) => LessThanEqual(rL, rR))
   }
 
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
@@ -401,10 +422,10 @@ object Remote {
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
     remote.eval.fold(remote => Left(g(remote)), a => Right(f(a)))
 
-  private[zio] def binaryEval[A, B, C](
+  private[zio] def binaryEval[A, B, C, D](
     left: Remote[A],
     right: Remote[B]
-  )(f: (A, B) => C, g: (Remote[A], Remote[B]) => Remote[C]): Either[Remote[C], C] = {
+  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C]): Either[Remote[C], D] = {
     val leftEither  = left.eval
     val rightEither = right.eval
 
@@ -500,11 +521,10 @@ object Remote {
             loop(ifTrue1, ifTrue2) &&
             loop(ifFalse2, ifFalse2)
 
-        case (l: LessThanEqual[l], LessThanEqual(left2, right2, sortable2)) =>
+        case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
           // TODO: Support `==` and `hashCode` for `Sortable`.
           loop(l.left, left2) &&
-            loop(l.right, right2) &&
-            l.sortable == sortable2
+            loop(l.right, right2)
 
         case (l: Not[l], Not(value2)) =>
           loop(l.value, value2)
@@ -566,11 +586,12 @@ object Remote {
   implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
     Tuple4(t._1, t._2, t._3, t._4)
 
-  def suspend[A](remote: => Remote[A]): Remote[A] = Lazy(() => remote)
+  def suspend[A](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
+
 }
