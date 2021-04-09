@@ -23,9 +23,9 @@ object Schema {
     def rightSchema: Schema[B] = Schema[B]
   }
 
-  implicit def nilSchema: Schema[Nil.type] = ???
+  implicit def nilSchema: Schema[Nil.type] = Schema.fail("")
 
-  implicit def listSchema[A: Schema]: Schema[List[A]] = ???
+  implicit def listSchema[A: Schema]: Schema[List[A]] = Schema.fail("")
 
   implicit def stringSchema: Schema[String] = Schema.fail("")
 
@@ -65,7 +65,9 @@ object Schema {
 
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
 
-  implicit def noneSchema: Schema[None.type] = ???
+  implicit def noneSchema: Schema[None.type] = Schema.fail("")
+
+  implicit def someSchema[A]: Schema[Some[A]] = Schema.fail("")
 
   implicit def optionSchema[A]: Schema[Option[A]] = ???
 
@@ -313,7 +315,7 @@ object Remote {
     override def eval: Either[Remote[Boolean], Boolean] =
       // FIXME: Compare two values of type A
       // NOTE: Can do this when `evalWithSchema` is done!
-      binaryEval(left, right)((_, _) => ???, (rL, rR) => LessThanEqual(rL, rR))
+      binaryEval(left, right)((l, r) => ???, (rL, rR) => LessThanEqual(rL, rR))
   }
 
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
@@ -387,6 +389,7 @@ object Remote {
           case Left(_)      => Left(self)
           case Right(value) => if (value) loop(iterate(current)) else current.eval
         }
+
       loop(initial)
     }
   }
