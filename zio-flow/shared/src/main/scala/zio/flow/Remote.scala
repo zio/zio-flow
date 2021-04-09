@@ -315,7 +315,7 @@ object Remote {
     override def eval: Either[Remote[Boolean], Boolean] =
       // FIXME: Compare two values of type A
       // NOTE: Can do this when `evalWithSchema` is done!
-      binaryEval(left, right)((l, r) => ???, (rL, rR) => LessThanEqual(rL, rR))
+      binaryEval(left, right)((_, _) => ???, (rL, rR) => LessThanEqual(rL, rR))
   }
 
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
