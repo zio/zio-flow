@@ -13,7 +13,7 @@ trait RemoteInstant[+A] {
     Remote.InstantToLong(self.widen[Instant])
 
   def plusDuration(duration: Remote[Duration])(implicit ev: A <:< Instant): Remote[Instant] = {
-    val longDuration = duration.seconds
+    val longDuration = duration.toSeconds
     val epochSecond  = getEpochSec
     val total        = longDuration + epochSecond
 

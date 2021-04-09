@@ -2,8 +2,6 @@ package zio.flow
 
 import java.time.Period
 
-import zio.flow.ZFlowState.newVar
-
 /**
  * 1. Get all policies that will expire in the next 60 days.
  * 2. For each of these policies, do the following -
@@ -132,7 +130,7 @@ object PolicyRenewalExample {
 
   def manualEvalReminderFlow(
     policy: Remote[Policy],
-    evaluationDone: Variable[Boolean]
+    evaluationDone: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
@@ -144,7 +142,7 @@ object PolicyRenewalExample {
 
   def policyRenewalReminderFlow(
     policy: Remote[Policy],
-    buyerResponded: Variable[Option[Boolean]]
+    buyerResponded: RemoteVariable[Option[Boolean]]
   ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
@@ -154,10 +152,8 @@ object PolicyRenewalExample {
       } yield loop
     }
 
-  val paymentStateConstructor: ZFlowState[Variable[Boolean]] = newVar("payment-successful", false)
-
   lazy val paymentFlow: ZFlow[Buyer, ActivityError, Boolean] =
-    ZFlow.define("Payment-Workflow", paymentStateConstructor) { case paymentSuccessful =>
+    ZFlow.newVar("payment-successful", false).flatMap { paymentSuccessful =>
       ZFlow.doWhile {
         for {
           user   <- ZFlow.input[Buyer]
@@ -177,17 +173,20 @@ object PolicyRenewalExample {
       ???
     )
 
-  val stateConstructor: ZFlowState[(Variable[Boolean], Variable[Option[Boolean]])] = for {
-    evaluationDone <- newVar[Boolean]("evaluationDone", false)
-    renewPolicy    <- newVar[Option[Boolean]]("renewPolicy", None)
-  } yield (evaluationDone, renewPolicy)
+  val stateConstructor: ZFlow[Any, Nothing, (Variable[Boolean], Variable[Option[Boolean]])] =
+    for {
+      evaluationDone <- ZFlow.newVar[Boolean]("evaluationDone", false)
+      renewPolicy    <- ZFlow.newVar[Option[Boolean]]("renewPolicy", None)
+    } yield (evaluationDone, renewPolicy)
 
   lazy val policyRenewalFlow: ZFlow[PaymentMethod with Policy, ActivityError, Unit] =
-    ZFlow.define("Policy-Renewal-Workflow", stateConstructor) { case (manualEvalDone, renewPolicy) =>
+    stateConstructor.flatMap { tuple =>
+      val Tuple(manualEvalDone, renewPolicy) = tuple
+
       def performPolicyRenewal(
         policy: Remote[Policy],
-        manualEvalDone: Variable[Boolean],
-        renewPolicy: Variable[Option[Boolean]]
+        manualEvalDone: RemoteVariable[Boolean],
+        renewPolicy: RemoteVariable[Option[Boolean]]
       ): ZFlow[PaymentMethod, ActivityError, Unit] =
         for {
           claimStatus     <- policyClaimStatus(policy)
