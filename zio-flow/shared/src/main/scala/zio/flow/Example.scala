@@ -17,7 +17,9 @@ object Example {
 
   val orderProcess: ZFlow[OrderId, ActivityError, Unit] =
     stateConstructor.flatMap { tuple =>
-      val Tuple(intVar, boolVar, listVar) = tuple
+      val intVar  = tuple._1
+      val boolVar = tuple._2
+      val listVar = tuple._3
 
       ZFlow
         .input[OrderId]
