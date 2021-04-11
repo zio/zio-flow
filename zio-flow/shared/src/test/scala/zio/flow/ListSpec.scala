@@ -1,5 +1,3 @@
 package zio.flow
 
-class ListSpec {
-
-}
+class ListSpec {}
