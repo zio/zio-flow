@@ -2,6 +2,8 @@ package zio
 
 import java.time._
 
+import scala.language.implicitConversions
+
 package object flow {
   type ActivityError
 
@@ -12,6 +14,14 @@ package object flow {
   type RemoteVariable[A] = Remote[Variable[A]]
 
   implicit def RemoteVariable[A](remote: Remote[Variable[A]]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
+    remote
+  )
+
+  implicit def RemoteInstant(remote: Remote[Instant]): RemoteInstantSyntax = new RemoteInstantSyntax(
+    remote
+  )
+
+  implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )
 }

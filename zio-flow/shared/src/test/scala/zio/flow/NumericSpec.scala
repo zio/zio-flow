@@ -4,6 +4,9 @@ import zio.test.Assertion.equalTo
 import zio.test.{ DefaultRunnableSpec, ZSpec, _ }
 
 object NumericSpec extends DefaultRunnableSpec {
+  val first: Short  = 1
+  val second: Short = 2
+  val sum: Int      = first + second
 
   private def addition[T](first: T, second: T, expected: T)(implicit numericT: Numeric[T], schemaT: Schema[T]) =
     test("Test Addition") {
@@ -54,12 +57,12 @@ object NumericSpec extends DefaultRunnableSpec {
   )
 
   val suite3: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("NumericShortSpec")(
-    addition(1.toShort, 2.toShort, 1.toShort + 2.toShort),
-    subtraction(1.toShort, 2.toShort, 1.toShort - 2.toShort),
-    multiplication(1.toShort, 2.toShort, 1.toShort * 2.toShort),
-    division(1.toShort, 2.toShort, 1.toShort / 2.toShort),
-    log(1.toShort, 2.toShort, Math.log(1.toShort) / Math.log(2.toShort)),
-    root(1.toShort, 2.toShort, 1.toShort)
+    addition(first, second, (first + second).toShort),
+    subtraction(first, second, (first - second).toShort),
+    multiplication(first, second, (first * second).toShort),
+    division(first, second, (first / second).toShort),
+    log(first, second, (Math.log(first.toDouble) / Math.log(second.toDouble)).toShort),
+    root(first, second, first.toShort)
   )
 
   val suite4: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("NumericFloatSpec")(
