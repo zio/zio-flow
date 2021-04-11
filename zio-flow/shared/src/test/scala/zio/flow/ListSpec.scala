@@ -26,11 +26,6 @@ object ListSpec extends DefaultRunnableSpec {
       val l2       = Remote(Nil)
       val appended = l1 ++ l2
       assert(appended.eval)(equalTo(l1.eval))
-    },
-    test("Take") {
-      val l1      = Remote(1 :: 2 :: 3 :: 4 :: 5 :: Nil)
-      val newList = l1.take(3)
-      assert(newList.eval)(equalTo(Right(1 :: 2 :: 3 :: Nil)))
     }
   )
 
