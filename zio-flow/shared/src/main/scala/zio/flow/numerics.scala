@@ -47,11 +47,11 @@ sealed trait NumericImplicits0 {
   implicit case object NumericShort extends Numeric[Short] {
     override def fromLong(l: Long): Remote[Short] = Remote(l.toShort)
 
-    override def add(left: Short, right: Short): Short = (left + right).toShort
+    override def add(left: Short, right: Short): Short = (left + right).shortValue()
 
-    override def multiply(left: Short, right: Short): Short = (left * right).toShort
+    override def multiply(left: Short, right: Short): Short = (left * right).shortValue()
 
-    override def divide(left: Short, right: Short): Short = (left / right).toShort
+    override def divide(left: Short, right: Short): Short = (left / right).shortValue()
 
     override def pow(left: Short, right: Short): Short = Math.pow(left.toDouble, right.toDouble).toShort
 
