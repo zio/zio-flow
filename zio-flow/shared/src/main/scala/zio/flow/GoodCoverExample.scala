@@ -181,7 +181,8 @@ object PolicyRenewalExample {
 
   lazy val policyRenewalFlow: ZFlow[PaymentMethod with Policy, ActivityError, Unit] =
     stateConstructor.flatMap { tuple =>
-      val Tuple(manualEvalDone, renewPolicy) = tuple
+      val manualEvalDone = tuple._1
+      val renewPolicy    = tuple._2
 
       def performPolicyRenewal(
         policy: Remote[Policy],

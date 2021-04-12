@@ -6,8 +6,6 @@ trait RemoteOption[+A] {
   def handleOption[A1, B](forNone: Remote[B], f: Remote[A1] => Remote[B])(implicit ev: A <:< Option[A1]): Remote[B] =
     Remote.FoldOption(self.widen[Option[A1]], forNone, f)
 
-  def some: Remote[Option[A]] = Remote.Some0(self)
-
   def isSome[A1](implicit ev: A <:< Option[A1]): Remote[Boolean] =
     handleOption(Remote(false), (_: Remote[A1]) => Remote(true))
 

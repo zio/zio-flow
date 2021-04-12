@@ -23,9 +23,9 @@ object Schema {
     def rightSchema: Schema[B] = Schema[B]
   }
 
-  implicit def nilSchema: Schema[Nil.type] = ???
+  implicit def nilSchema: Schema[Nil.type] = Schema.fail("")
 
-  implicit def listSchema[A: Schema]: Schema[List[A]] = ???
+  implicit def listSchema[A: Schema]: Schema[List[A]] = Schema.fail("")
 
   implicit def stringSchema: Schema[String] = Schema.fail("")
 
@@ -65,7 +65,9 @@ object Schema {
 
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
 
-  implicit def noneSchema: Schema[None.type] = ???
+  implicit def noneSchema: Schema[None.type] = Schema.fail("")
+
+  implicit def someSchema[A]: Schema[Some[A]] = Schema.fail("")
 
   implicit def optionSchema[A]: Schema[Option[A]] = ???
 
@@ -89,9 +91,7 @@ sealed trait Remote[+A]
     with RemoteNumeric[A]
     with RemoteEither[A]
     with RemoteFractional[A]
-    with RemoteInstant[A]
     with RemoteOption[A]
-    with RemoteDuration[A]
     with RemoteExecutingFlow[A] {
   def eval: Either[Remote[A], A]
 
@@ -387,6 +387,7 @@ object Remote {
           case Left(_)      => Left(self)
           case Right(value) => if (value) loop(iterate(current)) else current.eval
         }
+
       loop(initial)
     }
   }
