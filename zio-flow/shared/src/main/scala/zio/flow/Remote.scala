@@ -4,6 +4,8 @@ import zio.flow.Schema.{SchemaEither, SchemaOption, SchemaTuple2}
 
 import java.time.temporal.{ChronoUnit, TemporalUnit}
 import java.time.{Duration, Instant, Period}
+import scala.::
+import scala.collection.IterableOnce.iterableOnceExtensionMethods
 import scala.language.implicitConversions
 
 // TODO: Replace by ZIO Schema
@@ -27,6 +29,8 @@ object Schema {
   final case class SchemaEither[A, B](leftSchema: Schema[A], rightSchema: Schema[B]) extends Schema[Either[A, B]]
 
   final case class SchemaOption[A](opSchema: Schema[A]) extends Schema[Option[A]]
+
+  final case class SchemaList[A](listSchema: Schema[A]) extends Schema[List[A]]
 
   implicit def nilSchema: Schema[Nil.type] = Schema.fail("")
 
@@ -468,16 +472,39 @@ object Remote {
         }
     }
 
-    override def evalWithSchema: Either[Remote[B], (Schema[B], B)] = list.evalWithSchema match {
-      case Left(_) => Left(self)
-      case Right()
-    }
+    def schemaTuple[S,T](s:Schema[S], t: Schema[T]): Schema[(S, T)] = ???
 
+    override def evalWithSchema: Either[Remote[B], (Schema[B], B)] = list.evalWithSchema match {
+      case Left(_)                                             => Left(self)
+      case Right((schemaList: Schema[List[A]], list: List[A])) =>
+        list.foldLeft[Either[Remote[B], (Schema[B], B)]](initial.evalWithSchema) {
+          case (Left(_), _)                           => Left(self)
+          case (Right((schemaB: Schema[B], b: B)), a: A) => schemaList match {
+            case Schema.SchemaList(listSchema) => body(Literal((b, a), schemaTuple(schemaB, listSchema))).evalWithSchema
+            case _ =>throw new Exception("Error in schemaWithEval for Fold.")
+          }
+        }
+    }
   }
 
   final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
     override def eval: Either[Remote[List[A]], List[A]] =
       binaryEval(list, head)((l, h) => h :: l, (remoteL, remoteH) => Cons(remoteL, remoteH))
+
+    override def evalWithSchema: Either[Remote[List[A]], (Schema[List[A]], List[A])] = {
+      val evaluatedList  = list.evalWithSchema
+      val evaluatedHead = head.evalWithSchema
+      (for {
+        l <- evaluatedList
+        r <- evaluatedHead
+      } yield (l, r)) match {
+        case Left(_)       =>
+          val reducedList  = evaluatedList.fold(identity, a => Literal(a._2, a._1))
+          val reducedHead = evaluatedHead.fold(identity, b => Literal(b._2, b._1))
+          Left(reducedHead :: reducedList)
+        case Right((a, b)) => Right(schemaTuple(a._1, b._1), (a._2, b._2))
+      }
+    }
   }
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
@@ -494,11 +521,17 @@ object Remote {
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
     override def eval: Either[Remote[Instant], Instant] =
       unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
+
+    override def evalWithSchema: Either[Remote[Instant], (Schema[Instant], Instant)] =
+      unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS)).map((Schema[Instant], _))
   }
 
   final case class InstantToLong[A](instant: Remote[Instant]) extends Remote[Long] {
     override def eval: Either[Remote[Long], Long] =
       unaryEval(instant)(_.toEpochMilli, remoteS => InstantToLong(remoteS))
+
+    override def evalWithSchema: Either[Remote[Long], (Schema[Long], Long)] =
+      unaryEval(instant)(_.toEpochMilli, remoteS => InstantToLong(remoteS)).map((Schema[Long], _))
   }
 
   final case class DurationToLong[A](duration: Remote[Duration], temporalUnit: Remote[TemporalUnit])
@@ -507,11 +540,19 @@ object Remote {
       (d, tUnit) => d.get(tUnit),
       (remoteDuration, remoteUnit) => DurationToLong(remoteDuration, remoteUnit)
     )
+
+    override def evalWithSchema: Either[Remote[Long], (Schema[Long], Long)] = binaryEval(duration, temporalUnit)(
+      (d, tUnit) => d.get(tUnit),
+      (remoteDuration, remoteUnit) => DurationToLong(remoteDuration, remoteUnit)
+    ).map((Schema[Long], _))
   }
 
   final case class LongToDuration(seconds: Remote[Long]) extends Remote[Duration] {
     override def eval: Either[Remote[Duration], Duration] =
       unaryEval(seconds)(Duration.ofSeconds, remoteS => LongToDuration(remoteS))
+
+    override def evalWithSchema: Either[Remote[Duration], (Schema[Duration], Duration)] =
+      unaryEval(seconds)(Duration.ofSeconds, remoteS => LongToDuration(remoteS)).map((Schema[Duration], _))
   }
 
   final case class Iterate[A](
@@ -546,13 +587,14 @@ object Remote {
   }
 
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-    override def eval: Either[Remote[Option[A]], Option[A]] = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
-    implicit def toSchemaOption(schema: Schema[A]) : Schema[Option[A]] = ???
+    override def eval: Either[Remote[Option[A]], Option[A]]           = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
+    implicit def toSchemaOption(schema: Schema[A]): Schema[Option[A]] = ???
 
-    override def evalWithSchema: Either[Remote[Option[A]], (Schema[Option[A]], Option[A])] = value.evalWithSchema match {
-      case Left(_) => Left(self)
-      case Right((schemaA,a)) => Right((schemaA, Some(a)))
-    }
+    override def evalWithSchema: Either[Remote[Option[A]], (Schema[Option[A]], Option[A])] =
+      value.evalWithSchema match {
+        case Left(_)             => Left(self)
+        case Right((schemaA, a)) => Right((schemaA, Some(a)))
+      }
   }
 
   final case class FoldOption[A, B](option: Remote[Option[A]], none: Remote[B], f: Remote[A] => Remote[B])
@@ -563,8 +605,9 @@ object Remote {
     }
 
     override def evalWithSchema: Either[Remote[B], (Schema[B], B)] = option.evalWithSchema match {
-      case Left(_) => Left(self)
-      case Right((schemaOp : SchemaOption[A], op)) => op.fold(none.evalWithSchema)(v => f(Literal(v,schemaOp.opSchema)).evalWithSchema)
+      case Left(_)                                => Left(self)
+      case Right((schemaOp: SchemaOption[A], op)) =>
+        op.fold(none.evalWithSchema)(v => f(Literal(v, schemaOp.opSchema)).evalWithSchema)
     }
   }
 
