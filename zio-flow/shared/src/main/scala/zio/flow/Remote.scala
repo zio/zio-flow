@@ -85,6 +85,27 @@ object Schema {
   implicit def periodSchema: Schema[Period] = ???
 }
 
+trait SchemaAndValue[+A]{
+  type Subtype <: A
+  def schema:Schema[Subtype]
+  def value: Subtype
+}
+
+object SchemaAndValue {
+  def apply[A](schema0: Schema[A], value0: A) : SchemaAndValue[A] = {
+    new SchemaAndValue[A] {
+      override type Subtype = A
+
+      override def schema: Schema[Subtype] = schema0
+
+      override def value: Subtype = value0
+
+      //TODO : Equals and Hashcode required
+    }
+  }
+  def unapply[A](schemaAndValue: SchemaAndValue[A]) : Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
+    Some((schemaAndValue.schema, schemaAndValue.value))
+}
 /**
  * A `Remote[A]` is a blueprint for constructing a value of type `A` on a
  * remote machine. Remote values can always be serialized, because they are
@@ -103,7 +124,7 @@ sealed trait Remote[+A]
 
   def eval: Either[Remote[A], A]
 
-  def evalWithSchema: Either[Remote[A], (Schema[A], A)]
+  def evalWithSchema : Either[Remote[A], SchemaAndValue[A]]
 
   def self: Remote[A] = this
 
@@ -133,15 +154,15 @@ sealed trait Remote[+A]
 object Remote {
 
   final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
-      Right((schema, value))
+    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Right(SchemaAndValue(schema, value))
 
     override def eval: Either[Remote[A], A] = Right(value)
   }
 
   final case class Ignore[A](value: Remote[A]) extends Remote[Unit] {
-    def evalWithSchema: Either[Remote[Unit], (Schema[Unit], Unit)] =
-      Right((Schema[Unit], ()))
+    def evalWithSchema: Either[Remote[Unit], SchemaAndValue[Unit]] =
+      Right(SchemaAndValue(Schema[Unit], ()))
 
     override def eval: Either[Remote[Unit], Unit] = Right(())
 
@@ -149,13 +170,13 @@ object Remote {
   }
 
   final case class Variable[A](identifier: String, schema: Schema[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], (Schema[A], A)] = Left(self)
+    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = Left(self)
 
     override def eval: Either[Remote[A], A] = Left(self)
   }
 
   final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], (Schema[A], A)] =
+    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEval(left, right)((l, r) => (numeric.schema, numeric.add(l, r)), AddNumeric(_, _, numeric))
 
     override def eval: Either[Remote[A], A] =
@@ -273,7 +294,6 @@ object Remote {
           remoteB => Left(Either0(Right(remoteB))),
           b => Right((toRightSchema(b._1), (Right(b._2))))
         )
-
     }
     override def eval: Either[Remote[Either[A, B]], Either[A, B]] =
       either match {
@@ -670,16 +690,16 @@ object Remote {
   private[zio] def binaryEvalWithSchema[A, B, C, D](
     left: Remote[A],
     right: Remote[B]
-  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C], schema: Schema[D]): Either[Remote[C], (Schema[D], D)] = {
+  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C], schema: Schema[D]): Either[Remote[C], SchemaAndValue[D]] = {
     val leftEither  = left.evalWithSchema
     val rightEither = right.evalWithSchema
     (for {
       l <- leftEither
       r <- rightEither
-    } yield f(l._2, r._2)) match {
+    } yield f(l.value, r.value)) match {
       case Left(_)  =>
         Left(g(left, right))
-      case Right(v) => Right((schema, v))
+      case Right(v) => Right(SchemaAndValue(schema, v))
     }
   }
 
