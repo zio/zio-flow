@@ -1,11 +1,9 @@
 package zio.flow
 
-import zio.flow.Schema.{SchemaEither, SchemaOption, SchemaTuple2}
+import zio.flow.Schema.{ SchemaEither, SchemaOption, SchemaTuple2 }
 
-import java.time.temporal.{ChronoUnit, TemporalUnit}
-import java.time.{Duration, Instant, Period}
-import scala.::
-import scala.collection.IterableOnce.iterableOnceExtensionMethods
+import java.time.temporal.{ ChronoUnit, TemporalUnit }
+import java.time.{ Duration, Instant, Period }
 import scala.language.implicitConversions
 
 // TODO: Replace by ZIO Schema
@@ -102,6 +100,7 @@ sealed trait Remote[+A]
     with RemoteFractional[A]
     with RemoteOption[A]
     with RemoteExecutingFlow[A] {
+
   def eval: Either[Remote[A], A]
 
   def evalWithSchema: Either[Remote[A], (Schema[A], A)]
@@ -272,7 +271,7 @@ object Remote {
       case Right(remoteB) =>
         remoteB.evalWithSchema.fold(
           remoteB => Left(Either0(Right(remoteB))),
-          b => Right(toRightSchema(b._1), (Right(b._2)))
+          b => Right((toRightSchema(b._1), (Right(b._2))))
         )
 
     }
@@ -325,7 +324,7 @@ object Remote {
           val reducedLeft  = evaluatedLeft.fold(identity, a => Literal(a._2, a._1))
           val reducedRight = evaluatedRight.fold(identity, b => Literal(b._2, b._1))
           Left((reducedLeft, reducedRight))
-        case Right((a, b)) => Right(schemaTuple(a._1, b._1), (a._2, b._2))
+        case Right((a, b)) => Right((schemaTuple(a._1, b._1), (a._2, b._2)))
       }
     }
 
@@ -352,7 +351,7 @@ object Remote {
           val reducedSecond = second.fold(identity, b => Literal(b._2, b._1))
           val reducedThird  = third.fold(identity, c => Literal(c._2, c._1))
           Left((reducedFirst, reducedSecond, reducedThird))
-        case Right((a, b, c)) => Right(schemaTuple(a._1, b._1, c._1), (a._2, b._2, c._2))
+        case Right((a, b, c)) => Right((schemaTuple(a._1, b._1, c._1), (a._2, b._2, c._2)))
       }
     }
 
@@ -472,17 +471,19 @@ object Remote {
         }
     }
 
-    def schemaTuple[S,T](s:Schema[S], t: Schema[T]): Schema[(S, T)] = ???
+    def schemaTuple[S, T](s: Schema[S], t: Schema[T]): Schema[(S, T)] = ???
 
     override def evalWithSchema: Either[Remote[B], (Schema[B], B)] = list.evalWithSchema match {
       case Left(_)                                             => Left(self)
       case Right((schemaList: Schema[List[A]], list: List[A])) =>
         list.foldLeft[Either[Remote[B], (Schema[B], B)]](initial.evalWithSchema) {
-          case (Left(_), _)                           => Left(self)
-          case (Right((schemaB: Schema[B], b: B)), a: A) => schemaList match {
-            case Schema.SchemaList(listSchema) => body(Literal((b, a), schemaTuple(schemaB, listSchema))).evalWithSchema
-            case _ =>throw new Exception("Error in schemaWithEval for Fold.")
-          }
+          case (Left(_), _)             => Left(self)
+          case (Right((schemaB, b)), a) =>
+            schemaList match {
+              case Schema.SchemaList(listSchema) =>
+                body(Literal((b, a), schemaTuple(schemaB, listSchema))).evalWithSchema
+              case _                             => throw new Exception("Error in schemaWithEval for Fold.")
+            }
         }
     }
   }
@@ -492,17 +493,18 @@ object Remote {
       binaryEval(list, head)((l, h) => h :: l, (remoteL, remoteH) => Cons(remoteL, remoteH))
 
     override def evalWithSchema: Either[Remote[List[A]], (Schema[List[A]], List[A])] = {
-      val evaluatedList  = list.evalWithSchema
+      val evaluatedList = list.evalWithSchema
       val evaluatedHead = head.evalWithSchema
       (for {
         l <- evaluatedList
         r <- evaluatedHead
       } yield (l, r)) match {
-        case Left(_)       =>
-          val reducedList  = evaluatedList.fold(identity, a => Literal(a._2, a._1))
+        case Left(_) =>
+          val reducedList = evaluatedList.fold(identity, a => Literal(a._2, a._1))
           val reducedHead = evaluatedHead.fold(identity, b => Literal(b._2, b._1))
-          Left(reducedHead :: reducedList)
-        case Right((a, b)) => Right(schemaTuple(a._1, b._1), (a._2, b._2))
+          Left(Cons(reducedList, reducedHead))
+
+        case Right((aList, a)) => Right((aList._1, a._2 :: aList._2))
       }
     }
   }
@@ -516,6 +518,24 @@ object Remote {
         },
       remoteList => UnCons(remoteList)
     )
+
+    override def evalWithSchema
+      : Either[Remote[Option[(A, List[A])]], (Schema[Option[(A, List[A])]], Option[(A, List[A])])] = {
+      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]]                     = ???
+      implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
+
+      list.evalWithSchema.fold(
+        remote => Left(UnCons(remote)),
+        a =>
+          Right((a._2.headOption, a._1) match {
+            case (scala.Some(v), Schema.SchemaList(listSchema)) =>
+              (toOptionSchema(toTupleSchema(listSchema, a._1)), Some((v, a._2.tail)))
+            case (None, Schema.SchemaList(listSchema))          =>
+              (toOptionSchema(toTupleSchema(listSchema, a._1)), None)
+            case _                                              => throw new Exception("Error!")
+          })
+      )
+    }
   }
 
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
