@@ -14,10 +14,19 @@ trait RemoteList[+A] {
     fold[A0, List[A0]](Remote(Nil))((l, a) => Remote.Cons(l, a))
 
   def take[A1](num: Remote[Int])(implicit ev: A <:< List[A1]): Remote[List[A1]] = {
-    val ifTrue = Remote
+    val ifTrue: Remote[List[A1]] = Remote
       .UnCons(self.widen[List[A1]])
       .widen[Option[(A1, List[A1])]]
       .handleOption(Nil, (tuple: Remote[(A1, List[A1])]) => Cons(tuple._2.take[A1](num - Remote(1)), tuple._1))
+    (num > Remote(0)).ifThenElse(ifTrue, Nil)
+  }
+
+  def take1[A1](num: Remote[Int])(implicit ev: A <:< List[A1]): Remote[List[A1]] = {
+    val ifTrue: Remote[List[A1]] = Remote
+      .UnCons(self.widen[List[A1]])
+      .widen[Option[(A1, List[A1])]]
+      .handleOption(Nil, (tuple: Remote[(A1, List[A1])]) => Cons(tuple._2.take[A1](num - Remote(1)), tuple._1))
+
     (num > Remote(0)).ifThenElse(ifTrue, Nil)
   }
 
