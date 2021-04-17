@@ -313,19 +313,16 @@ object Remote {
     right: Remote[B] => Remote[C]
   ) extends Remote[C] {
     override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = either.evalWithSchema match {
-      case Left(_) => Left(self)
-
+      case Left(_)                              => Left(self)
       case Right(SchemaAndValue(schema, value)) =>
-        schema.asInstanceOf[SchemaEither[A, B]] match {
-          case SchemaEither(leftSchema, rightSchema) =>
-            value match {
-              case Left(a)  => left(Literal(a, leftSchema)).evalWithSchema
-              case Right(b) => right(Literal(b, rightSchema)).evalWithSchema
-              case _        => throw new Exception("Error!")
-            }
-          case _                                     => throw new Exception("Invalid type.")
+        val schemaEither = schema.asInstanceOf[SchemaEither[A, B]]
+        value match {
+          case Left(a)  => left(Literal(a, schemaEither.leftSchema)).evalWithSchema
+          case Right(b) => right(Literal(b, schemaEither.rightSchema)).evalWithSchema
+          case _        => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
         }
-      case Right(_)                             => throw new Exception("Error!")
+      case Right(_)                             =>
+        throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
     }
 
     override def eval: Either[Remote[C], C] =
@@ -437,7 +434,7 @@ object Remote {
             val schema = schemaTuple2.asInstanceOf[SchemaTuple2[A, B]].leftSchema
             val (a, _) = value.asInstanceOf[scala.Tuple2[A, B]]
             Right(SchemaAndValue(schema, a))
-          case _                                   => throw new Exception("Invalid.")
+          case _                                   => throw new IllegalStateException("Every remote First must be constructed using Remote[(A,B)].")
         }
       )
   }
@@ -452,7 +449,7 @@ object Remote {
             val schema = schemaTuple2.asInstanceOf[SchemaTuple2[A, B]].rightSchema
             val (_, b) = value.asInstanceOf[scala.Tuple2[A, B]]
             Right(SchemaAndValue(schema, b))
-          case _                                   => throw new Exception("Evaluation error.")
+          case _                                   => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
         }
       )
   }
@@ -529,10 +526,13 @@ object Remote {
             schemaList match {
               case Schema.SchemaList(schemaA) =>
                 body(Literal((schemaAndValue.value, a), schemaTuple(schemaAndValue.schema, schemaA))).evalWithSchema
-              case _                          => throw new Exception("Error!")
+              case _                          =>
+                throw new IllegalStateException(
+                  "It should be possible to evaluate every remote Fold initial schema to a Schema[List]."
+                )
             }
         }
-      case _                                    => throw new Exception("Error!")
+      case _                                    => throw new IllegalStateException("Every remote Fold must be constructed using Remote[List].")
     }
   }
 
@@ -590,7 +590,7 @@ object Remote {
                 toOptionSchema(toTupleSchema(schema.listSchema, schemaAndValue.schema)),
                 None
               )
-            case _       => throw new Exception("Error")
+            case _       => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
           })
       )
     }
@@ -677,7 +677,7 @@ object Remote {
           val schemaA = schema.asInstanceOf[Schema[A]]
           val a       = value.asInstanceOf[A]
           Right(SchemaAndValue(toSchemaOption(schemaA), Some(a)))
-        case Right(_)                             => throw new Exception("Error!")
+        case Right(_)                             => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
       }
   }
 
@@ -694,7 +694,7 @@ object Remote {
         val opSchema = schema.asInstanceOf[SchemaOption[A]]
         val opValue  = value.asInstanceOf[Option[A]]
         opValue.fold(none.evalWithSchema)(v => f(Literal(v, opSchema.opSchema)).evalWithSchema)
-      case _                                    => throw new Exception("Exception!")
+      case _                                    => throw new IllegalStateException("Every remote FoldOption must be constructed using Remote[Option].")
     }
   }
 
