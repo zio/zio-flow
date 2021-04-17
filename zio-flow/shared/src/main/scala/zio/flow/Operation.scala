@@ -5,7 +5,9 @@ object Operation {
   final case class Http[R, A](
     url: java.net.URI,
     method: String = "GET",
-    headers: Map[String, String]
+    headers: Map[String, String],
+    inputSchema: Schema[R],
+    outputSchema: Schema[A]
   ) extends Operation[R, A]
   final case class SendEmail(
     server: String,

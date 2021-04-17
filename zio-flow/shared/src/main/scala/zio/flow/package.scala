@@ -8,6 +8,7 @@ package object flow {
   type ActivityError
 
   type Variable[A]
+  type ExecutingFlow[+E, +A]
 
   type RemoteDuration    = Remote[Duration]
   type RemoteInstant     = Remote[Instant]
