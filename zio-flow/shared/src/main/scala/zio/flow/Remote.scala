@@ -319,11 +319,13 @@ object Remote {
         schema.asInstanceOf[SchemaEither[A, B]] match {
           case SchemaEither(leftSchema, rightSchema) =>
             value match {
-              case Left(a: A)  => left(Literal(a, leftSchema)).evalWithSchema
-              case Right(b: B) => right(Literal(b, rightSchema)).evalWithSchema
+              case Left(a)  => left(Literal(a, leftSchema)).evalWithSchema
+              case Right(b) => right(Literal(b, rightSchema)).evalWithSchema
+              case _        => throw new Exception("Error!")
             }
           case _                                     => throw new Exception("Invalid type.")
         }
+      case Right(_)                             => throw new Exception("Error!")
     }
 
     override def eval: Either[Remote[C], C] =
@@ -521,8 +523,8 @@ object Remote {
         val schemaList = schema.asInstanceOf[Schema[List[A]]]
         val list       = value.asInstanceOf[List[A]]
         list.foldLeft[Either[Remote[B], SchemaAndValue[B]]](initial.evalWithSchema) {
-          case (Left(_), _)        => Left(self)
-          case (Right(left), a: A) =>
+          case (Left(_), _)     => Left(self)
+          case (Right(left), a) =>
             val schemaAndValue: SchemaAndValue[B] = left.asInstanceOf[SchemaAndValue[B]]
             schemaList match {
               case Schema.SchemaList(schemaA) =>
@@ -530,6 +532,7 @@ object Remote {
               case _                          => throw new Exception("Error!")
             }
         }
+      case _                                    => throw new Exception("Error!")
     }
   }
 
@@ -571,35 +574,23 @@ object Remote {
       implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]]                     = ???
       implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
 
-//      val evaluatedList: Either[Remote[List[A]], SchemaAndValue[List[A]]] = list.evalWithSchema
-//        evaluatedList.fold(
-//        remote => Left(UnCons(remote)),
-//          (schemaAndValue:SchemaAndValue[List[A]]) =>
-//          Right((schemaAndValue.value.headOption, schemaAndValue.schema) match {
-//            case (Some(v: A), Schema.SchemaList(schemaA)) =>
-//              SchemaAndValue(toOptionSchema(toTupleSchema(schemaA.asInstanceOf[Schema[A]], schemaAndValue.schema)), Some((v, schemaAndValue.value.tail)))
-//            case (None, Schema.SchemaList(schemaA))       =>
-//              SchemaAndValue(toOptionSchema(toTupleSchema(schemaA.asInstanceOf[Schema[A]], schemaAndValue.schema)), None)
-//            case _                                                   => throw new Exception("Error!")
-//          })
-//      )
       list.evalWithSchema.fold(
         remote => Left(UnCons(remote)),
-        (schemaAndValue: SchemaAndValue[List[A]]) =>
+        schemaAndValue =>
           Right(schemaAndValue.value.headOption match {
-            case Some(v: A) =>
+            case Some(v) =>
               val schema = schemaAndValue.schema.asInstanceOf[Schema.SchemaList[A]]
               SchemaAndValue(
                 toOptionSchema(toTupleSchema(schema.listSchema, schema)),
-                Some(v, schemaAndValue.value.tail)
+                Some((v, schemaAndValue.value.tail))
               )
-            case None       =>
+            case None    =>
               val schema = schemaAndValue.schema.asInstanceOf[Schema.SchemaList[A]]
               SchemaAndValue(
                 toOptionSchema(toTupleSchema(schema.listSchema, schemaAndValue.schema)),
                 None
               )
-            case _          => throw new Exception("Error")
+            case _       => throw new Exception("Error")
           })
       )
     }
@@ -686,6 +677,7 @@ object Remote {
           val schemaA = schema.asInstanceOf[Schema[A]]
           val a       = value.asInstanceOf[A]
           Right(SchemaAndValue(toSchemaOption(schemaA), Some(a)))
+        case Right(_)                             => throw new Exception("Error!")
       }
   }
 
