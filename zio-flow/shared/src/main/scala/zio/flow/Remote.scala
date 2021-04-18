@@ -114,11 +114,10 @@ object SchemaAndValue {
  */
 sealed trait Remote[+A]
     extends RemoteRelational[A]
-    with RemoteTuple[A]
     with RemoteList[A]
     with RemoteNumeric[A]
     with RemoteFractional[A]
-    with RemoteOption[A]
+    with RemoteOptionSyntax[A]
     with RemoteExecutingFlow[A] {
 
   def eval: Either[Remote[A], A]
@@ -266,7 +265,7 @@ object Remote {
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(fractional.sin, SinFractional(_, fractional), fractional.schema)
+      Remote.unaryEvalWithSchema(value)(a => fractional.sin(a), SinFractional(_, fractional), fractional.schema)
 
     override def eval: Either[Remote[A], A] =
       Remote.unaryEval(value)(fractional.sin, SinFractional(_, fractional))
