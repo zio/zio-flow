@@ -5,7 +5,7 @@ import java.time.{ Duration, Instant, Period }
 
 import scala.language.implicitConversions
 
-import zio.flow.Schema.{ SchemaEither, SchemaOption, SchemaTuple2 }
+import zio.flow.Schema.{ SchemaEither, SchemaList, SchemaOption, SchemaTuple2 }
 
 // TODO: Replace by ZIO Schema
 trait Schema[A]
@@ -574,13 +574,18 @@ object Remote {
 
       list.evalWithSchema.fold(
         remote => Left(UnCons(remote)),
-        schemaAndValue =>
+        rightVal => {
+          val schemaAndValue = rightVal.asInstanceOf[SchemaAndValue[List[A]]]
           Right(schemaAndValue.value.headOption match {
             case Some(v) =>
-              val schema = schemaAndValue.schema.asInstanceOf[Schema.SchemaList[A]]
               SchemaAndValue(
-                toOptionSchema(toTupleSchema(schema.listSchema, schema)),
-                Some((v, schemaAndValue.value.tail))
+                toOptionSchema(
+                  toTupleSchema(
+                    (schemaAndValue.schema.asInstanceOf[SchemaList[A]]).listSchema,
+                    schemaAndValue.schema.asInstanceOf[SchemaList[A]]
+                  )
+                ),
+                Some((v.asInstanceOf[A], schemaAndValue.value.tail.asInstanceOf[List[A]]))
               )
             case None    =>
               val schema = schemaAndValue.schema.asInstanceOf[Schema.SchemaList[A]]
@@ -590,6 +595,7 @@ object Remote {
               )
             case _       => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
           })
+        }
       )
     }
   }
