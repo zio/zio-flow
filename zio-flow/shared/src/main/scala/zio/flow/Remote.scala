@@ -547,10 +547,13 @@ object Remote {
           val reducedHead = evaluatedHead.fold(identity, b => Literal(b.value, b.schema))
           Left(Cons(reducedList, reducedHead))
 
-        case Right((x, y)) =>
-          val aList = x.asInstanceOf[SchemaAndValue[List[A]]]
-          val a     = y.asInstanceOf[SchemaAndValue[A]]
-          Right(SchemaAndValue(aList.schema.asInstanceOf[Schema[List[A]]], a.value :: aList.value))
+        case Right((aList, a)) =>
+          Right(
+            SchemaAndValue(
+              aList.schema.asInstanceOf[Schema[List[A]]],
+              a.value.asInstanceOf[A] :: aList.value.asInstanceOf[List[A]]
+            )
+          )
       }
     }
   }
