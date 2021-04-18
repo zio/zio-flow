@@ -114,10 +114,8 @@ object SchemaAndValue {
  */
 sealed trait Remote[+A]
     extends RemoteRelational[A]
-    with RemoteList[A]
     with RemoteNumeric[A]
     with RemoteFractional[A]
-    with RemoteOptionSyntax[A]
     with RemoteExecutingFlow[A] {
 
   def eval: Either[Remote[A], A]
