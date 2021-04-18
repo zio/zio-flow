@@ -186,7 +186,7 @@ object ZFlow {
     for {
       executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
       eithers        <- ZFlow.foreach(executingFlows)(_.await)
-      bs             <- ZFlow.fromEither(RemoteEither.collectAll(eithers))
+      bs             <- ZFlow.fromEither(RemoteEitherSyntax.collectAll(eithers))
     } yield bs
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
@@ -226,5 +226,4 @@ object ZFlow {
 
   def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
-
 }

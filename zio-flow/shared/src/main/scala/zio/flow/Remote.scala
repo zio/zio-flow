@@ -114,11 +114,9 @@ object SchemaAndValue {
  */
 sealed trait Remote[+A]
     extends RemoteRelational[A]
-    with RemoteBoolean[A]
     with RemoteTuple[A]
     with RemoteList[A]
     with RemoteNumeric[A]
-    with RemoteEither[A]
     with RemoteFractional[A]
     with RemoteOption[A]
     with RemoteExecutingFlow[A] {

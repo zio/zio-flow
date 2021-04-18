@@ -24,4 +24,10 @@ package object flow {
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )
+  implicit def RemoteBoolean(remote: Remote[Boolean]): RemoteBooleanSyntax    = new RemoteBooleanSyntax(remote)
+
+  implicit def RemoteEither[A, B](remote: Remote[Either[A, B]]): RemoteEitherSyntax[A, B] = new RemoteEitherSyntax(
+    remote
+  )
+
 }
