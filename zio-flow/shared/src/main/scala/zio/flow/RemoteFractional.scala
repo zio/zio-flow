@@ -1,24 +1,25 @@
 package zio.flow
 
 trait RemoteFractional[+A] {
+
   def self: Remote[A]
 
   final def sin[A1 >: A](implicit fractional: Fractional[A1]): Remote[A1] =
-    Remote.SinFractional(self.widen[A1], fractional)
+    Remote.SinFractional(self, fractional)
 
   final def cos[A1 >: A](implicit fractional: Fractional[A1]): Remote[A1] = {
-    implicit val schemaA1 = fractional.schema
-    Remote(fractional.fromDouble(1.0)) - (self.sin[A1] pow Remote(fractional.fromDouble(2.0)))
+    implicit val schemaA1: Schema[A1] = fractional.schema
+    Remote(fractional.fromDouble(1.0)) - sin(fractional) pow Remote(fractional.fromDouble(2.0))
   }
 
   final def tan[A1 >: A](implicit fractional: Fractional[A1]): Remote[A1] =
-    self.widen[A1].sin / (self.widen[A1].cos)
+    sin(fractional) / cos(fractional)
 
   final def sinInverse[A1 >: A](implicit fractional: Fractional[A1]): Remote[A1] =
-    Remote.SinInverseFractional(self.widen[A1], fractional)
+    Remote.SinInverseFractional(self, fractional)
 
   final def cosInverse[A1 >: A](implicit fractional: Fractional[A1]): Remote[A1] = {
-    implicit val schemaA1 = fractional.schema
-    Remote(fractional.fromDouble(1.571)) - self.sinInverse[A1]
+    implicit val schema = fractional.schema
+    Remote(fractional.fromDouble(1.571)) - sinInverse(fractional)
   }
 }
