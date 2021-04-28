@@ -1,13 +1,12 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
+import javax.naming.OperationNotSupportedException
 
 import zio._
 import zio.clock._
-import zio.stm._
-
 import zio.flow.ZFlow.Die
-import javax.naming.OperationNotSupportedException
+import zio.stm._
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
