@@ -14,20 +14,16 @@ object NumericSpec extends DefaultRunnableSpec {
       numericTests("Float", Gen.anyFloat)(Operations.floatOperations),
       numericTests("Double", Gen.anyDouble)(Operations.doubleOperations),
       numericTests("BigInt", Gen.bigInt(BigInt(Int.MinValue), BigInt(Int.MaxValue)))(Operations.bigIntOperations),
-      bigDecimalNumericSuite
+      numericTestsWithoutLogOrRoot(
+        "BigDecimal",
+        Gen.bigDecimal(BigDecimal(Double.MinValue), BigDecimal(Double.MaxValue))
+      )(
+        Operations.bigDecimalOperations
+      )
     )
 
-  // Not working.
-  val bigDecimalNumericSuite: Spec[Random with TestConfig, TestFailure[Nothing], TestSuccess] =
-    numericTestsWithoutLogOrRoot(
-      "BigDecimal",
-      Gen.bigDecimal(BigDecimal(Double.MinValue), BigDecimal(Double.MaxValue))
-    )(
-      Operations.bigDecimalOperations
-    )
-
-  def numericTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: Operations[A])(implicit
-    numericT: Numeric[A]
+  private def numericTests[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
+    ops: NumericOps[A]
   ): Spec[R with TestConfig, TestFailure[Nothing], TestSuccess] =
     suite(name)(
       testOp[R, A]("Addition", gen, gen)(_ + _)(ops.addition),
@@ -39,8 +35,8 @@ object NumericSpec extends DefaultRunnableSpec {
     )
 
   // TODO: BigDecimal fails Log/Root specs
-  def numericTestsWithoutLogOrRoot[R, A: Schema](name: String, gen: Gen[R, A])(ops: Operations[A])(implicit
-    numericT: Numeric[A]
+  private def numericTestsWithoutLogOrRoot[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
+    ops: NumericOps[A]
   ): Spec[R with TestConfig, TestFailure[Nothing], TestSuccess] =
     suite(name)(
       testOp[R, A]("Addition", gen, gen)(_ + _)(ops.addition),
@@ -60,7 +56,7 @@ object NumericSpec extends DefaultRunnableSpec {
       }
     }
 
-  private case class Operations[A](
+  private case class NumericOps[A](
     addition: (A, A) => A,
     subtraction: (A, A) => A,
     multiplication: (A, A) => A,
@@ -71,8 +67,8 @@ object NumericSpec extends DefaultRunnableSpec {
   )
 
   private object Operations {
-    val intOperations: Operations[Int] =
-      Operations[Int](
+    val intOperations: NumericOps[Int] =
+      NumericOps[Int](
         addition = _ + _,
         subtraction = _ - _,
         multiplication = _ * _,
@@ -82,8 +78,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toInt
       )
 
-    val bigIntOperations: Operations[BigInt] =
-      Operations[BigInt](
+    val bigIntOperations: NumericOps[BigInt] =
+      NumericOps[BigInt](
         addition = _ + _,
         subtraction = _ - _,
         multiplication = _ * _,
@@ -93,8 +89,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toInt
       )
 
-    val bigDecimalOperations: Operations[BigDecimal] =
-      Operations[BigDecimal](
+    val bigDecimalOperations: NumericOps[BigDecimal] =
+      NumericOps[BigDecimal](
         addition = _ + _,
         subtraction = _ - _,
         multiplication = _ * _,
@@ -104,8 +100,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble)
       )
 
-    val longOperations: Operations[Long] =
-      Operations[Long](
+    val longOperations: NumericOps[Long] =
+      NumericOps[Long](
         addition = _ + _,
         subtraction = _ - _,
         multiplication = _ * _,
@@ -115,8 +111,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toLong
       )
 
-    val shortOperations: Operations[Short] =
-      Operations[Short](
+    val shortOperations: NumericOps[Short] =
+      NumericOps[Short](
         addition = (x, y) => (x + y).toShort,
         subtraction = (x, y) => (x - y).toShort,
         multiplication = (x, y) => (x * y).toShort,
@@ -126,7 +122,7 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toShort
       )
 
-    val doubleOperations: Operations[Double] = Operations[Double](
+    val doubleOperations: NumericOps[Double] = NumericOps[Double](
       addition = _ + _,
       subtraction = _ - _,
       multiplication = _ * _,
@@ -136,7 +132,7 @@ object NumericSpec extends DefaultRunnableSpec {
       root = (x, y) => Math.pow(x, 1 / y)
     )
 
-    val floatOperations: Operations[Float] = Operations[Float](
+    val floatOperations: NumericOps[Float] = NumericOps[Float](
       addition = _ + _,
       subtraction = _ - _,
       multiplication = _ * _,
