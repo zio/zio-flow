@@ -12,7 +12,7 @@ object ListSpec extends DefaultRunnableSpec {
     },
     test("Reverse empty list") {
       val reversedEmptyList = Remote(Nil).reverse
-      assert(reversedEmptyList.eval)(isRight)
+      assert(reversedEmptyList.eval)(isRight) &&
       assert(reversedEmptyList.eval)(equalTo(Right(Nil)))
     },
     test("Append") {

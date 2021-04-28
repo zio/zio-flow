@@ -17,14 +17,14 @@ object RemoteOptionSpec extends DefaultRunnableSpec {
     },
     test("isSome") {
       val op1 = Remote(None)
-      assert(op1.isSome.eval)(equalTo(Right(false)))
       val op2 = Remote(Some(12))
+      assert(op1.isSome.eval)(equalTo(Right(false))) &&
       assert(op2.isSome.eval)(equalTo(Right(true)))
     },
     test("isNone") {
       val op1 = Remote(None)
-      assert(op1.isNone.eval)(equalTo(Right(true)))
       val op2 = Remote(Some(12))
+      assert(op1.isNone.eval)(equalTo(Right(true))) &&
       assert(op2.isNone.eval)(equalTo(Right(false)))
     }
   )
