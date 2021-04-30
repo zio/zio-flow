@@ -1,10 +1,11 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.random.Random
 import zio.test._
 
 object RemoteEitherSpec extends DefaultRunnableSpec {
-  def spec = suite("RemoteEitherSpec")(
+  def spec: ZSpec[TestConfig with Random with Annotations, Any] = suite("RemoteEitherSpec")(
     testM("handleEither") {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         val expected = either.fold(_ * 2, if (_) 10 else 20)

@@ -1,8 +1,9 @@
 package zio.flow
 
+import java.time.temporal.ChronoUnit
+
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
-import java.time.temporal.ChronoUnit
 
 object RemoteDurationSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[Environment, Failure] = suite("RemoteDurationSpec")(
