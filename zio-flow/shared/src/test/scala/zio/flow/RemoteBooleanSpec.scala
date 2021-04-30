@@ -1,24 +1,30 @@
 package zio.flow
 
-import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assert }
+import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.test._
 
 object RemoteBooleanSpec extends DefaultRunnableSpec {
-  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess]                   = suite("RemoteBooleanSpec")(
+  override def spec: ZSpec[Environment, Failure] = suite("RemoteBooleanSpec")(
     test("And") {
-      assert((Remote(true) && Remote(false)).eval)(equalTo(Right(false)))
-      assert((Remote(true) && Remote(true)).eval)(equalTo(Right(true)))
-      assert((Remote(false) && Remote(false)).eval)(equalTo(Right(false)))
+      BoolAlgebra.all(
+        (Remote(true) && Remote(false)) <-> false,
+        (Remote(true) && Remote(true)) <-> true,
+        (Remote(false) && Remote(false)) <-> false
+      )
     },
     test("Or") {
-      assert((Remote(true) || Remote(false)).eval)(equalTo(Right(true)))
-      assert((Remote(true) || Remote(true)).eval)(equalTo(Right(true)))
-      assert((Remote(false) || Remote(false)).eval)(equalTo(Right(false)))
+      BoolAlgebra.all(
+        (Remote(true) || Remote(false)) <-> true,
+        (Remote(true) || Remote(true)) <-> true,
+        (Remote(false) || Remote(false)) <-> false
+      )
     },
     test("Not") {
-      assert((!Remote(true)).eval)(equalTo(Right(false)))
-      assert((!Remote(false)).eval)(equalTo(Right(true)))
+      BoolAlgebra.all(
+        !Remote(true) <-> false,
+        !Remote(false) <-> true
+      )
     }
   )
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("Remote Boolean Spec")(suite1)
+
 }
