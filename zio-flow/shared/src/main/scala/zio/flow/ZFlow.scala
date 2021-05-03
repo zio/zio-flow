@@ -87,15 +87,6 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
-  /**
-   * Evaluates the ZFlow in a test-only mode of operation, using the specified operation executor.
-   */
-  def test[R2 <: Clock](input: R, executor: OperationExecutor[R2]): ZIO[R2, E, A] = {
-    val _ = (input, executor)
-
-    ZIO.die(new OperationNotSupportedException("Needs to be implemented"))
-  }
-
   final def timeout(duration: Remote[Duration]): ZFlow[R, E, Option[A]] =
     ZFlow.Timeout(self, duration)
 
@@ -119,191 +110,59 @@ object ZFlow {
       .fromEither(value.eval)
       .orDieWith(_ => new IllegalStateException(s"Cannot evaluate Remote expressions with variables: ${value}"))
 
-  final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, A] = eval(value)
-  }
+  final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A]
 
-  case object Now extends ZFlow[Any, Nothing, Instant] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, Instant] = instant
-  }
+  case object Now extends ZFlow[Any, Nothing, Instant]
 
-  final case class WaitTill(time: Remote[Instant]) extends ZFlow[Any, Nothing, Unit] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, Unit] =
-      for {
-        instant <- eval(time)
-        now     <- zio.clock.instant
-        duration = java.time.Duration.between(now, instant)
-        _       <- ZIO.sleep(duration)
-      } yield ()
-  }
+  final case class WaitTill(time: Remote[Instant]) extends ZFlow[Any, Nothing, Unit]
 
   final case class Modify[A, B](svar: Remote[Variable[A]], f: Remote[A] => Remote[(B, A)])
-      extends ZFlow[Any, Nothing, B] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, B] =
-      for {
-        tref  <- eval(svar).map(_.asInstanceOf[TRef[A]])
-        a     <- tref.get.commit
-        tuple <- eval(f(Remote.Literal(a, Schema.fail("Cannot serialize this value"))))
-        _     <- tref.set(tuple._2).commit
-      } yield tuple._1
-  }
+      extends ZFlow[Any, Nothing, B]
 
   final case class Fold[R, E1, E2, A, B](
     value: ZFlow[R, E1, A],
     ke: Remote[E1] => ZFlow[R, E2, B],
     ks: Remote[A] => ZFlow[R, E2, B]
-  ) extends ZFlow[R, E2, B] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E2, B] =
-      value.test(workflowInput, executor).either.flatMap {
-        case Left(error)    => ke(Remote.Literal(error, Schema.fail("Cannot serialize"))).test(workflowInput, executor)
-        case Right(success) =>
-          ks(Remote.Literal(success, Schema.fail("Cannot serialize"))).test(workflowInput, executor)
-      }
-  }
+  ) extends ZFlow[R, E2, B]
 
-  final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A] {
-    override def test[R2 <: Clock](workflowInput: Any, executor: OperationExecutor[R2]): ZIO[R2, ActivityError, A] =
-      for {
-        input <- eval(input)
-        a     <- executor.execute(input, activity.operation)
-      } yield a
-  }
-
-  /*
-  orTry        : recover from `retryUntil` by trying a fallback workflow
-  retryUntil   : go to start of transaction and wait until someone changes a variable
-  transaction  : create a new scope that offers rollback on fail / retry, and which bounds retries
-
-  State:
-    Variables          = Map[String, Ref[Value]]
-    Current            = The current ZFlow
-    Continuation Stack = What to do AFTER producing the current ZFlow value
-  Status:
-    NonTransactionl | 
-    Transactional(parent: Status, undoLogStack: Stack[ZFlow], localReadVariables: Set[String])
-
-  On every transaction, capture new transaction details:
-
-  1. Create state snapshot
-  2. Create an empty undo log stack
-  3. Create an empty set of "read" variables
-
-  As we are executing operations inside each transaction:
-
-  1. For activities, push compensations on undo log stack
-  2. For state changes, make the changes
-  3. Track all variables read
-
-  On uncaught failure inside ANY transaction:
-
-  1. Run undo log for THIS transaction
-  2. Reset state to THIS snapshot
-  3. Continue processing failure (possibly rolling up!)
-
-  On retry inside a transaction:
-
-  1. Run undo log ALL THE WAY TO THE TOP
-  2. Reset state to TOPMOST snapshot
-  3. Wait on ANY variables read inside ANY transaction to change
-
-  */
+  final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A]
 
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
-  final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, Nothing, R] =
-      ZIO.succeed(workflowInput)
-  }
+  final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R]
 
-  final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E, A] =
-      flow.test(workflowInput, executor).ensuring(finalizer.test(workflowInput, executor))
-  }
+  final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
 
-  final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E, A] =
-      eval(remote).flatMap(flow => flow.test(workflowInput, executor))
-  }
+  final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
   final case class Foreach[R, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[R, E, B])
-      extends ZFlow[R, E, List[B]] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E, List[B]] =
-      eval(values).flatMap(list =>
-        ZIO.foreach(list) { a =>
-          body(Remote.Literal(a, Schema.fail("Cannot serialize"))).test(workflowInput, executor)
-        }
-      )
-  }
+      extends ZFlow[R, E, List[B]]
 
-  final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
-    override def test[R2 <: Clock](
-      workflowInput: R,
-      executor: OperationExecutor[R2]
-    ): ZIO[R2, Nothing, ExecutingFlow[E, A]] =
-      workflow.test(workflowInput, executor).fork.map(_.asInstanceOf[ExecutingFlow[E, A]])
-  }
+  final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]]
 
-  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E, Option[A]] =
-      eval(duration).flatMap(duration => flow.test(workflowInput, executor).timeout(duration))
-  }
+  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]]
 
-  final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A] {
-    override def test[R2 <: Clock](workflowInput: Any, executor: OperationExecutor[R2]): ZIO[R2, E, A] =
-      eval(value).flatMap(r => flow.test(r, executor))
-  }
+  final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A]
 
-  case object Die extends ZFlow[Any, Nothing, Nothing] {
-    override def test[R2 <: Clock](workflowInput: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, Nothing] =
-      ZIO.die(new Error("Illegal situation"))
-  }
+  case object Die extends ZFlow[Any, Nothing, Nothing]
 
   case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
-  final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Either[E, A]] {
-    override def test[R2 <: Clock](
-      workflowInput: Any,
-      executor: OperationExecutor[R2]
-    ): ZIO[R2, ActivityError, Either[E, A]] =
-      eval(exFlow).map(_.asInstanceOf[Fiber[E, A]]).flatMap(_.join.either)
-  }
+  final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Either[E, A]]
 
-  final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Any] {
-    override def test[R2 <: Clock](workflowInput: Any, executor: OperationExecutor[R2]): ZIO[R2, ActivityError, Any] =
-      eval(exFlow).map(_.asInstanceOf[Fiber[E, A]]).flatMap(_.interrupt)
-  }
+  final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Any]
 
-  final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, E, Nothing] =
-      eval(error).flatMap(ZIO.fail(_))
-  }
+  final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing]
 
-  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]] {
-    override def test[R2 <: Clock](input: Any, executor: OperationExecutor[R2]): ZIO[R2, Nothing, Variable[A]] =
-      eval(initial).flatMap(a => TRef.make(a).commit).map(_.asInstanceOf[Variable[A]])
-  }
+  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]]
 
   case class Iterate[R, E, A](
     self: ZFlow[R, E, A],
     step: Remote[A] => ZFlow[R, E, A],
     predicate: Remote[A] => Remote[Boolean]
-  ) extends ZFlow[R, E, A] {
-    override def test[R2 <: Clock](workflowInput: R, executor: OperationExecutor[R2]): ZIO[R2, E, A] = {
-      def loop(flow: ZFlow[R, E, A]): ZIO[R2, E, A] =
-        flow.test(workflowInput, executor).flatMap { a =>
-          val remoteA = Remote.Literal(a, Schema.fail(""))
-
-          eval(predicate(remoteA)).flatMap(boolean =>
-            if (boolean) loop(step(remoteA))
-            else ZIO.succeed(a)
-          )
-        }
-
-      loop(self)
-    }
-  }
+  ) extends ZFlow[R, E, A]
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
