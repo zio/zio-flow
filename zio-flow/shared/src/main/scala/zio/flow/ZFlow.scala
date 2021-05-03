@@ -1,13 +1,12 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
+import javax.naming.OperationNotSupportedException
 
 import zio._
 import zio.clock._
-import zio.stm._
-
 import zio.flow.ZFlow.Die
-import javax.naming.OperationNotSupportedException
+import zio.stm._
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -92,8 +91,7 @@ sealed trait ZFlow[-R, +E, +A] {
    * Evaluates the ZFlow in a test-only mode of operation, using the specified operation executor.
    */
   def test[R2 <: Clock](input: R, executor: OperationExecutor[R2]): ZIO[R2, E, A] = {
-    val _ = input
-    val _ = executor
+    val _ = (input, executor)
 
     ZIO.die(new OperationNotSupportedException("Needs to be implemented"))
   }
