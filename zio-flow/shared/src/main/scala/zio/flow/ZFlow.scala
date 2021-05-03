@@ -171,6 +171,45 @@ object ZFlow {
       } yield a
   }
 
+  /*
+  orTry        : recover from `retryUntil` by trying a fallback workflow
+  retryUntil   : go to start of transaction and wait until someone changes a variable
+  transaction  : create a new scope that offers rollback on fail / retry, and which bounds retries
+
+  State:
+    Variables          = Map[String, Ref[Value]]
+    Current            = The current ZFlow
+    Continuation Stack = What to do AFTER producing the current ZFlow value
+  Status:
+    NonTransactionl | 
+    Transactional(parent: Status, undoLogStack: Stack[ZFlow], localReadVariables: Set[String])
+
+  On every transaction, capture new transaction details:
+
+  1. Create state snapshot
+  2. Create an empty undo log stack
+  3. Create an empty set of "read" variables
+
+  As we are executing operations inside each transaction:
+
+  1. For activities, push compensations on undo log stack
+  2. For state changes, make the changes
+  3. Track all variables read
+
+  On uncaught failure inside ANY transaction:
+
+  1. Run undo log for THIS transaction
+  2. Reset state to THIS snapshot
+  3. Continue processing failure (possibly rolling up!)
+
+  On retry inside a transaction:
+
+  1. Run undo log ALL THE WAY TO THE TOP
+  2. Reset state to TOPMOST snapshot
+  3. Wait on ANY variables read inside ANY transaction to change
+
+  */
+
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
   final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R] {
