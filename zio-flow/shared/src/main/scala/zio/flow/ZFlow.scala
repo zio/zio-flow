@@ -26,12 +26,12 @@ sealed trait ZFlow[-R, +E, +A] {
   self =>
   final def *>[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, B] =
+  ): ZFlow[R1, E1, B] =
     (self: ZFlow[R, E, A1]).zip(that).map(_._2)
 
   final def <*[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, A1] =
+  ): ZFlow[R1, E1, A1] =
     (self: ZFlow[R, E, A1]).zip(that).map(_._1)
 
   final def as[B](b: => Remote[B]): ZFlow[R, E, B] = self.map(_ => b)
@@ -94,7 +94,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def zip[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, (A1, B)] =
+  ) : ZFlow[R1, E1, (A1, B)] =
     (self: ZFlow[R, E, A1]).flatMap(a => that.map(b => a -> b))
 
   final def widen[A0](implicit ev: A <:< A0): ZFlow[R, E, A0] = {

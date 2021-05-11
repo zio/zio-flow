@@ -1,6 +1,8 @@
 package zio.flow
 
+import zio.flow.InMemoryZFlowExecutorSpec.test
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.test.Assertion.equalTo
 import zio.test._
 
 object RemoteBooleanSpec extends DefaultRunnableSpec {
@@ -24,6 +26,10 @@ object RemoteBooleanSpec extends DefaultRunnableSpec {
         !Remote(true) <-> false,
         !Remote(false) <-> true
       )
+    },
+    test("IfThenElse") {
+      Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12
+      Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
     }
   )
 

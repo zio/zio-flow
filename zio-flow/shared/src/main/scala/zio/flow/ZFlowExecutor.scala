@@ -1,8 +1,11 @@
 package zio.flow
 
-import zio.clock.Clock
-import zio._
 import java.time.Duration
+import java.util.concurrent.TimeUnit
+
+import zio._
+import zio.clock.Clock
+import zio.schema._
 
 trait ZFlowExecutor[-U] {
   def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -54,7 +57,7 @@ object ZFlowExecutor {
     type Erased = ZFlow[Any, Any, Any]
     def erase(flow: ZFlow[_, _, _]): Erased = flow.asInstanceOf[Erased]
 
-    val clock = env.get[Clock.Service]
+    val clock: Clock.Service = env.get[Clock.Service]
 
     def eval[A](r: Remote[A]): UIO[A] = UIO(r.eval.right.get)
 
@@ -76,6 +79,8 @@ object ZFlowExecutor {
             for {
               start <- clock.instant
               end   <- eval(instant)
+              _     <- UIO(println(start))
+              _     <- UIO(println(end))
               _     <- clock.sleep(Duration.between(start, end))
             } yield ()
 
@@ -106,7 +111,8 @@ object ZFlowExecutor {
           case Ensuring(flow, finalizer) =>
             compile(ref, input, flow).ensuring(compile(ref, input, finalizer))
 
-          case Unwrap(remote) => eval(remote).flatMap(compile(ref, input, _))
+          case Unwrap(remote) =>
+            UIO(println("Evaluating ... " + remote)) *> eval(remote).flatMap(compile(ref, input, _))
 
           case Foreach(values, body) =>
             eval(values).flatMap(list =>
@@ -161,6 +167,7 @@ object ZFlowExecutor {
         }
 
       for {
+        _      <- UIO(println("Compiling... " + flow))
         ref    <- Ref.make(State(TState.Empty, Map()))
         result <- compile(ref, (), flow).provide(env)
       } yield result
