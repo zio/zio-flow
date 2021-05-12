@@ -1,5 +1,4 @@
 package zio.flow
-import zio.schema._
 
 class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
