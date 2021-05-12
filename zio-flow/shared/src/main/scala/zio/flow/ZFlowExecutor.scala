@@ -207,10 +207,10 @@ object ZFlowExecutor {
 
   object InMemory {
 
-    def make[U, R](env: R, opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
+    def make[U, R<: Clock](env: R, opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
       (for {
         ref <- Ref.make[Map[U, Ref[InMemory.State]]](Map.empty)
-      } yield InMemory(env, opEx, ref))
+      } yield InMemory[U,R](env, opEx, ref))
 
     final case class State(
                             tstate: TState,
@@ -250,7 +250,7 @@ object ZFlowExecutor {
 
       def addReadVar(name: String): TState = self match {
         case TState.Empty => TState.Empty
-        case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars ++ name, compensation)
+        case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars + name, compensation)
       }
 
       def allVariables: Set[String] = self match {
