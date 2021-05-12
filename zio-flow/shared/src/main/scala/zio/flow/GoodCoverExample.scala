@@ -2,6 +2,8 @@ package zio.flow
 
 import java.time.Period
 
+import zio.schema.{ DeriveSchema, Schema }
+
 /**
  * 1. Get all policies that will expire in the next 60 days.
  * 2. For each of these policies, do the following -
@@ -28,6 +30,8 @@ object PolicyRenewalExample {
   type Year            = Int
   type Probability     = Float
 
+  implicit val buyerSchema: Schema[Buyer] = DeriveSchema.gen[Buyer]
+
   sealed trait EmailContent
 
   object EmailContent {
@@ -45,7 +49,6 @@ object PolicyRenewalExample {
   case class Buyer(id: String, address: PropertyAddress, email: Email)
 
   implicit val policySchema: Schema[Policy] = ???
-  implicit val buyerSchema: Schema[Buyer]   = ???
 
   def policyClaimStatus: Activity[Policy, Boolean] =
     Activity[Policy, Boolean](
@@ -197,7 +200,7 @@ object PolicyRenewalExample {
           policyOption    <- createRenewedPolicy(claimStatus, fireRisk)
           _               <- policyOption.handleOption(ZFlow.unit, (p: Remote[Policy]) => policyRenewalReminderFlow(p, renewPolicy))
           renew           <- renewPolicy.get
-          _               <- renew.handleOption(ZFlow.unit, (r: Remote[Boolean]) => r.ifThenElse(paymentFlow, ZFlow.unit))
+          _               <- renew.isNone.ifThenElse(ZFlow.unit, paymentFlow)
         } yield ()
 
       for {

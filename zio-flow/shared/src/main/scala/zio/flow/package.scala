@@ -4,6 +4,8 @@ import java.time._
 
 import scala.language.implicitConversions
 
+import zio.schema.Schema
+
 package object flow {
   type ActivityError
 
@@ -13,6 +15,13 @@ package object flow {
   type RemoteDuration    = Remote[Duration]
   type RemoteInstant     = Remote[Instant]
   type RemoteVariable[A] = Remote[Variable[A]]
+  type SchemaList[A]     = Schema[List[A]]
+
+  implicit val schemaDuration: Schema[Duration] = ???
+  implicit val schemaInstant: Schema[Instant]   = ???
+
+  implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
+    Schema.EitherSchema(aSchema, bSchema)
 
   implicit def RemoteVariable[A](remote: Remote[Variable[A]]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
     remote

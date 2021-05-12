@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.schema.Schema
 import zio.test._
 
 object FractionalSpec extends DefaultRunnableSpec {

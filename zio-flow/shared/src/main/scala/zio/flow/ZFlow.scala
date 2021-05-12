@@ -1,12 +1,10 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
-import javax.naming.OperationNotSupportedException
 
 import zio._
-import zio.clock._
 import zio.flow.ZFlow.Die
-import zio.stm._
+import zio.schema.Schema
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -26,17 +24,17 @@ sealed trait ZFlow[-R, +E, +A] {
   self =>
   final def *>[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, B] =
+  ): ZFlow[R1, E1, B] =
     (self: ZFlow[R, E, A1]).zip(that).map(_._2)
 
   final def <*[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, A1] =
+  ): ZFlow[R1, E1, A1] =
     (self: ZFlow[R, E, A1]).zip(that).map(_._1)
 
   final def as[B](b: => Remote[B]): ZFlow[R, E, B] = self.map(_ => b)
 
-  final def catchAll[R1 <: R, E1 >: E, A1 >: A: Schema, E2](f: Remote[E] => ZFlow[R1, E2, A1]): ZFlow[R1, E2, A1] =
+  final def catchAll[R1 <: R, E1 >: E, A1 >: A, E2](f: Remote[E] => ZFlow[R1, E2, A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).foldM(f, ZFlow(_))
 
   final def ensuring(flow: ZFlow[Any, Nothing, Any]): ZFlow[R, E, A] = ZFlow.Ensuring(self, flow)
@@ -71,7 +69,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def orElseEither[R1 <: R, E2, A1 >: A, B](
     that: ZFlow[R1, E2, B]
-  )(implicit A1: Schema[A1], b: Schema[B]): ZFlow[R1, E2, Either[A1, B]] =
+  )(implicit a1: Schema[A1], b: Schema[B]): ZFlow[R1, E2, Either[A1, B]] =
     (self: ZFlow[R, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
 
   /**
@@ -94,7 +92,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def zip[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  )(implicit A1: Schema[A1], B: Schema[B]): ZFlow[R1, E1, (A1, B)] =
+  ): ZFlow[R1, E1, (A1, B)] =
     (self: ZFlow[R, E, A1]).flatMap(a => that.map(b => a -> b))
 
   final def widen[A0](implicit ev: A <:< A0): ZFlow[R, E, A0] = {
