@@ -1,8 +1,9 @@
 package zio.flow
 
-import zio.clock.Clock
-import zio._
 import java.time.Duration
+
+import zio._
+import zio.clock.Clock
 
 trait ZFlowExecutor[-U] {
   def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -54,7 +55,7 @@ object ZFlowExecutor {
     type Erased = ZFlow[Any, Any, Any]
     def erase(flow: ZFlow[_, _, _]): Erased = flow.asInstanceOf[Erased]
 
-    val clock = env.get[Clock.Service]
+    val clock: Clock.Service = env.get[Clock.Service]
 
     def eval[A](r: Remote[A]): UIO[A] = UIO(r.eval.right.get)
 

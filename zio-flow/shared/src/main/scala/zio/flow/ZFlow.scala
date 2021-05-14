@@ -1,12 +1,8 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
-import javax.naming.OperationNotSupportedException
 
-import zio._
-import zio.clock._
 import zio.flow.ZFlow.Die
-import zio.stm._
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -105,11 +101,6 @@ sealed trait ZFlow[-R, +E, +A] {
 }
 
 object ZFlow {
-  private def eval[A](value: Remote[A]): UIO[A] =
-    ZIO
-      .fromEither(value.eval)
-      .orDieWith(_ => new IllegalStateException(s"Cannot evaluate Remote expressions with variables: ${value}"))
-
   final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A]
 
   case object Now extends ZFlow[Any, Nothing, Instant]
