@@ -5,6 +5,8 @@ import java.time.{ Duration, Instant, Period }
 
 import scala.language.implicitConversions
 
+import zio.flow.Schema.{ SchemaEither, SchemaList, SchemaOption, SchemaTuple2 }
+
 // TODO: Replace by ZIO Schema
 trait Schema[A]
 
@@ -669,7 +671,7 @@ object Remote {
   }
 
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-    override def eval: Either[Remote[Option[A]], Option[A]]           = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
+    override def eval: Either[Remote[Option[A]], Option[A]] = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
 
     override def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
       value.evalWithSchema match {
@@ -677,7 +679,7 @@ object Remote {
         case Right(SchemaAndValue(schema, value)) =>
           val schemaA = schema.asInstanceOf[Schema[A]]
           val a       = value.asInstanceOf[A]
-          Right(SchemaAndValue(Schema.Optional(schemaA), Some(a)))
+          Right(SchemaAndValue(SchemaOption(schemaA), Some(a)))
         case Right(_)                             => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
       }
   }

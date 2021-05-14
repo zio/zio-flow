@@ -1,12 +1,8 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
-import javax.naming.OperationNotSupportedException
 
-import zio._
-import zio.clock._
 import zio.flow.ZFlow.Die
-import zio.stm._
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -94,7 +90,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def zip[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
-  ) : ZFlow[R1, E1, (A1, B)] =
+  ): ZFlow[R1, E1, (A1, B)] =
     (self: ZFlow[R, E, A1]).flatMap(a => that.map(b => a -> b))
 
   final def widen[A0](implicit ev: A <:< A0): ZFlow[R, E, A0] = {
@@ -105,10 +101,10 @@ sealed trait ZFlow[-R, +E, +A] {
 }
 
 object ZFlow {
-  private def eval[A](value: Remote[A]): UIO[A] =
-    ZIO
-      .fromEither(value.eval)
-      .orDieWith(_ => new IllegalStateException(s"Cannot evaluate Remote expressions with variables: ${value}"))
+//  private def eval[A](value: Remote[A]): UIO[A] =
+//    ZIO
+//      .fromEither(value.eval)
+//      .orDieWith(_ => new IllegalStateException(s"Cannot evaluate Remote expressions with variables: ${value}"))
 
   final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A]
 

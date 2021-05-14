@@ -1,11 +1,9 @@
 package zio.flow
 
 import java.time.Duration
-import java.util.concurrent.TimeUnit
 
 import zio._
 import zio.clock.Clock
-import zio.schema._
 
 trait ZFlowExecutor[-U] {
   def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -51,7 +49,11 @@ object ZFlowExecutor {
   3. Wait on ANY variables read inside ANY transaction to change
 
    */
-  final case class InMemory[U, R <: Clock](env: R, opExec: OperationExecutor[R], workflows: Ref[Map[U, Ref[InMemory.State]]]) extends ZFlowExecutor[U] {
+  final case class InMemory[U, R <: Clock](
+    env: R,
+    opExec: OperationExecutor[R],
+    workflows: Ref[Map[U, Ref[InMemory.State]]]
+  ) extends ZFlowExecutor[U] {
 
     import InMemory._
     import ZFlow._
@@ -62,33 +64,33 @@ object ZFlowExecutor {
 
     val clock: Clock.Service = env.get[Clock.Service]
 
-    def eval[A](r: Remote[A]): UIO[A] = UIO(r.eval.right.get)
+    def eval[A](r: Remote[A]): UIO[A] = UIO(r.eval.getOrElse(throw new IllegalStateException("Bad state.")))
 
     def lit[A](a: A): Remote[A] =
       Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
 
     def getVariable(workflowId: U, variableName: String): UIO[Option[Any]] =
       (for {
-        map <- workflows.get
+        map      <- workflows.get
         stateRef <- ZIO.fromOption(map.get(workflowId))
-        state <- stateRef.get
-        vRef <- ZIO.fromOption(state.getVariable(variableName))
-        v <- vRef.get
+        state    <- stateRef.get
+        vRef     <- ZIO.fromOption(state.getVariable(variableName))
+        v        <- vRef.get
       } yield v).optional
 
     def setVariable(workflowId: U, variableName: String, value: Any): UIO[Boolean] =
       (for {
-        map <- workflows.get
+        map      <- workflows.get
         stateRef <- ZIO.fromOption(map.get(workflowId))
-        state <- stateRef.get
-        vRef <- ZIO.fromOption(state.getVariable(variableName))
-        _ <- vRef.set(value.asInstanceOf)
-        _ <- stateRef.modify(state => (state.retry.forkDaemon,state.copy(retry = ZIO.unit))).flatten
-      } yield true).orElseFail(false)
+        state    <- stateRef.get
+        vRef     <- ZIO.fromOption(state.getVariable(variableName))
+        _        <- vRef.set(value.asInstanceOf)
+        _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
+      } yield true).catchAll(_ => UIO(false))
 
     def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] = {
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
-      def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, E, A] =
+      def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A])(implicit schema: Schema[I]): ZIO[R, E, A] =
         flow match {
           case Return(value) => eval(value)
 
@@ -97,22 +99,22 @@ object ZFlowExecutor {
           case WaitTill(instant) =>
             for {
               start <- clock.instant
-              end <- eval(instant)
-              _ <- UIO(println(start))
-              _ <- UIO(println(end))
-              _ <- clock.sleep(Duration.between(start, end))
+              end   <- eval(instant)
+              _     <- UIO(println(start))
+              _     <- UIO(println(end))
+              _     <- clock.sleep(Duration.between(start, end))
             } yield ()
 
           case Modify(svar, f0) =>
             val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
 
             for {
-              vRef <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-              value <- vRef.get
-              tuple <- eval(f(lit(value)))
+              vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])
+              value      <- vRef.get
+              tuple      <- eval(f(lit(value)))
               (a, value2) = tuple
-              _ <- vRef.set(value2)
-              _ <- ref.update(_.addReadVar(vRef))
+              _          <- vRef.set(value2)
+              _          <- ref.update(_.addReadVar(vRef))
             } yield a
 
           case Fold(value, ifError, ifSuccess) =>
@@ -123,12 +125,13 @@ object ZFlowExecutor {
 
           case RunActivity(input, activity) =>
             for {
-              input <- eval(input)
+              input  <- eval(input)
               output <- opExec.execute(input, activity.operation)
-              _ <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
+              _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
             } yield output
 
-          case Transaction(flow) => ref.update(_.enterTransaction(flow.provide(input))).flatMap(_ => compile(ref, input, flow))
+          case Transaction(flow) =>
+            ref.update(_.enterTransaction(flow.provide(input))).flatMap(_ => compile(ref, input, flow))
 
           case Input(_) => ZIO.succeed(input.asInstanceOf[A])
 
@@ -150,17 +153,31 @@ object ZFlowExecutor {
           case Timeout(flow, duration) =>
             eval(duration).flatMap(duration => compile(ref, input, flow).timeout(duration))
 
-          case Provide(value, flow) => eval(value).flatMap(r => compile(ref, r, flow))
+          //TODO : Not sure
+          case Provide(value, flow)    =>
+            eval(value).flatMap(r => compile(ref, r, flow)(Schema.fail("Schema any should not be used.")))
 
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil =>
             for {
-              promise <- Promise.make[E,A]
-              state <- ref.get
-              flow <- ZIO.fromOption(state.getTransactionFlow)
-              _ <- ref.update(_.copy(retry = compile(ref, (), flow ).run.flatMap(exit => promise.done(exit))))
-          } yield promise.asInstanceOf[Nothing]
+              promise <- Promise.make[E, A]
+              state   <- ref.get
+              _       <- state.getTransactionFlow match {
+                           case Some(flow) =>
+                             ref.update(
+                               _.copy(retry =
+                                 compile(ref, (), flow)
+                                   .asInstanceOf[ZIO[R, E, A]]
+                                   .run
+                                   .flatMap(exit => promise.done(exit))
+                                   .provide(env)
+                               )
+                             )
+                           case None       => ZIO.unit
+                         }
+              a       <- promise.await
+            } yield a
 
           case OrTry(left, right) => ???
 
@@ -175,11 +192,11 @@ object ZFlowExecutor {
           case NewVar(name, initial) =>
             for {
               value <- eval(initial)
-              vref <- Ref.make(value)
-              _ <- ref.update(_.addVariable(name, vref))
+              vref  <- Ref.make(value)
+              _     <- ref.update(_.addVariable(name, vref))
             } yield vref.asInstanceOf[A]
 
-          case iterate0@Iterate(_, _, _) =>
+          case iterate0 @ Iterate(_, _, _) =>
             val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
 
             val Iterate(self, step, predicate) = iterate
@@ -197,7 +214,7 @@ object ZFlowExecutor {
         }
 
       for {
-        ref <- Ref.make(State(TState.Empty, Map()))
+        ref    <- Ref.make(State(TState.Empty, Map()))
         acquire = workflows.update(_ + ((uniqueId, ref)))
         release = workflows.update(_ - uniqueId)
         result <- acquire.bracket_(release)(compile(ref, (), flow).provide(env))
@@ -207,18 +224,19 @@ object ZFlowExecutor {
 
   object InMemory {
 
-    def make[U, R<: Clock](env: R, opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
+    def make[U, R <: Clock](env: R, opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
       (for {
         ref <- Ref.make[Map[U, Ref[InMemory.State]]](Map.empty)
-      } yield InMemory[U,R](env, opEx, ref))
+      } yield InMemory[U, R](env, opEx, ref))
 
     final case class State(
-                            tstate: TState,
-                            variables: Map[String, Ref[_]],
-                            retry : UIO[Any] = ZIO.unit
-                          ) {
+      tstate: TState,
+      variables: Map[String, Ref[_]],
+      retry: UIO[Any] = ZIO.unit
+    ) {
 
-      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State = copy(tstate = tstate.addCompensation(newCompensation))
+      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State =
+        copy(tstate = tstate.addCompensation(newCompensation))
 
       def addReadVar(ref: Ref[_]): State =
         copy(tstate = tstate.addReadVar(lookupName(ref)))
@@ -227,41 +245,42 @@ object ZFlowExecutor {
 
       def enterTransaction(flow: ZFlow[Any, _, _]): State = copy(tstate = tstate.enterTransaction(flow))
 
-      def getTransactionFlow: Option[ZFlow[Any,_,_]] = tstate match {
-        case TState.Empty => None
+      def getTransactionFlow: Option[ZFlow[Any, _, _]] = tstate match {
+        case TState.Empty                   => None
         case TState.Transaction(flow, _, _) => Some(flow)
       }
+
       def getVariable(name: String): Option[Ref[_]] = variables.get(name)
 
-
       //TODO scala map function
-      private lazy val lookupName: Map[Ref[_], String] = variables.map {
-        case (l, r) => (r, l)
+      private lazy val lookupName: Map[Ref[_], String] = variables.map { case (l, r) =>
+        (r, l)
       }.toMap
     }
 
     sealed trait TState {
       self =>
       def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
-        case TState.Empty => TState.Empty
-        case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars, newCompensation *> compensation)
+        case TState.Empty                                     => TState.Empty
+        case TState.Transaction(flow, readVars, compensation) =>
+          TState.Transaction(flow, readVars, newCompensation *> compensation)
         //TODO : Compensation Failure semantics
       }
 
       def addReadVar(name: String): TState = self match {
-        case TState.Empty => TState.Empty
+        case TState.Empty                                     => TState.Empty
         case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars + name, compensation)
       }
 
       def allVariables: Set[String] = self match {
-        case TState.Empty => Set()
+        case TState.Empty                       => Set()
         case TState.Transaction(_, readVars, _) => readVars
       }
 
       def enterTransaction(flow: ZFlow[Any, _, _]): TState =
         self match {
           case TState.Empty => TState.Transaction(flow, Set(), ZFlow.unit)
-          case _ => self
+          case _            => self
         }
     }
 
@@ -270,10 +289,10 @@ object ZFlowExecutor {
       case object Empty extends TState
 
       final case class Transaction(
-                                    flow: ZFlow[Any, _, _],
-                                    readVars: Set[String],
-                                    compensation: ZFlow[Any, ActivityError, Any]
-                                  ) extends TState
+        flow: ZFlow[Any, _, _],
+        readVars: Set[String],
+        compensation: ZFlow[Any, ActivityError, Any]
+      ) extends TState
 
     }
 

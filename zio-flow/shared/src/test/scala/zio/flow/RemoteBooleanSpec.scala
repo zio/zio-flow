@@ -1,8 +1,6 @@
 package zio.flow
 
-import zio.flow.InMemoryZFlowExecutorSpec.test
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test.Assertion.equalTo
 import zio.test._
 
 object RemoteBooleanSpec extends DefaultRunnableSpec {
