@@ -5,84 +5,84 @@ import java.time.{ Duration, Instant, Period }
 
 import scala.language.implicitConversions
 
-//// TODO: Replace by ZIO Schema
-//trait Schema[A]
-//
-//object Schema {
-//  def apply[A](implicit schema: Schema[A]): Schema[A] = schema
-//
-//  // FIXME: Add this to ZIO Schema
-//  def fail[A](message: String): Schema[A] = {
-//    val _ = message
-//    null
-//  }
-//
-//  final case class SchemaTuple2[A: Schema, B: Schema]() extends Schema[(A, B)] {
-//    def leftSchema: Schema[A] = Schema[A]
-//
-//    def rightSchema: Schema[B] = Schema[B]
-//  }
-//
-//  final case class SchemaEither[A, B](leftSchema: Schema[A], rightSchema: Schema[B]) extends Schema[Either[A, B]]
-//
-//  final case class SchemaOption[A](opSchema: Schema[A]) extends Schema[Option[A]]
-//
-//  final case class SchemaList[A](listSchema: Schema[A]) extends Schema[List[A]]
-//
-//  implicit def nilSchema: Schema[Nil.type] = Schema.fail("")
-//
-//  implicit def listSchema[A: Schema]: Schema[List[A]] = Schema.fail("")
-//
-//  implicit def stringSchema: Schema[String] = Schema.fail("")
-//
-//  implicit def shortSchema: Schema[Short] = Schema.fail("")
-//
-//  implicit def intSchema: Schema[Int] = Schema.fail("Failed Int")
-//
-//  implicit def longSchema: Schema[Long] = Schema.fail("")
-//
-//  implicit def floatSchema: Schema[Float] = Schema.fail("")
-//
-//  implicit def doubleSchema: Schema[Double] = Schema.fail("")
-//
-//  implicit def bigIntSchema: Schema[BigInt] = Schema.fail("")
-//
-//  implicit def bigDecimalSchema: Schema[BigDecimal] = Schema.fail("")
-//
-//  implicit def unitSchema: Schema[Unit] = Schema.fail("")
-//
-//  implicit def boolSchema: Schema[Boolean] = Schema.fail("")
-//
-//  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]] = ???
-//
-//  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]] = ???
-//
-//  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = Schema.fail("")
-//
-//  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = Schema.fail("")
-//
-//  implicit def schemaTuple4[A: Schema, B: Schema, C: Schema, D: Schema]: Schema[(A, B, C, D)] = ???
-//
-//  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
-//
-//  implicit def schemaNothing: Schema[Nothing] = ???
-//
-//  implicit def chronoUnitSchema: Schema[ChronoUnit] = ???
-//
-//  implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
-//
-//  implicit def noneSchema: Schema[None.type] = Schema.fail("")
-//
-//  implicit def someSchema[A]: Schema[Some[A]] = Schema.fail("")
-//
-//  implicit def optionSchema[A]: Schema[Option[A]] = ???
-//
-//  implicit def instantSchema: Schema[Instant] = ???
-//
-//  implicit def durationSchema: Schema[Duration] = ???
-//
-//  implicit def periodSchema: Schema[Period] = ???
-//}
+// TODO: Replace by ZIO Schema
+trait Schema[A]
+
+object Schema {
+  def apply[A](implicit schema: Schema[A]): Schema[A] = schema
+
+  // FIXME: Add this to ZIO Schema
+  def fail[A](message: String): Schema[A] = {
+    val _ = message
+    null
+  }
+
+  final case class SchemaTuple2[A: Schema, B: Schema]() extends Schema[(A, B)] {
+    def leftSchema: Schema[A] = Schema[A]
+
+    def rightSchema: Schema[B] = Schema[B]
+  }
+
+  final case class SchemaEither[A, B](leftSchema: Schema[A], rightSchema: Schema[B]) extends Schema[Either[A, B]]
+
+  final case class SchemaOption[A](opSchema: Schema[A]) extends Schema[Option[A]]
+
+  final case class SchemaList[A](listSchema: Schema[A]) extends Schema[List[A]]
+
+  implicit def nilSchema: Schema[Nil.type] = Schema.fail("")
+
+  implicit def listSchema[A: Schema]: Schema[List[A]] = Schema.fail("")
+
+  implicit def stringSchema: Schema[String] = Schema.fail("")
+
+  implicit def shortSchema: Schema[Short] = Schema.fail("")
+
+  implicit def intSchema: Schema[Int] = Schema.fail("Failed Int")
+
+  implicit def longSchema: Schema[Long] = Schema.fail("")
+
+  implicit def floatSchema: Schema[Float] = Schema.fail("")
+
+  implicit def doubleSchema: Schema[Double] = Schema.fail("")
+
+  implicit def bigIntSchema: Schema[BigInt] = Schema.fail("")
+
+  implicit def bigDecimalSchema: Schema[BigDecimal] = Schema.fail("")
+
+  implicit def unitSchema: Schema[Unit] = Schema.fail("")
+
+  implicit def boolSchema: Schema[Boolean] = Schema.fail("")
+
+  implicit def leftSchema[A: Schema]: Schema[Left[A, Nothing]] = ???
+
+  implicit def rightSchema[B: Schema]: Schema[Right[Nothing, B]] = ???
+
+  implicit def schemaTuple2[A: Schema, B: Schema]: Schema[(A, B)] = Schema.fail("")
+
+  implicit def schemaTuple3[A: Schema, B: Schema, C: Schema]: Schema[(A, B, C)] = Schema.fail("")
+
+  implicit def schemaTuple4[A: Schema, B: Schema, C: Schema, D: Schema]: Schema[(A, B, C, D)] = ???
+
+  implicit def schemaEither[A: Schema, B: Schema]: Schema[Either[A, B]] = ???
+
+  implicit def schemaNothing: Schema[Nothing] = ???
+
+  implicit def chronoUnitSchema: Schema[ChronoUnit] = ???
+
+  implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
+
+  implicit def noneSchema: Schema[None.type] = Schema.fail("")
+
+  implicit def someSchema[A]: Schema[Some[A]] = Schema.fail("")
+
+  implicit def optionSchema[A]: Schema[Option[A]] = ???
+
+  implicit def instantSchema: Schema[Instant] = ???
+
+  implicit def durationSchema: Schema[Duration] = ???
+
+  implicit def periodSchema: Schema[Period] = ???
+}
 
 trait SchemaAndValue[+A] {
   type Subtype <: A
