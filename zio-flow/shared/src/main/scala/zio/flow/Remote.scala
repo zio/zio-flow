@@ -73,11 +73,11 @@ object Schema {
 
   implicit def temporalUnitSchema: Schema[TemporalUnit] = ???
 
-  implicit def noneSchema: Schema[None.type] = Schema.fail("")
+  implicit def noneSchema: Schema[None.type] = optionSchema[None.type]
 
-  implicit def someSchema[A]: Schema[Some[A]] = Schema.fail("")
+  implicit def someSchema[A]: Schema[Some[A]] = optionSchema[A]
 
-  implicit def optionSchema[A]: Schema[Option[A]] = ???
+  implicit def optionSchema[A]: Schema[Option[A]] = Schema.fail("")
 
   implicit def instantSchema: Schema[Instant] = ???
 
@@ -88,12 +88,14 @@ object Schema {
 
 trait SchemaAndValue[+A] {
   type Subtype <: A
+
   def schema: Schema[Subtype]
+
   def value: Subtype
 }
 
 object SchemaAndValue {
-  def apply[A](schema0: Schema[A], value0: A): SchemaAndValue[A]                                                      =
+  def apply[A](schema0: Schema[A], value0: A): SchemaAndValue[A] =
     new SchemaAndValue[A] {
       override type Subtype = A
 
@@ -103,6 +105,7 @@ object SchemaAndValue {
 
       //TODO : Equals and Hashcode required
     }
+
   def unapply[A](schemaAndValue: SchemaAndValue[A]): Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
     Some((schemaAndValue.schema, schemaAndValue.value))
 }
@@ -243,7 +246,8 @@ object Remote {
 
   final case class Either0[A, B](either: Either[Remote[A], Remote[B]]) extends Remote[Either[A, B]] {
     //TODO : Is this a valid function
-    def toLeftSchema[T, U](schema: Schema[T]): Schema[Either[T, U]]  = ???
+    def toLeftSchema[T, U](schema: Schema[T]): Schema[Either[T, U]] = ???
+
     def toRightSchema[T, U](schema: Schema[T]): Schema[Either[U, T]] = ???
 
     override def evalWithSchema: Either[Remote[Either[A, B]], SchemaAndValue[Either[A, B]]] = either match {
@@ -361,31 +365,48 @@ object Remote {
 
   final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      tuple.evalWithSchema.fold(
-        remote => Left(remote._1),
-        {
-          case SchemaAndValue(schemaTuple2, value) =>
-            val schema = schemaTuple2.asInstanceOf[SchemaTuple2[A, B]].leftSchema
-            val (a, _) = value.asInstanceOf[scala.Tuple2[A, B]]
-            Right(SchemaAndValue(schema, a))
-          case _                                   => throw new IllegalStateException("Every remote First must be constructed using Remote[(A,B)].")
-        }
-      )
+    //    override def eval: Either[Remote[A], A] = unaryEval(tuple)(t => t._1, remoteT => First(remoteT))
+
+    //    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+    //      tuple.evalWithSchema.fold(
+    //        remote => Left(remote._1),
+    //        {
+    //          case SchemaAndValue(schemaTuple2, value) =>
+    //            val schema = schemaTuple2.asInstanceOf[SchemaTuple2[A, B]].leftSchema
+    //            val (a, _) = value.asInstanceOf[scala.Tuple2[A, B]]
+    //            Right(SchemaAndValue(schema, a))
+    //          case _                                   => throw new IllegalStateException("Every remote First must be constructed using Remote[(A,B)].")
+    //        }
+    //      )
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
+      val evaluatedTuple = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._1,
+            remoteT => First(remoteT),
+            schemaAndValue.schema.asInstanceOf[Schema[A]]
+          )
+      }
+    }
   }
 
   final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] =
-      tuple.evalWithSchema.fold(
-        remote => Left(remote._2),
-        {
-          case SchemaAndValue(schemaTuple2, value) =>
-            val schema = schemaTuple2.asInstanceOf[SchemaTuple2[A, B]].rightSchema
-            val (_, b) = value.asInstanceOf[scala.Tuple2[A, B]]
-            Right(SchemaAndValue(schema, b))
-          case _                                   => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
-        }
-      )
+
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
+      val evaluatedTuple: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._2,
+            remoteT => Second(remoteT),
+            schemaAndValue.schema.asInstanceOf[Schema[B]]
+          )
+      }
+    }
   }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
@@ -426,6 +447,15 @@ object Remote {
   final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: Remote[(B, A)] => Remote[B])
       extends Remote[B] {
 
+    override def eval: Either[Remote[B], B] = list.eval match {
+      case Left(_)  => Left(self)
+      case Right(l) =>
+        l.foldLeft[Either[Remote[B], B]](initial.eval) {
+          case (Left(_), _)  => Left(self)
+          case (Right(b), a) => body(Literal((b, a), Schema.fail[(B, A)]("No schema for (B,A)"))).eval
+        }
+    }
+
     def schemaTuple[S, T](s: Schema[S], t: Schema[T]): Schema[(S, T)] = ???
 
     override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = list.evalWithSchema match {
@@ -453,23 +483,14 @@ object Remote {
   final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
 
     override def evalWithSchema: Either[Remote[List[A]], SchemaAndValue[List[A]]] = {
-      val evaluatedList = list.evalWithSchema
-      val evaluatedHead = head.evalWithSchema
-      (for {
-        l <- evaluatedList
-        r <- evaluatedHead
-      } yield (l, r)) match {
-        case Left(_) =>
-          val reducedList = evaluatedList.fold(identity, a => Literal(a.value, a.schema))
-          val reducedHead = evaluatedHead.fold(identity, b => Literal(b.value, b.schema))
-          Left(Cons(reducedList, reducedHead))
-
-        case Right((aList, a)) =>
-          Right(
-            SchemaAndValue(
-              aList.schema.asInstanceOf[Schema[List[A]]],
-              a.value.asInstanceOf[A] :: aList.value.asInstanceOf[List[A]]
-            )
+      val evaluatedList: Either[Remote[List[A]], SchemaAndValue[List[A]]] = list.evalWithSchema
+      evaluatedList match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          binaryEvalWithSchema(list, head)(
+            (l, h) => h :: l,
+            (remoteL, remoteH) => Cons(remoteL, remoteH),
+            schemaAndValue.schema.asInstanceOf[Schema[List[A]]]
           )
       }
     }
@@ -478,7 +499,8 @@ object Remote {
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
 
     override def evalWithSchema: Either[Remote[Option[(A, List[A])]], SchemaAndValue[Option[(A, List[A])]]] = {
-      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]]                     = ???
+      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]] = ???
+
       implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
 
       list.evalWithSchema.fold(
@@ -548,6 +570,7 @@ object Remote {
           case Left(_)      => Left(self)
           case Right(value) => if (value.value) loop(iterate(current)) else current.evalWithSchema
         }
+
       loop(initial)
     }
   }
@@ -570,16 +593,23 @@ object Remote {
       }
   }
 
-  final case class FoldOption[A, B](option: Remote[Option[A]], none: Remote[B], f: Remote[A] => Remote[B])
+  final case class FoldOption[A, B](option: Remote[Option[A]], remoteB: Remote[B], f: Remote[A] => Remote[B])
       extends Remote[B] {
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = option.evalWithSchema match {
-      case Left(_)                              => Left(self)
-      case Right(SchemaAndValue(schema, value)) =>
-        val opSchema = schema.asInstanceOf[SchemaOption[A]]
-        val opValue  = value.asInstanceOf[Option[A]]
-        opValue.fold(none.evalWithSchema)(v => f(Literal(v, opSchema.opSchema)).evalWithSchema)
-      case _                                    => throw new IllegalStateException("Every remote FoldOption must be constructed using Remote[Option].")
+    override def eval: Either[Remote[B], B] = option.eval match {
+      case Left(_)   => Left(self)
+      case Right(op) => op.fold(remoteB.eval)(v => f(Literal(v, Schema.fail[A]("No schema for B"))).eval)
+    }
+
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
+      implicit val schemaA: Schema[A] = option.evalWithSchema match {
+        case Left(_)               => Schema.fail("Option could not be reduced")
+        case Right(schemaAndValue) => schemaAndValue.schema.asInstanceOf[SchemaOption[A]].opSchema
+      }
+      option.eval match {
+        case Left(_)        => Left(self)
+        case Right(optionA) => optionA.fold(remoteB.evalWithSchema)(a => f(Remote(a)).evalWithSchema)
+      }
     }
   }
 
@@ -623,8 +653,8 @@ object Remote {
     left: Remote[A],
     right: Remote[B]
   )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C], schema: Schema[D]): Either[Remote[C], SchemaAndValue[D]] = {
-    val leftEither  = left.evalWithSchema
-    val rightEither = right.evalWithSchema
+    val leftEither: Either[Remote[A], SchemaAndValue[A]]  = left.evalWithSchema
+    val rightEither: Either[Remote[B], SchemaAndValue[B]] = right.evalWithSchema
     (for {
       l <- leftEither
       r <- rightEither
