@@ -169,7 +169,7 @@ object ZFlowExecutor {
               _       <- state.getTransactionFlow match {
                            case Some(flow) =>
                              ref.update(
-                               _.copy(retry =
+                               _.addRetry(
                                  compile(ref, (), flow)
                                    .asInstanceOf[ZIO[R, E, A]]
                                    .run
@@ -236,13 +236,15 @@ object ZFlowExecutor {
       tstate: TState,
       variables: Map[String, Ref[_]],
       retry: UIO[Any] = ZIO.unit
-    ) {
+    ) { self =>
 
       def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State =
         copy(tstate = tstate.addCompensation(newCompensation))
 
       def addReadVar(ref: Ref[_]): State =
         copy(tstate = tstate.addReadVar(lookupName(ref)))
+
+      def addRetry(retry : UIO[Any]): State = copy(retry = self.retry *> retry)
 
       def addVariable(name: String, ref: Ref[_]): State = copy(variables = variables + (name -> ref))
 
