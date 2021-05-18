@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.schema.{ DeriveSchema, Schema }
+
 object Example {
   // Remote[A] => Remote[(B, A)]
 
@@ -191,7 +193,7 @@ object UberEatsExample {
   }
 
   def riderWorkflow(tuple2: Remote[(User, Address)]): ZFlow[Any, ActivityError, Any] = {
-    implicit def schemaRiderState: Schema[RiderState] = ???
+    implicit def schemaRiderState: Schema[RiderState] = DeriveSchema.gen[RiderState]
 
     def updateRiderState(rider: Remote[Rider], address: Remote[Address]): ZFlow[Any, ActivityError, RiderState] =
       ZFlow(RiderState.RiderAssigned: RiderState).iterate((riderState: Remote[RiderState]) =>

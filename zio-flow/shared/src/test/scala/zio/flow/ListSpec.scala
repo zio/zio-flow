@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.flow.Remote.Cons
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
@@ -25,6 +26,16 @@ object ListSpec extends DefaultRunnableSpec {
       val l2       = Remote(Nil)
       val appended = l1 ++ l2
       appended <-> (1 :: 2 :: 3 :: 4 :: 5 :: Nil)
+    },
+    test("Cons") {
+      val l1   = Remote(1 :: 2 :: 3 :: Nil)
+      val cons = Cons(l1, Remote(4))
+      cons <-> (4 :: 1 :: 2 :: 3 :: Nil)
+    },
+    test("RemoteFold") {
+      val l1                = Remote(1 :: 2 :: 3 :: Nil)
+      val fold: Remote[Int] = Remote.Fold(l1, Remote(0), (tuple: Remote[(Int, Int)]) => tuple._1 + tuple._2)
+      fold <-> 6
     }
   )
 

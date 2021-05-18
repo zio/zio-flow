@@ -2,6 +2,8 @@ package zio.flow
 
 import java.time.Period
 
+import zio.schema.{ DeriveSchema, Schema }
+
 /**
  * 1. Get all policies that will expire in the next 60 days.
  * 2. For each of these policies, do the following -
@@ -38,14 +40,14 @@ object PolicyRenewalExample {
 
   }
 
-  implicit def emailContentSchema: Schema[EmailContent] = ???
+  implicit def emailContentSchema: Schema[EmailContent] = DeriveSchema.gen[EmailContent]
 
   case class Policy(id: PolicyId, address: PropertyAddress, userEmail: Email, evaluatorEmail: Email)
 
   case class Buyer(id: String, address: PropertyAddress, email: Email)
 
-  implicit val policySchema: Schema[Policy] = ???
-  implicit val buyerSchema: Schema[Buyer]   = ???
+  implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
+  implicit val buyerSchema: Schema[Buyer]   = DeriveSchema.gen[Buyer]
 
   def policyClaimStatus: Activity[Policy, Boolean] =
     Activity[Policy, Boolean](

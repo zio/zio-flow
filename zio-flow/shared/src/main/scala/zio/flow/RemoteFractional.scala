@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.schema.Schema
+
 trait RemoteFractional[+A] {
 
   def self: Remote[A]

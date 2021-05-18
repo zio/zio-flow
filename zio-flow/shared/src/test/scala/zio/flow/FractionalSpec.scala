@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.schema.Schema
 import zio.test._
 
 object FractionalSpec extends DefaultRunnableSpec {
@@ -21,8 +22,6 @@ object FractionalSpec extends DefaultRunnableSpec {
       testOp[R, A]("Sin", gen)(_.sin)(ops.sin),
       testOp[R, A]("Cos", gen)(_.cos)(ops.cos) @@ TestAspect.ignore,
       testOp[R, A]("Tan", gen)(_.tan)(ops.tan) @@ TestAspect.ignore
-//      testOp[R, A]("Sin Inverse", gen)(_.sinInverse)(ops.tan),
-//      testOp[R, A]("Cos Inverse", gen)(_.cosInverse)(ops.tan),
     )
 
   private def testOp[R, A: Schema: Fractional](name: String, gen: Gen[R, A])(
