@@ -4,8 +4,8 @@ import zio.flow.Remote.Cons
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
-object ListSpec extends DefaultRunnableSpec {
-  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("ListSpec")(
+object RemoteListSpec extends DefaultRunnableSpec {
+  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("RemoteListSpec")(
     test("Reverse") {
       val remoteList   = Remote(1 :: 2 :: 3 :: 4 :: Nil)
       val reversedList = remoteList.reverse
@@ -32,12 +32,12 @@ object ListSpec extends DefaultRunnableSpec {
       val cons = Cons(l1, Remote(4))
       cons <-> (4 :: 1 :: 2 :: 3 :: Nil)
     },
-    test("RemoteFold") {
+    test("Fold") {
       val l1                = Remote(1 :: 2 :: 3 :: Nil)
-      val fold: Remote[Int] = Remote.Fold(l1, Remote(0), (tuple: Remote[(Int, Int)]) => tuple._1 + tuple._2)
+      val fold: Remote[Int] = l1.fold(Remote(0))((a,b) => a + b)
       fold <-> 6
     }
   )
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("ListSpec")(suite1)
+  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("RemoteListSpec")(suite1)
 }
