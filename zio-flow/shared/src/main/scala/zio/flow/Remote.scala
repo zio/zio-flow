@@ -153,6 +153,11 @@ object Remote {
       Remote.binaryEvalWithSchema(value, base)(numeric.log, PowNumeric(_, _, numeric), numeric.schema)
   }
 
+  final case class ModNumeric(left: Remote[Int], right: Remote[Int], numericInt: Remote[Int]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      Remote.binaryEvalWithSchema(left, right)(numericInt.mod, ModNumeric(_,_, numericInt), schemaInt)
+  }
+
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
@@ -721,4 +726,5 @@ object Remote {
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
+
 }

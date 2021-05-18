@@ -41,6 +41,8 @@ object Numeric extends NumericImplicits0 {
     def schema: Schema[Int] = implicitly[Schema[Int]]
 
     override def negate(left: Int): Int = -1 * left
+
+    def mod(left : Int, right: Int): Int = left % right
   }
 }
 

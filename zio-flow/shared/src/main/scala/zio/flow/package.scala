@@ -10,7 +10,7 @@ import zio.schema.Schema.Primitive
 import zio.schema.{ Schema, StandardType }
 
 package object flow {
-  type ActivityError
+  type ActivityError = Throwable
 
   type Variable[A]
   type ExecutingFlow[+E, +A]
