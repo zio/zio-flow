@@ -665,14 +665,13 @@ object Remote {
   }
 
   final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A] {
-    override def eval: Either[Remote[A], A] = Left(self)
+    override def eval: Either[Remote[A], A] = value().eval
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = Left(self)
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = value().evalWithSchema
   }
 
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-    override def eval: Either[Remote[Option[A]], Option[A]]           = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
-    implicit def toSchemaOption(schema: Schema[A]): Schema[Option[A]] = ???
+    override def eval: Either[Remote[Option[A]], Option[A]] = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
 
     override def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
       value.evalWithSchema match {
@@ -680,7 +679,7 @@ object Remote {
         case Right(SchemaAndValue(schema, value)) =>
           val schemaA = schema.asInstanceOf[Schema[A]]
           val a       = value.asInstanceOf[A]
-          Right(SchemaAndValue(toSchemaOption(schemaA), Some(a)))
+          Right(SchemaAndValue(SchemaOption(schemaA), Some(a)))
         case Right(_)                             => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
       }
   }
