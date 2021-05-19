@@ -5,10 +5,18 @@
 | [![Project stage][Stage]][Stage-Page] | ![CI][Badge-CI] | [![Release Artifacts][Badge-SonatypeReleases]][Link-SonatypeReleases] | [![Snapshot Artifacts][Badge-SonatypeSnapshots]][Link-SonatypeSnapshots] | [![Badge-Discord]][Link-Discord] |
 
 # Summary
-TODO: Tagline
+
+ZIO Flow is an engine for executing persistent, distributed, fault-tolerant applications, providing an easy and powerful way to build stateful serverless applications.
+
+ - Type-safe, compositional front-end
+ - Resilient interactions with databases, web services, and microservices
+ - Persistent workflows that survive restarts
+ - Transactional guarantees via a persistent saga pattern
+
+ZIO Flow helps you orchestrate complex business logic, without having to worry about fallible systems, transient failures, manual rollbacks, or other infrastructure.
 
 # Documentation
-[zio-flow Microsite](https://zio.github.io/zio-flow/)
+[ZIO Flow Microsite](https://zio.github.io/zio-flow/)
 
 # Contributing
 [Documentation for contributors](https://zio.github.io/zio-flow/docs/about/about_contributing)
