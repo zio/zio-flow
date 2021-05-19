@@ -323,8 +323,6 @@ object Remote {
     }
   }
 
-  // def eval: Either[Remote[Boolean], Boolean]
-  // def eval: Either[Remote[A], (Schema[A], A)]
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
     override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
       val lEval = left.evalWithSchema
@@ -484,21 +482,17 @@ object Remote {
   }
 
   final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A] {
-    override def eval: Either[Remote[A], A] = value().eval
-
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = value().evalWithSchema
   }
 
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-    override def eval: Either[Remote[Option[A]], Option[A]] = unaryEval(value)(a => Some(a), remoteA => Some0(remoteA))
-
     override def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
       value.evalWithSchema match {
         case Left(_)                              => Left(self)
         case Right(SchemaAndValue(schema, value)) =>
           val schemaA = schema.asInstanceOf[Schema[A]]
           val a       = value.asInstanceOf[A]
-          Right(SchemaAndValue(SchemaOption(schemaA), Some(a)))
+          Right(SchemaAndValue(Schema.Optional(schemaA), Some(a)))
         case Right(_)                             => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
       }
   }
@@ -506,21 +500,16 @@ object Remote {
   final case class FoldOption[A, B](option: Remote[Option[A]], remoteB: Remote[B], f: Remote[A] => Remote[B])
       extends Remote[B] {
 
-    override def eval: Either[Remote[B], B] = option.eval match {
-      case Left(_)   => Left(self)
-      case Right(op) => op.fold(remoteB.eval)(v => f(Literal(v, Schema.fail[A]("No schema for B"))).eval)
-    }
+    def schemaFromOption[T](opSchema: Schema[Option[T]]): Schema[T] =
+      opSchema.transform(op => op.getOrElse(().asInstanceOf[T]), (value: T) => Some(value))
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      implicit val schemaA: Schema[A] = option.evalWithSchema match {
-        case Left(_)               => Schema.fail("Option could not be reduced")
-        case Right(schemaAndValue) => schemaAndValue.schema.asInstanceOf[SchemaOption[A]].codec
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] =
+      option.evalWithSchema match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          val schemaA = schemaFromOption(schemaAndValue.schema.asInstanceOf[Schema[Option[A]]])
+          schemaAndValue.value.fold(remoteB.evalWithSchema)(v => f(Literal(v, schemaA)).evalWithSchema)
       }
-      option.eval match {
-        case Left(_)        => Left(self)
-        case Right(optionA) => optionA.fold(remoteB.evalWithSchema)(a => f(Remote(a)).evalWithSchema)
-      }
-    }
   }
 
   object Lazy {

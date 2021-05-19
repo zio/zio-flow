@@ -1,14 +1,12 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.schema._
-import zio.test.{ DefaultRunnableSpec, ZSpec, _ }
+import zio.test._
 
 object RemoteOptionSpec extends DefaultRunnableSpec {
-  implicit val someSchema: Schema[Some[Int]]               = DeriveSchema.gen[Some[Int]]
-  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("RemoteOptionSpec")(
+  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess]                   = suite("RemoteOptionSpec")(
     test("HandleOption for Some") {
-      val option: Remote[Option[Int]] = Remote(Some(12))
+      val option: Remote[Option[Int]] = Remote(Option(12))
       val optionHandled: Remote[Int]  = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
       optionHandled <-> 24
     },
@@ -19,7 +17,7 @@ object RemoteOptionSpec extends DefaultRunnableSpec {
     },
     test("isSome") {
       val op1 = Remote(None)
-      val op2 = Remote(Some(12))
+      val op2 = Remote(Option(12))
       BoolAlgebra.all(
         op1.isSome <-> false,
         op2.isSome <-> true
@@ -27,13 +25,12 @@ object RemoteOptionSpec extends DefaultRunnableSpec {
     },
     test("isNone") {
       val op1 = Remote(None)
-      val op2 = Remote(Some(12))
+      val op2 = Remote(Option(12))
       BoolAlgebra.all(
         op1.isNone <-> true,
         op2.isNone <-> false
       )
     }
   )
-
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("OptionSpec")(suite1)
 }
