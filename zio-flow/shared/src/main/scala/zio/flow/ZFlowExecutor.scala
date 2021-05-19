@@ -4,6 +4,7 @@ import java.time.Duration
 
 import zio._
 import zio.clock.Clock
+import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
   def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -64,7 +65,9 @@ object ZFlowExecutor {
 
     val clock: Clock.Service = env.get[Clock.Service]
 
-    def eval[A](r: Remote[A]): UIO[A] = UIO(r.eval.getOrElse(throw new IllegalStateException("Bad state.")))
+    def eval[A](r: Remote[A]): UIO[A] = UIO(
+      r.eval.getOrElse(throw new IllegalStateException("Eval could not be reduced to Right of Either."))
+    )
 
     def lit[A](a: A): Remote[A] =
       Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))

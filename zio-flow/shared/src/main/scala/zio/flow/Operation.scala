@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.schema.Schema
+
 sealed trait Operation[-R, +A]
 object Operation {
   final case class Http[R, A](

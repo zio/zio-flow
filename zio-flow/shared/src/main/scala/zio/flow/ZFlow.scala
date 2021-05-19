@@ -3,6 +3,7 @@ package zio.flow
 import java.time.{ Duration, Instant }
 
 import zio.flow.ZFlow.Die
+import zio.schema.Schema
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -101,10 +102,6 @@ sealed trait ZFlow[-R, +E, +A] {
 }
 
 object ZFlow {
-//  private def eval[A](value: Remote[A]): UIO[A] =
-//    ZIO
-//      .fromEither(value.eval)
-//      .orDieWith(_ => new IllegalStateException(s"Cannot evaluate Remote expressions with variables: ${value}"))
 
   final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A]
 
