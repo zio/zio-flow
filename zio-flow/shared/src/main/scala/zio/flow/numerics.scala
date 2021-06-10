@@ -42,7 +42,7 @@ object Numeric extends NumericImplicits0 {
 
     override def negate(left: Int): Int = -1 * left
 
-    def mod(left : Int, right: Int): Int = left % right
+    def mod(left: Int, right: Int): Int = left % right
   }
 }
 

@@ -1,6 +1,6 @@
 package zio.flow
 
-import java.time.{ Duration, Instant }
+import java.time.Duration
 
 import zio._
 import zio.clock.Clock
@@ -60,16 +60,6 @@ object ZFlowExecutor {
     import InMemory._
     import ZFlow._
 
-    sealed trait CompileStatus
-
-    object CompileStatus {
-
-      case object Done extends CompileStatus
-
-      case object Suspended extends CompileStatus
-
-    }
-
     type Erased = ZFlow[Any, Any, Any]
 
     def erase(flow: ZFlow[_, _, _]): Erased = flow.asInstanceOf[Erased]
@@ -102,45 +92,70 @@ object ZFlowExecutor {
         _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
       } yield true).catchAll(_ => UIO(false))
 
-    def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] = {
+    def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
-      //TODO : Is schema required here?
-      def compile[I, E, A](
-        promise: Promise[E, A],
-        ref: Ref[State],
-        input: I,
-        flow: ZFlow[I, E, A]
-      ): ZIO[R, Nothing, CompileStatus] =
-        flow match {
-          case Return(value) => eval(value).to(promise) as CompileStatus.Done
+      for {
+        ref     <- Ref.make(State(TState.Empty, Map()))
+        acquire  = workflows.update(_ + ((uniqueId, ref)))
+        release  = workflows.update(_ - uniqueId)
+        promise <- Promise.make[E, A]
+        _       <- acquire.bracket_(release)(compile(promise, ref, (), flow)).provide(env)
+        result  <- promise.await
+      } yield result
+    def compile[I, E, A](
+      promise: Promise[E, A],
+      ref: Ref[State],
+      input: I,
+      flow: ZFlow[I, E, A]
+    ): ZIO[R, Nothing, CompileStatus]                               =
+      flow match {
+        case Return(value) => eval(value).to(promise) as CompileStatus.Done
 
-          case Now => clock.instant.run.flatMap(e => promise.done(e)) as CompileStatus.Done
+        case Now => clock.instant.run.flatMap(e => promise.done(e)) as CompileStatus.Done
 
-          case WaitTill(instant) =>
-            (for {
-              start <- clock.instant
-              end   <- eval(instant)
-              _     <- clock.sleep(Duration.between(start, end))
-            } yield ()).to(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
+        case WaitTill(instant) =>
+          (for {
+            start <- clock.instant
+            end   <- eval(instant)
+            _     <- clock.sleep(Duration.between(start, end))
+          } yield ()).to(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
 
-          case Modify(svar, f0) =>
-            val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
-            (for {
-              vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-              value      <- vRef.get
-              tuple      <- eval(f(lit(value)))
-              (a, value2) = tuple
-              _          <- vRef.set(value2)
-              _          <- ref.update(_.addReadVar(vRef))
-            } yield a).to(promise) as CompileStatus.Done
+        case Modify(svar, f0) =>
+          val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
+          (for {
+            vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])
+            value      <- vRef.get
+            tuple      <- eval(f(lit(value)))
+            (a, value2) = tuple
+            _          <- vRef.set(value2)
+            _          <- ref.update(_.addReadVar(vRef))
+          } yield a).to(promise) as CompileStatus.Done
 
-          case fold @ Fold(_, _, _) =>
-            //TODO : Clean up required, why not 2 forkDaemons - try and try to reason about this
-            for {
-              innerPromise <- Promise.make[fold.ValueE, fold.ValueA]
-              status       <- compile[fold.ValueR, fold.ValueE, fold.ValueA](innerPromise, ref, input, fold.value)
-              status2      <- if (status == CompileStatus.Done)
-                                innerPromise.await.foldM(
+        case fold @ Fold(_, _, _) =>
+          //TODO : Clean up required, why not 2 forkDaemons - try and try to reason about this
+          for {
+            innerPromise <- Promise.make[fold.ValueE, fold.ValueA]
+            status       <- compile[fold.ValueR, fold.ValueE, fold.ValueA](innerPromise, ref, input, fold.value)
+            status2      <- if (status == CompileStatus.Done)
+                              innerPromise.await.foldM(
+                                error =>
+                                  Promise
+                                    .make[E, A]
+                                    .flatMap(p1 =>
+                                      compile(p1, ref, input, fold.ifError(lit(error))) <* p1.await.to(promise)
+                                    ),
+                                success =>
+                                  Promise
+                                    .make[E, A]
+                                    .flatMap(p2 =>
+                                      compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await
+                                        .to(promise)
+                                        .forkDaemon
+                                    )
+                              )
+                            else
+                              innerPromise.await
+                                .foldM(
                                   error =>
                                     Promise
                                       .make[E, A]
@@ -151,244 +166,229 @@ object ZFlowExecutor {
                                     Promise
                                       .make[E, A]
                                       .flatMap(p2 =>
-                                        compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await
-                                          .to(promise)
-                                          .forkDaemon
+                                        compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
                                       )
                                 )
-                              else
-                                innerPromise.await
-                                  .foldM(
-                                    error =>
-                                      Promise
-                                        .make[E, A]
-                                        .flatMap(p1 =>
-                                          compile(p1, ref, input, fold.ifError(lit(error))) <* p1.await.to(promise)
-                                        ),
-                                    success =>
-                                      Promise
-                                        .make[E, A]
-                                        .flatMap(p2 =>
-                                          compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
-                                        )
-                                  )
-                                  .forkDaemon *>
-                                  ZIO.succeed(CompileStatus.Suspended)
-            } yield status2
+                                .forkDaemon *>
+                                ZIO.succeed(CompileStatus.Suspended)
+          } yield status2
 
-          case RunActivity(input, activity) =>
-            (for {
-              input  <- eval(input)
-              output <- opExec.execute(input, activity.operation)
-              _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
-            } yield output).to(promise.asInstanceOf[Promise[ActivityError, A]]) as CompileStatus.Done
+        case RunActivity(input, activity) =>
+          (for {
+            input  <- eval(input)
+            output <- opExec.execute(input, activity.operation)
+            _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
+          } yield output).to(promise.asInstanceOf[Promise[ActivityError, A]]) as CompileStatus.Done
 
-          case Transaction(flow) =>
-            for {
-              _      <- ref.update(_.enterTransaction(flow.provide(lit(input)), promise))
-              status <- compile(promise, ref, input, flow)
-            } yield status
+        case Transaction(flow) =>
+          for {
+            _      <- ref.update(_.enterTransaction(flow.provide(lit(input)), promise))
+            status <- compile(promise, ref, input, flow.provide(lit(input)))
+          } yield status
 
-          case Input(_) => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
+        case Input(_) => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
 
-          case Ensuring(flow, finalizer) =>
-            for {
-              innerPromise <- Promise.make[E, A]
-              flowStatus   <- compile(innerPromise, ref, input, flow)
-              p1           <- Promise.make[Nothing, Any]
-              rest          = innerPromise.await.run.flatMap { e =>
-                                compile(p1, ref, input, finalizer) <*
-                                  (p1.await *>
-                                    promise.done(e)).forkDaemon
-                              }
-              flowStatus   <- if (flowStatus == CompileStatus.Done) rest
-                              else
-                                rest.forkDaemon as CompileStatus.Suspended
-            } yield flowStatus
+        case Ensuring(flow, finalizer) =>
+          for {
+            innerPromise <- Promise.make[E, A]
+            flowStatus   <- compile(innerPromise, ref, input, flow)
+            p1           <- Promise.make[Nothing, Any]
+            rest          = innerPromise.await.run.flatMap { e =>
+                              compile(p1, ref, input, finalizer) <*
+                                (p1.await *>
+                                  promise.done(e)).forkDaemon
+                            }
+            flowStatus   <- if (flowStatus == CompileStatus.Done) rest
+                            else
+                              rest.forkDaemon as CompileStatus.Suspended
+          } yield flowStatus
 
-          case Unwrap(remote) =>
-            for {
-              evaluatedFlow <- eval(remote)
-              status        <- compile(promise, ref, input, evaluatedFlow)
-            } yield status
+        case Unwrap(remote) =>
+          for {
+            evaluatedFlow <- eval(remote)
+            status        <- compile(promise, ref, input, evaluatedFlow)
+          } yield status
 
-          case forEach @ Foreach(values, body) =>
-            for {
-              list                             <- eval(values)
-              unitPromise                      <- Promise.make[Nothing, Unit]
-              _                                <- unitPromise.succeed(())
-              listRef                          <- Ref.make(List.empty[Exit[E, forEach.Element]])
-              tuple                            <- list.foldLeft[ZIO[R, Nothing, (CompileStatus, Promise[Nothing, Unit])]](
-                                                    ZIO.succeed((CompileStatus.Done, unitPromise))
-                                                  ) { case (effect, element) =>
-                                                    effect.flatMap { case (previousStatus, previousPromise) =>
-                                                      if (previousStatus == CompileStatus.Done)
-                                                        for {
-                                                          _              <- previousPromise.await
-                                                          p              <- Promise.make[E, forEach.Element]
-                                                          status         <- compile(p, ref, input, body(lit(element)))
-                                                          elementPromise <- Promise.make[Nothing, Unit]
-                                                          _              <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise.succeed(
-                                                                              ()
-                                                                            )).forkDaemon
-                                                        } yield (status, elementPromise)
-                                                      else {
-                                                        Promise
-                                                          .make[Nothing, Unit]
-                                                          .flatMap(elementPromise =>
-                                                            (previousPromise.await *>
-                                                              (for {
-                                                                p <- Promise.make[E, forEach.Element]
-                                                                _ <- compile(p, ref, input, body(lit(element)))
-                                                                _ <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise
-                                                                       .succeed(())).forkDaemon
-                                                              } yield ())).forkDaemon as ((CompileStatus.Suspended, elementPromise))
-                                                          )
-                                                      }
+        case forEach @ Foreach(values, body) =>
+          for {
+            list                             <- eval(values)
+            unitPromise                      <- Promise.make[Nothing, Unit]
+            _                                <- unitPromise.succeed(())
+            listRef                          <- Ref.make(List.empty[Exit[E, forEach.Element]])
+            tuple                            <- list.foldLeft[ZIO[R, Nothing, (CompileStatus, Promise[Nothing, Unit])]](
+                                                  ZIO.succeed((CompileStatus.Done, unitPromise))
+                                                ) { case (effect, element) =>
+                                                  effect.flatMap { case (previousStatus, previousPromise) =>
+                                                    if (previousStatus == CompileStatus.Done)
+                                                      for {
+                                                        _              <- previousPromise.await
+                                                        p              <- Promise.make[E, forEach.Element]
+                                                        status         <- compile(p, ref, input, body(lit(element)))
+                                                        elementPromise <- Promise.make[Nothing, Unit]
+                                                        _              <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise.succeed(
+                                                                            ()
+                                                                          )).forkDaemon
+                                                      } yield (status, elementPromise)
+                                                    else {
+                                                      Promise
+                                                        .make[Nothing, Unit]
+                                                        .flatMap(elementPromise =>
+                                                          (previousPromise.await *>
+                                                            (for {
+                                                              p <- Promise.make[E, forEach.Element]
+                                                              _ <- compile(p, ref, input, body(lit(element)))
+                                                              _ <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise
+                                                                     .succeed(())).forkDaemon
+                                                            } yield ())).forkDaemon as ((CompileStatus.Suspended, elementPromise))
+                                                        )
                                                     }
                                                   }
-              (previousStatus, previousPromise) = tuple
-              completePromise                   = listRef.get
-                                                    .map(l => Exit.collectAll(l.reverse).get)
-                                                    .flatMap(exit => promise.done(exit.map(_.asInstanceOf[A])))
+                                                }
+            (previousStatus, previousPromise) = tuple
+            completePromise                   = listRef.get
+                                                  .map(l => Exit.collectAll(l.reverse).get)
+                                                  .flatMap(exit => promise.done(exit.map(_.asInstanceOf[A])))
 
-              status <- if (previousStatus == CompileStatus.Done)
-                          (previousPromise.await *> completePromise) as CompileStatus.Done
-                        else {
-                          (previousPromise.await *> completePromise).forkDaemon as CompileStatus.Suspended
-                        }
-            } yield status
+            status <- if (previousStatus == CompileStatus.Done)
+                        (previousPromise.await *> completePromise) as CompileStatus.Done
+                      else {
+                        (previousPromise.await *> completePromise).forkDaemon as CompileStatus.Suspended
+                      }
+          } yield status
 
-          case fork @ Fork(workflow) =>
-            for {
-              innerPromise <- Promise.make[fork.ValueE, fork.ValueA]
-              fiber        <- compile(innerPromise, ref, input, workflow).fork
-              _            <- promise
-                                .asInstanceOf[Promise[Nothing, ExecutingFlow[fork.ValueE, fork.ValueA]]]
-                                .succeed(fiber.asInstanceOf[ExecutingFlow[fork.ValueE, fork.ValueA]])
-            } yield CompileStatus.Done
+        case fork @ Fork(workflow) =>
+          for {
+            innerPromise <- Promise.make[fork.ValueE, fork.ValueA]
+            fiber        <- compile(innerPromise, ref, input, workflow).fork
+            _            <- promise
+                              .asInstanceOf[Promise[Nothing, ExecutingFlow[fork.ValueE, fork.ValueA]]]
+                              .succeed(fiber.asInstanceOf[ExecutingFlow[fork.ValueE, fork.ValueA]])
+          } yield CompileStatus.Done
 
-          case timeout @ Timeout(flow, duration) =>
-            val p = promise.asInstanceOf[Promise[E, Option[timeout.ValueA]]]
-            for {
-              innerPromise <- Promise.make[E, timeout.ValueA]
-              duration     <- eval(duration)
+        case timeout @ Timeout(flow, duration) =>
+          val p = promise.asInstanceOf[Promise[E, Option[timeout.ValueA]]]
+          for {
+            innerPromise <- Promise.make[E, timeout.ValueA]
+            duration     <- eval(duration)
 
-              status <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow).timeout(duration)
-              //TODO check other operations ensure done/to (promise) is called with await.
-              _      <- status
-                          .fold(p.succeed(None))(_ => innerPromise.await.run.flatMap(e => p.done(e.map(Some(_)))))
-                          .forkDaemon
-            } yield CompileStatus.Done
+            status <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow).timeout(duration)
+            //TODO check other operations ensure done/to (promise) is called with await.
+            _      <- status
+                        .fold(p.succeed(None))(_ => innerPromise.await.run.flatMap(e => p.done(e.map(Some(_)))))
+                        .forkDaemon
+          } yield CompileStatus.Done
 
-          case provide @ Provide(_, _) =>
-            for {
-              innerPromise <- Promise.make[provide.ValueE, provide.ValueA]
-              status       <- eval(provide.value).flatMap(r => compile(innerPromise, ref, r, provide.flow))
-              flowStatus   <- if (status == CompileStatus.Done) ZIO.succeed(status)
-                              else innerPromise.await.to(promise).forkDaemon as CompileStatus.Suspended
-            } yield flowStatus
+        case provide @ Provide(_, _) =>
+          for {
+            innerPromise <- Promise.make[provide.ValueE, provide.ValueA]
+            status       <- eval(provide.value).flatMap(valueA =>
+                              compile(innerPromise, ref, valueA, provide.flow)
+                            ) //TODO : Input is provided in compile
+            flowStatus   <- if (status == CompileStatus.Done) innerPromise.await.to(promise) as CompileStatus.Done
+                            else innerPromise.await.to(promise).forkDaemon as CompileStatus.Suspended
+          } yield flowStatus
 
-          case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow")) as CompileStatus.Done
+        case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow")) as CompileStatus.Done
 
-          case RetryUntil =>
-            for {
-              state <- ref.get
-              _     <- state.getTransactionFlow match {
-                         case Some(FlowPromise(flow, promise)) =>
-                           ref.update(_.addRetry(compile(promise, ref, (), flow).provide(env)))
-                         case None                             => ZIO.dieMessage("There is no transaction to retry.")
-                       }
-            } yield CompileStatus.Suspended
+        case RetryUntil =>
+          for {
+            state <- ref.get
+            _     <- state.getTransactionFlow match {
+                       case Some(FlowPromise(flow, promise)) =>
+                         ref.update(_.addRetry(compile(promise, ref, (), flow).provide(env)))
+                       case None                             => ZIO.dieMessage("There is no transaction to retry.")
+                     }
+          } yield CompileStatus.Suspended
 
-          case OrTry(left, right) =>
-            for {
-              leftStatus <- compile(promise, ref, input, left)
-              status     <- if (leftStatus == CompileStatus.Suspended) {
-                              compile(promise, ref, input, right)
-                            } else {
-                              ZIO.succeed(CompileStatus.Done)
-                            }
-            } yield status
+        case OrTry(left, right) =>
+          for {
+            leftStatus <- compile(promise, ref, input, left)
+            status     <- if (leftStatus == CompileStatus.Suspended) {
+                            compile(promise, ref, input, right)
+                          } else {
+                            ZIO.succeed(CompileStatus.Done)
+                          }
+          } yield status
 
-          case Await(execFlow) =>
-            for {
-              execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-              _        <- execflow.join.to(promise).forkDaemon
-            } yield CompileStatus.Done
+        case Await(execFlow) =>
+          for {
+            execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
+            _        <- execflow.join.to(promise).forkDaemon
+          } yield CompileStatus.Done
 
-          case Interrupt(execFlow) =>
-            for {
-              execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-              _        <- execflow.interrupt.flatMap(e => promise.done(e)).forkDaemon
-            } yield CompileStatus.Done
+        case Interrupt(execFlow) =>
+          for {
+            execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
+            _        <- execflow.interrupt.flatMap(e => promise.done(e)).forkDaemon
+          } yield CompileStatus.Done
 
-          case Fail(error) => eval(error).flatMap(promise.fail) as CompileStatus.Done
+        case Fail(error) => eval(error).flatMap(promise.fail) as CompileStatus.Done
 
-          case NewVar(name, initial) =>
-            (for {
-              value <- eval(initial)
-              vref  <- Ref.make(value)
-              _     <- ref.update(_.addVariable(name, vref))
-            } yield vref.asInstanceOf[A]).to(promise) as CompileStatus.Done
+        case NewVar(name, initial) =>
+          (for {
+            value <- eval(initial)
+            vref  <- Ref.make(value)
+            _     <- ref.update(_.addVariable(name, vref))
+          } yield vref.asInstanceOf[A]).to(promise) as CompileStatus.Done
 
-          case iterate0 @ Iterate(_, _, _) =>
-            val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
+        case iterate0 @ Iterate(_, _, _) =>
+          val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
 
-            val Iterate(self, step, predicate) = iterate
+          val Iterate(self, step, predicate) = iterate
 
-            def loop(a: A): ZIO[R, Nothing, CompileStatus] = {
+          def loop(a: A): ZIO[R, Nothing, CompileStatus] = {
 
-              val remoteA: Remote[A] = lit(a)
-
-              Promise
-                .make[E, A]
-                .flatMap(p1 =>
-                  eval(predicate(remoteA)).flatMap { continue =>
-                    if (continue)
-                      for {
-                        status <- compile(p1, ref, input, step(remoteA))
-                        status <-
-                          if (status == CompileStatus.Done)
-                            p1.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
-                          else
-                            p1.await.run
-                              .flatMap(e => e.fold(cause => promise.halt(cause), loop))
-                              .forkDaemon as CompileStatus.Suspended
-                      } yield status
-                    else
-                      promise.succeed(a) as CompileStatus.Done
-                  }
-                )
-            }
+            val remoteA: Remote[A] = lit(a)
 
             Promise
               .make[E, A]
-              .flatMap(p =>
-                for {
-                  status <- compile(p, ref, input, self)
-                  status <-
-                    if (status == CompileStatus.Done)
-                      p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
-                    else
-                      p.await.run
-                        .flatMap(e => e.fold(cause => promise.halt(cause), loop))
-                        .forkDaemon as CompileStatus.Suspended
-                } yield status
+              .flatMap(p1 =>
+                eval(predicate(remoteA)).flatMap { continue =>
+                  if (continue)
+                    for {
+                      status <- compile(p1, ref, input, step(remoteA))
+                      status <-
+                        if (status == CompileStatus.Done)
+                          p1.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
+                        else
+                          p1.await.run
+                            .flatMap(e => e.fold(cause => promise.halt(cause), loop))
+                            .forkDaemon as CompileStatus.Suspended
+                    } yield status
+                  else
+                    promise.succeed(a) as CompileStatus.Done
+                }
               )
-        }
-      for {
-        ref     <- Ref.make(State(TState.Empty, Map()))
-        acquire  = workflows.update(_ + ((uniqueId, ref)))
-        release  = workflows.update(_ - uniqueId)
-        promise <- Promise.make[E, A]
-        _       <- acquire.bracket_(release)(compile(promise, ref, (), flow)).provide(env)
-        result  <- promise.await
-      } yield result
-    }
+          }
+
+          Promise
+            .make[E, A]
+            .flatMap(p =>
+              for {
+                status <- compile(p, ref, input, self)
+                status <-
+                  if (status == CompileStatus.Done)
+                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
+                  else
+                    p.await.run
+                      .flatMap(e => e.fold(cause => promise.halt(cause), loop))
+                      .forkDaemon as CompileStatus.Suspended
+              } yield status
+            )
+      }
   }
 
   object InMemory {
+
+    sealed trait CompileStatus
+
+    object CompileStatus {
+
+      case object Done extends CompileStatus
+
+      case object Suspended extends CompileStatus
+
+    }
 
     def make[U, R <: Clock](env: R, opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
       (for {

@@ -28,5 +28,5 @@ trait RemoteNumeric[+A] {
     Remote.LogNumeric(self.widen[A1], base, numeric)
 
   final def mod[A1 >: A](that: Remote[Int])(implicit ev: A <:< Int, numericInt: Numeric[Int]): Remote[Int] =
-    Remote.ModNumeric(self.widen[Int], that, numericInt )
+    Remote.ModNumeric(self.widen[Int], that)
 }

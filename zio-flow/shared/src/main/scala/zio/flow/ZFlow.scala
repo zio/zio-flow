@@ -221,7 +221,7 @@ object ZFlow {
 
   def waitTill(instant: Remote[Instant]): ZFlow[Any, Nothing, Unit] = WaitTill(instant)
 
-  implicit def schemaZFlow[R, E, A]: Schema[ZFlow[R, E, A]] = ???
+  implicit def schemaZFlow[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("Schema ZFlow is not available.")
 
   def when[R, E](predicate: Remote[Boolean])(flow: ZFlow[R, E, Any]): ZFlow[R, E, Any] =
     ZFlow.ifThenElse(predicate)(flow, ZFlow.unit)
