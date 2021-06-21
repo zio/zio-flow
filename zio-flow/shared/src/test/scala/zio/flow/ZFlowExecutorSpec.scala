@@ -103,7 +103,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         } yield modifiedVariable) <=> s.length
       }
     },
-    //TODO : Possible Bug
+    //TODO : Bug - activity is executed only once
     testM("Test Iterate") {
       ZFlow.Iterate[Any, ActivityError, Int](
         ZFlow.RunActivity[Any, Int](12, testActivity),
