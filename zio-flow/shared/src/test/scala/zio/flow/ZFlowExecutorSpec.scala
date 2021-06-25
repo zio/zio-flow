@@ -1,5 +1,8 @@
 package zio.flow
 
+import java.net.URI
+import java.time.Instant
+
 import zio.Schedule.Decision.Done
 import zio.flow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
 import zio.flow.utils.CompiledZFlowAssertionSyntax.{ InMemoryZFlowAssertion, mockInMemory }
@@ -8,9 +11,6 @@ import zio.test.Assertion.{ dies, equalTo, fails, hasMessage }
 import zio.test.TestAspect.ignore
 import zio.test._
 import zio.{ Promise, Ref }
-
-import java.net.URI
-import java.time.Instant
 
 object ZFlowExecutorSpec extends DefaultRunnableSpec {
   val ifError: Remote[Int] => ZFlow[Any, Nothing, Int]      = r => ZFlow.succeed(r + 5)
