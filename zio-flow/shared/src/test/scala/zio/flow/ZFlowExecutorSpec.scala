@@ -5,7 +5,7 @@ import java.time.Instant
 
 import zio.Schedule.Decision.Done
 import zio.flow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
-import zio.flow.utils.CompiledZFlowAssertionSyntax.{ InMemoryZFlowAssertion, mockInMemory }
+import zio.flow.utils.CompiledZFlowAssertionSyntax.{ InMemoryZFlowAssertion, mockInMemoryTestClock }
 import zio.schema.Schema
 import zio.test.Assertion.{ dies, equalTo, fails, hasMessage }
 import zio.test.TestAspect.ignore
@@ -53,20 +53,20 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     testM("Test Fork")(
       ZFlow
         .Fork[Any, Nothing, Int](ZFlow.succeed(12))
-        .evaluateInMem
+        .evaluateTestInMem
         .map(r => assert(r.isInstanceOf[ExecutingFlow[Nothing, Int]])(equalTo(true)))
     ),
     testM("Test Die")(
-      assertM(ZFlow.Die.evaluateInMem.run)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
+      assertM(ZFlow.Die.evaluateTestInMem.run)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
     ),
     testM("Test RunActivity")(
       ZFlow.RunActivity(12, testActivity) <=> 12
     ),
     testM("Test NewVar")(
-      ZFlow.NewVar("var1", Remote(20)).evaluateInMem.map(r => assert(r.isInstanceOf[Variable[Int]])(equalTo(true)))
+      ZFlow.NewVar("var1", Remote(20)).evaluateTestInMem.map(r => assert(r.isInstanceOf[Variable[Int]])(equalTo(true)))
     ),
     testM("Retry Until - No Transaction")(
-      assertM(ZFlow.RetryUntil.evaluateInMem.run)(dies(hasMessage(equalTo("There is no transaction to retry."))))
+      assertM(ZFlow.RetryUntil.evaluateTestInMem.run)(dies(hasMessage(equalTo("There is no transaction to retry."))))
     ),
     testM("Test OrTry - right succeeds")(
       ZFlow.OrTry[Any, Nothing, Int](ZFlow.transaction(_ => ZFlow.RetryUntil), ZFlow.succeed(12)) <=> 12
@@ -83,7 +83,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     testM("Test Fail") {
       implicit val schema: Schema[IllegalStateException] =
         Schema.primitive[String].transform(s => new IllegalStateException(s), exp => exp.getMessage)
-      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateInMem.run)(
+      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateTestInMem.run)(
         fails(hasMessage(equalTo("Illegal")))
       )
     },
@@ -116,7 +116,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
   val suite2: Spec[Environment, TestFailure[Nothing], TestSuccess] =
     suite("Test RetryUntil")(testM("Test compile status of RetryUntil") {
       val result = for {
-        inMemory      <- mockInMemory
+        inMemory      <- mockInMemoryTestClock
         promise       <- Promise.make[Nothing, String]
         ref           <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
         compileResult <-
@@ -130,7 +130,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     suite("Test Interrupt")(testM("Test Interrupt") {
       implicit val exFloSchema: Schema[ExecutingFlow[Nothing, Int]] = Schema.fail("exFlow schema")
       val result                                                    = for {
-        inMemory       <- mockInMemory
+        inMemory       <- mockInMemoryTestClock
         exFlow         <- inMemory.submit("1234", ZFlow.Fork[Any, Nothing, Int](ZFlow.succeed(12)))
         compiledResult <- inMemory.submit("1234", ZFlow.Interrupt[Nothing, Int](Remote(exFlow)))
       } yield compiledResult
