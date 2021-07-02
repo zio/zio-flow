@@ -36,7 +36,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
       ZFlow.succeed(15)
     )
 
-  val suite1 = suite("Test Unwrap")(
+  val suite1: Spec[Environment, TestFailure[Any], TestSuccess] = suite("Test Unwrap")(
     testM("Test Return")(ZFlow.Return(12) <=> 12),
     testM("Test Now")(ZFlow.now <=> Instant.now()) @@ ignore,
     testM("Test Unwrap")(ZFlow.Unwrap[Any, Nothing, Int](Remote(ZFlow.succeed(12))) <=> 12),
@@ -113,27 +113,29 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     }
   )
 
-  val suite2 = suite("Test RetryUntil")(testM("Test compile status of RetryUntil") {
-    val result = for {
-      inMemory      <- mockInMemory
-      promise       <- Promise.make[Nothing, String]
-      ref           <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
-      compileResult <-
-        inMemory.compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))
-    } yield compileResult
+  val suite2: Spec[Environment, TestFailure[Nothing], TestSuccess] =
+    suite("Test RetryUntil")(testM("Test compile status of RetryUntil") {
+      val result = for {
+        inMemory      <- mockInMemory
+        promise       <- Promise.make[Nothing, String]
+        ref           <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
+        compileResult <-
+          inMemory.compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))
+      } yield compileResult
 
-    assertM(result)(equalTo(CompileStatus.Suspended))
-  })
+      assertM(result)(equalTo(CompileStatus.Suspended))
+    })
 
-  val suite3 = suite("Test Interrupt")(testM("Test Interrupt") {
-    implicit val exFloSchema: Schema[ExecutingFlow[Nothing, Int]] = Schema.fail("exFlow schema")
-    val result                                                    = for {
-      inMemory       <- mockInMemory
-      exFlow         <- inMemory.submit("1234", ZFlow.Fork[Any, Nothing, Int](ZFlow.succeed(12)))
-      compiledResult <- inMemory.submit("1234", ZFlow.Interrupt[Nothing, Int](Remote(exFlow)))
-    } yield compiledResult
-    assertM(result)(equalTo(Done))
-  })
+  val suite3: Spec[Environment, TestFailure[ActivityError], TestSuccess] =
+    suite("Test Interrupt")(testM("Test Interrupt") {
+      implicit val exFloSchema: Schema[ExecutingFlow[Nothing, Int]] = Schema.fail("exFlow schema")
+      val result                                                    = for {
+        inMemory       <- mockInMemory
+        exFlow         <- inMemory.submit("1234", ZFlow.Fork[Any, Nothing, Int](ZFlow.succeed(12)))
+        compiledResult <- inMemory.submit("1234", ZFlow.Interrupt[Nothing, Int](Remote(exFlow)))
+      } yield compiledResult
+      assertM(result)(equalTo(Done))
+    })
 
   override def spec: ZSpec[Environment, Failure] = suite("Test ZFlow combinators")(
     suite1,
