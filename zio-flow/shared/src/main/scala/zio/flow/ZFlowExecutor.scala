@@ -7,7 +7,7 @@ import zio.clock.Clock
 import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
-  def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
+  def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
 }
 
 object ZFlowExecutor {
@@ -91,7 +91,7 @@ object ZFlowExecutor {
         _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
       } yield true).catchAll(_ => UIO(false))
 
-    def submit[E, A](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] = {
+    def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] = {
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
       def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A])(implicit schema: Schema[I]): ZIO[R, E, A] =
         flow match {
