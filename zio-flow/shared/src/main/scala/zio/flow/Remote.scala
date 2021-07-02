@@ -1,10 +1,10 @@
 package zio.flow
 
-import java.time.temporal.TemporalUnit
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
+import zio.flow.Numeric.NumericInt
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {
@@ -153,6 +153,11 @@ object Remote {
       Remote.binaryEvalWithSchema(value, base)(numeric.log, PowNumeric(_, _, numeric), numeric.schema)
   }
 
+  final case class ModNumeric(left: Remote[Int], right: Remote[Int]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      Remote.binaryEvalWithSchema(left, right)(NumericInt.mod, ModNumeric(_, _), Schema.primitive[Int])
+  }
+
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
@@ -207,7 +212,7 @@ object Remote {
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
 
     override def evalWithSchema: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = {
-      def schemaTuple[T, U](a: Schema[T], b: Schema[U]): Schema[(T, U)] = ???
+      //def schemaTuple[T, U](a: Schema[T], b: Schema[U]): Schema[(T, U)] = ???
 
       val evaluatedLeft  = left.evalWithSchema
       val evaluatedRight = right.evalWithSchema
@@ -219,7 +224,7 @@ object Remote {
           val reducedLeft  = evaluatedLeft.fold(identity, a => Literal(a.value, a.schema))
           val reducedRight = evaluatedRight.fold(identity, b => Literal(b.value, b.schema))
           Left((reducedLeft, reducedRight))
-        case Right((a, b)) => Right(SchemaAndValue(schemaTuple(a.schema, b.schema), (a.value, b.value)))
+        case Right((a, b)) => Right(SchemaAndValue(Schema.Tuple(a.schema, b.schema), (a.value, b.value)))
       }
     }
   }
@@ -321,6 +326,11 @@ object Remote {
       case Left(_)      => Left(self)
       case Right(value) => if (value) ifTrue.evalWithSchema else ifFalse.evalWithSchema
     }
+  }
+
+  case class Length(remoteString: Remote[String]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      unaryEvalWithSchema(remoteString)(str => str.length, remoteStr => Length(remoteStr), Schema[Int])
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
@@ -446,15 +456,14 @@ object Remote {
   final case class InstantToLong[A](instant: Remote[Instant]) extends Remote[Long] {
 
     override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] =
-      unaryEval(instant)(_.toEpochMilli, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
+      unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
   }
 
-  final case class DurationToLong[A](duration: Remote[Duration], temporalUnit: Remote[TemporalUnit])
-      extends Remote[Long] {
+  final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
 
-    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = binaryEval(duration, temporalUnit)(
-      (d, tUnit) => d.get(tUnit),
-      (remoteDuration, remoteUnit) => DurationToLong(remoteDuration, remoteUnit)
+    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = unaryEval(duration)(
+      _.getSeconds() % 60,
+      remoteDuration => DurationToLong(remoteDuration)
     ).map(SchemaAndValue(Schema[Long], _))
   }
 
@@ -721,4 +730,5 @@ object Remote {
   val unit: Remote[Unit] = Remote(())
 
   implicit def schemaRemote[A]: Schema[Remote[A]] = ???
+
 }

@@ -26,4 +26,7 @@ trait RemoteNumeric[+A] {
 
   final def log[A1 >: A](base: Remote[A1])(implicit numeric: Numeric[A1]): Remote[A1] =
     Remote.LogNumeric(self.widen[A1], base, numeric)
+
+  final def mod[A1 >: A](that: Remote[Int])(implicit ev: A <:< Int, numericInt: Numeric[Int]): Remote[Int] =
+    Remote.ModNumeric(self.widen[Int], that)
 }

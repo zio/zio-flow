@@ -10,7 +10,7 @@ import zio.schema.Schema.Primitive
 import zio.schema.{ Schema, StandardType }
 
 package object flow {
-  type ActivityError
+  type ActivityError = Throwable
 
   type Variable[A]
   type ExecutingFlow[+E, +A]
@@ -52,4 +52,6 @@ package object flow {
   implicit def RemoteList[A](remote: Remote[List[A]]): RemoteListSyntax[A] = new RemoteListSyntax[A](remote)
 
   implicit def RemoteOption[A](remote: Remote[Option[A]]): RemoteOptionSyntax[A] = new RemoteOptionSyntax[A](remote)
+
+  implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
 }
