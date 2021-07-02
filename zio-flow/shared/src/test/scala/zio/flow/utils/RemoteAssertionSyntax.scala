@@ -10,5 +10,4 @@ object RemoteAssertionSyntax {
     def <->(that: A): TestResult =
       assert(self.eval)(isRight(equalTo(that)))
   }
-
 }

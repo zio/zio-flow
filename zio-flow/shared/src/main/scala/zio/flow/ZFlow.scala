@@ -114,9 +114,13 @@ object ZFlow {
 
   final case class Fold[R, E1, E2, A, B](
     value: ZFlow[R, E1, A],
-    ke: Remote[E1] => ZFlow[R, E2, B],
-    ks: Remote[A] => ZFlow[R, E2, B]
-  ) extends ZFlow[R, E2, B]
+    ifError: Remote[E1] => ZFlow[R, E2, B],
+    ifSuccess: Remote[A] => ZFlow[R, E2, B]
+  ) extends ZFlow[R, E2, B] {
+    type ValueE = E1
+    type ValueA = A
+    type ValueR = R
+  }
 
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A]
 
@@ -129,13 +133,25 @@ object ZFlow {
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
   final case class Foreach[R, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[R, E, B])
-      extends ZFlow[R, E, List[B]]
+      extends ZFlow[R, E, List[B]] {
+    type Element = B
 
-  final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]]
+  }
 
-  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]]
+  final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
+    type ValueE = E
+    type ValueA = A
+  }
 
-  final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A]
+  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
+    type ValueA = A
+    type ValueE = E
+  }
+
+  final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A] {
+    type ValueE = E
+    type ValueA = A
+  }
 
   case object Die extends ZFlow[Any, Nothing, Nothing]
 
@@ -205,7 +221,7 @@ object ZFlow {
 
   def waitTill(instant: Remote[Instant]): ZFlow[Any, Nothing, Unit] = WaitTill(instant)
 
-  implicit def schemaZFlow[R, E, A]: Schema[ZFlow[R, E, A]] = ???
+  implicit def schemaZFlow[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("Schema ZFlow is not available.")
 
   def when[R, E](predicate: Remote[Boolean])(flow: ZFlow[R, E, Any]): ZFlow[R, E, Any] =
     ZFlow.ifThenElse(predicate)(flow, ZFlow.unit)

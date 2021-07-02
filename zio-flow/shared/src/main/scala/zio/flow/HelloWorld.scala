@@ -7,6 +7,11 @@ import zio.{ App, ExitCode, URIO, ZIO }
 
 object HelloWorld extends App {
 
+  case class Person(name: String, age: Int)
+
+  val person: Person = Person("Ash", 12)
+  person.copy(age = 32)
+
   override def run(args: List[String]): URIO[Console, ExitCode] =
     myAppLogic.exitCode
 
