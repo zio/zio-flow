@@ -1,6 +1,5 @@
 package zio.flow
 
-import java.time.temporal.TemporalUnit
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
@@ -457,15 +456,14 @@ object Remote {
   final case class InstantToLong[A](instant: Remote[Instant]) extends Remote[Long] {
 
     override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] =
-      unaryEval(instant)(_.toEpochMilli, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
+      unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
   }
 
-  final case class DurationToLong[A](duration: Remote[Duration], temporalUnit: Remote[TemporalUnit])
-      extends Remote[Long] {
+  final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
 
-    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = binaryEval(duration, temporalUnit)(
-      (d, tUnit) => d.get(tUnit),
-      (remoteDuration, remoteUnit) => DurationToLong(remoteDuration, remoteUnit)
+    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = unaryEval(duration)(
+      _.getSeconds() % 60,
+      remoteDuration => DurationToLong(remoteDuration)
     ).map(SchemaAndValue(Schema[Long], _))
   }
 

@@ -1,7 +1,5 @@
 package zio.flow
 
-import java.time.temporal.ChronoUnit
-
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
@@ -20,11 +18,6 @@ object RemoteDurationSpec extends DefaultRunnableSpec {
     testM("toSeconds") {
       check(Gen.anyFiniteDuration) { d =>
         Remote(d).toSeconds <-> d.getSeconds
-      }
-    },
-    testM("durationToLong") {
-      check(Gen.anyFiniteDuration) { d =>
-        Remote(d).durationToLong(ChronoUnit.MILLIS) <-> d.toMillis
       }
     }
   ) @@ TestAspect.ignore

@@ -122,6 +122,8 @@ object ZFlow {
     type ValueR = R
   }
 
+  final case class Log(message: String) extends ZFlow[Any, Nothing, Unit]
+
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A]
 
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
@@ -232,4 +234,6 @@ object ZFlow {
 
   def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
+
+  def log(message: String): Log = ZFlow.Log(message)
 }

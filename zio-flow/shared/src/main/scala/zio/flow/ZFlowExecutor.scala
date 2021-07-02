@@ -4,6 +4,7 @@ import java.time.Duration
 
 import zio._
 import zio.clock.Clock
+import zio.console.putStrLn
 import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
@@ -330,6 +331,11 @@ object ZFlowExecutor {
             vref  <- Ref.make(value)
             _     <- ref.update(_.addVariable(name, vref))
           } yield vref.asInstanceOf[A]).to(promise) as CompileStatus.Done
+
+        case Log(message) =>
+          putStrLn(message)
+            .provideLayer(zio.console.Console.live)
+            .to(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
 
         case iterate0 @ Iterate(_, _, _) =>
           val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
