@@ -5,7 +5,8 @@ import java.time.Instant
 
 import zio.Schedule.Decision.Done
 import zio.flow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
-import zio.flow.utils.CompiledZFlowAssertionSyntax.{ InMemoryZFlowAssertion, mockInMemoryTestClock }
+import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockInMemoryTestClock
 import zio.schema.Schema
 import zio.test.Assertion.{ dies, equalTo, fails, hasMessage }
 import zio.test.TestAspect.ignore

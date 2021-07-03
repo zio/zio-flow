@@ -19,5 +19,5 @@ trait RemoteRelational[+A] {
     !(self === that)
 
   final def ===[A1 >: A](that: Remote[A1]): Remote[Boolean] =
-    (self <= that) && (that <= self)
+    Remote.Equal(self, that)
 }
