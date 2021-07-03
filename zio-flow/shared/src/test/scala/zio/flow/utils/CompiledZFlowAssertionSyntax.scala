@@ -46,14 +46,13 @@ object CompiledZFlowAssertionSyntax {
       compileResult
     }
 
-//    def evaluateLiveInMem: ZIO[Clock with Console, E, A] = {
-//      val compileResult = for {
-//        inMemory <- mockInMemoryLiveClock
-//        _ <- putStrLn("Starts")
-//        result   <- inMemory.submit("1234", zflow)
-//      } yield result
-//      compileResult
-//    }
+    def evaluateLiveInMem: ZIO[Clock with Console, E, A] = {
+      val compileResult = for {
+        inMemory <- mockInMemoryLiveClock
+        result   <- inMemory.submit("1234", zflow)
+      } yield result
+      compileResult
+    }
   }
 
 }
