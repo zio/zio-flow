@@ -272,11 +272,12 @@ object ZFlowExecutor {
             innerPromise <- Promise.make[E, timeout.ValueA]
             duration     <- eval(duration)
 
-            status <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow).timeout(duration)
+            _ <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow)
             //TODO check other operations ensure done/to (promise) is called with await.
-            _      <- status
-                        .fold(p.succeed(None))(_ => innerPromise.await.run.flatMap(e => p.done(e.map(Some(_)))))
-                        .forkDaemon
+//            _      <- status
+//                        .fold(p.succeed(None))(_ => innerPromise.await.timeout(duration).run.flatMap(e => p.done(e.map(Some(_)))))
+//                        .forkDaemon
+            _ <- innerPromise.await.timeout(duration).run.flatMap(a => p.done(a))
           } yield CompileStatus.Done
 
         case provide @ Provide(_, _) =>

@@ -348,6 +348,21 @@ object Remote {
     }
   }
 
+  final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
+      val lEval = left.evalWithSchema
+      val rEval = right.evalWithSchema
+      (lEval, rEval) match {
+        //FIXME : fix when zio schema can compare Schemas
+        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+          Right(
+            SchemaAndValue(Schema[Boolean], (leftA == rightA))
+          )
+        case _                                                                                        => Left(self)
+      }
+    }
+  }
+
   final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
     override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
       unaryEval(value)(a => !a, remoteA => Not(remoteA)).map(SchemaAndValue(Schema[Boolean], _))
