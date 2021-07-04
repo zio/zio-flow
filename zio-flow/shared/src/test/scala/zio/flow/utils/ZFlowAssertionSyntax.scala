@@ -1,15 +1,15 @@
 package zio.flow.utils
 
+import java.net.URI
+
 import zio.clock.Clock
 import zio.console.Console
 import zio.flow.ZFlowExecutor.InMemory
-import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
+import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test.assertM
-import zio.{Has, Ref, ZIO, console}
-
-import java.net.URI
+import zio.{ Has, Ref, ZIO, console }
 
 object ZFlowAssertionSyntax {
 
@@ -45,7 +45,9 @@ object ZFlowAssertionSyntax {
     val mockInMemoryLiveClock: ZIO[Any, Nothing, InMemory[String, Has[Clock.Service] with Has[Console.Service]]] =
       Ref
         .make[Map[String, Ref[InMemory.State]]](Map.empty)
-        .map(ref => InMemory(Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live), mockOpExec, ref))
+        .map(ref =>
+          InMemory(Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live), mockOpExec, ref)
+        )
   }
 
   import Mocks._
