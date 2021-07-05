@@ -204,7 +204,7 @@ object PolicyRenewalExample {
 
       for {
         policies <- getPoliciesAboutToExpire(Remote(Period.ofDays(60)))
-        _        <- ZFlow.foreach(policies) { policy =>
+        _        <- ZFlow.foreachPar(policies) { policy =>
                       performPolicyRenewal(policy, manualEvalDone, renewPolicy)
                     }
       } yield ()
