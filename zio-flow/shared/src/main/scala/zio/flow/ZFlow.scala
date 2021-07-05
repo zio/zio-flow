@@ -183,7 +183,7 @@ object ZFlow {
     ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
 
   def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
-    ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === false)
+    ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     Foreach(values, body)
