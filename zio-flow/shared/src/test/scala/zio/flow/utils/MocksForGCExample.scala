@@ -1,12 +1,12 @@
 package zio.flow.utils
 
 import java.net.URI
-
 import zio.clock.Clock
 import zio.console.Console
+import zio.flow.GoodcoverUseCase.Policy
 import zio.flow.ZFlowExecutor.InMemory
-import zio.flow.{ ActivityError, Operation, OperationExecutor }
-import zio.{ Has, Ref, ZIO, console }
+import zio.flow.{ActivityError, Operation, OperationExecutor}
+import zio.{Has, Ref, ZIO, console}
 
 object MocksForGCExample {
 
@@ -34,6 +34,7 @@ object MocksForGCExample {
   private val mockResponseMap: Map[URI, Any] = Map(
     new URI("getPolicyClaimStatus.com")   -> true,
     new URI("getFireRiskForProperty.com") -> 0.23,
-    new URI("isManualEvalRequired.com")   -> true
+    new URI("isManualEvalRequired.com")   -> true,
+    new URI("createRenewedPolicy.com") -> Some(Policy("DummyPolicy"))
   )
 }
