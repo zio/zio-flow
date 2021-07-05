@@ -5,6 +5,7 @@ import java.net.URI
 import zio.clock.Clock
 import zio.console.Console
 import zio.flow.ZFlowExecutor.InMemory
+import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
 import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
@@ -72,6 +73,14 @@ object ZFlowAssertionSyntax {
       } yield result
       compileResult
     }
-  }
 
+    def evaluateInMemForGCExample: ZIO[Any, E, A] = {
+      val compileResult = for {
+        inMemory <- mockInMemoryForGCExample
+        result   <- inMemory.submit("1234", zflow)
+      } yield result
+      compileResult
+    }
+
+  }
 }
