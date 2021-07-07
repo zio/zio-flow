@@ -58,7 +58,7 @@ object ZFlowAssertionSyntax {
       assertM(compileResult)(equalTo(that))
     }
 
-    def evaluateTestInMem: ZIO[Clock with Console, E, A] = {
+    def evaluateTestInMem(implicit schemaA : Schema[A], schemaE : Schema[E]): ZIO[Clock with Console, E, A] = {
       val compileResult = for {
         inMemory <- mockInMemoryTestClock
         result   <- inMemory.submit("1234", zflow)
@@ -66,7 +66,7 @@ object ZFlowAssertionSyntax {
       compileResult
     }
 
-    def evaluateLiveInMem: ZIO[Clock with Console, E, A] = {
+    def evaluateLiveInMem(implicit schemaA : Schema[A], schemaE : Schema[E]): ZIO[Clock with Console, E, A] = {
       val compileResult = for {
         inMemory <- mockInMemoryLiveClock
         result   <- inMemory.submit("1234", zflow)
@@ -74,13 +74,12 @@ object ZFlowAssertionSyntax {
       compileResult
     }
 
-    def evaluateInMemForGCExample: ZIO[Any, E, A] = {
+    def evaluateInMemForGCExample(implicit schemaA : Schema[A], schemaE : Schema[E]): ZIO[Any, E, A] = {
       val compileResult = for {
         inMemory <- mockInMemoryForGCExample
         result   <- inMemory.submit("1234", zflow)
       } yield result
       compileResult
     }
-
   }
 }
