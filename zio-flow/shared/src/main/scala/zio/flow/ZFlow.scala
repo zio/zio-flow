@@ -116,8 +116,8 @@ object ZFlow {
     value: ZFlow[R, E1, A],
     ifError: Remote[E1] => ZFlow[R, E2, B],
     ifSuccess: Remote[A] => ZFlow[R, E2, B],
-    schemaE1 : Schema[E1] = null,
-    schemaA : Schema[A] = null
+    schemaE1: Schema[E1] = null,
+    schemaA: Schema[A] = null
   ) extends ZFlow[R, E2, B] {
     type ValueE = E1
     type ValueA = A

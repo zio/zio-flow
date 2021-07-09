@@ -141,7 +141,8 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
               loop <- bool.get
               _    <- ZFlow.RunActivity(12, mockActivity)
             } yield loop,
-          (b: Remote[Boolean]) => b)
+          (b: Remote[Boolean]) => b
+        )
 
         val evaluated: ZIO[Clock with Console, ActivityError, Boolean] = (for {
           b         <- boolVarZFlow

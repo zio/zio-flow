@@ -14,7 +14,7 @@ trait SchemaAndValue[+A] {
 
   def value: Subtype
 
-  def toRemote : Remote[A] = Remote.Literal(value, schema)
+  def toRemote: Remote[A] = Remote.Literal(value, schema)
 }
 
 object SchemaAndValue {
@@ -28,7 +28,6 @@ object SchemaAndValue {
 
       //TODO : Equals and Hashcode required
     }
-
 
   def unapply[A](schemaAndValue: SchemaAndValue[A]): Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
     Some((schemaAndValue.schema, schemaAndValue.value))
