@@ -13,6 +13,8 @@ trait SchemaAndValue[+A] {
   def schema: Schema[Subtype]
 
   def value: Subtype
+
+  def toRemote: Remote[A] = Remote.Literal(value, schema)
 }
 
 object SchemaAndValue {
@@ -342,6 +344,21 @@ object Remote {
         case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
           Right(
             SchemaAndValue(Schema[Boolean], (leftA != rightA) && (leftSchemaA.hashCode() < rightSchemaA.hashCode()))
+          )
+        case _                                                                                        => Left(self)
+      }
+    }
+  }
+
+  final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
+      val lEval = left.evalWithSchema
+      val rEval = right.evalWithSchema
+      (lEval, rEval) match {
+        //FIXME : fix when zio schema can compare Schemas
+        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+          Right(
+            SchemaAndValue(Schema[Boolean], (leftA == rightA))
           )
         case _                                                                                        => Left(self)
       }

@@ -108,7 +108,7 @@ object ZFlowExecutor {
       ref: Ref[State],
       input: I,
       flow: ZFlow[I, E, A]
-    ): ZIO[R, Nothing, CompileStatus]                               =
+    ): ZIO[R, Nothing, CompileStatus]                                               =
       flow match {
         case Return(value) => eval(value).to(promise) as CompileStatus.Done
 
@@ -132,7 +132,7 @@ object ZFlowExecutor {
             _          <- ref.update(_.addReadVar(vRef))
           } yield a).to(promise) as CompileStatus.Done
 
-        case fold @ Fold(_, _, _) =>
+        case fold @ Fold(_, _, _, _, _) =>
           //TODO : Clean up required, why not 2 forkDaemons - try and try to reason about this
           for {
             innerPromise <- Promise.make[fold.ValueE, fold.ValueA]
@@ -272,11 +272,12 @@ object ZFlowExecutor {
             innerPromise <- Promise.make[E, timeout.ValueA]
             duration     <- eval(duration)
 
-            status <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow).timeout(duration)
+            _ <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow)
             //TODO check other operations ensure done/to (promise) is called with await.
-            _      <- status
-                        .fold(p.succeed(None))(_ => innerPromise.await.run.flatMap(e => p.done(e.map(Some(_)))))
-                        .forkDaemon
+//            _      <- status
+//                        .fold(p.succeed(None))(_ => innerPromise.await.timeout(duration).run.flatMap(e => p.done(e.map(Some(_)))))
+//                        .forkDaemon
+            _ <- innerPromise.await.timeout(duration).run.flatMap(a => p.done(a))
           } yield CompileStatus.Done
 
         case provide @ Provide(_, _) =>
