@@ -1,16 +1,16 @@
 package zio.flow.utils
 
 import java.net.URI
-
 import zio.clock.Clock
 import zio.console.Console
 import zio.flow.ZFlowExecutor.InMemory
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
-import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
+import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
+import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test.assertM
-import zio.{ Has, Ref, ZIO, console }
+import zio.{Has, Ref, ZIO, console}
 
 object ZFlowAssertionSyntax {
 
@@ -53,10 +53,10 @@ object ZFlowAssertionSyntax {
 
   import Mocks._
   implicit final class InMemoryZFlowAssertion[R, E, A](private val zflow: ZFlow[Any, E, A]) {
-    def <=>(that: A) = {
-      val compileResult = evaluateTestInMem
-      assertM(compileResult)(equalTo(that))
-    }
+//    def <=>(that: A)(implicit schemaA : Schema[A], schemaE: Schema[E]) = {
+//      val compileResult = evaluateTestInMem
+//      assertM(compileResult)(equalTo(that))
+//    }
 
     def evaluateTestInMem(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Clock with Console, E, A] = {
       val compileResult = for {

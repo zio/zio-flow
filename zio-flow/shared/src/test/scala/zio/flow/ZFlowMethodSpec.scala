@@ -6,13 +6,17 @@ import zio.duration.durationInt
 import zio.flow.ActivityError
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockActivity
+import zio.schema.Schema
 import zio.test.Assertion.equalTo
-import zio.test.environment.{ TestClock, TestConsole }
-import zio.test.{ Spec, TestFailure, TestSuccess, _ }
-import zio.{ Has, ZIO }
+import zio.test.environment.{TestClock, TestConsole}
+import zio.test.{Spec, TestFailure, TestSuccess, _}
+import zio.{Has, ZIO}
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
+  implicit val nothingSchema : Schema[Nothing] = ???
+  implicit val activityErrorSchema : Schema[ActivityError] = ???
+  implicit val anySchema : Schema[Any] = ???
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
@@ -41,7 +45,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 5L)
           bool          <- remoteBoolVar.get
-        } yield bool).evaluateTestInMem
+        } yield bool).evaluateTestInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         val result = for {
           f <- evaluated.fork
@@ -56,7 +60,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 5L, 2L)
           bool          <- remoteBoolVar.get
-        } yield bool).evaluateTestInMem
+        } yield bool).evaluateTestInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         val result = for {
           f <- evaluated.fork
@@ -75,7 +79,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 1L, 100L)
           bool          <- remoteBoolVar.get
-        } yield bool).evaluateLiveInMem
+        } yield bool).evaluateLiveInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         assertM(evaluated)(equalTo(false))
       },
@@ -85,7 +89,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
           //TODO : This waits for timeoutDuration time
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 1L)
           bool          <- remoteBoolVar.get
-        } yield bool).evaluateLiveInMem
+        } yield bool).evaluateLiveInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         assertM(evaluated)(equalTo(true))
       }

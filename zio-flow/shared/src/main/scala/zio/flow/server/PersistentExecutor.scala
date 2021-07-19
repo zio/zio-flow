@@ -1,15 +1,13 @@
 package zio.flow.server
 
+import java.io.IOException
+import java.time.Duration
+
 import zio._
 import zio.clock._
 import zio.console.putStrLn
-import zio.flow.ZFlowExecutor.InMemory.CompileStatus
 import zio.flow._
 import zio.schema._
-
-import java.io.IOException
-import java.time.Duration
-import scala.::
 
 final case class PersistentExecutor(
                                      clock: Clock.Service,
@@ -58,7 +56,7 @@ final case class PersistentExecutor(
       // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
     } yield true).catchAll(_ => UIO(false))
 
-  def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
+  def submit[E : Schema, A : Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
     def step(ref: Ref[State[E, A]]): IO[IOException, Unit] =
       ref.get.flatMap { state =>
         state.current match {
