@@ -13,6 +13,8 @@ trait SchemaAndValue[+A] {
   def schema: Schema[Subtype]
 
   def value: Subtype
+
+  def toRemote: Remote[A] = Remote.Literal(value, schema)
 }
 
 object SchemaAndValue {

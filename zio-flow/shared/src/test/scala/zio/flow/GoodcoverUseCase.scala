@@ -12,9 +12,9 @@ import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, as
 object GoodcoverUseCase extends DefaultRunnableSpec {
 
   case class Policy(id: String)
-
-  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
-  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+  implicit val policySchema: Schema[Policy]                = DeriveSchema.gen[Policy]
+  implicit val emailRequestSchema: Schema[EmailRequest]    = DeriveSchema.gen[EmailRequest]
+  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
 
   val emailRequest: Remote[EmailRequest] = Remote(
     EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
