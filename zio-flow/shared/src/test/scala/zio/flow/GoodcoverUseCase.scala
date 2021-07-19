@@ -13,12 +13,12 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
 
   case class Policy(id: String)
 
+  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
+  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+
   val emailRequest: Remote[EmailRequest] = Remote(
     EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
   )
-
-  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
-  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
 
   val policyClaimStatus: Activity[Policy, Boolean] = Activity[Policy, Boolean](
     "get-policy-claim-status",
@@ -78,7 +78,6 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
     } yield ()
 
   def manualEvalReminderFlow(
-    policy: Remote[Policy],
     manualEvalDone: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     ZFlow(true),
@@ -95,7 +94,6 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   )
 
   def policyPaymentReminderFlow(
-    policy: Remote[Policy],
     renewPolicy: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     ZFlow(true),
@@ -137,9 +135,9 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
         claimStatus       <- policyClaimStatus(policy)
         fireRisk          <- getFireRisk(policy)
         isManualEvalReq   <- isManualEvalRequired(policy, fireRisk)
-        _                 <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(policy, manualEvalDone))
+        _                 <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(manualEvalDone))
         policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
-        _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(policy, paymentSuccessful))
+        _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
       } yield ()).evaluateInMemForGCExample
 
       assertM(result)(equalTo(()))
