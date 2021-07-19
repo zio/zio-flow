@@ -1,22 +1,24 @@
 package zio.flow
 
+import java.net.URI
+
 import zio.flow
 import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-
-import java.net.URI
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema.{ DeriveSchema, Schema }
 import zio.test.Assertion.equalTo
-import zio.test.{DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM}
+import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
 
 object GoodcoverUseCase extends DefaultRunnableSpec {
 
   case class Policy(id: String)
 
-  val emailRequest = Remote(EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, ""))
-
-  implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
+  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
   implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+
+  val emailRequest: Remote[EmailRequest] = Remote(
+    EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
+  )
 
   val policyClaimStatus: Activity[Policy, Boolean] = Activity[Policy, Boolean](
     "get-policy-claim-status",
@@ -71,37 +73,42 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   def waitAndSetEvalDoneToTrue(evaluationDone: RemoteVariable[Boolean]): ZFlow[Any, Nothing, Unit] =
     for {
       boolVar <- evaluationDone
-      _ <- ZFlow.sleep(Remote.ofSeconds(3L))
-      _ <- boolVar.set(true)
+      _       <- ZFlow.sleep(Remote.ofSeconds(3L))
+      _       <- boolVar.set(true)
     } yield ()
 
-  def manualEvalReminderFlow(policy: Remote[Policy],
-                             manualEvalDone: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
+  def manualEvalReminderFlow(
+    manualEvalDone: RemoteVariable[Boolean]
+  ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     ZFlow(true),
     (_: Remote[Boolean]) =>
       for {
         bool <- manualEvalDone
-        _ <- setBoolVarAfterSleep(bool, 5, true).fork
-        _ <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+        _    <- setBoolVarAfterSleep(bool, 5, true).fork
+        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
         loop <- bool.get
-        _ <- ZFlow.log("Send reminder email to evaluator")
-        _ <- reminderEmailForManualEvaluation(emailRequest)
+        _    <- ZFlow.log("Send reminder email to evaluator")
+        _    <- reminderEmailForManualEvaluation(emailRequest)
       } yield !loop,
-    (b: Remote[Boolean]) => b)
+    (b: Remote[Boolean]) => b
+  )
 
-  def policyPaymentReminderFlow(policy : Remote[Policy], renewPolicy: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
+  def policyPaymentReminderFlow(
+    renewPolicy: RemoteVariable[Boolean]
+  ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     ZFlow(true),
     (_: Remote[Boolean]) =>
       for {
-        _ <- ZFlow.log("Inside policy renewal reminder flow.")
+        _    <- ZFlow.log("Inside policy renewal reminder flow.")
         bool <- renewPolicy
-        _ <- setBoolVarAfterSleep(bool, 5, true).fork
-        _ <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+        _    <- setBoolVarAfterSleep(bool, 5, true).fork
+        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
         loop <- bool.get
-        _ <- ZFlow.log("Send reminder email to customer for payment")
-        _ <- reminderEmailForManualEvaluation(emailRequest)
+        _    <- ZFlow.log("Send reminder email to customer for payment")
+        _    <- reminderEmailForManualEvaluation(emailRequest)
       } yield !loop,
-    (b: Remote[Boolean]) => b)
+    (b: Remote[Boolean]) => b
+  )
 
   def createRenewedPolicy: Activity[(Boolean, Double), Option[Policy]] =
     Activity[(Boolean, Double), Option[Policy]](
@@ -123,14 +130,14 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   val suite1: Spec[Any, TestFailure[ActivityError], TestSuccess] =
     suite("PolicyClaimStatus")(testM("PolicyClaimStatus") {
       val result = (for {
-        manualEvalDone <- ZFlow.newVar("manualEvalDone", false)
+        manualEvalDone    <- ZFlow.newVar("manualEvalDone", false)
         paymentSuccessful <- ZFlow.newVar("paymentSuccessful", false)
-        claimStatus <- policyClaimStatus(policy)
-        fireRisk <- getFireRisk(policy)
-        isManualEvalReq <- isManualEvalRequired(policy, fireRisk)
-        _ <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(policy, manualEvalDone))
-        policyOption    <- createRenewedPolicy(claimStatus, fireRisk)
-        _               <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(policy, paymentSuccessful))
+        claimStatus       <- policyClaimStatus(policy)
+        fireRisk          <- getFireRisk(policy)
+        isManualEvalReq   <- isManualEvalRequired(policy, fireRisk)
+        _                 <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(manualEvalDone))
+        policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
+        _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
       } yield ()).evaluateInMemForGCExample
 
       assertM(result)(equalTo(()))

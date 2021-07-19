@@ -1,11 +1,11 @@
 package zio.flow.server
 
-import zio._ 
-import zio.clock._ 
-import zio.schema._ 
-import zio.flow._
-
 import java.io.IOException
+
+import zio._
+import zio.clock._
+import zio.flow._
+import zio.schema._
 
 final case class PersistentExecutor(
     clock: Clock.Service,

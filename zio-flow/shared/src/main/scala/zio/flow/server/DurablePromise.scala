@@ -1,9 +1,9 @@
 package zio.flow.server 
 
-import zio._ 
-import zio.schema._ 
+import java.io.IOException
 
-import java.io.IOException 
+import zio._
+import zio.schema._ 
 
 final case class DurablePromise[E, A](promiseId: String, durableLog: DurableLog) {
   def succeed(value: A)(implicit schemaA: Schema[A]): IO[IOException, Boolean] = ???

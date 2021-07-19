@@ -1,6 +1,6 @@
 package zio.flow.server
 
-import java.io.IOException 
+import java.io.IOException
 
 import zio._ 
 
