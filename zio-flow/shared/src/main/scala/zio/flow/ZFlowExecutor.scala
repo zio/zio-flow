@@ -108,7 +108,7 @@ object ZFlowExecutor {
       ref: Ref[State],
       input: I,
       flow: ZFlow[I, E, A]
-    ): ZIO[R, Nothing, CompileStatus]                               =
+    ): ZIO[R, Nothing, CompileStatus]                                               =
       flow match {
         case Return(value) => eval(value).to(promise) as CompileStatus.Done
 
