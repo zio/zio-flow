@@ -205,10 +205,10 @@ final case class PersistentExecutor(
             }
 
           case Unwrap(remote) =>
-            for {
+            (for {
               evaluatedFlow <- eval(remote)
               _             <- ref.update(_.copy(current = evaluatedFlow.value))
-            } yield step(ref)
+            } yield ()) *> step(ref)
 
           case foreach @ Foreach(_, _) => ???
 

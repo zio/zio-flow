@@ -9,8 +9,6 @@ import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
 import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
-import zio.test.Assertion.equalTo
-import zio.test.assertM
 import zio.{ Has, Ref, ZIO, console }
 
 object ZFlowAssertionSyntax {
