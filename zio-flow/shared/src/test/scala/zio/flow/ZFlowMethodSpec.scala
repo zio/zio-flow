@@ -8,20 +8,20 @@ import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockActivity
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
-import zio.test.environment.{TestClock, TestConsole}
-import zio.test.{Spec, TestFailure, TestSuccess, _}
-import zio.{Has, ZIO}
+import zio.test.environment.{ TestClock, TestConsole }
+import zio.test.{ Spec, TestFailure, TestSuccess, _ }
+import zio.{ Has, ZIO }
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
-  implicit val nothingSchema : Schema[Nothing] = ???
-  implicit val activityErrorSchema : Schema[ActivityError] = ???
-  implicit val anySchema : Schema[Any] = ???
+  implicit val nothingSchema: Schema[Nothing]             = Schema.fail("Nothing schema")
+  implicit val activityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
+  implicit val anySchema: Schema[Any]                     = Schema.fail("Schema for Any")
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit] = for {
+  ): ZFlow[Any, Nothing, Unit]                            = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()

@@ -1,10 +1,10 @@
 package zio.flow
 
+import java.net.URI
+
 import zio.flow
 import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-
-import java.net.URI
 import zio.schema.{ DeriveSchema, Schema }
 import zio.test.Assertion.equalTo
 import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
@@ -13,10 +13,13 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
 
   case class Policy(id: String)
 
-  val emailRequest = Remote(EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, ""))
+  val emailRequest: Remote[EmailRequest] = Remote(
+    EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
+  )
 
-  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
-  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+  implicit val policySchema: Schema[Policy]                = DeriveSchema.gen[Policy]
+  implicit val emailRequestSchema: Schema[EmailRequest]    = DeriveSchema.gen[EmailRequest]
+  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
 
   val policyClaimStatus: Activity[Policy, Boolean] = Activity[Policy, Boolean](
     "get-policy-claim-status",

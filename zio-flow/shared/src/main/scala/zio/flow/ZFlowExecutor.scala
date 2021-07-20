@@ -266,7 +266,7 @@ object ZFlowExecutor {
                               .succeed(fiber.asInstanceOf[ExecutingFlow[fork.ValueE, fork.ValueA]])
           } yield CompileStatus.Done
 
-        case timeout @Timeout(flow, duration) =>
+        case timeout @ Timeout(flow, duration) =>
           val p = promise.asInstanceOf[Promise[E, Option[timeout.ValueA]]]
           for {
             innerPromise <- Promise.make[E, timeout.ValueA]
