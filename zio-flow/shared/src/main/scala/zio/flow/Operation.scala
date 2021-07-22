@@ -11,6 +11,7 @@ object Operation {
     inputSchema: Schema[R],
     outputSchema: Schema[A]
   ) extends Operation[R, A]
+
   final case class SendEmail(
     server: String,
     port: Int

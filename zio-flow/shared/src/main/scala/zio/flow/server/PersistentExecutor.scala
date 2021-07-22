@@ -87,7 +87,7 @@ final case class PersistentExecutor(
               }
             }
 
-          case Input(_) =>
+          case Input() =>
             ref.get.flatMap { state =>
               val env = state.currentEnvironment.value
               state.stack match {
@@ -199,7 +199,7 @@ final case class PersistentExecutor(
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
               val env  = state.currentEnvironment.schema
-              val cont = Continuation(finalizer, ZFlow.input(env))
+              val cont = Continuation(finalizer, ZFlow.input)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
             }

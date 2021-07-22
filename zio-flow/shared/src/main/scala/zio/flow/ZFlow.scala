@@ -131,7 +131,7 @@ object ZFlow {
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
   //TODO : Zflow.input does not need schema, apply function and fold also will not require schema
-  final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R]
+  final case class Input[R]() extends ZFlow[R, Nothing, R]
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
 
@@ -203,7 +203,7 @@ object ZFlow {
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
-  def input[R: Schema]: ZFlow[R, Nothing, R] = Input(implicitly[Schema[R]])
+  def input[R]: ZFlow[R, Nothing, R] = Input[R]
 
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Variable[A]] = NewVar(name, initial)
 

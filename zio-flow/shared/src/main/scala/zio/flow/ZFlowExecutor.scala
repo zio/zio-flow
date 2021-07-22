@@ -187,7 +187,7 @@ object ZFlowExecutor {
             status <- compile(promise, ref, input, flow.provide(lit(input)))
           } yield status
 
-        case Input(_) => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
+        case Input() => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
 
         case Ensuring(flow, finalizer) =>
           for {
