@@ -4,7 +4,7 @@ import zio.ZIO
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
- * 
+ *
  * TODO: Delete R from operation executor
  */
 trait OperationExecutor[-R] {

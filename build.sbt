@@ -67,6 +67,7 @@ lazy val docs = project
     moduleName := "zio-flow-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
+    scalacOptions += "-Xlog-implicits",
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % zioVersion
     ),
