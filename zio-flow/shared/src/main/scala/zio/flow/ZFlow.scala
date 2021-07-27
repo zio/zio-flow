@@ -56,7 +56,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]
   ): ZFlow[R1, E1, A1] =
-    ZFlow.Iterate(self, step, predicate)
+    self.flatMap(remoteA => ZFlow.Iterate(remoteA, step, predicate))
 
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
@@ -115,9 +115,7 @@ object ZFlow {
   final case class Fold[R, E1, E2, A, B](
     value: ZFlow[R, E1, A],
     ifError: Remote[E1] => ZFlow[R, E2, B],
-    ifSuccess: Remote[A] => ZFlow[R, E2, B],
-    schemaE1: Schema[E1] = null,
-    schemaA: Schema[A] = null
+    ifSuccess: Remote[A] => ZFlow[R, E2, B]
   ) extends ZFlow[R, E2, B] {
     type ValueE = E1
     type ValueA = A
@@ -130,7 +128,6 @@ object ZFlow {
 
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
-  //TODO : Zflow.input does not need schema, apply function and fold also will not require schema
   final case class Input[R]() extends ZFlow[R, Nothing, R]
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
@@ -173,7 +170,7 @@ object ZFlow {
   final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]]
 
   case class Iterate[R, E, A](
-    self: ZFlow[R, E, A],
+    self: Remote[A],
     step: Remote[A] => ZFlow[R, E, A],
     predicate: Remote[A] => Remote[Boolean]
   ) extends ZFlow[R, E, A]
@@ -203,7 +200,7 @@ object ZFlow {
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
-  def input[R]: ZFlow[R, Nothing, R] = Input[R]
+  def input[R]: ZFlow[R, Nothing, R] = Input[R]()
 
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Variable[A]] = NewVar(name, initial)
 

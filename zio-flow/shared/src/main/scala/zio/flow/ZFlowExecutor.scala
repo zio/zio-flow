@@ -132,7 +132,7 @@ object ZFlowExecutor {
             _          <- ref.update(_.addReadVar(vRef))
           } yield a).to(promise) as CompileStatus.Done
 
-        case fold @ Fold(_, _, _, _, _) =>
+        case fold @ Fold(_, _, _) =>
           //TODO : Clean up required, why not 2 forkDaemons - try and try to reason about this
           for {
             innerPromise <- Promise.make[fold.ValueE, fold.ValueA]
@@ -341,12 +341,9 @@ object ZFlowExecutor {
         case iterate0 @ Iterate(_, _, _) =>
           val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
 
-          val Iterate(self, step, predicate) = iterate
+          val Iterate(initial, step, predicate) = iterate
 
-          def loop(a: A): ZIO[R, Nothing, CompileStatus] = {
-
-            val remoteA: Remote[A] = lit(a)
-
+          def loop(remoteA: Remote[A]): ZIO[R, Nothing, CompileStatus] =
             Promise
               .make[E, A]
               .flatMap(p1 =>
@@ -356,32 +353,32 @@ object ZFlowExecutor {
                       status <- compile(p1, ref, input, step(remoteA))
                       status <-
                         if (status == CompileStatus.Done)
-                          p1.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
+                          p1.await.run
+                            .flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, a => loop(lit(a))))
                         else
                           p1.await.run
-                            .flatMap(e => e.fold(cause => promise.halt(cause), loop))
+                            .flatMap(e => e.fold(cause => promise.halt(cause), a => loop(lit(a))))
                             .forkDaemon as CompileStatus.Suspended
                     } yield status
                   else
-                    promise.succeed(a) as CompileStatus.Done
+                    eval(remoteA).flatMap(a => promise.succeed(a) as CompileStatus.Done)
                 }
               )
-          }
-
-          Promise
-            .make[E, A]
-            .flatMap(p =>
-              for {
-                status <- compile(p, ref, input, self)
-                status <-
-                  if (status == CompileStatus.Done)
-                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
-                  else
-                    p.await.run
-                      .flatMap(e => e.fold(cause => promise.halt(cause), loop))
-                      .forkDaemon as CompileStatus.Suspended
-              } yield status
-            )
+          //          Promise
+//            .make[E, A]
+//            .flatMap(p =>
+//              for {
+//                status <- compile(p, ref, input, initial)
+//                status <-
+//                  if (status == CompileStatus.Done)
+//                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
+//                  else
+//                    p.await.run
+//                      .flatMap(e => e.fold(cause => promise.halt(cause), loop))
+//                      .forkDaemon as CompileStatus.Suspended
+//              } yield status
+//            )
+          loop(initial)
       }
   }
 

@@ -7,7 +7,7 @@ import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{ DeriveSchema, Schema }
 import zio.test.Assertion.equalTo
-import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
+import zio.test._
 
 object GoodcoverUseCase extends DefaultRunnableSpec {
 
@@ -81,7 +81,7 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   def manualEvalReminderFlow(
     manualEvalDone: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
-    ZFlow(true),
+    Remote(true),
     (_: Remote[Boolean]) =>
       for {
         bool <- manualEvalDone
@@ -97,7 +97,7 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   def policyPaymentReminderFlow(
     renewPolicy: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
-    ZFlow(true),
+    Remote(true),
     (_: Remote[Boolean]) =>
       for {
         _    <- ZFlow.log("Inside policy renewal reminder flow.")
@@ -140,7 +140,6 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
         policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
         _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
       } yield ()).evaluateInMemForGCExample
-
       assertM(result)(equalTo(()))
     })
 

@@ -3,6 +3,7 @@ package zio.flow
 import java.net.URI
 import java.time.Instant
 
+import zio.flow.Remote.apply
 import zio.flow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockInMemoryTestClock
@@ -158,14 +159,12 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
       }
     },
     testM("Test Iterate") {
-      val compileResult = ZFlow
-        .Iterate[Any, ActivityError, Int](
-          ZFlow.RunActivity[Any, Int](12, testActivity),
-          (r: Remote[Int]) => ZFlow.succeed(r + 1),
-          (r: Remote[Int]) => r === Remote(15)
-        )
-        .evaluateTestInMem(implicitly[Schema[Int]], implicitly[Schema[ActivityError]])
-      assertM(compileResult)(equalTo(12))
+      val compileResult: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(
+        Remote(12),
+        (r: Remote[Int]) => ZFlow.succeed(r + 1),
+        (r: Remote[Int]) => r === Remote(15)
+      )
+      assertM(compileResult.evaluateTestInMem(implicitly[Schema[Int]], implicitly[Schema[ActivityError]]))(equalTo(12))
     }
   )
 
