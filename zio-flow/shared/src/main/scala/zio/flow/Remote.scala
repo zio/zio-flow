@@ -38,11 +38,7 @@ object SchemaAndValue {
  * remote machine. Remote values can always be serialized, because they are
  * mere blueprints, and they do not contain any Scala code.
  */
-sealed trait Remote[+A]
-    extends RemoteRelational[A]
-    with RemoteNumeric[A]
-    with RemoteFractional[A]
-    with RemoteExecutingFlow[A] {
+sealed trait Remote[+A] {
 
   def eval: Either[Remote[A], A] = evalWithSchema.map(_.value)
 
