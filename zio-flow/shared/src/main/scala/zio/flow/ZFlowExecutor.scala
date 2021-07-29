@@ -23,7 +23,7 @@ object ZFlowExecutor {
     Current            = The current ZFlow
     Continuation Stack = What to do AFTER producing the current ZFlow value
   TransactionalState:
-    NonTransactionl |
+    NonTransactional |
     Transactional(parent: TransactionalState, undoLogStack: Stack[ZFlow], localReadVariables: Set[String])
 
   On every transaction, capture new transaction details:
@@ -364,20 +364,6 @@ object ZFlowExecutor {
                     eval(remoteA).flatMap(a => promise.succeed(a) as CompileStatus.Done)
                 }
               )
-          //          Promise
-//            .make[E, A]
-//            .flatMap(p =>
-//              for {
-//                status <- compile(p, ref, input, initial)
-//                status <-
-//                  if (status == CompileStatus.Done)
-//                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
-//                  else
-//                    p.await.run
-//                      .flatMap(e => e.fold(cause => promise.halt(cause), loop))
-//                      .forkDaemon as CompileStatus.Suspended
-//              } yield status
-//            )
           loop(initial)
       }
   }
@@ -401,8 +387,9 @@ object ZFlowExecutor {
 
     final case class State(
       tstate: TState,
-      variables: Map[String, Ref[_]],
-      retry: UIO[Any] = ZIO.unit
+      variables: Map[String, Ref[_]], // TODO : variable should be case class (TRef, TReEntrantLock), instead of Ref
+      retry: UIO[Any] = ZIO.unit // TODO : Delete this, use zio STM's retry mechanism
+                          //TODO : Add a variable lock of type TReentrantLock
     ) {
       self =>
 

@@ -32,7 +32,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     sleepDuration: Long
   ): ZFlow[Any, Nothing, Boolean] = for {
     _    <- setBoolVarAfterSleep(remoteBoolVar, sleepDuration, true).fork
-    _    <- remoteBoolVar.waitUntil(_ === true).timeout(Remote.ofSeconds(timeoutDuration))
+    _    <- remoteBoolVar.waitUntil(_ === true).timeout(Remote.ofSeconds(timeoutDuration)) //TODO : capture return value
     bool <- remoteBoolVar.get
   } yield bool
 
