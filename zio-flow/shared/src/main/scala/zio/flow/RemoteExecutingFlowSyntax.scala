@@ -1,7 +1,6 @@
 package zio.flow
 
-trait RemoteExecutingFlow[+A] {
-  def self: Remote[A]
+class RemoteExecutingFlowSyntax[A](self: Remote[A]) {
 
   def flowId[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): Remote[FlowId] = ???
 
