@@ -558,6 +558,11 @@ object Remote {
       )
   }
 
+  final case class ZipWith[A, B, C: Schema](a: Remote[A], b: Remote[B])(f: (A, B) => C) extends Remote[C] {
+    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] =
+      binaryEvalWithSchema(a, b)(f, ZipWith(_, _)(f), Schema[C])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
