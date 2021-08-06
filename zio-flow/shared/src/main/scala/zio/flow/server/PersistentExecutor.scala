@@ -2,11 +2,13 @@ package zio.flow.server
 
 import java.io.IOException
 import java.time.Duration
-
 import zio._
 import zio.clock._
 import zio.console.putStrLn
+import zio.flow.ZFlowExecutor.InMemory.CompileStatus.Suspended
+import zio.flow.ZFlowExecutor.InMemory.{CompileStatus, FlowPromise}
 import zio.flow._
+import zio.schema.DeriveSchema.gen
 import zio.schema._
 
 final case class PersistentExecutor(
@@ -138,6 +140,8 @@ final case class PersistentExecutor(
                     (a, value2) = tuple
                     _ <- vRef.set(value2)
                     _ <- ref.update(_.addReadVar(vRef))
+                    // TODO : Solve using continuation
+                    _ <- ZIO.foreach(state.retry)(fp => submit("", fp.flow)).catchAll(_ => ZIO.dieMessage("Dummy string"))
                     _ <- state.result.succeed(a)
                   } yield ()
 
@@ -252,9 +256,30 @@ final case class PersistentExecutor(
 
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
-          case RetryUntil => ???
+          case RetryUntil => ref.get.flatMap { state =>
+            for {
+              state <- ref.get
+              _     <- state.getTransactionFlow match {
+                case Some(flow) =>
+                  ref.update(_.addRetry(FlowDurablePromise(flow, state.result)).setSuspended)
 
-          case OrTry(left, right) => ???
+                case None                             => ZIO.dieMessage("There is no transaction to retry.")
+              }
+            } yield ()
+          }
+
+          case OrTry(left, right) =>
+
+            ref.set(state.copy(current = left))*> step(ref) *>
+            ref.get.flatMap { state =>
+            for {
+              _     <- {
+                val cont = new Continuation(ZFlow.unit, right)
+                ref.set(state.copy(stack = cont :: state.stack)) *>
+                  step(ref)
+              }.when(state.compileStatus == PersistentCompileStatus.Suspended)
+            } yield ()
+          }
 
           case Await(execFlow) =>
             val joined = for {
@@ -408,6 +433,7 @@ final case class PersistentExecutor(
       _ <- step(ref)
       result <- promise.awaitEither
     } yield result).orDie.absolve
+
   }
 }
 
@@ -447,9 +473,8 @@ object PersistentExecutor {
                                 result: DurablePromise[E, A],
                                 envStack: List[SchemaAndValue[_]],
                                 tempVarCounter: Int,
-                                retry: Option[
-                                  ZFlow[_, _, _]
-                                ]
+                                retry: List[FlowDurablePromise[_,_]],
+                                compileStatus : PersistentCompileStatus
                               ) {
 
     def currentEnvironment: SchemaAndValue[_] = envStack.headOption.getOrElse(SchemaAndValue[Unit](Schema[Unit], ()))
@@ -470,6 +495,10 @@ object PersistentExecutor {
       case TState.Empty => None
       case TState.Transaction(flow, _, _) => Some(flow)
     }
+
+    def addRetry(flowDurablePromise: FlowDurablePromise[_,_]) : State[E,A] = copy(retry = flowDurablePromise :: retry )
+
+    def setSuspended : State[E,A] = copy(compileStatus = PersistentCompileStatus.Suspended)
 
     def getVariable(name: String): Option[SchemaAndValue[_]] = variables.get(name)
 
@@ -516,4 +545,13 @@ object PersistentExecutor {
 
   }
 
+  final case class FlowDurablePromise[E,A](flow : ZFlow[Any, E, A], promise : DurablePromise[E,A])
+
+  sealed trait PersistentCompileStatus
+
+  object PersistentCompileStatus {
+    case object Running extends PersistentCompileStatus
+    case object Done extends  PersistentCompileStatus
+    case object Suspended extends PersistentCompileStatus
+  }
 }
