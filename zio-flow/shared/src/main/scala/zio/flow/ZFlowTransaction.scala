@@ -11,6 +11,8 @@ object ZFlowTransaction {
   private[flow] val instance: ZFlowTransaction =
     new ZFlowTransaction {
       def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Any] =
-        ZFlow.ifThenElse(predicate)(ZFlow.unit, ZFlow.RetryUntil)
+        for {
+          _ <- ZFlow.ifThenElse(predicate)(ZFlow.unit, ZFlow.RetryUntil)
+        } yield ()
     }
 }

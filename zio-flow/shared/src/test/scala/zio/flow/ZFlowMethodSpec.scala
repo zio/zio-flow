@@ -17,11 +17,12 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
   implicit val nothingSchema: Schema[Nothing]             = Schema.fail("Nothing schema")
   implicit val activityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
   implicit val anySchema: Schema[Any]                     = Schema.fail("Schema for Any")
+
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit]                            = for {
+  ): ZFlow[Any, Nothing, Unit] = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()
@@ -188,6 +189,24 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
       assertM(result)(equalTo(()))
     })
 
+  val suite6: Spec[Clock with Console, TestFailure[Nothing], TestSuccess] =
+    suite("Repro unlimited wait on waitUntil")(testM("repro of unlimited wait on waitUntil") {
+      def zflow2(remoteBoolVar: RemoteVariable[Boolean]) =
+        for {
+          _ <- ZFlow.sleep(Remote.ofSeconds(5L))
+          _ <- remoteBoolVar.set(true)
+        } yield ()
+
+      val zflow1: ZFlow[Any, Nothing, Boolean] = for {
+        remoteBoolVar <- ZFlow.newVar("boolVar", false)
+        _             <- zflow2(remoteBoolVar).fork
+        _             <- remoteBoolVar.waitUntil(_ === true)
+        remoteBool    <- remoteBoolVar.get
+      } yield remoteBool
+
+      assertM(zflow1.evaluateLiveInMem(implicitly[Schema[Boolean]], nothingSchema))(equalTo(true))
+    })
+
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
-    suite("Testing interactions between ZFlows")(suite1, suite2, suite3, suite4, suite5)
+    suite("Testing interactions between ZFlows")(suite1, suite2, suite3, suite4, suite5, suite6)
 }

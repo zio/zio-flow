@@ -90,7 +90,7 @@ object ZFlowExecutor {
         state    <- stateRef.get
         vRef     <- ZIO.fromOption(state.getVariable(variableName))
         _        <- vRef.set(value.asInstanceOf)
-        _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
+        //_ <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
       } yield true).catchAll(_ => UIO(false))
 
     def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
@@ -103,12 +103,15 @@ object ZFlowExecutor {
         _       <- acquire.bracket_(release)(compile(promise, ref, (), flow)).provide(env)
         result  <- promise.await
       } yield result
+
     def compile[I, E, A](
       promise: Promise[E, A],
       ref: Ref[State],
       input: I,
       flow: ZFlow[I, E, A]
-    ): ZIO[R, Nothing, CompileStatus]                                               =
+    ): ZIO[R, Nothing, CompileStatus] = {
+      //      for {
+      //        _      <- putStrLn("Inside compile ...").provide(Has(zio.console.Console.Service.live))
       flow match {
         case Return(value) => eval(value).to(promise) as CompileStatus.Done
 
@@ -130,6 +133,11 @@ object ZFlowExecutor {
             (a, value2) = tuple
             _          <- vRef.set(value2)
             _          <- ref.update(_.addReadVar(vRef))
+            state      <- ref.get
+            _          <-
+              ZIO
+                .foreachPar_(state.retry)(fp => compile(fp.promise.asInstanceOf[Promise[Any, Any]], ref, (), fp.flow))
+                .unless(value2 == value)
           } yield a).to(promise) as CompileStatus.Done
 
         case fold @ Fold(_, _, _) =>
@@ -167,7 +175,8 @@ object ZFlowExecutor {
                                     Promise
                                       .make[E, A]
                                       .flatMap(p2 =>
-                                        compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
+                                        compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await
+                                          .to(promise)
                                       )
                                 )
                                 .forkDaemon *>
@@ -226,9 +235,10 @@ object ZFlowExecutor {
                                                         p              <- Promise.make[E, forEach.Element]
                                                         status         <- compile(p, ref, input, body(lit(element)))
                                                         elementPromise <- Promise.make[Nothing, Unit]
-                                                        _              <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise.succeed(
-                                                                            ()
-                                                                          )).forkDaemon
+                                                        _              <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise
+                                                                            .succeed(
+                                                                              ()
+                                                                            )).forkDaemon
                                                       } yield (status, elementPromise)
                                                     else {
                                                       Promise
@@ -238,7 +248,8 @@ object ZFlowExecutor {
                                                             (for {
                                                               p <- Promise.make[E, forEach.Element]
                                                               _ <- compile(p, ref, input, body(lit(element)))
-                                                              _ <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise
+                                                              _ <- (p.await.run
+                                                                     .flatMap(exit => listRef.update(exit :: _)) *> elementPromise
                                                                      .succeed(())).forkDaemon
                                                             } yield ())).forkDaemon as ((CompileStatus.Suspended, elementPromise))
                                                         )
@@ -274,9 +285,9 @@ object ZFlowExecutor {
 
             _ <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow)
             //TODO check other operations ensure done/to (promise) is called with await.
-//            _      <- status
-//                        .fold(p.succeed(None))(_ => innerPromise.await.timeout(duration).run.flatMap(e => p.done(e.map(Some(_)))))
-//                        .forkDaemon
+            //            _      <- status
+            //                        .fold(p.succeed(None))(_ => innerPromise.await.timeout(duration).run.flatMap(e => p.done(e.map(Some(_)))))
+            //                        .forkDaemon
             _ <- innerPromise.await.timeout(duration).run.flatMap(a => p.done(a))
           } yield CompileStatus.Done
 
@@ -286,7 +297,8 @@ object ZFlowExecutor {
             status       <- eval(provide.value).flatMap(valueA =>
                               compile(innerPromise, ref, valueA, provide.flow)
                             ) //TODO : Input is provided in compile
-            flowStatus   <- if (status == CompileStatus.Done) innerPromise.await.to(promise) as CompileStatus.Done
+            flowStatus   <- if (status == CompileStatus.Done)
+                              innerPromise.await.to(promise) as CompileStatus.Done
                             else innerPromise.await.to(promise).forkDaemon as CompileStatus.Suspended
           } yield flowStatus
 
@@ -296,9 +308,10 @@ object ZFlowExecutor {
           for {
             state <- ref.get
             _     <- state.getTransactionFlow match {
-                       case Some(FlowPromise(flow, promise)) =>
-                         ref.update(_.addRetry(compile(promise, ref, (), flow).provide(env)))
-                       case None                             => ZIO.dieMessage("There is no transaction to retry.")
+                       case Some(flowPromise) =>
+                         //TODO : Nothing is being rolledback to the boundary of transaction. Will not affect how `waitUntil` works
+                         ref.update(_.addRetry(flowPromise))
+                       case None              => ZIO.dieMessage("There is no transaction to retry.")
                      }
           } yield CompileStatus.Suspended
 
@@ -356,7 +369,8 @@ object ZFlowExecutor {
                       status <- compile(p1, ref, input, step(remoteA))
                       status <-
                         if (status == CompileStatus.Done)
-                          p1.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
+                          p1.await.run
+                            .flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
                         else
                           p1.await.run
                             .flatMap(e => e.fold(cause => promise.halt(cause), loop))
@@ -375,7 +389,8 @@ object ZFlowExecutor {
                 status <- compile(p, ref, input, self)
                 status <-
                   if (status == CompileStatus.Done)
-                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
+                    p.await.run
+                      .flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
                   else
                     p.await.run
                       .flatMap(e => e.fold(cause => promise.halt(cause), loop))
@@ -383,6 +398,8 @@ object ZFlowExecutor {
               } yield status
             )
       }
+      //} yield result
+    }
   }
 
   object InMemory {
@@ -405,7 +422,7 @@ object ZFlowExecutor {
     final case class State(
       tstate: TState,
       variables: Map[String, Ref[_]],
-      retry: UIO[Any] = ZIO.unit
+      retry: List[FlowPromise[_, _]] = List.empty
     ) {
       self =>
 
@@ -415,7 +432,7 @@ object ZFlowExecutor {
       def addReadVar(ref: Ref[_]): State =
         copy(tstate = tstate.addReadVar(lookupName(ref)))
 
-      def addRetry(retry: UIO[Any]): State = copy(retry = self.retry *> retry)
+      def addRetry(retry: FlowPromise[_, _]): State = copy(retry = retry :: self.retry)
 
       def addVariable(name: String, ref: Ref[_]): State = copy(variables = variables + (name -> ref))
 
