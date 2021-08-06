@@ -28,6 +28,7 @@ final case class PersistentExecutor(
     r.evalWithSchema.getOrElse(throw new IllegalStateException("Eval could not be reduced to Right of Either."))
   )
 
+
   def lit[A](a: A): Remote[A] =
     Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
 

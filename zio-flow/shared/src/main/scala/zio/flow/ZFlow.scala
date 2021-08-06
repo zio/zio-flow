@@ -157,7 +157,7 @@ object ZFlow {
 
   case object Die extends ZFlow[Any, Nothing, Nothing]
 
-  case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
+  case object RetryUntil extends ZFlow[Any, Nothing, Nothing] // TODO : Change to ZFlow[Any, Nothing, Any]
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
