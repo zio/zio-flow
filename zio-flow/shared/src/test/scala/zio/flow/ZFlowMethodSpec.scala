@@ -190,7 +190,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     })
 
   val suite6: Spec[Clock with Console, TestFailure[Nothing], TestSuccess] =
-    suite("Repro unlimited wait on waitUntil")(testM("repro of unlimited wait on waitUntil") {
+    suite("waitUntil without timeout")(testM("waitUntil without timeout") {
       def zflow2(remoteBoolVar: RemoteVariable[Boolean]) =
         for {
           _ <- ZFlow.sleep(Remote.ofSeconds(5L))

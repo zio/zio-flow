@@ -110,8 +110,6 @@ object ZFlowExecutor {
       input: I,
       flow: ZFlow[I, E, A]
     ): ZIO[R, Nothing, CompileStatus] = {
-      //      for {
-      //        _      <- putStrLn("Inside compile ...").provide(Has(zio.console.Console.Service.live))
       flow match {
         case Return(value) => eval(value).to(promise) as CompileStatus.Done
 
