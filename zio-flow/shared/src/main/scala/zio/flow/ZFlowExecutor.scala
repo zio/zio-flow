@@ -170,8 +170,7 @@ object ZFlowExecutor {
                                         compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
                                       )
                                 )
-                                .forkDaemon *>
-                                ZIO.succeed(CompileStatus.Suspended)
+                                .forkDaemon.as(CompileStatus.Suspended)
           } yield status2
 
         case RunActivity(input, activity) =>
@@ -388,8 +387,8 @@ object ZFlowExecutor {
     final case class State(
       tstate: TState,
       variables: Map[String, Ref[_]], // TODO : variable should be case class (TRef, TReEntrantLock), instead of Ref
-      retry: UIO[Any] = ZIO.unit // TODO : Delete this, use zio STM's retry mechanism
-                          //TODO : Add a variable lock of type TReentrantLock
+      retry: UIO[Any] = ZIO.unit      // TODO : Delete this, use zio STM's retry mechanism
+      //TODO : Add a variable lock of type TReentrantLock
     ) {
       self =>
 
