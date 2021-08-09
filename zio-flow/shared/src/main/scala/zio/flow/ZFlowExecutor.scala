@@ -74,25 +74,6 @@ object ZFlowExecutor {
     def lit[A](a: A): Remote[A] =
       Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
 
-    def getVariable(workflowId: U, variableName: String): UIO[Option[Any]] =
-      (for {
-        map      <- workflows.get
-        stateRef <- ZIO.fromOption(map.get(workflowId))
-        state    <- stateRef.get
-        vRef     <- ZIO.fromOption(state.getVariable(variableName))
-        v        <- vRef.get
-      } yield v).optional
-
-    def setVariable(workflowId: U, variableName: String, value: Any): UIO[Boolean] =
-      (for {
-        map      <- workflows.get
-        stateRef <- ZIO.fromOption(map.get(workflowId))
-        state    <- stateRef.get
-        vRef     <- ZIO.fromOption(state.getVariable(variableName))
-        _        <- vRef.set(value.asInstanceOf)
-        //_ <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
-      } yield true).catchAll(_ => UIO(false))
-
     def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
       for {
