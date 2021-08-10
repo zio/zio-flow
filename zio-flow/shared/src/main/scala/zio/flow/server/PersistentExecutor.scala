@@ -164,6 +164,7 @@ final case class PersistentExecutor(
             putStrLn("Fold is submitted").provide(Has(console.Console.Service.live)) *>
             ref.update { state =>
               val env         = state.currentEnvironment
+              println("Current environment is "+ env.value)
               val errorFlow   = applyFunction(fold.ifError.asInstanceOf, env)
               val successFlow = applyFunction(fold.ifSuccess.asInstanceOf, env)
               val cont        = Continuation(errorFlow, successFlow)
@@ -351,7 +352,9 @@ final case class PersistentExecutor(
           case NewVar(name, initial) =>
             ref.get.flatMap { state =>
               val variable = for {
+                _ <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
                 schemaAndValue <- eval(initial)
+                _ <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
                 vref           <- Ref.make(schemaAndValue.value)
                 _              <- ref.update(_.addVariable(name, schemaAndValue))
               } yield vref

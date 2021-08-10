@@ -81,7 +81,6 @@ object ZFlowAssertionSyntax {
           ref
         )
       )
-
   }
 
   import Mocks._
