@@ -2,9 +2,10 @@ package zio.flow.server
 
 import java.io.IOException
 import java.time.Duration
+
 import zio._
 import zio.clock._
-import zio.console.{putStr, putStrLn}
+import zio.console.{ putStr, putStrLn }
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 import zio.schema._
@@ -33,11 +34,21 @@ final case class PersistentExecutor(
 
   def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
-  def applyFunction[A, R, E, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R]): ZFlow[A, E, B] =
-    for {
-      a <- ZFlow.input[A]
-      b <- f(a).provide(env.toRemote)
-    } yield b
+//  def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R], state : Ref[PersistentExecutor.State[E,A]]): UIO[ZFlow[A,E,B]] =
+////    for {
+////      a <- ZFlow.input[A]
+////      b <- f(a).provide(env.toRemote)
+////    } yield b
+//
+//    // 1. Read the environment `A` => ZFlow.Input (peek the environment)
+//    // 2. Push R onto the environment
+//    // 3. Run the workflow returned by `f`
+//
+//  state.update { state =>
+//    val cont = Continuation.handleSuccess(ZFlow.input[A])
+//    state.copy(stack = cont :: state.stack)
+//
+//  }
 
   def getVariable(workflowId: String, variableName: String): UIO[Option[Any]] =
     (for {
@@ -61,7 +72,6 @@ final case class PersistentExecutor(
       ref.get.flatMap { state =>
         state.current match {
           case Return(value) =>
-
             ref.get.flatMap { state =>
               state.stack match {
                 case Nil           =>
@@ -130,7 +140,7 @@ final case class PersistentExecutor(
                 case Nil =>
                   val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
                   for {
-                    _ <- putStrLn("Modify is submitted").provide(Has(console.Console.Service.live))
+                    _          <- putStrLn("Modify is submitted").provide(Has(console.Console.Service.live))
                     vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])
                     value      <- vRef.get
                     tuple      <- eval(f(lit(value))).map(_.value)
@@ -162,14 +172,15 @@ final case class PersistentExecutor(
 
           case fold @ Fold(_, _, _) =>
             putStrLn("Fold is submitted").provide(Has(console.Console.Service.live)) *>
-            ref.update { state =>
-              val env         = state.currentEnvironment
-              println("Current environment is "+ env.value)
-              val errorFlow   = applyFunction(fold.ifError.asInstanceOf, env)
-              val successFlow = applyFunction(fold.ifSuccess.asInstanceOf, env)
-              val cont        = Continuation(errorFlow, successFlow)
-              state.copy(current = fold.value, stack = cont :: state.stack)
-            } *> step(ref)
+              ref.update { state =>
+                val env         = state.currentEnvironment.unsafeCoerce[fold.ValueR]
+                //val errorFlow   = applyFunction[fold.ValueR, fold.ValueE, fold.ValueA, fold.ValueB](fold.ifError, env)
+                //val successFlow = applyFunction[fold.ValueR, fold.ValueE, fold.ValueA, fold.ValueB](fold.ifSuccess, env)
+                val errorFlow   = ZFlow.input[fold.ValueE].provide(env.asInstanceOf)
+                val successFlow = ZFlow.input[fold.ValueA].provide(env.asInstanceOf)
+                val cont        = Continuation(errorFlow, successFlow)
+                state.copy(current = fold.value, stack = cont :: state.stack)
+              } *> step(ref)
 
           case RunActivity(input, activity) =>
             ref.get.flatMap { state =>
@@ -248,9 +259,11 @@ final case class PersistentExecutor(
               } yield ()
             }
 
-          case Provide(value, flow) =>
+          //TODO : instead of Provide, use ZFlow.pushEnv and ZFlow.popEnv. Implement Provide in terms of pushEnv, popEnv, Ensuring
+          case Provide(value, flow)    =>
             eval(value).flatMap { schemaAndValue =>
               ref.update(state => state.pushEnv(schemaAndValue).copy(current = flow)) *> step(ref)
+            //TODO : Missing - pop environment
             }
 
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
@@ -352,9 +365,9 @@ final case class PersistentExecutor(
           case NewVar(name, initial) =>
             ref.get.flatMap { state =>
               val variable = for {
-                _ <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
+                _              <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
                 schemaAndValue <- eval(initial)
-                _ <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
+                _              <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
                 vref           <- Ref.make(schemaAndValue.value)
                 _              <- ref.update(_.addVariable(name, schemaAndValue))
               } yield vref
@@ -391,18 +404,18 @@ final case class PersistentExecutor(
           //      4.3.2 delete the temp variable
           //      4.3.3 inspect the stack - terminate with  a value (complete the promise) or continue by feeding this value into continuation
 
-//            ref.modify { state =>
-//              val tempVarName = s"_zflow_tempvar_${state.tempVarCounter}"
-//              val newState = state.copy(tempVarCounter = state.tempVarCounter + 1) //TODO Add helper
-//              val zflow = for {
-//                stateVar <- ZFlow.newVar(tempVarName, iterate0.initial).asInstanceOf[RemoteVariable[A]]
-//                stateValue <- stateVar.get
-//                boolRemote = iterate0.predicate(stateValue.asInstanceOf)
-//                //stateValue <- ZFlow.ifThenElse(boolRemote)(ifTrue = ???, ifFalse = ???)
-//              } yield stateValue
-//
-//              (zflow, newState)
-//            }.flatMap(zflow => ref.update(_.copy(current = zflow)) *> step(ref))
+          //            ref.modify { state =>
+          //              val tempVarName = s"_zflow_tempvar_${state.tempVarCounter}"
+          //              val newState = state.copy(tempVarCounter = state.tempVarCounter + 1) //TODO Add helper
+          //              val zflow = for {
+          //                stateVar <- ZFlow.newVar(tempVarName, iterate0.initial).asInstanceOf[RemoteVariable[A]]
+          //                stateValue <- stateVar.get
+          //                boolRemote = iterate0.predicate(stateValue.asInstanceOf)
+          //                //stateValue <- ZFlow.ifThenElse(boolRemote)(ifTrue = ???, ifFalse = ???)
+          //              } yield stateValue
+          //
+          //              (zflow, newState)
+          //            }.flatMap(zflow => ref.update(_.copy(current = zflow)) *> step(ref))
 
           case Log(message) =>
             ref.get.flatMap { state =>
@@ -426,20 +439,18 @@ final case class PersistentExecutor(
         }
       }
 
-
     val durablePZio =
-      Promise.make[E,A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
+      Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
     val stateZio    = durablePZio.map(dp =>
       State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, Nil, PersistentCompileStatus.Running)
     )
 
     (for {
-      state    <- stateZio
-      ref      <- Ref.make[State[E, A]](state)
-      _        <- step(ref)
-      result   <- state.result.awaitEither
+      state  <- stateZio
+      ref    <- Ref.make[State[E, A]](state)
+      _      <- step(ref)
+      result <- state.result.awaitEither
     } yield result).orDie.absolve
-
   }
 }
 
@@ -559,8 +570,13 @@ object PersistentExecutor {
   sealed trait PersistentCompileStatus
 
   object PersistentCompileStatus {
-    case object Running   extends PersistentCompileStatus
-    case object Done      extends PersistentCompileStatus
+
+    case object Running extends PersistentCompileStatus
+
+    case object Done extends PersistentCompileStatus
+
     case object Suspended extends PersistentCompileStatus
+
   }
+
 }

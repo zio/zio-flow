@@ -120,7 +120,21 @@ object ZFlow {
     type ValueE = E1
     type ValueA = A
     type ValueR = R
+    type ValueB = B
   }
+
+  final case class Fold1[R, E1, E2, A, B](
+    value: ZFlow[R, E1, A],
+    ifError: ZFlow[E1, E2, B],
+    ifSuccess: ZFlow[A, E2, B]
+  ) extends ZFlow[R, E2, B] {
+    type ValueE = E1
+    type ValueA = A
+    type ValueR = R
+    type ValueB = B
+  }
+
+  final case class ApplyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], a: Remote[A]) extends ZFlow[R, E, B]
 
   final case class Log(message: String) extends ZFlow[Any, Nothing, Unit]
 
@@ -236,4 +250,7 @@ object ZFlow {
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): Log = ZFlow.Log(message)
+
+  def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], remoteA: Remote[A]): ZFlow[R, E, B] =
+    ApplyFunction(f, remoteA)
 }

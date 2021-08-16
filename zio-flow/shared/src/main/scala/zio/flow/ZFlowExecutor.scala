@@ -170,7 +170,8 @@ object ZFlowExecutor {
                                         compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
                                       )
                                 )
-                                .forkDaemon.as(CompileStatus.Suspended)
+                                .forkDaemon
+                                .as(CompileStatus.Suspended)
           } yield status2
 
         case RunActivity(input, activity) =>
@@ -364,6 +365,8 @@ object ZFlowExecutor {
                 }
               )
           loop(initial)
+
+        case applyFunction @ ApplyFunction(f, remoteA) => compile(promise, ref, input, f(remoteA))
       }
   }
 
