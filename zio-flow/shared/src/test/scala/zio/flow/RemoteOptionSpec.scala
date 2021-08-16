@@ -30,6 +30,14 @@ object RemoteOptionSpec extends DefaultRunnableSpec {
         op1.isNone <-> true,
         op2.isNone <-> false
       )
+    },
+    test("zip") {
+      BoolAlgebra.all(
+        Remote.Some0("a").zip(Remote.Some0(1)) <-> Some(("a", 1)),
+        Remote.Some0(1).zip(Remote.Some0("a")) <-> Some((1, "a")),
+        Remote.Some0(1).zip(None) <-> None,
+        Remote(None).zip(Remote.Some0("a")) <-> None
+      )
     }
   )
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("OptionSpec")(suite1)

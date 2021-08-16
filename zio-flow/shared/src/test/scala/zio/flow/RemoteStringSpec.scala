@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.test.TestAspect.ignore
 import zio.test._
 
 object RemoteStringSpec extends DefaultRunnableSpec {
@@ -32,11 +33,15 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("abc").codepointAtOption(-1) <-> None
       )
     },
-    test("Compare") {
+    test("CompareIgnoreCase") {
       BoolAlgebra.all(
-        Remote("a").compare("a") <-> 0,
-        Remote("a").compare("b") <-> -1,
-        Remote("b").compare("a") <-> 1
+        Remote("a").compareToIgnoreCase("B") <-> -1,
+        Remote("A").compareToIgnoreCase("b") <-> -1,
+        Remote("B").compareToIgnoreCase("a") <-> 1,
+        Remote("b").compareToIgnoreCase("A") <-> 1,
+        Remote("a").compareToIgnoreCase("A") <-> 0,
+        Remote("A").compareToIgnoreCase("a") <-> 0,
+        Remote("a").compareToIgnoreCase("a") <-> 0
       )
     },
     test("Concat") {
@@ -47,11 +52,38 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("") ++ Remote("abc") <-> "abc"
       )
     },
+    test("Contains char") {
+      BoolAlgebra.all(
+        Remote("abc").contains('a') <-> true,
+        Remote("abc").contains('b') <-> true,
+        Remote("abc").contains('c') <-> true,
+        Remote("abc").contains('d') <-> false
+      )
+    } @@ ignore, // TODO: remove ignore when Remote.Equal is implemented
+    test("Contains slice") {
+      BoolAlgebra.all(
+        Remote("abc").contains("ab") <-> true,
+        Remote("abc").contains("bc") <-> true,
+        Remote("abc").contains("ac") <-> false,
+        Remote("abc").contains("abc") <-> true,
+        Remote("").contains("ab") <-> false,
+        Remote("abc").contains("") <-> true
+      )
+    } @@ ignore, // TODO: implement
+    test("Relational") {
+      BoolAlgebra.all(
+        (Remote("a") === "a") <-> true,
+        (Remote("a") === "b") <-> false,
+        (Remote("a") > "b") <-> false,
+        (Remote("a") < "b") <-> true
+      )
+    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
     test("Reverse") {
-      Remote("foo").reverse <-> "oof"
-    },
-    test("Reverse empty string") {
-      Remote("").reverse <-> ""
+      BoolAlgebra.all(
+        Remote("foo").reverse <-> "oof",
+        Remote("oof").reverse <-> "foo",
+        Remote("").reverse <-> ""
+      )
     }
   )
 }

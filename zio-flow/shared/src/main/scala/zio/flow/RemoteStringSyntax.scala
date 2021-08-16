@@ -1,23 +1,27 @@
 package zio.flow
 
-import scala.util.Try
-
 class RemoteStringSyntax(self: Remote[String]) {
   def ++(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
   def charAtOption(index: Remote[Int]): Remote[Option[Char]] =
-    Remote.ZipWith(self, index)((string, index) => Try(string.charAt(index)).toOption)
+    Remote.CharAtOption(self, index)
 
   def codepointAtOption(index: Remote[Int]): Remote[Option[Int]] =
-    Remote.ZipWith(self, index)((string, index) => Try(string.codePointAt(index)).toOption)
+    Remote.CodepointAtOption(self, index)
 
   def codepointBeforeOption(index: Remote[Int]): Remote[Option[Int]] =
-    Remote.ZipWith(self, index)((string, index) => Try(string.codePointBefore(index)).toOption)
+    Remote.CodepointBeforeOption(self, index)
 
-  def compare(that: Remote[String]): Remote[Int] =
-    Remote.ZipWith(self, that)(_.compare(_))
+  def compareToIgnoreCase(that: Remote[String]): Remote[Int] =
+    Remote.CompareIgnoreCase(self, that)
 
   def concat(suffix: Remote[String]): Remote[String] = toList ++ suffix.toList
+
+  def contains(char: Remote[Char])(implicit d: DummyImplicit): Remote[Boolean] =
+    toList.contains(char)
+
+  def contains(substring: Remote[String]): Remote[Boolean] =
+    toList.containsSlice(substring.toList)
 
   def length: Remote[Int] = Remote.Length(self)
 

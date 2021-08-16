@@ -5,7 +5,7 @@ import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
 object RemoteListSpec extends DefaultRunnableSpec {
-  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("RemoteListSpec")(
+  val suite1: Spec[Annotations, TestFailure[Nothing], TestSuccess] = suite("RemoteListSpec")(
     test("Reverse") {
       val remoteList   = Remote(1 :: 2 :: 3 :: 4 :: Nil)
       val reversedList = remoteList.reverse
@@ -36,7 +36,10 @@ object RemoteListSpec extends DefaultRunnableSpec {
       val l1                = Remote(1 :: 2 :: 3 :: Nil)
       val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
       fold <-> 6
-    }
+    },
+    test("StartsWith") {
+      Remote(List(1, 2, 3)).startsWith(Remote(List.empty[Int])) <-> true
+    } @@ TestAspect.ignore // TODO: remove ignore when UnCons#toTupleSchema is implemented
   )
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("RemoteListSpec")(suite1)

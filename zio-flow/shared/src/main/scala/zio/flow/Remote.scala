@@ -3,6 +3,7 @@ package zio.flow
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
+import scala.util.Try
 
 import zio.flow.Numeric.NumericInt
 import zio.schema.Schema
@@ -558,9 +559,36 @@ object Remote {
       )
   }
 
-  final case class ZipWith[A, B, C: Schema](a: Remote[A], b: Remote[B])(f: (A, B) => C) extends Remote[C] {
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] =
-      binaryEvalWithSchema(a, b)(f, ZipWith(_, _)(f), Schema[C])
+  final case class CharAtOption(value: Remote[String], index: Remote[Int]) extends Remote[Option[Char]] {
+    override def evalWithSchema: Either[Remote[Option[Char]], SchemaAndValue[Option[Char]]] =
+      binaryEvalWithSchema(value, index)(
+        (string, index) => Try(string.charAt(index)).toOption,
+        CharAtOption,
+        Schema[Option[Char]]
+      )
+  }
+
+  final case class CodepointAtOption(value: Remote[String], index: Remote[Int]) extends Remote[Option[Int]] {
+    override def evalWithSchema: Either[Remote[Option[Int]], SchemaAndValue[Option[Int]]] =
+      binaryEvalWithSchema(value, index)(
+        (string, index) => Try(string.codePointAt(index)).toOption,
+        CodepointAtOption,
+        Schema[Option[Int]]
+      )
+  }
+
+  final case class CodepointBeforeOption(value: Remote[String], index: Remote[Int]) extends Remote[Option[Int]] {
+    override def evalWithSchema: Either[Remote[Option[Int]], SchemaAndValue[Option[Int]]] =
+      binaryEvalWithSchema(value, index)(
+        (string, index) => Try(string.codePointBefore(index)).toOption,
+        CodepointBeforeOption,
+        Schema[Option[Int]]
+      )
+  }
+
+  final case class CompareIgnoreCase(value: Remote[String], that: Remote[String]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      binaryEvalWithSchema(value, that)(_.compareToIgnoreCase(_), CompareIgnoreCase, Schema[Int])
   }
 
   private[zio] def unaryEval[A, B](
