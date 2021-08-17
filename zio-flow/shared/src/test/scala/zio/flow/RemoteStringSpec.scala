@@ -70,6 +70,28 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("abc").contains("") <-> true
       )
     } @@ ignore, // TODO: implement
+    test("Index of char") {
+      BoolAlgebra.all(
+        Remote("abc").indexOf('a', 0) <-> 0,
+        Remote("abc").indexOf('b', 1) <-> 1,
+        Remote("abc").indexOf('b', 2) <-> -1,
+        Remote("abc").indexOf('d') <-> -1,
+        Remote("永").indexOf('永') <-> 0,
+        Remote("a永").indexOf('永') <-> 1
+      )
+    },
+    test("Index of substring") {
+      BoolAlgebra.all(
+        Remote("abc").indexOf("abc") <-> 0,
+        Remote("abc").indexOf("") <-> 0,
+        Remote("abc").indexOf("d") <-> -1,
+        Remote("abc").indexOf("bcd") <-> -1,
+        Remote("abc").indexOf("永") <-> -1,
+        Remote("永遠").indexOf("永遠", 0) <-> 0,
+        Remote("永遠に").indexOf("遠に") <-> 1,
+        Remote("永遠に").indexOf("遠に", 2) <-> -1
+      )
+    },
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,

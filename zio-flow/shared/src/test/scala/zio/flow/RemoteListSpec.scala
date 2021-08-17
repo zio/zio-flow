@@ -37,6 +37,9 @@ object RemoteListSpec extends DefaultRunnableSpec {
       val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
       fold <-> 6
     },
+    test("IndexOf") {
+      Remote(List(1, 2, 3)).indexOf(1) <-> 0
+    } @@ TestAspect.ignore, // TODO: remove ignore when UnCons#toTupleSchema is implemented
     test("StartsWith") {
       Remote(List(1, 2, 3)).startsWith(Remote(List.empty[Int])) <-> true
     } @@ TestAspect.ignore // TODO: remove ignore when UnCons#toTupleSchema is implemented

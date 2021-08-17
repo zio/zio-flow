@@ -591,6 +591,18 @@ object Remote {
       binaryEvalWithSchema(value, that)(_.compareToIgnoreCase(_), CompareIgnoreCase, Schema[Int])
   }
 
+  final case class IndexOfCharFromIndex(value: Remote[String], ch: Remote[Char], fromIndex: Remote[Int])
+      extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      ternaryEvalWithSchema(value, ch, fromIndex)(_.indexOf(_, _), IndexOfCharFromIndex, Schema[Int])
+  }
+
+  final case class IndexOfStringFromIndex(value: Remote[String], str: Remote[String], fromIndex: Remote[Int])
+      extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      ternaryEvalWithSchema(value, str, fromIndex)(_.indexOf(_, _), IndexOfStringFromIndex, Schema[Int])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
@@ -632,6 +644,40 @@ object Remote {
       case Right(v) => Right(SchemaAndValue(schema, v))
     }
   }
+
+  private[zio] def ternaryEval[A, B, C, D, E](
+    remoteA: Remote[A],
+    remoteB: Remote[B],
+    remoteC: Remote[C]
+  )(f: (A, B, C) => E, g: (Remote[A], Remote[B], Remote[C]) => Remote[D]): Either[Remote[D], E] =
+    (for {
+      a <- remoteA.eval
+      b <- remoteB.eval
+      c <- remoteC.eval
+    } yield f(a, b, c)) match {
+      case Left(_)  =>
+        Left(g(remoteA, remoteB, remoteC))
+      case Right(v) => Right(v)
+    }
+
+  private[zio] def ternaryEvalWithSchema[A, B, C, D, E](
+    remoteA: Remote[A],
+    remoteB: Remote[B],
+    remoteC: Remote[C]
+  )(
+    f: (A, B, C) => E,
+    g: (Remote[A], Remote[B], Remote[C]) => Remote[D],
+    schema: Schema[E]
+  ): Either[Remote[D], SchemaAndValue[E]] =
+    (for {
+      a <- remoteA.evalWithSchema
+      b <- remoteB.evalWithSchema
+      c <- remoteC.evalWithSchema
+    } yield f(a.value, b.value, c.value)) match {
+      case Left(_)  =>
+        Left(g(remoteA, remoteB, remoteC))
+      case Right(v) => Right(SchemaAndValue(schema, v))
+    }
 
   implicit def apply[A: Schema](value: A): Remote[A] =
     Literal(value, Schema[A])

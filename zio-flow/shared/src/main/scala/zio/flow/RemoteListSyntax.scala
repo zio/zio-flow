@@ -65,7 +65,10 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.Some0(a))
     )
 
-  def indexOf(elem: Remote[A]): Remote[Int] = {
+  def indexOf(elem: Remote[A]): Remote[Int] =
+    indexOf(elem, 0)
+
+  def indexOf(elem: Remote[A], offset: Remote[Int]): Remote[Int] = {
     def loop(list: Remote[List[A]], index: Remote[Int]): Remote[Int] =
       Remote
         .UnCons(list.widen[List[A]])
@@ -74,7 +77,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
           -1,
           (tuple: Remote[(A, List[A])]) => (tuple._1 === elem).ifThenElse(index, loop(tuple._2, index + 1))
         )
-    loop(self, Remote(0))
+    loop(self.drop(offset), Remote(0))
   }
 
   final def isEmpty: Remote[Boolean] =

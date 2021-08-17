@@ -23,6 +23,20 @@ class RemoteStringSyntax(self: Remote[String]) {
   def contains(substring: Remote[String]): Remote[Boolean] =
     toList.containsSlice(substring.toList)
 
+  def indexOf(ch: Remote[Char]): Remote[Int] =
+    indexOf(ch, 0)
+
+  def indexOf(ch: Remote[Char], fromIndex: Remote[Int]): Remote[Int] =
+    Remote.IndexOfCharFromIndex(self, ch, fromIndex)
+
+  def indexOf(str: Remote[String])(implicit d: DummyImplicit): Remote[Int] =
+    indexOf(str, 0)
+
+  def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
+    Remote.IndexOfStringFromIndex(self, str, fromIndex)
+
+  "".isBlank
+
   def length: Remote[Int] = Remote.Length(self)
 
   def reverse: Remote[String] = toList.reverse
