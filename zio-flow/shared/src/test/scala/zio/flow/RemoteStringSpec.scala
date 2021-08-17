@@ -92,12 +92,6 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("永遠に").indexOf("遠に", 2) <-> -1
       )
     },
-    test("Is blank") {
-      BoolAlgebra.all(
-        Remote("\t\n ").isBlank <-> true,
-        Remote("a").isBlank <-> false
-      )
-    },
     test("Is empty") {
       BoolAlgebra.all(
         Remote("").isEmpty <-> true,

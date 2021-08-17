@@ -603,11 +603,6 @@ object Remote {
       ternaryEvalWithSchema(value, str, fromIndex)(_.indexOf(_, _), IndexOfStringFromIndex, Schema[Int])
   }
 
-  final case class IsBlank(value: Remote[String]) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
-      unaryEvalWithSchema(value)(_.isBlank, IsBlank, Schema[Boolean])
-  }
-
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =

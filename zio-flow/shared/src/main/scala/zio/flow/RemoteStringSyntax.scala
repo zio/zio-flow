@@ -41,9 +41,6 @@ class RemoteStringSyntax(self: Remote[String]) {
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
 
-  def isBlank: Remote[Boolean] =
-    Remote.IsBlank(self)
-
   def isEmpty: Remote[Boolean] =
     length === 0
 
