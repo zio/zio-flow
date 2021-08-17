@@ -591,7 +591,7 @@ object Remote {
       binaryEvalWithSchema(value, that)(_.compareToIgnoreCase(_), CompareIgnoreCase, Schema[Int])
   }
 
-  final case class IndexOfCharFromIndex(value: Remote[String], ch: Remote[Char], fromIndex: Remote[Int])
+  final case class IndexOfCharFromIndex(value: Remote[String], ch: Remote[Int], fromIndex: Remote[Int])
       extends Remote[Int] {
     override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
       ternaryEvalWithSchema(value, ch, fromIndex)(_.indexOf(_, _), IndexOfCharFromIndex, Schema[Int])
@@ -601,6 +601,11 @@ object Remote {
       extends Remote[Int] {
     override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
       ternaryEvalWithSchema(value, str, fromIndex)(_.indexOf(_, _), IndexOfStringFromIndex, Schema[Int])
+  }
+
+  final case class IsBlank(value: Remote[String]) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
+      unaryEvalWithSchema(value)(_.isBlank, IsBlank, Schema[Boolean])
   }
 
   private[zio] def unaryEval[A, B](
