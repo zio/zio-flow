@@ -35,8 +35,6 @@ class RemoteStringSyntax(self: Remote[String]) {
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
 
-  "".isBlank
-
   def length: Remote[Int] = Remote.Length(self)
 
   def reverse: Remote[String] = toList.reverse
