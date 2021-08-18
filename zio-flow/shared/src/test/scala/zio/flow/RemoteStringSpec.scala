@@ -69,7 +69,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("").contains("ab") <-> false,
         Remote("abc").contains("") <-> true
       )
-    } @@ ignore, // TODO: implement
+    } @@ ignore,
     test("Index of char") {
       BoolAlgebra.all(
         Remote("abc").indexOf('a', 0) <-> 0,
@@ -127,6 +127,14 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("").lastOption <-> None
       )
     },
+    test("Length") {
+      BoolAlgebra.all(
+        Remote("").length <-> 0,
+        Remote("a").length <-> 1,
+        Remote("ab").length <-> 2,
+        Remote("\t\n").length <-> 2
+      )
+    },
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,
@@ -141,6 +149,12 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("oof").reverse <-> "foo",
         Remote("").reverse <-> ""
       )
-    }
+    },
+    test("Substring option") {
+      BoolAlgebra.all(
+        Remote("abc").substringOption(-1) <-> None,
+        Remote("abc").substringOption(0) <-> Some("abc")
+      )
+    } @@ ignore  // TODO: remove ignore when Remote.LessThanEqual gets fixed
   )
 }

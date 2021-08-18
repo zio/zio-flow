@@ -24,6 +24,9 @@ class RemoteStringSyntax(self: Remote[String]) {
   def contains(substring: Remote[String]): Remote[Boolean] =
     toList.containsSlice(substring.toList)
 
+  def drop(n: Remote[Int]): Remote[String] =
+    toList.drop(n)
+
   def indexOf(ch: Remote[Char]): Remote[Int] =
     indexOf(ch, 0)
 
@@ -72,6 +75,16 @@ class RemoteStringSyntax(self: Remote[String]) {
   def length: Remote[Int] = Remote.Length(self)
 
   def reverse: Remote[String] = toList.reverse
+
+  def substringOption(beginIndex: Remote[Int], endIndex: Remote[Int] = length): Remote[Option[String]] =
+    ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
+      .ifThenElse(
+        None,
+        Remote.Some0(drop(beginIndex).take(endIndex))
+      )
+
+  def take(n: Remote[Int]): Remote[String] =
+    toList.take(n)
 
   def toList: Remote[List[Char]] = Remote.StringToList(self)
 }
