@@ -66,5 +66,7 @@ package object flow {
 
   implicit def RemoteListCharToString(remote: Remote[List[Char]]): Remote[String] = Remote.ListToString(remote)
 
+  implicit def RemoteStringToListChar(remote: Remote[String]): Remote[List[Char]] = Remote.StringToList(remote)
+
   implicit def RemoteChar[A](remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
 }

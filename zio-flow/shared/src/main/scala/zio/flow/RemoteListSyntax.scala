@@ -83,6 +83,9 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
   final def isEmpty: Remote[Boolean] =
     self.headOption.isNone
 
+  def lastOption: Remote[Option[A]] =
+    reverse.headOption
+
   final def length: Remote[Int] =
     self.fold[Int](0)((len, _) => len + 1)
 

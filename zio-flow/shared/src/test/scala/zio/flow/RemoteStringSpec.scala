@@ -119,6 +119,14 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("永遠永遠永遠").lastIndexOf("永遠") <-> 4
       )
     },
+    test("Last option") {
+      BoolAlgebra.all(
+        Remote("abc").lastOption <-> Some('c'),
+        Remote("永遠").lastOption <-> Some('遠'),
+        Remote(" ").lastOption <-> Some(' '),
+        Remote("").lastOption <-> None
+      )
+    },
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,

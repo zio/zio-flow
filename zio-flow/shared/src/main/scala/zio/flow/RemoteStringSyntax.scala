@@ -66,6 +66,9 @@ class RemoteStringSyntax(self: Remote[String]) {
   ): Remote[Int] =
     Remote.LastIndexOfStringFromIndex(self, str, fromIndex)
 
+  def lastOption: Remote[Option[Char]] =
+    toList.lastOption
+
   def length: Remote[Int] = Remote.Length(self)
 
   def reverse: Remote[String] = toList.reverse
