@@ -65,4 +65,6 @@ package object flow {
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
 
   implicit def RemoteListCharToString(remote: Remote[List[Char]]): Remote[String] = Remote.ListToString(remote)
+
+  implicit def RemoteChar[A](remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
 }

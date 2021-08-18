@@ -99,6 +99,26 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("a").isEmpty <-> false
       )
     },
+    test("Last index of char") {
+      BoolAlgebra.all(
+        Remote("abc").lastIndexOf('a', 0) <-> 0,
+        Remote("abc").lastIndexOf('b', 1) <-> 1,
+        Remote("abc").lastIndexOf('b', 2) <-> 1,
+        Remote("abca").lastIndexOf('a') <-> 3,
+        Remote("abc").lastIndexOf('d') <-> -1,
+        Remote("永").lastIndexOf('永') <-> 0,
+        Remote("a永").lastIndexOf('永') <-> 1
+      )
+    },
+    test("Last index of string") {
+      BoolAlgebra.all(
+        Remote("abcabc").lastIndexOf("abc") <-> 3,
+        Remote("abcabc").lastIndexOf("abcd") <-> -1,
+        Remote("bbbaaa").lastIndexOf("a", 4) <-> 4,
+        Remote("永遠").lastIndexOf("永遠", 0) <-> 0,
+        Remote("永遠永遠永遠").lastIndexOf("永遠") <-> 4
+      )
+    },
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,

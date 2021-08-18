@@ -603,6 +603,23 @@ object Remote {
       ternaryEvalWithSchema(value, str, fromIndex)(_.indexOf(_, _), IndexOfStringFromIndex, Schema[Int])
   }
 
+  final case class CharToInt(value: Remote[Char]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      unaryEvalWithSchema(value)(_.toInt, CharToInt, Schema[Int])
+  }
+
+  final case class LastIndexOfCharFromIndex(value: Remote[String], ch: Remote[Int], fromIndex: Remote[Int])
+      extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      ternaryEvalWithSchema(value, ch, fromIndex)(_.lastIndexOf(_, _), LastIndexOfCharFromIndex, Schema[Int])
+  }
+
+  final case class LastIndexOfStringFromIndex(value: Remote[String], str: Remote[String], fromIndex: Remote[Int])
+      extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      ternaryEvalWithSchema(value, str, fromIndex)(_.lastIndexOf(_, _), LastIndexOfStringFromIndex, Schema[Int])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
