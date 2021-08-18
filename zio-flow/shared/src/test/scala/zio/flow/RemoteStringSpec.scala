@@ -92,6 +92,11 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("永遠に").indexOf("遠に", 2) <-> -1
       )
     },
+    test("Index of slice") {
+      BoolAlgebra.all(
+        Remote("abc").toList.indexOfSlice(List('a', 'b')) <-> 0
+      )
+    } @@ ignore,  // TODO: complete/remove ignore when Remote.LessThanEqual gets fixed
     test("Is empty") {
       BoolAlgebra.all(
         Remote("").isEmpty <-> true,

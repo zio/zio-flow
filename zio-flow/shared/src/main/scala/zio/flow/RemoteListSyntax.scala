@@ -77,6 +77,22 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     loop(self.drop(offset), Remote(0))
   }
 
+  def indexOfSlice[B >: A](that: Remote[List[B]], from: Remote[Int] = 0): Remote[Int] = {
+    def loop(list: Remote[List[B]], i: Remote[Int], indexOfSlice: Remote[Int]): Remote[Int] =
+      Remote
+        .UnCons(list.widen[List[B]])
+        .widen[Option[(B, List[B])]]
+        .handleOption(
+          indexOfSlice,
+          (tuple: Remote[(B, List[B])]) =>
+            list.startsWith(that).ifThenElse(
+              i,
+              loop(tuple._2, i + 1, indexOfSlice)
+            )
+        )
+    loop(self.drop(from), 0, -1)
+  }
+
   final def isEmpty: Remote[Boolean] =
     self.headOption.isNone
 

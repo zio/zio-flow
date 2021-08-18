@@ -16,7 +16,7 @@ class RemoteStringSyntax(self: Remote[String]) {
     Remote.CompareIgnoreCase(self, that)
 
   def concat(suffix: Remote[String]): Remote[String] =
-    Remote.ListToString(toList ++ suffix.toList)
+    Remote.ListToString(self.toList ++ suffix.toList)
 
   def contains(char: Remote[Char])(implicit d: DummyImplicit): Remote[Boolean] =
     toList.contains(char)
@@ -44,6 +44,9 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit, e: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
+
+  def indexOfSlice(that: Remote[List[Char]], fromIndex: Remote[Int]): Remote[Int] =
+    toList.indexOfSlice(that, fromIndex)
 
   def isEmpty: Remote[Boolean] =
     length === 0

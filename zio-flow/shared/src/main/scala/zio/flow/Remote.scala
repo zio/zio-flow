@@ -547,16 +547,12 @@ object Remote {
 
   final case class StringToList(value: Remote[String]) extends Remote[List[Char]] {
     override def evalWithSchema: Either[Remote[List[Char]], SchemaAndValue[List[Char]]] =
-      unaryEvalWithSchema(value)(str => str.toList, remoteStr => StringToList(remoteStr), Schema[List[Char]])
+      unaryEvalWithSchema(value)(_.toList, StringToList, Schema[List[Char]])
   }
 
   final case class ListToString(value: Remote[List[Char]]) extends Remote[String] {
     override def evalWithSchema: Either[Remote[String], SchemaAndValue[String]] =
-      unaryEvalWithSchema(value)(
-        listChar => listChar.mkString,
-        remoteListChar => ListToString(remoteListChar),
-        Schema[String]
-      )
+      unaryEvalWithSchema(value)(_.mkString, ListToString, Schema[String])
   }
 
   final case class CharAtOption(value: Remote[String], index: Remote[Int]) extends Remote[Option[Char]] {
