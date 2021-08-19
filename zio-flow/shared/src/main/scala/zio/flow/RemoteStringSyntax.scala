@@ -16,16 +16,16 @@ class RemoteStringSyntax(self: Remote[String]) {
     Remote.CompareIgnoreCase(self, that)
 
   def concat(suffix: Remote[String]): Remote[String] =
-    Remote.ListToString(self.toList ++ suffix.toList)
+    Remote.ListToString(toList.concat(suffix.toList))
 
   def contains(char: Remote[Char])(implicit d: DummyImplicit): Remote[Boolean] =
-    toList.contains(char)
+    RemoteStringToListChar(self).contains(char)
 
   def contains(substring: Remote[String]): Remote[Boolean] =
     toList.containsSlice(substring.toList)
 
   def drop(n: Remote[Int]): Remote[String] =
-    toList.drop(n)
+    Remote.ListToString(RemoteStringToListChar(self).drop(n))
 
   def indexOf(ch: Remote[Char]): Remote[Int] =
     indexOf(ch, 0)
@@ -44,9 +44,6 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit, e: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
-
-  def indexOfSlice(that: Remote[List[Char]], fromIndex: Remote[Int]): Remote[Int] =
-    toList.indexOfSlice(that, fromIndex)
 
   def isEmpty: Remote[Boolean] =
     length === 0
@@ -72,12 +69,10 @@ class RemoteStringSyntax(self: Remote[String]) {
   ): Remote[Int] =
     Remote.LastIndexOfStringFromIndex(self, str, fromIndex)
 
-  def lastOption: Remote[Option[Char]] =
-    toList.lastOption
-
   def length: Remote[Int] = Remote.Length(self)
 
-  def reverse: Remote[String] = toList.reverse
+  def reverse: Remote[String] =
+    Remote.ListToString(toList.reverse)
 
   def substringOption(beginIndex: Remote[Int], endIndex: Remote[Int] = length): Remote[Option[String]] =
     ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
@@ -87,7 +82,8 @@ class RemoteStringSyntax(self: Remote[String]) {
       )
 
   def take(n: Remote[Int]): Remote[String] =
-    toList.take(n)
+    Remote.ListToString(toList.take(n))
 
-  def toList: Remote[List[Char]] = Remote.StringToList(self)
+  def toList: Remote[List[Char]] =
+    Remote.StringToList(self)
 }

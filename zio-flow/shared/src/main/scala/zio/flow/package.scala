@@ -6,10 +6,11 @@ import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
 
+import zio.flow.{ Remote, RemoteListSyntax }
 import zio.schema.Schema.Primitive
 import zio.schema.{ Schema, StandardType }
 
-package object flow {
+package object flow extends LowPriorityZFlowImplicits {
   type ActivityError = Throwable
 
   type Variable[A]
@@ -64,9 +65,10 @@ package object flow {
 
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
 
-  implicit def RemoteListCharToString(remote: Remote[List[Char]]): Remote[String] = Remote.ListToString(remote)
-
-  implicit def RemoteStringToListChar(remote: Remote[String]): Remote[List[Char]] = Remote.StringToList(remote)
-
   implicit def RemoteChar[A](remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
+}
+
+trait LowPriorityZFlowImplicits {
+  implicit def RemoteStringToListChar(remote: Remote[String]): RemoteListSyntax[Char] =
+    new RemoteListSyntax[Char](Remote.StringToList(remote))
 }

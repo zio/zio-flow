@@ -4,10 +4,11 @@ import zio.flow.Remote.{ Cons, apply }
 
 class RemoteListSyntax[A](val self: Remote[List[A]]) {
 
-  def ++(other: Remote[List[A]]): Remote[List[A]] = {
-    val reversedSelf: Remote[List[A]] = reverse
-    reversedSelf.fold(other)((l, a) => Remote.Cons(l, a))
-  }
+  def ++(other: Remote[List[A]]): Remote[List[A]] =
+    self.concat(other)
+
+  def concat(that: Remote[List[A]]): Remote[List[A]] =
+    reverse.fold(that)(Remote.Cons(_, _))
 
   def contains(elem: Remote[A]): Remote[Boolean] =
     Remote
@@ -84,11 +85,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
         .widen[Option[(B, List[B])]]
         .handleOption(
           indexOfSlice,
-          (tuple: Remote[(B, List[B])]) =>
-            list.startsWith(that).ifThenElse(
-              i,
-              loop(tuple._2, i + 1, indexOfSlice)
-            )
+          (tuple: Remote[(B, List[B])]) => list.startsWith(that).ifThenElse(i, loop(tuple._2, i + 1, indexOfSlice))
         )
     loop(self.drop(from), 0, -1)
   }
