@@ -616,6 +616,17 @@ object Remote {
       ternaryEvalWithSchema(value, str, fromIndex)(_.lastIndexOf(_, _), LastIndexOfStringFromIndex, Schema[Int])
   }
 
+  final case class MatchesRegex(value: Remote[String], regex: Remote[String]) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
+      binaryEvalWithSchema(value, regex)(_.matches(_), MatchesRegex, Schema[Boolean])
+  }
+
+  final case class OffsetByCodePoints(value: Remote[String], index: Remote[Int], codePointOffset: Remote[Int])
+      extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      ternaryEvalWithSchema(value, index, codePointOffset)(_.offsetByCodePoints(_, _), OffsetByCodePoints, Schema[Int])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =

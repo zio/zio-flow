@@ -140,6 +140,13 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("\t\n").length <-> 2
       )
     },
+    test("Matches regex") {
+      BoolAlgebra.all(
+        Remote("foo").matches("foo") <-> true,
+        Remote("foo").matches("fo+") <-> true,
+        Remote("oof").matches("fo+") <-> false
+      )
+    },
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,

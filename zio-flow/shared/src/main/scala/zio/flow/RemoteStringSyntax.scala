@@ -45,9 +45,6 @@ class RemoteStringSyntax(self: Remote[String]) {
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit, e: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
 
-  def isEmpty: Remote[Boolean] =
-    length === 0
-
   def lastIndexOf(ch: Remote[Char]): Remote[Int] =
     lastIndexOf(ch, length)
 
@@ -70,6 +67,12 @@ class RemoteStringSyntax(self: Remote[String]) {
     Remote.LastIndexOfStringFromIndex(self, str, fromIndex)
 
   def length: Remote[Int] = Remote.Length(self)
+
+  def matches(regex: Remote[String]): Remote[Boolean] =
+    Remote.MatchesRegex(self, regex)
+
+  def offsetByCodePoints(index: Remote[Int], codePointOffset: Remote[Int]): Remote[Int] =
+    Remote.OffsetByCodePoints(self, index, codePointOffset)
 
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)

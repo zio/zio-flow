@@ -78,6 +78,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     loop(self.drop(offset), Remote(0))
   }
 
+  // can be optimized with the KMP algorithm, but we don't have a remote indexed sequence yet
   def indexOfSlice[B >: A](that: Remote[List[B]], from: Remote[Int] = 0): Remote[Int] = {
     def loop(list: Remote[List[B]], i: Remote[Int], indexOfSlice: Remote[Int]): Remote[Int] =
       Remote
