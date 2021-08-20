@@ -76,6 +76,13 @@ class RemoteStringSyntax(self: Remote[String]) {
   def offsetByCodePoints(index: Remote[Int], codePointOffset: Remote[Int]): Remote[Int] =
     Remote.OffsetByCodePoints(self, index, codePointOffset)
 
+  def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
+    Remote.ListToString(
+      toList.fold[List[Char]](Nil) { (chars, char) =>
+        Remote.Cons(chars, (char === oldChar).ifThenElse(newChar, char))
+      }
+    )
+
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)
 
