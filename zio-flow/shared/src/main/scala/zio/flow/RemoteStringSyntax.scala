@@ -1,5 +1,7 @@
 package zio.flow
 
+import java.util.Locale
+
 class RemoteStringSyntax(self: Remote[String]) {
   def ++(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
@@ -89,4 +91,24 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def toList: Remote[List[Char]] =
     Remote.StringToList(self)
+
+  /**
+   * Uses [[Locale.ROOT]] instead of the default locale for this instance of the JVM. A different locale can be
+   * specified by calling `toLowerCase(locale: Remote[Locale])`.
+   */
+  def toLowerCase: Remote[String] =
+    toLowerCase(Locale.ROOT)
+
+  def toLowerCase(locale: Remote[Locale]): Remote[String] =
+    Remote.ToLowerCase(self, locale)
+
+  /**
+   * Uses [[Locale.ROOT]] instead of the default locale for this instance of the JVM. A different locale can be
+   * specified by calling `toUpperCase(locale: Remote[Locale])`.
+   */
+  def toUpperCase: Remote[String] =
+    toUpperCase(Locale.ROOT)
+
+  def toUpperCase(locale: Remote[Locale]): Remote[String] =
+    Remote.ToUpperCase(self, locale)
 }

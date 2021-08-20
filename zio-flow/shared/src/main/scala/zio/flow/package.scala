@@ -3,9 +3,11 @@ package zio
 import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 import scala.language.implicitConversions
 
+import zio.flow.internal.LocaleParts
 import zio.flow.{ Remote, RemoteListSyntax }
 import zio.schema.Schema.Primitive
 import zio.schema.{ Schema, StandardType }
@@ -24,6 +26,7 @@ package object flow extends LowPriorityZFlowImplicits {
 
   implicit val schemaDuration: Schema[Duration] = Primitive(StandardType.Duration(ChronoUnit.SECONDS))
   implicit val schemaInstant: Schema[Instant]   = Primitive(StandardType.Instant(DateTimeFormatter.BASIC_ISO_DATE))
+  implicit val schemaLocale: Schema[Locale]     = LocaleParts.localeSchema
 
   implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
     Schema.EitherSchema(aSchema, bSchema)

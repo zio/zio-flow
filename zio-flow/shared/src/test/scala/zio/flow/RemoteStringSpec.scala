@@ -1,5 +1,7 @@
 package zio.flow
 
+import java.util.Locale
+
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test.TestAspect.ignore
 import zio.test._
@@ -167,6 +169,22 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("abc").substringOption(-1) <-> None,
         Remote("abc").substringOption(0) <-> Some("abc")
       )
-    } @@ ignore  // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    test("To lowercase") {
+      BoolAlgebra.all(
+        Remote("abc").toLowerCase <-> "abc",
+        Remote("ABC").toLowerCase <-> "abc",
+        Remote("bugün nasılsın").toLowerCase(Locale.forLanguageTag("tr")) <-> "bugün nasılsın",
+        Remote("BUGÜN NASILSIN").toLowerCase(Locale.forLanguageTag("tr")) <-> "bugün nasılsın"
+      )
+    },
+    test("To uppercase") {
+      BoolAlgebra.all(
+        Remote("abc").toUpperCase <-> "ABC",
+        Remote("ABC").toUpperCase <-> "ABC",
+        Remote("bugün nasılsın").toUpperCase(Locale.forLanguageTag("tr")) <-> "BUGÜN NASILSIN",
+        Remote("BUGÜN NASILSIN").toUpperCase(Locale.forLanguageTag("tr")) <-> "BUGÜN NASILSIN"
+      )
+    }
   )
 }

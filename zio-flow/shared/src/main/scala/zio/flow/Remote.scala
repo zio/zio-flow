@@ -1,6 +1,7 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
+import java.util.Locale
 
 import scala.language.implicitConversions
 import scala.util.Try
@@ -625,6 +626,21 @@ object Remote {
       extends Remote[Int] {
     override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
       ternaryEvalWithSchema(value, index, codePointOffset)(_.offsetByCodePoints(_, _), OffsetByCodePoints, Schema[Int])
+  }
+
+  final case class IntToLong(value: Remote[Int]) extends Remote[Long] {
+    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] =
+      unaryEvalWithSchema(value)(_.toLong, IntToLong, Schema[Long])
+  }
+
+  final case class ToLowerCase(value: Remote[String], locale: Remote[Locale]) extends Remote[String] {
+    override def evalWithSchema: Either[Remote[String], SchemaAndValue[String]] =
+      binaryEvalWithSchema(value, locale)(_.toLowerCase(_), ToLowerCase, Schema[String])
+  }
+
+  final case class ToUpperCase(value: Remote[String], locale: Remote[Locale]) extends Remote[String] {
+    override def evalWithSchema: Either[Remote[String], SchemaAndValue[String]] =
+      binaryEvalWithSchema(value, locale)(_.toUpperCase(_), ToUpperCase, Schema[String])
   }
 
   private[zio] def unaryEval[A, B](
