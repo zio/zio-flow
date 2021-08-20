@@ -643,6 +643,12 @@ object Remote {
       binaryEvalWithSchema(value, locale)(_.toUpperCase(_), ToUpperCase, Schema[String])
   }
 
+  final case class ReplaceAll(value: Remote[String], regex: Remote[String], replacement: Remote[String])
+      extends Remote[String] {
+    override def evalWithSchema: Either[Remote[String], SchemaAndValue[String]] =
+      ternaryEvalWithSchema(value, regex, replacement)(_.replaceAll(_, _), ReplaceAll, Schema[String])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =

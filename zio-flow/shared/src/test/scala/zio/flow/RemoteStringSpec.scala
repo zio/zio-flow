@@ -165,6 +165,13 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("").replace('a', 'b') <-> ""
       )
     },
+    test("Replace all") {
+      BoolAlgebra.all(
+        Remote("ababa").replaceAll("ba", "bc") <-> "abcbc",
+        Remote("ababa").replaceAll("ba", "") <-> "a",
+        Remote("ababababadababa").replaceAll("(?:ba)+", "da") <-> "adadada"
+      )
+    },
     test("Reverse") {
       BoolAlgebra.all(
         Remote("foo").reverse <-> "oof",

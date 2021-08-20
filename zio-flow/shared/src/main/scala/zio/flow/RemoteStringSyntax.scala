@@ -83,6 +83,9 @@ class RemoteStringSyntax(self: Remote[String]) {
       }
     )
 
+  def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    Remote.ReplaceAll(self, regex, replacement)
+
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)
 
