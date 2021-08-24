@@ -165,6 +165,16 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("").replace('a', 'b') <-> ""
       )
     },
+    test("Replace substring") {
+      BoolAlgebra.all(
+        Remote("foooo").replace("oo", "") <-> "f",
+        Remote("foooo").replace("o", "a") <-> "faaaa",
+        Remote("faadaabaa").replace("aa", "") <-> "fdb",
+        Remote("abcbcdbcbca").replace("bc", "de") <-> "adededdedea",
+        Remote("foo").replace("", "a") <-> "afaoaoa",
+        Remote("foo").replace("a", "b") <-> "foo"
+      )
+    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
     test("Replace all") {
       BoolAlgebra.all(
         Remote("ababa").replaceAll("ba", "bc") <-> "abcbc",

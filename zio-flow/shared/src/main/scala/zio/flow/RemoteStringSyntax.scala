@@ -3,6 +3,8 @@ package zio.flow
 import java.util.Locale
 
 class RemoteStringSyntax(self: Remote[String]) {
+  def +(suffix: Remote[String]): Remote[String] = self.concat(suffix)
+
   def ++(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
   def charAtOption(index: Remote[Int]): Remote[Option[Char]] =
@@ -80,6 +82,18 @@ class RemoteStringSyntax(self: Remote[String]) {
     Remote.ListToString(
       toList.fold[List[Char]](Nil) { (chars, char) =>
         Remote.Cons(chars, (char === oldChar).ifThenElse(newChar, char))
+      }
+    )
+
+  def replace(target: Remote[String], replacement: Remote[String])(implicit d: DummyImplicit): Remote[String] =
+    (target === "").ifThenElse(
+      replacement + self.headOption.handleOption("", ch => Remote.ListToString(Remote.Cons(Remote(Nil), ch))) +
+        self.isEmpty.ifThenElse(self, self.drop(1).replace(target, replacement)), {
+        val occurrence = self.indexOf(target)
+        (occurrence === -1).ifThenElse(
+          self,
+          self.take(occurrence) ++ replacement ++ self.drop(occurrence + target.length).replace(target, replacement)
+        )
       }
     )
 
