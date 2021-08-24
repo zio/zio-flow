@@ -31,6 +31,12 @@ class RemoteStringSyntax(self: Remote[String]) {
   def drop(n: Remote[Int]): Remote[String] =
     Remote.ListToString(RemoteStringToListChar(self).drop(n))
 
+  def endsWith(s: Remote[String]): Remote[Boolean] =
+    toList.endsWith(s.toList)
+
+  def equalsIgnoreCase(anotherString: Remote[String]): Remote[Boolean] =
+    self.toLowerCase === anotherString.toLowerCase
+
   def indexOf(ch: Remote[Char]): Remote[Int] =
     indexOf(ch, 0)
 
@@ -78,6 +84,21 @@ class RemoteStringSyntax(self: Remote[String]) {
   def offsetByCodePoints(index: Remote[Int], codePointOffset: Remote[Int]): Remote[Int] =
     Remote.OffsetByCodePoints(self, index, codePointOffset)
 
+  def regionMatches(
+    toffset: Remote[Int],
+    other: Remote[String],
+    ooffset: Remote[Int],
+    len: Remote[Int]
+  ): Remote[Boolean] = {
+    val invalidParams = (ooffset < 0) || (toffset < 0) ||
+      (Remote.IntToLong(toffset) > Remote.IntToLong(self.length) - Remote.IntToLong(len)) ||
+      (Remote.IntToLong(ooffset) > Remote.IntToLong(other.length) - Remote.IntToLong(len))
+    invalidParams.ifThenElse(
+      false,
+      slice(toffset, toffset + len) === other.slice(ooffset, ooffset + len)
+    )
+  }
+
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
     Remote.ListToString(
       toList.fold[List[Char]](Nil) { (chars, char) =>
@@ -102,6 +123,9 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)
+
+  def slice(from: Remote[Int], until: Remote[Int]): Remote[String] =
+    substringOption(from, until).getOrElse("")
 
   def substringOption(beginIndex: Remote[Int], endIndex: Remote[Int] = length): Remote[Option[String]] =
     ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
