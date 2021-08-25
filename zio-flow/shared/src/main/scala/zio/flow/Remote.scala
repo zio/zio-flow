@@ -649,6 +649,12 @@ object Remote {
       ternaryEvalWithSchema(value, regex, replacement)(_.replaceAll(_, _), ReplaceAll, Schema[String])
   }
 
+  final case class SplitString(value: Remote[String], regex: Remote[String], limit: Remote[Int])
+      extends Remote[List[String]] {
+    override def evalWithSchema: Either[Remote[List[String]], SchemaAndValue[List[String]]] =
+      ternaryEvalWithSchema(value, regex, limit)(_.split(_, _).toList, SplitString, Schema[List[String]])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =

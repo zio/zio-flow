@@ -111,7 +111,7 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def replace(target: Remote[String], replacement: Remote[String])(implicit d: DummyImplicit): Remote[String] =
     (target === "").ifThenElse(
-      replacement + self.headOption.handleOption("", ch => Remote.ListToString(Remote.Cons(Remote(Nil), ch))) +
+      replacement + self.headOption.handleOption("", _.toString) +
         self.isEmpty.ifThenElse(self, self.drop(1).replace(target, replacement)), {
         val occurrence = self.indexOf(target)
         (occurrence === -1).ifThenElse(
@@ -129,6 +129,21 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def slice(from: Remote[Int], until: Remote[Int]): Remote[String] =
     substringOption(from, until).getOrElse("")
+
+  def split(ch: Remote[Char]): Remote[List[String]] =
+    split(ch.escape, 0)
+
+  def split(separators: Remote[List[Char]])(implicit d: DummyImplicit): Remote[List[String]] =
+    self.split(separators.fold("[")(_ + _.escape) + "]")
+
+  def split(regex: Remote[String])(implicit d: DummyImplicit, e: DummyImplicit): Remote[List[String]] =
+    split(regex, 0)
+
+  def split(regex: Remote[String], limit: Remote[Int]): Remote[List[String]] =
+    Remote.SplitString(self, regex, limit)
+
+  def splitAt(n: Int): Remote[(String, String)] =
+    Remote.tuple2((take(n), drop(n)))
 
   def substringOption(beginIndex: Remote[Int], endIndex: Remote[Int] = length): Remote[Option[String]] =
     ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
