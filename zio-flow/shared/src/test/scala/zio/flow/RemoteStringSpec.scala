@@ -164,6 +164,14 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("").regionMatches(0, "", 0, 1) <-> false
       )
     } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    test("Repeat") {
+      BoolAlgebra.all(
+        Remote("foo").repeat(-1) <-> "",
+        Remote("foo").repeat(0) <-> "",
+        Remote("foo").repeat(1) <-> "foo",
+        Remote("foo").repeat(5) <-> "foofoofoofoofoo"
+      )
+    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
     test("Replace") {
       BoolAlgebra.all(
         Remote("aaa").replace('a', 'b') <-> "bbb",

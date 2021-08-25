@@ -99,6 +99,9 @@ class RemoteStringSyntax(self: Remote[String]) {
     )
   }
 
+  def repeat(count: Remote[Int]): Remote[String] =
+    (count > 0).ifThenElse(self + repeat(count - 1), "")
+
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
     Remote.ListToString(
       toList.fold[List[Char]](Nil) { (chars, char) =>
