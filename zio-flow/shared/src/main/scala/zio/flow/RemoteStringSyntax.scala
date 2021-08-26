@@ -3,9 +3,12 @@ package zio.flow
 import java.util.Locale
 
 class RemoteStringSyntax(self: Remote[String]) {
-  def +(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
-  def ++(suffix: Remote[String]): Remote[String] = self.concat(suffix)
+  def *(count: Remote[Int]): Remote[String] = repeat(count)
+
+  def +(suffix: Remote[String]): Remote[String] = concat(suffix)
+
+  def ++(suffix: Remote[String]): Remote[String] = concat(suffix)
 
   def charAtOption(index: Remote[Int]): Remote[Option[Char]] =
     Remote.CharAtOption(self, index)
