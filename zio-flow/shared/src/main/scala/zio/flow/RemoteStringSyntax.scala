@@ -134,7 +134,7 @@ class RemoteStringSyntax(self: Remote[String]) {
     split(ch.escape, 0)
 
   def split(separators: Remote[List[Char]])(implicit d: DummyImplicit): Remote[List[String]] =
-    self.split(separators.fold("[")(_ + _.escape) + "]")
+    split(separators.fold("[")(_ + _.escape) + "]")
 
   def split(regex: Remote[String])(implicit d: DummyImplicit, e: DummyImplicit): Remote[List[String]] =
     split(regex, 0)
@@ -177,4 +177,7 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def toUpperCase(locale: Remote[Locale]): Remote[String] =
     Remote.ToUpperCase(self, locale)
+
+  def trim: Remote[String] =
+    slice(self.indexWhere(_ > ' '), self.lastIndexWhere(_ > ' ') + 1)
 }

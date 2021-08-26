@@ -66,33 +66,48 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.Some0(a))
     )
 
-  def indexOf(elem: Remote[A], offset: Remote[Int] = 0): Remote[Int] = {
-    def loop(list: Remote[List[A]], index: Remote[Int]): Remote[Int] =
-      Remote
-        .UnCons(list.widen[List[A]])
-        .widen[Option[(A, List[A])]]
-        .handleOption(
-          -1,
-          (tuple: Remote[(A, List[A])]) => (tuple._1 === elem).ifThenElse(index, loop(tuple._2, index + 1))
-        )
-    loop(self.drop(offset), Remote(0))
-  }
+  def indexOf(elem: Remote[A], from: Remote[Int] = 0): Remote[Int] =
+    indexWhere(elem === _, from)
 
   // can be optimized with the KMP algorithm, but we don't have a remote indexed sequence yet
   def indexOfSlice[B >: A](that: Remote[List[B]], from: Remote[Int] = 0): Remote[Int] = {
-    def loop(list: Remote[List[B]], i: Remote[Int], indexOfSlice: Remote[Int]): Remote[Int] =
+    def loop(list: Remote[List[B]], i: Remote[Int], acc: Remote[Int]): Remote[Int] =
       Remote
         .UnCons(list.widen[List[B]])
         .widen[Option[(B, List[B])]]
         .handleOption(
-          indexOfSlice,
-          (tuple: Remote[(B, List[B])]) => list.startsWith(that).ifThenElse(i, loop(tuple._2, i + 1, indexOfSlice))
+          acc,
+          tuple => list.startsWith(that).ifThenElse(i, loop(tuple._2, i + 1, acc))
         )
-    loop(self.drop(from), 0, -1)
+
+    val index = loop(self.drop(from), 0, -1)
+    (index === -1).ifThenElse(index, index + from)
+  }
+
+  def indexWhere[B >: A](p: Remote[B] => Remote[Boolean], from: Remote[Int] = 0): Remote[Int] = {
+    def loop(list: Remote[List[B]], i: Remote[Int], acc: Remote[Int]): Remote[Int] =
+      Remote
+        .UnCons(list.widen[List[B]])
+        .widen[Option[(B, List[B])]]
+        .handleOption(
+          acc,
+          tuple => p(tuple._1).ifThenElse(i, loop(tuple._2, i + 1, acc))
+        )
+
+    val index = loop(self.drop(from), 0, -1)
+    (index === -1).ifThenElse(index, index + from)
   }
 
   final def isEmpty: Remote[Boolean] =
     self.headOption.isNone
+
+  def lastIndexOf(elem: Remote[A], end: Remote[Int] = length - 1): Remote[Int] =
+    lastIndexWhere(elem === _, end)
+
+  def lastIndexWhere[B >: A](p: Remote[B] => Remote[Boolean], end: Remote[Int] = length - 1): Remote[Int] = {
+    val lastIndex = reverse.indexWhere(p, length - end - 1)
+    (lastIndex === -1).ifThenElse(lastIndex, length - lastIndex - 1)
+  }
 
   def lastOption: Remote[Option[A]] =
     reverse.headOption

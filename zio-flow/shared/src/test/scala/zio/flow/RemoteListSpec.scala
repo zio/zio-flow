@@ -38,8 +38,25 @@ object RemoteListSpec extends DefaultRunnableSpec {
       fold <-> 6
     },
     test("IndexOf") {
-      Remote(List(1, 2, 3)).indexOf(1) <-> 0
+      BoolAlgebra.all(
+        // Remote(List.empty[Int]).indexOf(3) <-> -1,
+        Remote(List(1, 2, 3)).indexOf(4) <-> -1,
+        Remote(List(1, 2, 3)).indexOf(1) <-> -0,
+        Remote(List(1, 2, 3, 4, 5)).indexOf(5, 0) <-> 4,
+        Remote(List(1, 2, 3, 4, 5)).indexOf(5, 3) <-> 4,
+        Remote(List(1, 2, 3, 4, 5)).indexOf(5, 4) <-> 4,
+        Remote(List(1, 2, 3, 4, 5)).indexOf(5, 5) <-> -1
+      )
     } @@ TestAspect.ignore, // TODO: remove ignore when UnCons#toTupleSchema is implemented
+    test("LastIndexOf") {
+      BoolAlgebra.all(
+        // Remote(List.empty[Int]).lastIndexOf(3) <-> -1,
+        Remote(List(1, 2, 3)).lastIndexOf(4) <-> -1,
+        Remote(List(1, 2, 3)).lastIndexOf(1) <-> 0,
+        Remote(List(1, 2, 3, 2, 1)).lastIndexOf(1) <-> 4,
+        Remote(List(5, 4, 5, 4, 3)).lastIndexOf(5) <-> 2
+      )
+    } @@ TestAspect.ignore,
     test("StartsWith") {
       Remote(List(1, 2, 3)).startsWith(Remote(List.empty[Int])) <-> true
     } @@ TestAspect.ignore // TODO: remove ignore when UnCons#toTupleSchema is implemented
