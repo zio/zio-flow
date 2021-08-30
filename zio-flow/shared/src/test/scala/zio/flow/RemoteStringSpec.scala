@@ -61,7 +61,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("abc").contains('c') <-> true,
         Remote("abc").contains('d') <-> false
       )
-    } @@ ignore, // TODO: remove ignore when Remote.Equal is implemented
+    } @@ ignore,
     test("Contains slice") {
       BoolAlgebra.all(
         Remote("abc").contains("ab") <-> true,
@@ -98,7 +98,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
       BoolAlgebra.all(
         Remote("abc").indexOfSlice(List('a', 'b')) <-> 0
       )
-    } @@ ignore, // TODO: complete/remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("Is empty") {
       BoolAlgebra.all(
         Remote("").isEmpty <-> true,
@@ -149,6 +149,14 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("oof").matches("fo+") <-> false
       )
     },
+    test("Pad to") {
+      BoolAlgebra.all(
+        Remote("a").padTo(-1, '*') <-> "a",
+        Remote("a").padTo(Int.MinValue, '*') <-> "a",
+        Remote("a").padTo(4, '*') <-> "a***",
+        Remote("a").padTo(5, '*') <-> "a****"
+      )
+    } @@ ignore,
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,
@@ -156,14 +164,14 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         (Remote("a") > "b") <-> false,
         (Remote("a") < "b") <-> true
       )
-    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("Region matches") {
       BoolAlgebra.all(
         Remote("foobar").regionMatches(3, "bar", 0, 3) <-> true,
         Remote("foobar").regionMatches(0, "bar", 0, 3) <-> false,
         Remote("").regionMatches(0, "", 0, 1) <-> false
       )
-    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("Repeat") {
       BoolAlgebra.all(
         Remote("foo").repeat(-1) <-> "",
@@ -171,7 +179,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("foo").repeat(1) <-> "foo",
         Remote("foo").repeat(5) <-> "foofoofoofoofoo"
       )
-    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("Replace") {
       BoolAlgebra.all(
         Remote("aaa").replace('a', 'b') <-> "bbb",
@@ -189,7 +197,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("foo").replace("", "a") <-> "afaoaoa",
         Remote("foo").replace("a", "b") <-> "foo"
       )
-    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("Replace all") {
       BoolAlgebra.all(
         Remote("ababa").replaceAll("ba", "bc") <-> "abcbc",
@@ -209,7 +217,7 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("abc").substringOption(-1) <-> None,
         Remote("abc").substringOption(0) <-> Some("abc")
       )
-    } @@ ignore, // TODO: remove ignore when Remote.LessThanEqual gets fixed
+    } @@ ignore,
     test("To lowercase") {
       BoolAlgebra.all(
         Remote("abc").toLowerCase <-> "abc",

@@ -32,7 +32,7 @@ class RemoteStringSyntax(self: Remote[String]) {
     toList.containsSlice(substring.toList)
 
   def drop(n: Remote[Int]): Remote[String] =
-    Remote.ListToString(RemoteStringToListChar(self).drop(n))
+    Remote.ListToString(toList.drop(n))
 
   def endsWith(s: Remote[String]): Remote[Boolean] =
     toList.endsWith(s.toList)
@@ -87,6 +87,12 @@ class RemoteStringSyntax(self: Remote[String]) {
   def offsetByCodePoints(index: Remote[Int], codePointOffset: Remote[Int]): Remote[Int] =
     Remote.OffsetByCodePoints(self, index, codePointOffset)
 
+  def padTo(len: Remote[Int], elem: Remote[Char]): Remote[String] =
+    (length >= len).ifThenElse(
+      self,
+      self ++ Remote.ListToString(Remote.fill(len - length, elem))
+    )
+
   def regionMatches(
     toffset: Remote[Int],
     other: Remote[String],
@@ -127,8 +133,13 @@ class RemoteStringSyntax(self: Remote[String]) {
   def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
     Remote.ReplaceAll(self, regex, replacement)
 
+  def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    Remote.ReplaceFirst(self, regex, replacement)
+
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)
+
+  def size: Remote[Int] = length
 
   def slice(from: Remote[Int], until: Remote[Int]): Remote[String] =
     substringOption(from, until).getOrElse("")
@@ -152,7 +163,7 @@ class RemoteStringSyntax(self: Remote[String]) {
     ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
       .ifThenElse(
         None,
-        Remote.Some0(drop(beginIndex).take(endIndex))
+        Remote.Some0(self.slice(beginIndex, beginIndex + endIndex))
       )
 
   def take(n: Remote[Int]): Remote[String] =

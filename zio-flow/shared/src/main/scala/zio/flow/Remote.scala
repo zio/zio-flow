@@ -649,6 +649,12 @@ object Remote {
       ternaryEvalWithSchema(value, regex, replacement)(_.replaceAll(_, _), ReplaceAll, Schema[String])
   }
 
+  final case class ReplaceFirst(value: Remote[String], regex: Remote[String], replacement: Remote[String])
+      extends Remote[String] {
+    override def evalWithSchema: Either[Remote[String], SchemaAndValue[String]] =
+      ternaryEvalWithSchema(value, regex, replacement)(_.replaceFirst(_, _), ReplaceAll, Schema[String])
+  }
+
   final case class SplitString(value: Remote[String], regex: Remote[String], limit: Remote[Int])
       extends Remote[List[String]] {
     override def evalWithSchema: Either[Remote[List[String]], SchemaAndValue[List[String]]] =
@@ -857,6 +863,15 @@ object Remote {
 
   implicit def either[A, B](either0: Either[Remote[A], Remote[B]]): Remote[Either[A, B]] =
     Either0(either0)
+
+  def fill[A](size: Remote[Int], a: Remote[A]): Remote[List[A]] = {
+    def loop(size: Remote[Int], list: Remote[List[A]]): Remote[List[A]] =
+      (size > 0).ifThenElse(
+        Remote.Cons(fill(size - 1, a), a),
+        list
+      )
+    loop(size, Nil)
+  }
 
   def fromEpochSec(seconds: Remote[Long]): Remote[Instant] =
     Remote.InstantFromLong(seconds)
