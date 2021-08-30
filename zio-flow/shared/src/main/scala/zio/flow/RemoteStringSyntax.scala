@@ -10,6 +10,20 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def ++(suffix: Remote[String]): Remote[String] = concat(suffix)
 
+  def +:(c: Remote[Char]): Remote[String] = prepended(c)
+
+  def ++:(prefix: Remote[String]): Remote[String] = prependedAll(prefix)
+
+  def :+(c: Remote[Char]): Remote[String] = appended(c)
+
+  def :++(suffix: Remote[String]): Remote[String] = appendedAll(suffix)
+
+  def appended(c: Remote[Char]): Remote[String] =
+    self + c.toStringRemote
+
+  def appendedAll(suffix: Remote[String]): Remote[String] =
+    self.concat(suffix)
+
   def charAtOption(index: Remote[Int]): Remote[Option[Char]] =
     Remote.CharAtOption(self, index)
 
@@ -92,6 +106,12 @@ class RemoteStringSyntax(self: Remote[String]) {
       self,
       self ++ Remote.ListToString(Remote.fill(len - length, elem))
     )
+
+  def prepended(c: Remote[Char]): Remote[String] =
+    Remote.ListToString(Remote.Cons(self.toList, c))
+
+  def prependedAll(prefix: Remote[String]): Remote[String] =
+    prefix.concat(self)
 
   def regionMatches(
     toffset: Remote[Int],
