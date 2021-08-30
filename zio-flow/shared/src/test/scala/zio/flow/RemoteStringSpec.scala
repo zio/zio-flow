@@ -252,6 +252,13 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("bugün nasılsın").toUpperCase(Locale.forLanguageTag("tr")) <-> "BUGÜN NASILSIN",
         Remote("BUGÜN NASILSIN").toUpperCase(Locale.forLanguageTag("tr")) <-> "BUGÜN NASILSIN"
       )
-    }
+    },
+    test("Updated option") {
+      BoolAlgebra.all(
+        Remote("foo").updatedOption(0, 'r') <-> Some("roo"),
+        Remote("boo").updatedOption(1, 'r') <-> Some("bro"),
+        Remote("").updatedOption(0, 'a') <-> None
+      )
+    } @@ ignore
   )
 }

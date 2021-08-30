@@ -112,6 +112,12 @@ class RemoteStringSyntax(self: Remote[String]) {
     take(offset) ++ other ++ drop(offset + replaced)
   }
 
+  def updatedOption(index: Remote[Int], elem: Remote[Char]): Remote[Option[String]] =
+    ((Remote(0) <= index) && (index < length)).ifThenElse(
+      Remote.Some0(patch(index, elem.toStringRemote, 1)),
+      None
+    )
+
   def prepended(c: Remote[Char]): Remote[String] =
     Remote.ListToString(Remote.Cons(self.toList, c))
 
