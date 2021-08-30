@@ -157,6 +157,25 @@ object RemoteStringSpec extends DefaultRunnableSpec {
         Remote("a").padTo(5, '*') <-> "a****"
       )
     } @@ ignore,
+    test("Patch") {
+      BoolAlgebra.all(
+        Remote("foobar").patch(Int.MinValue, "x", 0) <-> "xfoobar",
+        Remote("foobar").patch(0, "x", 0) <-> "xfoobar",
+        Remote("foobar").patch(0, "x", 2) <-> "xobar",
+        Remote("foobar").patch(0, "xx", 2) <-> "xxobar",
+        Remote("foobar").patch(0, "xxx", 2) <-> "xxxobar",
+        Remote("foobar").patch(1, "xxx", 2) <-> "fxxxbar",
+        Remote("foobar").patch(3, "xxx", 2) <-> "fooxxxr",
+        Remote("foobar").patch(0, "xxx", 1) <-> "xxxoobar",
+        Remote("foobar").patch(0, "xxxxxx", 5) <-> "xxxxxxr",
+        Remote("foobar").patch(0, "xxxxxx", 6) <-> "xxxxxx",
+        Remote("foobar").patch(3, "xxxxxx", 0) <-> "fooxxxxxxbar",
+        Remote("foobar").patch(3, "xxxxxx", 1) <-> "fooxxxxxxar",
+        Remote("foobar").patch(3, "xxxxxx", 6) <-> "fooxxxxxx",
+        Remote("foobar").patch(Int.MaxValue, "xxxxxx", 6) <-> "foobarxxxxxx",
+        Remote("foobar").patch(Int.MinValue, "xxx", 6) <-> "xxx"
+      )
+    } @@ ignore,
     test("Relational") {
       BoolAlgebra.all(
         (Remote("a") === "a") <-> true,

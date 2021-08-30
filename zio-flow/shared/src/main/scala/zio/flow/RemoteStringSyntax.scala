@@ -107,6 +107,11 @@ class RemoteStringSyntax(self: Remote[String]) {
       self ++ Remote.ListToString(Remote.fill(len - length, elem))
     )
 
+  def patch(from: Remote[Int], other: Remote[String], replaced: Remote[Int]): Remote[String] = {
+    val offset = (from < 0).ifThenElse(0, (from > length).ifThenElse(length, from))
+    take(offset) ++ other ++ drop(offset + replaced)
+  }
+
   def prepended(c: Remote[Char]): Remote[String] =
     Remote.ListToString(Remote.Cons(self.toList, c))
 
