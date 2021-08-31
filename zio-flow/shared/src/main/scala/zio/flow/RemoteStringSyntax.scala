@@ -98,6 +98,24 @@ class RemoteStringSyntax(self: Remote[String]) {
   def matches(regex: Remote[String]): Remote[Boolean] =
     Remote.MatchesRegex(self, regex)
 
+  def mkString(sep: Remote[String]): Remote[String] =
+    (sep.isEmpty || self.length < 2).ifThenElse(
+      self,
+      mkString("", sep, "")
+    )
+
+  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String]): Remote[String] = {
+    val sepChars = sep.toList.reverse
+    start ++ Remote.ListToString(
+      self
+        .fold(List.empty[Char]) { (chars, ch) =>
+          Remote.Cons(sepChars, ch) ++ chars
+        }
+        .reverse
+        .drop(sep.length)
+    ) ++ end
+  }
+
   def offsetByCodePoints(index: Remote[Int], codePointOffset: Remote[Int]): Remote[Int] =
     Remote.OffsetByCodePoints(self, index, codePointOffset)
 
@@ -111,12 +129,6 @@ class RemoteStringSyntax(self: Remote[String]) {
     val offset = (from < 0).ifThenElse(0, (from > length).ifThenElse(length, from))
     take(offset) ++ other ++ drop(offset + replaced)
   }
-
-  def updatedOption(index: Remote[Int], elem: Remote[Char]): Remote[Option[String]] =
-    ((Remote(0) <= index) && (index < length)).ifThenElse(
-      Remote.Some0(patch(index, elem.toStringRemote, 1)),
-      None
-    )
 
   def prepended(c: Remote[Char]): Remote[String] =
     Remote.ListToString(Remote.Cons(self.toList, c))
@@ -225,4 +237,10 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def trim: Remote[String] =
     slice(self.indexWhere(_ > ' '), self.lastIndexWhere(_ > ' ') + 1)
+
+  def updatedOption(index: Remote[Int], elem: Remote[Char]): Remote[Option[String]] =
+    ((Remote(0) <= index) && (index < length)).ifThenElse(
+      Remote.Some0(patch(index, elem.toStringRemote, 1)),
+      None
+    )
 }
