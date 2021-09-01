@@ -661,6 +661,16 @@ object Remote {
       ternaryEvalWithSchema(value, regex, limit)(_.split(_, _).toList, SplitString, Schema[List[String]])
   }
 
+  final case class CharIsLower(value: Remote[Char]) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
+      unaryEvalWithSchema(value)(_.isLower, CharIsLower, Schema[Boolean])
+  }
+
+  final case class CharToUpper(value: Remote[Char]) extends Remote[Char] {
+    override def evalWithSchema: Either[Remote[Char], SchemaAndValue[Char]] =
+      unaryEvalWithSchema(value)(_.toUpper, CharToUpper, Schema[Char])
+  }
+
   private[zio] def unaryEval[A, B](
     remote: Remote[A]
   )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =

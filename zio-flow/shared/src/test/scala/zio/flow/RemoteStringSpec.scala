@@ -8,6 +8,14 @@ import zio.test._
 
 object RemoteStringSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[Environment, Failure] = suite("RemoteStringSpec")(
+    test("Capitalize") {
+      BoolAlgebra.all(
+        Remote("").capitalize <-> "",
+        Remote("foo").capitalize <-> "Foo",
+        Remote("Foo").capitalize <-> "Foo",
+        Remote("FOO").capitalize <-> "FOO"
+      )
+    } @@ ignore,
     test("CharAt") {
       BoolAlgebra.all(
         Remote("abc").charAtOption(0) <-> Some('a'),

@@ -9,9 +9,15 @@ class RemoteCharSyntax(self: Remote[Char]) {
       "\\" + self.toString
     )
 
+  def isLower: Remote[Boolean] =
+    Remote.CharIsLower(self)
+
   def toInt: Remote[Int] =
     Remote.CharToInt(self)
 
   def toStringRemote: Remote[String] =
     Remote.ListToString(Remote.Cons(Remote(Nil), self))
+
+  def toUpper: Remote[Char] =
+    Remote.CharToUpper(self)
 }

@@ -24,6 +24,9 @@ class RemoteStringSyntax(self: Remote[String]) {
   def appendedAll(suffix: Remote[String]): Remote[String] =
     self.concat(suffix)
 
+  def capitalize: Remote[String] =
+    self.charAtOption(0).handleOption(self, _.toUpper +: self.drop(1))
+
   def charAtOption(index: Remote[Int]): Remote[Option[Char]] =
     Remote.CharAtOption(self, index)
 
