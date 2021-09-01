@@ -2,7 +2,7 @@ package zio.flow
 
 class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
 
-  def getOrElse[B >: A](default: => Remote[B]): Remote[B] =
+  def getOrElse[B >: A](default: Remote[B]): Remote[B] =
     handleOption(default, a => a)
 
   def handleOption[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =

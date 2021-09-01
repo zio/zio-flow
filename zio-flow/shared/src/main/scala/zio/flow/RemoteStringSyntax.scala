@@ -205,6 +205,25 @@ class RemoteStringSyntax(self: Remote[String]) {
   def splitAt(n: Int): Remote[(String, String)] =
     Remote.tuple2((take(n), drop(n)))
 
+  def startsWith(prefix: Remote[String]): Remote[Boolean] =
+    toList.startsWith(prefix.toList)
+
+  def stripPrefix(prefix: Remote[String]): Remote[String] =
+    self
+      .startsWith(prefix)
+      .ifThenElse(
+        self.substringOption(prefix.length).getOrElse(self),
+        self
+      )
+
+  def stripSuffix(suffix: Remote[String]): Remote[String] =
+    self
+      .endsWith(suffix)
+      .ifThenElse(
+        self.substringOption(0, self.length - suffix.length).getOrElse(self),
+        self
+      )
+
   def substringOption(beginIndex: Remote[Int], endIndex: Remote[Int] = length): Remote[Option[String]] =
     ((beginIndex < 0) || (endIndex > length) || (beginIndex > endIndex))
       .ifThenElse(
