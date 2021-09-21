@@ -4,19 +4,19 @@ import java.util.Locale
 
 class RemoteStringSyntax(self: Remote[String]) {
 
-  def *(count: Remote[Int]): Remote[String] = repeat(count)
+  def *(count: Remote[Int]): Remote[String] = self.repeat(count)
 
-  def +(suffix: Remote[String]): Remote[String] = concat(suffix)
+  def +(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
-  def ++(suffix: Remote[String]): Remote[String] = concat(suffix)
+  def ++(suffix: Remote[String]): Remote[String] = self.concat(suffix)
 
-  def +:(c: Remote[Char]): Remote[String] = prepended(c)
+  def +:(c: Remote[Char]): Remote[String] = self.prepended(c)
 
-  def ++:(prefix: Remote[String]): Remote[String] = prependedAll(prefix)
+  def ++:(prefix: Remote[String]): Remote[String] = self.prependedAll(prefix)
 
-  def :+(c: Remote[Char]): Remote[String] = appended(c)
+  def :+(c: Remote[Char]): Remote[String] = self.appended(c)
 
-  def :++(suffix: Remote[String]): Remote[String] = appendedAll(suffix)
+  def :++(suffix: Remote[String]): Remote[String] = self.appendedAll(suffix)
 
   def appended(c: Remote[Char]): Remote[String] =
     self + c.toStringRemote
@@ -49,40 +49,40 @@ class RemoteStringSyntax(self: Remote[String]) {
     toList.containsSlice(substring.toList)
 
   def drop(n: Remote[Int]): Remote[String] =
-    Remote.ListToString(toList.drop(n))
+    Remote.ListToString(self.toList.drop(n))
 
   def endsWith(s: Remote[String]): Remote[Boolean] =
-    toList.endsWith(s.toList)
+    self.toList.endsWith(s.toList)
 
   def equalsIgnoreCase(anotherString: Remote[String]): Remote[Boolean] =
     self.toLowerCase === anotherString.toLowerCase
 
   def indexOf(ch: Remote[Char]): Remote[Int] =
-    indexOf(ch, 0)
+    self.indexOf(ch, 0)
 
   def indexOf(ch: Remote[Char], fromIndex: Remote[Int]): Remote[Int] =
     Remote.IndexOfCharFromIndex(self, ch.toInt, fromIndex)
 
   def indexOf(ch: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
-    indexOf(ch, 0)
+    self.indexOf(ch, 0)
 
   def indexOf(ch: Remote[Int], fromIndex: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
     Remote.IndexOfCharFromIndex(self, ch, fromIndex)
 
   def indexOf(str: Remote[String])(implicit d: DummyImplicit, e: DummyImplicit): Remote[Int] =
-    indexOf(str, 0)(d, e)
+    self.indexOf(str, 0)(d, e)
 
   def indexOf(str: Remote[String], fromIndex: Remote[Int])(implicit d: DummyImplicit, e: DummyImplicit): Remote[Int] =
     Remote.IndexOfStringFromIndex(self, str, fromIndex)
 
   def lastIndexOf(ch: Remote[Char]): Remote[Int] =
-    lastIndexOf(ch, length)
+    self.lastIndexOf(ch, length)
 
   def lastIndexOf(ch: Remote[Char], fromIndex: Remote[Int]): Remote[Int] =
     Remote.LastIndexOfCharFromIndex(self, ch.toInt, fromIndex)
 
   def lastIndexOf(ch: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
-    lastIndexOf(ch, length)
+    self.lastIndexOf(ch, length)
 
   def lastIndexOf(ch: Remote[Int], fromIndex: Remote[Int])(implicit d: DummyImplicit): Remote[Int] =
     Remote.LastIndexOfCharFromIndex(self, ch, fromIndex)
@@ -104,7 +104,7 @@ class RemoteStringSyntax(self: Remote[String]) {
   def mkString(sep: Remote[String]): Remote[String] =
     (sep.isEmpty || self.length < 2).ifThenElse(
       self,
-      mkString("", sep, "")
+      self.mkString("", sep, "")
     )
 
   def mkString(start: Remote[String], sep: Remote[String], end: Remote[String]): Remote[String] = {
@@ -130,7 +130,7 @@ class RemoteStringSyntax(self: Remote[String]) {
 
   def patch(from: Remote[Int], other: Remote[String], replaced: Remote[Int]): Remote[String] = {
     val offset = (from < 0).ifThenElse(0, (from > length).ifThenElse(length, from))
-    take(offset) ++ other ++ drop(offset + replaced)
+    self.take(offset) ++ other ++ self.drop(offset + replaced)
   }
 
   def prepended(c: Remote[Char]): Remote[String] =
@@ -150,16 +150,16 @@ class RemoteStringSyntax(self: Remote[String]) {
       (Remote.IntToLong(ooffset) > Remote.IntToLong(other.length) - Remote.IntToLong(len))
     invalidParams.ifThenElse(
       false,
-      slice(toffset, toffset + len) === other.slice(ooffset, ooffset + len)
+      self.slice(toffset, toffset + len) === other.slice(ooffset, ooffset + len)
     )
   }
 
   def repeat(count: Remote[Int]): Remote[String] =
-    (count > 0).ifThenElse(self + repeat(count - 1), "")
+    (count > 0).ifThenElse(self + self.repeat(count - 1), "")
 
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
     Remote.ListToString(
-      toList.fold[List[Char]](Nil) { (chars, char) =>
+      self.toList.fold[List[Char]](Nil) { (chars, char) =>
         Remote.Cons(chars, (char === oldChar).ifThenElse(newChar, char))
       }
     )
@@ -185,28 +185,28 @@ class RemoteStringSyntax(self: Remote[String]) {
   def reverse: Remote[String] =
     Remote.ListToString(toList.reverse)
 
-  def size: Remote[Int] = length
+  def size: Remote[Int] = self.length
 
   def slice(from: Remote[Int], until: Remote[Int]): Remote[String] =
     substringOption(from, until).getOrElse("")
 
   def split(ch: Remote[Char]): Remote[List[String]] =
-    split(ch.escape, 0)
+    self.split(ch.escape, 0)
 
   def split(separators: Remote[List[Char]])(implicit d: DummyImplicit): Remote[List[String]] =
-    split(separators.fold("[")(_ + _.escape) + "]")
+    self.split(separators.fold("[")(_ + _.escape) + "]")
 
   def split(regex: Remote[String])(implicit d: DummyImplicit, e: DummyImplicit): Remote[List[String]] =
-    split(regex, 0)
+    self.split(regex, 0)
 
   def split(regex: Remote[String], limit: Remote[Int]): Remote[List[String]] =
     Remote.SplitString(self, regex, limit)
 
   def splitAt(n: Int): Remote[(String, String)] =
-    Remote.tuple2((take(n), drop(n)))
+    Remote.tuple2((self.take(n), self.drop(n)))
 
   def startsWith(prefix: Remote[String]): Remote[Boolean] =
-    toList.startsWith(prefix.toList)
+    self.toList.startsWith(prefix.toList)
 
   def stripPrefix(prefix: Remote[String]): Remote[String] =
     self
@@ -242,7 +242,7 @@ class RemoteStringSyntax(self: Remote[String]) {
    * specified by calling `toLowerCase(locale: Remote[Locale])`.
    */
   def toLowerCase: Remote[String] =
-    toLowerCase(Locale.ROOT)
+    self.toLowerCase(Locale.ROOT)
 
   def toLowerCase(locale: Remote[Locale]): Remote[String] =
     Remote.ToLowerCase(self, locale)
@@ -252,13 +252,13 @@ class RemoteStringSyntax(self: Remote[String]) {
    * specified by calling `toUpperCase(locale: Remote[Locale])`.
    */
   def toUpperCase: Remote[String] =
-    toUpperCase(Locale.ROOT)
+    self.toUpperCase(Locale.ROOT)
 
   def toUpperCase(locale: Remote[Locale]): Remote[String] =
     Remote.ToUpperCase(self, locale)
 
   def trim: Remote[String] =
-    slice(self.indexWhere(_ > ' '), self.lastIndexWhere(_ > ' ') + 1)
+    self.slice(self.indexWhere(_ > ' '), self.lastIndexWhere(_ > ' ') + 1)
 
   def updatedOption(index: Remote[Int], elem: Remote[Char]): Remote[Option[String]] =
     ((Remote(0) <= index) && (index < length)).ifThenElse(
