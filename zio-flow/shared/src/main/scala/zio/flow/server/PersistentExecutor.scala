@@ -156,6 +156,12 @@ final case class PersistentExecutor(
               }
             }
 
+          case fold @ Fold(Input(), _, _) =>
+            ref.get.map { state =>
+              val env = state.currentEnvironment
+              state.copy(current = fold.ifSuccess(env.toRemote))
+            } *> step(ref)
+
           case fold @ Fold(_, _, _) =>
             ref.update { state =>
               val env         = state.currentEnvironment
