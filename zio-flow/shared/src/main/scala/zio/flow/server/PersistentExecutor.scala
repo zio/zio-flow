@@ -204,7 +204,6 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              val env  = state.currentEnvironment.schema
               val cont = Continuation(finalizer, ZFlow.input)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
