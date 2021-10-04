@@ -156,6 +156,12 @@ final case class PersistentExecutor(
               }
             }
 
+          case fold @ Fold(Input(), _, _) =>
+            ref.get.map { state =>
+              val env = state.currentEnvironment
+              state.copy(current = fold.ifSuccess(env.toRemote))
+            } *> step(ref)
+
           case fold @ Fold(_, _, _) =>
             ref.update { state =>
               val env         = state.currentEnvironment
@@ -198,7 +204,6 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              val env  = state.currentEnvironment.schema
               val cont = Continuation(finalizer, ZFlow.input)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
