@@ -170,17 +170,20 @@ final case class PersistentExecutor(
               }
             }
 
+          case fold @ Fold(Input(), _, _) =>
+            ref.get.map { state =>
+              val env = state.currentEnvironment
+              state.copy(current = fold.ifSuccess(env.toRemote))
+            } *> step(ref)
+
           case fold @ Fold(_, _, _) =>
-            putStrLn("Fold is submitted").provide(Has(console.Console.Service.live)) *>
-              ref.update { state =>
-                val env         = state.currentEnvironment.unsafeCoerce[fold.ValueR]
-                //val errorFlow   = applyFunction[fold.ValueR, fold.ValueE, fold.ValueA, fold.ValueB](fold.ifError, env)
-                //val successFlow = applyFunction[fold.ValueR, fold.ValueE, fold.ValueA, fold.ValueB](fold.ifSuccess, env)
-                val errorFlow   = ZFlow.input[fold.ValueE].provide(env.asInstanceOf)
-                val successFlow = ZFlow.input[fold.ValueA].provide(env.asInstanceOf)
-                val cont        = Continuation(errorFlow, successFlow)
-                state.copy(current = fold.value, stack = cont :: state.stack)
-              } *> step(ref)
+            ref.update { state =>
+              val env         = state.currentEnvironment
+              val errorFlow   = applyFunction(fold.ifError.asInstanceOf, env)
+              val successFlow = applyFunction(fold.ifSuccess.asInstanceOf, env)
+              val cont        = Continuation(errorFlow, successFlow)
+              state.copy(current = fold.value, stack = cont :: state.stack)
+            } *> step(ref)
 
           case RunActivity(input, activity) =>
             ref.get.flatMap { state =>
@@ -215,7 +218,6 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              val env  = state.currentEnvironment.schema
               val cont = Continuation(finalizer, ZFlow.input)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
