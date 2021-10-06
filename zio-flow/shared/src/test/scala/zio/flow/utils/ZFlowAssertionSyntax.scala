@@ -2,14 +2,17 @@ package zio.flow.utils
 
 import java.net.URI
 import zio.clock.Clock
-import zio.console.Console
+import zio.console.{Console, putStrLn}
 import zio.flow.ZFlowExecutor.InMemory
 import zio.flow.server.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
 import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow, ZFlowExecutor}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
-import zio.{Has, Ref, ZIO, console}
+import zio.stream.ZStream
+import zio.{Chunk, Has, IO, Ref, ZIO, console}
+
+import java.io.IOException
 
 object ZFlowAssertionSyntax {
 
@@ -49,14 +52,35 @@ object ZFlowAssertionSyntax {
           InMemory(Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live), mockOpExec, ref)
         )
 
-//    final case class PersistentExecutor(
-//                                         clock: Clock.Service,
-//                                         durableLog: DurableLog,
-//                                         kvStore: KeyValueStore,
-//                                         opExec: OperationExecutor[Any],
-//                                         workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
-//                                       ) extends ZFlowExecutor[String]
-    val mockPersistentLiveClock = PersistentExecutor(Has(zio.clock.Clock.Service.live), )
+    val doesNothingDurableLog: DurableLog = new DurableLog {
+      override def append(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
+        putStrLn("Append Does Nothing").provide(Has(console.Console.Service.live)).as(12L)
+
+      override def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
+        ZStream.fromChunk(Chunk.empty)
+    }
+
+    val doesNothingKVStore: KeyValueStore = new KeyValueStore {
+      override def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
+        ZIO.succeed(true)
+
+      override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] = ZIO.none
+
+      override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
+        ZStream.fromChunk(Chunk.empty) zip ZStream.fromChunk(Chunk.empty)
+    }
+
+    val mockPersistentLiveClock: ZIO[Any, Nothing, PersistentExecutor] = Ref
+      .make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
+      .map(ref =>
+        PersistentExecutor(
+          Clock.Service.live,
+          doesNothingDurableLog,
+          doesNothingKVStore,
+          mockOpExec.asInstanceOf[OperationExecutor[Any]],
+          ref
+        )
+      )
   }
 
   import Mocks._
@@ -90,10 +114,9 @@ object ZFlowAssertionSyntax {
       compileResult
     }
 
-    def evaluateLivePersistent =  {
-      val compileResult = for {
-
-      }
-    }
+    def evaluateLivePersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Any, E, A] = for {
+      persistentEval <- mockPersistentLiveClock
+      result         <- persistentEval.submit("1234", zflow)
+    } yield result
   }
 }

@@ -1,17 +1,20 @@
 package zio.flow.server
 
+import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.{Remote, ZFlow}
 import zio.schema.Schema
+import zio.test.Assertion.equalTo
+import zio.test.TestAspect.ignore
 import zio.test._
 import zio.test.{Annotations, Spec, TestFailure, TestSuccess, ZSpec, suite}
 
-object PersistentExecutorTest extends DefaultRunnableSpec {
+object PersistentExecutorSpec extends DefaultRunnableSpec {
 
   implicit val nothingSchema: Schema[Nothing]               = Schema.fail("Nothing schema")
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val suite1: Spec[Annotations, TestFailure[Nothing], TestSuccess] = suite("Test the easy operators")(
+  val suite1: Spec[Annotations, TestFailure[Any], TestSuccess] = suite("Test the easy operators")(
     testM("Test Return") {
       val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
       assertM(flow.evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema))(equalTo(12))

@@ -2,11 +2,11 @@ package zio.flow.server
 
 import java.io.IOException
 import java.time.Duration
-
 import zio._
 import zio.clock._
 import zio.console.putStrLn
 import zio.flow._
+import zio.flow.server.PersistentExecutor.PersistentCompileStatus
 import zio.schema._
 
 final case class PersistentExecutor(
@@ -389,13 +389,17 @@ final case class PersistentExecutor(
         }
       }
 
-    val promise = DurablePromise.make[E, A](uniqueId + "_result", durableLog)
-    val state   = State(uniqueId, flow, TState.Empty, Nil, Map(), promise, Nil, None)
+    val durablePZio =
+      Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
+    val stateZio    = durablePZio.map(dp =>
+      State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, Nil, PersistentCompileStatus.Running)
+    )
 
     (for {
+      state  <- stateZio
       ref    <- Ref.make[State[E, A]](state)
       _      <- step(ref)
-      result <- promise.awaitEither
+      result <- state.result.awaitEither
     } yield result).orDie.absolve
   }
 }
