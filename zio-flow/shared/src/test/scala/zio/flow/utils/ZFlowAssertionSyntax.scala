@@ -1,15 +1,15 @@
 package zio.flow.utils
 
 import java.net.URI
-
 import zio.clock.Clock
 import zio.console.Console
 import zio.flow.ZFlowExecutor.InMemory
+import zio.flow.server.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
-import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
+import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow, ZFlowExecutor}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
-import zio.{ Has, Ref, ZIO, console }
+import zio.{Has, Ref, ZIO, console}
 
 object ZFlowAssertionSyntax {
 
@@ -48,6 +48,15 @@ object ZFlowAssertionSyntax {
         .map(ref =>
           InMemory(Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live), mockOpExec, ref)
         )
+
+//    final case class PersistentExecutor(
+//                                         clock: Clock.Service,
+//                                         durableLog: DurableLog,
+//                                         kvStore: KeyValueStore,
+//                                         opExec: OperationExecutor[Any],
+//                                         workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
+//                                       ) extends ZFlowExecutor[String]
+    val mockPersistentLiveClock = PersistentExecutor(Has(zio.clock.Clock.Service.live), )
   }
 
   import Mocks._
@@ -79,6 +88,12 @@ object ZFlowAssertionSyntax {
         result   <- inMemory.submit("1234", zflow)
       } yield result
       compileResult
+    }
+
+    def evaluateLivePersistent =  {
+      val compileResult = for {
+
+      }
     }
   }
 }
