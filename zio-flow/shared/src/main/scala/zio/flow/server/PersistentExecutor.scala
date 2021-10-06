@@ -34,11 +34,11 @@ final case class PersistentExecutor(
 
   def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
-//  def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R], state : Ref[PersistentExecutor.State[E,A]]): UIO[ZFlow[A,E,B]] =
-////    for {
-////      a <- ZFlow.input[A]
-////      b <- f(a).provide(env.toRemote)
-////    } yield b
+  def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R]) =
+    for {
+      a <- ZFlow.input[A]
+      b <- f(a).provide(env.toRemote)
+    } yield b
 //
 //    // 1. Read the environment `A` => ZFlow.Input (peek the environment)
 //    // 2. Push R onto the environment
@@ -179,8 +179,8 @@ final case class PersistentExecutor(
           case fold @ Fold(_, _, _) =>
             ref.update { state =>
               val env         = state.currentEnvironment
-              val errorFlow   = applyFunction(fold.ifError.asInstanceOf, env)
-              val successFlow = applyFunction(fold.ifSuccess.asInstanceOf, env)
+              val errorFlow   = applyFunction(fold.ifError, env)
+              val successFlow = applyFunction(fold.ifSuccess, env)
               val cont        = Continuation(errorFlow, successFlow)
               state.copy(current = fold.value, stack = cont :: state.stack)
             } *> step(ref)

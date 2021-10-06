@@ -13,7 +13,7 @@ object PersistentExecutorSpec extends DefaultRunnableSpec {
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val suite1: Spec[Annotations, TestFailure[Nothing], TestSuccess] = suite("Test the easy operators")(
+  val suite1 = suite("Test the easy operators")(
     testM("Test Return") {
 
       val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
@@ -31,9 +31,9 @@ object PersistentExecutorSpec extends DefaultRunnableSpec {
       val compileResult = ZFlow
         .succeed(15)
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
-        .evaluateLivePersistent(implicitly[Schema[Unit]], nothingSchema)
+        .evaluateLivePersistent(implicitly[Schema[Unit]], implicitly[Schema[Int]])
       assertM(compileResult)(equalTo(()))
-    } @@ignore,
+    },
     testM("Test Fold - error side") {
       val compileResult = ZFlow
         .fail(15)
