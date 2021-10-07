@@ -4,16 +4,16 @@ import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.ignore
-import zio.test.{ DefaultRunnableSpec, ZSpec, assertM }
+import zio.test.{ Annotations, DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
 import zio.test.{ Annotations, Spec, TestFailure, TestSuccess }
 
-object PersistentExecutorSpec extends DefaultRunnableSpec {
+object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   implicit val nothingSchema: Schema[Nothing]               = Schema.fail("Nothing schema")
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val suite1 = suite("Test the easy operators")(
+  val suite1: Spec[Annotations, TestFailure[Int], TestSuccess] = suite("Test the easy operators")(
     testM("Test Return") {
 
       val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
@@ -40,7 +40,7 @@ object PersistentExecutorSpec extends DefaultRunnableSpec {
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
         .evaluateLivePersistent(implicitly[Schema[Unit]], nothingSchema)
       assertM(compileResult)(equalTo(()))
-    } @@ignore,
+    },
     testM("Test input") {
       val compileResult = ZFlow.input[Int].provide(12).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
@@ -51,7 +51,7 @@ object PersistentExecutorSpec extends DefaultRunnableSpec {
         //b <- ZFlow.succeed(10)
       } yield a).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
-    } @@ ignore,
+    },
     testM("Test Provide") {
       val compileResult = ZFlow.succeed(12).provide(15).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
@@ -60,3 +60,5 @@ object PersistentExecutorSpec extends DefaultRunnableSpec {
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("All tests")(suite1)
 }
+
+// In Suite "All tests", in Suite "Test the easy operators", test "Test Fold - success side" has taken more than 1 m to execute. If this is not expected, consider using TestAspect.timeout to timeout runaway tests for faster diagnostics.
