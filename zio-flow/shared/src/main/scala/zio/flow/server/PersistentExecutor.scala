@@ -220,7 +220,11 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              val cont = Continuation(finalizer, ZFlow.input)
+              //val cont = Continuation(finalizer, finalizer)
+              val cont = Continuation(
+                ZFlow.input[Any].flatMap(e => finalizer *> ZFlow.fail(e)),
+                ZFlow.input[Any].flatMap(a => finalizer *> ZFlow.succeed(a))
+              )
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
             }
@@ -331,6 +335,7 @@ final case class PersistentExecutor(
                                   _.copy(current = k.onError.provide(coerceRemote(lit(error))), stack = newStack)
                                 ),
                               a =>
+
                                 ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(lit(a))), stack = newStack))
                             )
                     _    <- step(ref)

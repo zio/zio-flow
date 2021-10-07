@@ -41,6 +41,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         .evaluateLivePersistent(implicitly[Schema[Unit]], nothingSchema)
       assertM(compileResult)(equalTo(()))
     },
+    testM("Test Fold"){
+      val compileResult = ZFlow.succeed(12).flatMap( rA => rA + 1 ).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
+      assertM(compileResult)(equalTo(13))
+    },
     testM("Test input") {
       val compileResult = ZFlow.input[Int].provide(12).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
