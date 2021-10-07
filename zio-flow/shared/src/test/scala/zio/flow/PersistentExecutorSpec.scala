@@ -4,7 +4,7 @@ import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.ignore
-import zio.test.{ DefaultRunnableSpec, ZSpec, assertM }
+import zio.test.{ Annotations, DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
 import zio.test.{ Annotations, Spec, TestFailure, TestSuccess }
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
@@ -13,7 +13,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val suite1 = suite("Test the easy operators")(
+  val suite1: Spec[Annotations, TestFailure[Int], TestSuccess] = suite("Test the easy operators")(
     testM("Test Return") {
 
       val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
