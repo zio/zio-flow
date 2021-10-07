@@ -189,6 +189,10 @@ object ZFlow {
     predicate: Remote[A] => Remote[Boolean]
   ) extends ZFlow[R, E, A]
 
+  case class PushEnv[A](env: Remote[A]) extends ZFlow[Any, Nothing, Unit]
+
+  case object PopEnv extends ZFlow[Any, Nothing, Unit]
+
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
   def apply[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = Return(remote)

@@ -2,10 +2,10 @@ package zio.flow.server
 
 import java.io.IOException
 import java.time.Duration
-
 import zio._
 import zio.clock._
 import zio.console.putStrLn
+import zio.flow.ZFlow.{PopEnv, PushEnv}
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 import zio.schema._
@@ -445,6 +445,28 @@ final case class PersistentExecutor(
 
               }
             }
+
+          case PushEnv(env) =>
+            eval(env).flatMap { schemaAndValue =>
+              ref.get.flatMap {
+                state =>
+                  state.stack match {
+                    case Nil => state.result.succeed(().asInstanceOf[A]).unit
+                    case k :: newStack =>
+                      ref.update(state => state.pushEnv(schemaAndValue).copy(current = k.onSuccess, stack = newStack))
+                  }
+              } *> step(ref)
+            }
+
+          case PopEnv =>
+            ref.get.flatMap {
+              state =>
+                state.stack match {
+                  case Nil => state.result.succeed(().asInstanceOf[A]).unit
+                  case k :: newStack =>
+                    ref.update(state => state.popEnv().copy(current = k.onSuccess, stack = newStack))
+                }
+            } *> step(ref)
         }
       }
 
