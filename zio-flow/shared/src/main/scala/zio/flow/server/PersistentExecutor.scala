@@ -5,7 +5,6 @@ import java.time.Duration
 import zio._
 import zio.clock._
 import zio.console.putStrLn
-import zio.flow.ZFlow.{PopEnv, PushEnv}
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 import zio.schema._
@@ -70,106 +69,83 @@ final case class PersistentExecutor(
     } yield true).catchAll(_ => UIO(false))
 
   def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
-    def step(ref: Ref[State[E, A]]): IO[IOException, Unit] =
-      ref.get.flatMap { state =>
+    def step(ref: Ref[State[E, A]]): IO[IOException, Unit] = {
+
+      def onSuccess(value: Remote[_]): IO[IOException, Unit] =
+        ref.get.flatMap { state =>
+          state.stack match {
+            case Nil =>
+              eval(value).flatMap { schemaAndValue =>
+                state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit
+              }
+            case Continuation.PopEnv :: newStack =>
+              ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
+                onSuccess(value)
+            case Continuation.PushEnv(env) :: newStack =>
+              eval(env).flatMap { schemaAndValue =>
+                ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
+              } *> onSuccess(value)
+            case k :: newStack =>
+              ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
+                step(ref) 
+          }
+        }
+
+      def onError(value: Remote[_]): IO[IOException, Unit] =
+        ref.get.flatMap { state =>
+          state.stack match {
+            case Nil =>
+              eval(value).flatMap { schemaAndValue =>
+                state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit
+              }
+            case Continuation.PopEnv :: newStack =>
+              ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
+              onError(value)
+            case Continuation.PushEnv(env) :: newStack =>
+              eval(env).flatMap { schemaAndValue =>
+                ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
+              } *> onError(value)
+            case k :: newStack =>
+              ref.update(_.copy(current = k.onError.provide(coerceRemote(value)), stack = newStack)) *>
+                step(ref) 
+          }
+        }
+
+      ref.get.flatMap ( state =>
         state.current match {
           case Return(value) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case Nil =>
-                  eval(value).flatMap { schemaAndValue0 =>
-                    val schemaAndValue = schemaAndValue0.asInstanceOf[SchemaAndValue[A]]
-                    state.result.succeed(schemaAndValue.value: A).unit
-                  }
-                case k :: newStack =>
-                  ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
-                    step(ref)
-              }
-            }
+            onSuccess(value)
 
           case Now =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case Nil => clock.instant.flatMap(currInstant => state.result.succeed(currInstant.asInstanceOf).unit)
-
-                case k :: newStack =>
-                  clock.instant.flatMap(currInstant =>
-                    ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(currInstant)), stack = newStack))
-                  ) *>
-                    step(ref)
-              }
+            clock.instant.flatMap { currInstant =>
+              onSuccess(currInstant)
             }
 
           case Input() =>
             ref.get.flatMap { state =>
-              val env = state.currentEnvironment.value
-              state.stack match {
-                case k :: newStack =>
-                  ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(lit(env))), stack = newStack)) *> step(
-                    ref
-                  )
-                case Nil => state.result.succeed(env.asInstanceOf[A]).unit
-              }
+              onSuccess(state.currentEnvironment.toRemote)
             }
 
           case WaitTill(instant) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case Nil =>
-                  for {
-                    start <- clock.instant
-                    end <- eval(instant).map(_.value)
-                    _ <- clock.sleep(Duration.between(start, end))
-                    _ <- state.result.succeed(().asInstanceOf[A])
-                  } yield ()
-
-                case k :: newStack =>
-                  val wait = for {
-                    start <- clock.instant
-                    end <- eval(instant).map(_.value)
-                    _ <- clock.sleep(Duration.between(start, end))
-                  } yield ()
-                  wait.flatMap(r =>
-                    ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(r)), stack = newStack))
-                  ) *>
-                    step(ref)
-              }
-            }
+            val wait = for {
+              start <- clock.instant
+              end <- eval(instant).map(_.value)
+              _ <- clock.sleep(Duration.between(start, end))
+            } yield ()
+            wait *> onSuccess(())
 
           case Modify(svar, f0) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case Nil =>
-                  val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
-                  for {
-                    _ <- putStrLn("Modify is submitted").provide(Has(console.Console.Service.live))
-                    vRef <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-                    value <- vRef.get
-                    tuple <- eval(f(lit(value))).map(_.value)
-                    (a, value2) = tuple
-                    _ <- vRef.set(value2)
-                    _ <- ref.update(_.addReadVar(vRef))
-                    // TODO : Solve using continuation
-                    //_ <- ZIO.foreach(state.retry)(fp => submit("", fp.flow)).catchAll(_ => ZIO.dieMessage("Dummy string"))
-                    _ <- state.result.succeed(a)
-                  } yield ()
-
-                case k :: newStack =>
-                  val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
-                  val a: ZIO[Any, Nothing, A] = for {
-                    vRef <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-                    value <- vRef.get
-                    tuple <- eval(f(lit(value))).map(_.value)
-                    _ <- vRef.set(tuple._2)
-                    _ <- ref.update(_.addReadVar(vRef))
-                    _ <- ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(tuple._1)), stack = newStack))
-                  } yield tuple._1
-
-                  a.flatMap(r =>
-                    ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(r)), stack = newStack))
-                  ) *>
-                    step(ref)
-              }
+            val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
+            val a: ZIO[Any, Nothing, A] = for {
+              vRef <- eval(svar).map(_.asInstanceOf[Ref[Any]])
+              value <- vRef.get
+              tuple <- eval(f(lit(value))).map(_.value)
+              _ <- vRef.set(tuple._2)
+              _ <- ref.update(_.addReadVar(vRef))
+            } yield tuple._1
+            
+            a.flatMap { r =>
+              onSuccess(r)
             }
 
           case fold@Fold(Input(), _, _) =>
@@ -195,19 +171,10 @@ final case class PersistentExecutor(
                 _ <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
               } yield ()
 
-              state.stack match {
-                case Nil =>
-                  a.flatMap(output => state.result.succeed(output.asInstanceOf))
-                    .catchAll(_ => ZIO.fail(new IOException("Activity Error")))
-                    .unit
-
-                case k :: newStack =>
-                  a.flatMap(success =>
-                    ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(success)), stack = newStack))
-                  ).catchAll(error =>
-                    ref.update(_.copy(current = k.onError.provide(coerceRemote(lit(error))), stack = newStack))
-                  ) *> step(ref)
-              }
+              a.foldM(
+                error => onError(lit(error)),
+                success => onSuccess(success)
+              )
             }
 
           case Transaction(flow) =>
@@ -220,8 +187,12 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              //val cont = Continuation(finalizer, finalizer)
-              val cont = Finalizer(finalizer)
+              val cont = Continuation(
+                ZFlow.input[Any].flatMap(e => finalizer *> ZFlow.fail(e)),
+                ZFlow.input[Any].flatMap(a => finalizer *> ZFlow.succeed(a))
+              )
+              // val cont = Continuation(finalizer, finalizer)
+              // val cont = Finalizer(finalizer)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
             }
@@ -240,17 +211,7 @@ final case class PersistentExecutor(
               f <- step(ref).fork
             } yield f
 
-            state.stack match {
-              case k :: newStack =>
-                for {
-                  f <- fiber
-                  _ <- ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(f.asInstanceOf)), stack = newStack))
-                  _ <- step(ref)
-                } yield ()
-
-              case Nil =>
-                fiber.flatMap(f => state.result.succeed(f.asInstanceOf)).unit
-            }
+            fiber.flatMap(f => onSuccess(f.asInstanceOf))
 
           case Timeout(flow, duration) =>
             ref.get.flatMap { state =>
@@ -267,9 +228,8 @@ final case class PersistentExecutor(
           //TODO : instead of Provide, use ZFlow.pushEnv and ZFlow.popEnv. Implement Provide in terms of pushEnv, popEnv, Ensuring
           case Provide(value, flow) =>
             eval(value).flatMap { schemaAndValue =>
-              ref.update(state => state.pushEnv(schemaAndValue).copy(current = flow)) *> step(ref)
-              //TODO : Missing - pop environment
-            }
+              ref.update(state => state.copy(current = flow, stack = Continuation.PopEnv :: state.stack, envStack = schemaAndValue :: state.envStack))
+            } *> step(ref)
 
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
@@ -291,7 +251,7 @@ final case class PersistentExecutor(
               ref.get.flatMap { state =>
                 for {
                   _ <- {
-                    val cont = new Continuation(ZFlow.unit, right)
+                    val cont = Continuation(ZFlow.unit, right)
                     ref.set(state.copy(stack = cont :: state.stack)) *>
                       step(ref)
                   }.when(state.compileStatus == PersistentCompileStatus.Suspended)
@@ -304,69 +264,24 @@ final case class PersistentExecutor(
               result <- execflow.join
             } yield result
 
-            ref.get.flatMap { state =>
-              state.stack match {
-                case k :: newStack =>
-                  (for {
-                    r <- joined
-                    _ <-
-                      ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(r.asInstanceOf)), stack = newStack))
-                  } yield ()).catchAll(error =>
-                    ref.update(_.copy(current = k.onError.provide(coerceRemote(error.asInstanceOf))))
-                  )
-
-                case Nil => joined.either.flatMap(either => state.result.succeed(either.asInstanceOf)).unit
-              }
-            }
+            joined.foldM(
+              error => onError(lit(error)),
+              success => onSuccess(success)
+            )
 
           case Interrupt(execFlow) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case k :: newStack =>
-                  for {
-                    exec <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-                    exit <- exec.interrupt
-                    _ <- exit.toEither.fold(
-                      error =>
-                        ref.update(
-                          _.copy(current = k.onError.provide(coerceRemote(lit(error))), stack = newStack)
-                        ),
-                      a =>
+            val interrupt = for {
+              exec <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
+              exit <- exec.interrupt
+            } yield exit.toEither
 
-                        ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(lit(a))), stack = newStack))
-                    )
-                    _ <- step(ref)
-                  } yield ()
-
-                case Nil =>
-                  for {
-                    exec <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-                    exit <- exec.interrupt
-                    _ <-
-                      exit.toEither.fold(error => state.result.fail(error.asInstanceOf), a => state.result.succeed(a))
-                  } yield ()
-              }
+            interrupt.flatMap {
+              case Left(error) => onError(lit(error))
+              case Right(success) => onSuccess(success)
             }
 
           case Fail(error) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case k :: newStack =>
-                  for {
-                    err <- eval(error).map(_.value)
-                    _ <-
-                      ref.update(_.copy(current = k.onError.provide(coerceRemote(lit(err))), stack = newStack)) *> step(
-                        ref
-                      )
-                  } yield ()
-
-                case Nil =>
-                  for {
-                    err <- eval(error).map(_.value)
-                    _ <- state.result.fail(err.asInstanceOf)
-                  } yield ()
-              }
-            }
+            onError(error)
 
           case NewVar(name, initial) =>
             ref.get.flatMap { state =>
@@ -378,21 +293,7 @@ final case class PersistentExecutor(
                 _ <- ref.update(_.addVariable(name, schemaAndValue))
               } yield vref
 
-              state.stack match {
-                case k :: newStack =>
-                  for {
-                    vref <- variable
-                    _ <- ref.update(
-                      _.copy(current = k.onSuccess.provide(coerceRemote(lit(vref))), stack = newStack)
-                    ) *> step(ref)
-                  } yield ()
-
-                case Nil =>
-                  for {
-                    vref <- variable
-                    _ <- state.result.succeed(vref.asInstanceOf)
-                  } yield ()
-              }
+              variable.flatMap(vref => onSuccess(vref.asInstanceOf))
             }
 
           case iterate0@Iterate(_, _, _) => ???
@@ -424,48 +325,12 @@ final case class PersistentExecutor(
           //            }.flatMap(zflow => ref.update(_.copy(current = zflow)) *> step(ref))
 
           case Log(message) =>
-            ref.get.flatMap { state =>
-              state.stack match {
-                case k :: newStack =>
-                  for {
-                    _ <- putStrLn(message).provideLayer(zio.console.Console.live)
-                    _ <- ref.update(
-                      _.copy(current = k.onSuccess.provide(coerceRemote(lit(()))), stack = newStack)
-                    ) *> step(ref)
-                  } yield ()
+            val log =  putStrLn(message).provideLayer(zio.console.Console.live)
 
-                case Nil =>
-                  for {
-                    _ <- putStrLn(message).provideLayer(zio.console.Console.live)
-                    _ <- state.result.succeed(().asInstanceOf)
-                  } yield ()
-
-              }
-            }
-
-          case PushEnv(env) =>
-            eval(env).flatMap { schemaAndValue =>
-              ref.get.flatMap {
-                state =>
-                  state.stack match {
-                    case Nil => state.result.succeed(().asInstanceOf[A]).unit
-                    case k :: newStack =>
-                      ref.update(state => state.pushEnv(schemaAndValue).copy(current = k.onSuccess, stack = newStack))
-                  }
-              } *> step(ref)
-            }
-
-          case PopEnv =>
-            ref.get.flatMap {
-              state =>
-                state.stack match {
-                  case Nil => state.result.succeed(().asInstanceOf[A]).unit
-                  case k :: newStack =>
-                    ref.update(state => state.popEnv().copy(current = k.onSuccess, stack = newStack))
-                }
-            } *> step(ref)
+            log *> onSuccess(())
         }
-      }
+      )
+    }
 
     val durablePZio =
       Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
@@ -484,14 +349,29 @@ final case class PersistentExecutor(
 
 object PersistentExecutor {
 
-  case class Continuation(
-                           onError: ZFlow[_, _, _],
-                           onSuccess: ZFlow[_, _, _]
-                         )
-
-  final case class Finalizer(zFlow: ZFlow[_, _, _]) extends Continuation(zFlow, zFlow)
+  sealed trait Continuation {
+    def onError: ZFlow[_, _, _]
+    def onSuccess: ZFlow[_, _, _]
+  }
 
   object Continuation {
+
+    case object PopEnv extends Continuation {
+      def onError: ZFlow[_, _, _] = ZFlow.unit
+      def onSuccess: ZFlow[_, _, _] = ZFlow.unit
+    }
+
+    final case class PushEnv(env: Remote[_]) extends Continuation {
+      def onError: ZFlow[_, _, _] = ZFlow.unit
+      def onSuccess: ZFlow[_, _, _] = ZFlow.unit
+    }
+
+    def apply[R, E, A](onError0: ZFlow[R, E, A], onSuccess0: ZFlow[R, E, A]): Continuation =
+      new Continuation {
+        def onError = onError0
+        def onSuccess = onSuccess0
+      } 
+
     def handleError[E, A: Schema](onError: ZFlow[_, _, _]): Continuation =
       Continuation(onError, ZFlow.input[A].flatMap(success => ZFlow.succeed(success)))
 
