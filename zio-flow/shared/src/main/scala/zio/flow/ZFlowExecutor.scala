@@ -365,8 +365,6 @@ object ZFlowExecutor {
                 }
               )
           loop(initial)
-
-        case applyFunction @ ApplyFunction(f, remoteA) => compile(promise, ref, input, f(remoteA))
       }
   }
 

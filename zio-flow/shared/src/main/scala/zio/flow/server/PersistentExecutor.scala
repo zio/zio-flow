@@ -164,18 +164,16 @@ final case class PersistentExecutor(
             } *> step(ref)
 
           case RunActivity(input, activity) =>
-            ref.get.flatMap { state =>
-              val a = for {
-                inp <- eval(input)
-                output <- opExec.execute(inp.value, activity.operation)
-                _ <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
-              } yield ()
+            val a = for {
+              inp <- eval(input)
+              output <- opExec.execute(inp.value, activity.operation)
+              _ <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
+            } yield ()
 
-              a.foldM(
-                error => onError(lit(error)),
-                success => onSuccess(success)
-              )
-            }
+            a.foldM(
+              error => onError(lit(error)),
+              success => onSuccess(success)
+            )
 
           case Transaction(flow) =>
             val env = state.currentEnvironment.value
@@ -191,8 +189,6 @@ final case class PersistentExecutor(
                 ZFlow.input[Any].flatMap(e => finalizer *> ZFlow.fail(e)),
                 ZFlow.input[Any].flatMap(a => finalizer *> ZFlow.succeed(a))
               )
-              // val cont = Continuation(finalizer, finalizer)
-              // val cont = Finalizer(finalizer)
               ref.update(_.copy(current = flow, stack = cont :: state.stack)) *>
                 step(ref)
             }
@@ -234,17 +230,15 @@ final case class PersistentExecutor(
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil =>
-            ref.get.flatMap { state =>
               for {
                 state <- ref.get
                 _ <- state.getTransactionFlow match {
-                  case Some(flow: ZFlow[Any, E, A]) =>
-                    ref.update(_.addRetry(FlowDurablePromise(flow, state.result)).setSuspended)
+                  case Some(flow) =>
+                    ref.update(_.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result)).setSuspended)
 
                   case None => ZIO.dieMessage("There is no transaction to retry.")
                 }
               } yield ()
-            }
 
           case OrTry(left, right) =>
             ref.set(state.copy(current = left)) *> step(ref) *>
@@ -284,17 +278,15 @@ final case class PersistentExecutor(
             onError(error)
 
           case NewVar(name, initial) =>
-            ref.get.flatMap { state =>
-              val variable = for {
-                _ <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
-                schemaAndValue <- eval(initial)
-                _ <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
-                vref <- Ref.make(schemaAndValue.value)
-                _ <- ref.update(_.addVariable(name, schemaAndValue))
-              } yield vref
+            val variable = for {
+              _ <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
+              schemaAndValue <- eval(initial)
+              _ <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
+              vref <- Ref.make(schemaAndValue.value)
+              _ <- ref.update(_.addVariable(name, schemaAndValue))
+            } yield vref
 
-              variable.flatMap(vref => onSuccess(vref.asInstanceOf))
-            }
+            variable.flatMap(vref => onSuccess(vref.asInstanceOf))
 
           case iterate0@Iterate(_, _, _) => ???
           //TODO :
@@ -371,12 +363,6 @@ object PersistentExecutor {
         def onError = onError0
         def onSuccess = onSuccess0
       } 
-
-    def handleError[E, A: Schema](onError: ZFlow[_, _, _]): Continuation =
-      Continuation(onError, ZFlow.input[A].flatMap(success => ZFlow.succeed(success)))
-
-    def handleSuccess[E: Schema, A](onSuccess: ZFlow[_, _, _]): Continuation =
-      Continuation(ZFlow.input[E].flatMap(failure => ZFlow.fail(failure)), onSuccess)
   }
 
   def make(
