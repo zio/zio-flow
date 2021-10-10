@@ -25,7 +25,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         v        <- variable.get
       } yield v).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(10))
-    },
+    } @@ ignore,
     testM("Test Fold - success side") {
       val compileResult = ZFlow
         .succeed(15)
