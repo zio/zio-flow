@@ -294,7 +294,7 @@ final case class PersistentExecutor(
               _              <- ref.update(_.addVariable(name, schemaAndValue))
             } yield vref
 
-            variable.flatMap(vref => onSuccess(vref.asInstanceOf[Variable[A]]))
+            variable.flatMap(vref => onSuccess(vref.asInstanceOf))
 
           case iterate0 @ Iterate(_, _, _) => ???
           //TODO :
