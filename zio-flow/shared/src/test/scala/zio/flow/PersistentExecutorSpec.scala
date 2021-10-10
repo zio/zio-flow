@@ -2,10 +2,9 @@ package zio.flow
 
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
-import zio.test.Assertion.equalTo
-import zio.test.TestAspect.ignore
-import zio.test.{ Annotations, DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
-import zio.test.{ Annotations, Spec, TestFailure, TestSuccess }
+import zio.test._
+import zio.test.Assertion._
+import zio.test.TestAspect._
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
