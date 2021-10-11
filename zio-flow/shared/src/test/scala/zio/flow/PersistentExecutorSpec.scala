@@ -12,7 +12,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val suite1: Spec[Annotations, TestFailure[Int], TestSuccess] = suite("Test the easy operators")(
+  val suite1: Spec[Annotations, TestFailure[Any], TestSuccess] = suite("Test the easy operators")(
     testM("Test Return") {
 
       val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
@@ -64,6 +64,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       val compileResult =
         ZFlow.succeed(12).ensuring(ZFlow.succeed(15)).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
+    },
+    testM("Test Provide - advanced"){
+      val zflow1 = for {
+        a <- ZFlow.succeed(15)
+        b <- ZFlow.input[Int]
+      } yield a+ b
+      val compileResult = zflow1.provide(11).evaluateLivePersistent(Schema[Int], nothingSchema)
+      assertM(compileResult)(equalTo(26))
     }
   )
 

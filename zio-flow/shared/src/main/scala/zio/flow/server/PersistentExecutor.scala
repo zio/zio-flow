@@ -214,7 +214,7 @@ final case class PersistentExecutor(
             ref.get.flatMap { state =>
               for {
                 d      <- eval(duration).map(_.value)
-                output <- ref.update(_.copy(current = flow)) *> (step(ref).timeout(d)).provide(Has(clock))
+                output <- ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provide(Has(clock))
                 _      <- output match {
                             case Some(value) => state.result.succeed(value.asInstanceOf)
                             case None        => state.result.succeed(().asInstanceOf)
@@ -242,7 +242,7 @@ final case class PersistentExecutor(
               _     <- state.getTransactionFlow match {
                          case Some(flow) =>
                            ref.update(
-                             _.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result)).setSuspended
+                             _.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result)).setSuspended()
                            )
 
                          case None => ZIO.dieMessage("There is no transaction to retry.")
@@ -286,11 +286,9 @@ final case class PersistentExecutor(
           case Fail(error) =>
             onError(error)
 
-          case NewVar(name, initial) =>
+            case NewVar(name, initial) =>
             val variable = for {
-              _              <- putStrLn("Evaluating New Var").provide(Has(console.Console.Service.live))
               schemaAndValue <- eval(initial)
-              _              <- putStrLn("Eval Done").provide(Has(console.Console.Service.live))
               vref           <- Ref.make(schemaAndValue.value)
               _              <- ref.update(_.addVariable(name, schemaAndValue))
             } yield vref
@@ -369,22 +367,22 @@ object PersistentExecutor {
 
     def apply[R, E, A](onError0: ZFlow[R, E, A], onSuccess0: ZFlow[R, E, A]): Continuation =
       new Continuation {
-        def onError   = onError0
-        def onSuccess = onSuccess0
+        def onError: ZFlow[_, _, _] = onError0
+        def onSuccess: ZFlow[_, _, _] = onSuccess0
       }
   }
 
   def make(
     opEx: OperationExecutor[Any]
   ): ZLayer[Clock with Has[DurableLog] with Has[KeyValueStore], Nothing, Has[ZFlowExecutor[String]]] =
-    ((
+    (
       for {
         durableLog <- ZIO.service[DurableLog]
         kvStore    <- ZIO.service[KeyValueStore]
         clock      <- ZIO.service[Clock.Service]
         ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
       } yield PersistentExecutor(clock, durableLog, kvStore, opEx, ref)
-    ) ).toLayer
+    ).toLayer
 
   final case class State[E, A](
     workflowId: String,
@@ -423,13 +421,13 @@ object PersistentExecutor {
 
     def addRetry(flowDurablePromise: FlowDurablePromise[_, _]): State[E, A] = copy(retry = flowDurablePromise :: retry)
 
-    def setSuspended: State[E, A] = copy(compileStatus = PersistentCompileStatus.Suspended)
+    def setSuspended(): State[E, A] = copy(compileStatus = PersistentCompileStatus.Suspended)
 
     def getVariable(name: String): Option[SchemaAndValue[_]] = variables.get(name)
 
     //TODO scala map function
     private lazy val lookupName: Map[Any, String] =
-      variables.map((t: (String, _)) => t._2 -> t._1).toMap
+      variables.map((t: (String, _)) => t._2 -> t._1)
   }
 
   sealed trait TState {
