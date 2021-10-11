@@ -2,10 +2,9 @@ package zio.flow
 
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
-import zio.test.Assertion.equalTo
-import zio.test.TestAspect.ignore
-import zio.test.{ Annotations, DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
-import zio.test.{ Annotations, Spec, TestFailure, TestSuccess }
+import zio.test.Assertion._
+import zio.test.TestAspect._
+import zio.test._
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
@@ -41,8 +40,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         .evaluateLivePersistent(implicitly[Schema[Unit]], nothingSchema)
       assertM(compileResult)(equalTo(()))
     },
-    testM("Test Fold"){
-      val compileResult = ZFlow.succeed(12).flatMap( rA => rA + 1 ).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
+    testM("Test Fold") {
+      val compileResult =
+        ZFlow.succeed(12).flatMap(rA => rA + 1).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
       assertM(compileResult)(equalTo(13))
     },
     testM("Test input") {
@@ -58,6 +58,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testM("Test Provide") {
       val compileResult = ZFlow.succeed(12).provide(15).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
+      assertM(compileResult)(equalTo(12))
+    },
+    testM("Test Ensuring") {
+      val compileResult =
+        ZFlow.succeed(12).ensuring(ZFlow.succeed(15)).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     }
   )
