@@ -1,14 +1,19 @@
 package zio.flow
 
+import zio.flow.ZFlowExecutorSpec.testActivity
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
 
+import java.time.Instant
+
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   implicit val nothingSchema: Schema[Nothing]               = Schema.fail("Nothing schema")
+  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
+
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
@@ -72,10 +77,25 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield a+ b
       val compileResult = zflow1.provide(11).evaluateLivePersistent(Schema[Int], nothingSchema)
       assertM(compileResult)(equalTo(26))
+    },
+    testM("Test Now"){
+      val compileResult = ZFlow.now.evaluateLivePersistent(Schema[Instant], nothingSchema)
+      assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now.getEpochSecond))
+    },
+    testM("Test WaitTill"){
+      val twoSecsLater = Instant.now().getEpochSecond + 2
+      val compileResult = ZFlow.waitTill(Instant.ofEpochSecond(twoSecsLater)).evaluateLivePersistent(Schema[Unit], nothingSchema)
+      assertM(compileResult)(equalTo(()))
+    },
+    testM("Test Activity"){
+      val compileResult = ZFlow.RunActivity(12, testActivity).evaluateLivePersistent(Schema[Int], Schema[ActivityError])
+      assertM(compileResult)(equalTo(12))
+    },
+    testM("Test Iterate"){
+      val compileResult =
     }
   )
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("All tests")(suite1)
 }
 
-// In Suite "All tests", in Suite "Test the easy operators", test "Test Fold - success side" has taken more than 1 m to execute. If this is not expected, consider using TestAspect.timeout to timeout runaway tests for faster diagnostics.

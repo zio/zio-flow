@@ -3,11 +3,9 @@ package zio
 import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-
 import scala.language.implicitConversions
-
 import zio.schema.Schema.Primitive
-import zio.schema.{ Schema, StandardType }
+import zio.schema.{Schema, StandardType}
 
 package object flow {
   type ActivityError = Throwable

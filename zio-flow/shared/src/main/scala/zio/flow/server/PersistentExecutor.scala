@@ -169,11 +169,11 @@ final case class PersistentExecutor(
               inp    <- eval(input)
               output <- opExec.execute(inp.value, activity.operation)
               _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
-            } yield ()
+            } yield output
 
             a.foldM(
               error => onError(lit(error)),
-              success => onSuccess(success)
+              success => onSuccess(lit(success))
             )
 
           case Transaction(flow) =>

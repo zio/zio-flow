@@ -51,8 +51,8 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     },
     testM("Test Now") {
       val compileResult = ZFlow.now.evaluateTestInMem(implicitly[Schema[Instant]], nothingSchema)
-      assertM(compileResult)(equalTo(Instant.now()))
-    } @@ ignore,
+      assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now().getEpochSecond))
+    } @@ignore,
     testM("Test Unwrap") {
       val compileResult = ZFlow
         .Unwrap[Any, Nothing, Int](Remote(ZFlow.succeed(12)))

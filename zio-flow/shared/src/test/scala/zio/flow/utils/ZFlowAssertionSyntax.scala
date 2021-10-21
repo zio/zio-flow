@@ -2,17 +2,16 @@ package zio.flow.utils
 
 import java.io.IOException
 import java.net.URI
-
 import zio.clock.Clock
-import zio.console.{ Console, putStrLn }
+import zio.console.{Console, putStrLn}
 import zio.flow.ZFlowExecutor.InMemory
-import zio.flow.server.{ DurableLog, KeyValueStore, PersistentExecutor }
+import zio.flow.server.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
-import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
+import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.stream.ZStream
-import zio.{ Chunk, Has, IO, Ref, ZIO, console }
+import zio.{Chunk, Has, IO, Ref, ZIO, console}
 
 object ZFlowAssertionSyntax {
 
@@ -116,5 +115,4 @@ object ZFlowAssertionSyntax {
       result         <- persistentEval.submit("1234", zflow)
     } yield result
   }
-
 }
