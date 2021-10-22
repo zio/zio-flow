@@ -138,11 +138,11 @@ final case class PersistentExecutor(
           case Modify(svar, f0) =>
             val f                       = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
             val a: ZIO[Any, Nothing, A] = for {
-              vRef  <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-              value <- vRef.get
+              vRefTuple  <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
+              value <- vRefTuple._2.get
               tuple <- eval(f(lit(value))).map(_.value)
-              _     <- vRef.set(tuple._2)
-              _     <- ref.update(_.addReadVar(vRef))
+              _     <- vRefTuple._2.set(tuple._2)
+              _     <- ref.update(_.addReadVar(vRefTuple._1))
             } yield tuple._1
 
             a.flatMap { r =>
@@ -289,14 +289,15 @@ final case class PersistentExecutor(
             case NewVar(name, initial) =>
             val variable = for {
               schemaAndValue <- eval(initial)
-              vref           <- Ref.make(schemaAndValue.value)
+              vref           <- Ref.make(schemaAndValue.value.asInstanceOf[A])
               _              <- ref.update(_.addVariable(name, schemaAndValue))
             } yield vref
 
-            variable.flatMap(vref => onSuccess(vref.asInstanceOf))
+            variable.flatMap(vref => onSuccess(lit((name, vref))))
 
           case iterate0 @ Iterate(_, _, _) => ???
           //TODO :
+
           //1. create a variable to hold an A (state type)
           //2. evaluate the initial A
           //3. store the A inside the variable
@@ -406,8 +407,8 @@ object PersistentExecutor {
     def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State[E, A] =
       copy(tstate = tstate.addCompensation(newCompensation))
 
-    def addReadVar(value: Any): State[E, A] =
-      copy(tstate = tstate.addReadVar(lookupName(value)))
+    def addReadVar(name: String): State[E, A] =
+      copy(tstate = tstate.addReadVar(name))
 
     def addVariable(name: String, value: SchemaAndValue[Any]): State[E, A] =
       copy(variables = variables + (name -> value))

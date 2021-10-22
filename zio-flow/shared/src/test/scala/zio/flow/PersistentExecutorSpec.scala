@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.ZIO
 import zio.flow.ZFlowExecutorSpec.testActivity
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
@@ -25,12 +26,12 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testM("Test NewVar") {
       val compileResult = (for {
-        variable <- ZFlow.newVar[Int]("variable1", 10)
-        //modifiedVariable <- variable.modify(isOdd)
-        v        <- variable.get
-      } yield v).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
-      assertM(compileResult)(equalTo(10))
-    } @@ ignore,
+        variable <- ZFlow.newVar("variable1", 10)
+        modifiedVariable <- variable.modify(isOdd)
+        v        <- modifiedVariable
+      } yield v).evaluateLivePersistent(implicitly[Schema[Boolean]], nothingSchema)
+      assertM(compileResult)(equalTo(false))
+    },
     testM("Test Fold - success side") {
       val compileResult = ZFlow
         .succeed(15)
@@ -92,8 +93,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       assertM(compileResult)(equalTo(12))
     },
     testM("Test Iterate"){
-      val compileResult =
-    }
+      val flow: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(Remote(12), (r : Remote[Int]) => ZFlow.succeed(r + 1), (r : Remote[Int]) => r === 15)
+      val compileResult = flow.evaluateLivePersistent(Schema[Int], nothingSchema)
+      assertM(compileResult)(equalTo(12))
+    } @@ignore
   )
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("All tests")(suite1)
