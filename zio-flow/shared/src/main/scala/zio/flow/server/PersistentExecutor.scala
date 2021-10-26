@@ -39,7 +39,7 @@ final case class PersistentExecutor(
   def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
   def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R]): ZFlow[A, E, B] =
-    ZFlow.input[A].flatMap(a => f(a).provide(env.toRemote))
+    ZFlow.Apply(remoteA => f(remoteA).provide(env.toRemote))
 
   //
   //    // 1. Read the environment `A` => ZFlow.Input (peek the environment)
@@ -47,7 +47,7 @@ final case class PersistentExecutor(
   //    // 3. Run the workflow returned by `f`
   //
   //  state.update { state =>
-  //    val cont = Continuation.handleSuccess(ZFlow.input[A])
+  //    val cont = Instruction.handleSuccess(ZFlow.input[A])
   //    state.copy(stack = cont :: state.stack)
   //
   //  }
@@ -79,15 +79,15 @@ final case class PersistentExecutor(
               eval(value).flatMap { schemaAndValue =>
                 state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit
               }
-            case Continuation.PopEnv :: newStack       =>
+            case Instruction.PopEnv :: newStack       =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
                 onSuccess(value)
-            case Continuation.PushEnv(env) :: newStack =>
+            case Instruction.PushEnv(env) :: newStack =>
               eval(env).flatMap { schemaAndValue =>
                 ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
               } *> onSuccess(value)
-            case k :: newStack                         =>
-              ref.update(_.copy(current = k.onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
+            case Instruction.Continuation(_, onSuccess) :: newStack                         =>
+              ref.update(_.copy(current = onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
           }
         }
@@ -99,15 +99,15 @@ final case class PersistentExecutor(
               eval(value).flatMap { schemaAndValue =>
                 state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit
               }
-            case Continuation.PopEnv :: newStack       =>
+            case Instruction.PopEnv :: newStack       =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
                 onError(value)
-            case Continuation.PushEnv(env) :: newStack =>
+            case Instruction.PushEnv(env) :: newStack =>
               eval(env).flatMap { schemaAndValue =>
                 ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
               } *> onError(value)
-            case k :: newStack                         =>
-              ref.update(_.copy(current = k.onError.provide(coerceRemote(value)), stack = newStack)) *>
+            case Instruction.Continuation(onError,_) :: newStack                         =>
+              ref.update(_.copy(current = onError.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
           }
         }
@@ -149,18 +149,15 @@ final case class PersistentExecutor(
               onSuccess(r)
             }
 
-          case fold @ Fold(Input(), _, _) =>
+          case apply@Apply(_) =>
             ref.update { state =>
               val env = state.currentEnvironment
-              state.copy(current = fold.ifSuccess(env.toRemote))
+              state.copy(current = apply.lambda(env.toRemote.asInstanceOf[Remote[apply.ValueA]]))
             } *> step(ref)
 
           case fold @ Fold(_, _, _) =>
             ref.update { state =>
-              val env         = state.currentEnvironment
-              val errorFlow   = applyFunction(eraseCont(fold.ifError), env)
-              val successFlow = applyFunction(eraseCont(fold.ifSuccess), env)
-              val cont        = Continuation(errorFlow, successFlow)
+              val cont        = Instruction.Continuation(fold.ifError, fold.ifSuccess)
               state.copy(current = fold.value, stack = cont :: state.stack)
             } *> step(ref)
 
@@ -186,7 +183,7 @@ final case class PersistentExecutor(
 
           case Ensuring(flow, finalizer) =>
             ref.get.flatMap { state =>
-              val cont = Continuation(
+              val cont = Instruction.Continuation[Any, Any, Any](
                 ZFlow.input[Any].flatMap(e => finalizer *> ZFlow.fail(e)),
                 ZFlow.input[Any].flatMap(a => finalizer *> ZFlow.succeed(a))
               )
@@ -222,13 +219,12 @@ final case class PersistentExecutor(
               } yield ()
             }
 
-          //TODO : instead of Provide, use ZFlow.pushEnv and ZFlow.popEnv. Implement Provide in terms of pushEnv, popEnv, Ensuring
           case Provide(value, flow)    =>
             eval(value).flatMap { schemaAndValue =>
               ref.update(state =>
                 state.copy(
                   current = flow,
-                  stack = Continuation.PopEnv :: state.stack,
+                  stack = Instruction.PopEnv :: state.stack,
                   envStack = schemaAndValue :: state.envStack
                 )
               )
@@ -237,6 +233,7 @@ final case class PersistentExecutor(
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil =>
+            //TODO : Implement something like ccompileStatus in State
             for {
               state <- ref.get
               _     <- state.getTransactionFlow match {
@@ -250,11 +247,12 @@ final case class PersistentExecutor(
             } yield ()
 
           case OrTry(left, right) =>
+            //TODO : store right side as the fallback state, currentFlow to be set as Left, continue
             ref.set(state.copy(current = left)) *> step(ref) *>
               ref.get.flatMap { state =>
                 for {
                   _ <- {
-                    val cont = Continuation(ZFlow.unit, right)
+                    val cont = Instruction.Continuation(ZFlow.unit, right)
                     ref.set(state.copy(stack = cont :: state.stack)) *>
                       step(ref)
                   }.when(state.compileStatus == PersistentCompileStatus.Suspended)
@@ -349,28 +347,15 @@ final case class PersistentExecutor(
 
 object PersistentExecutor {
 
-  sealed trait Continuation {
-    def onError: ZFlow[_, _, _]
-    def onSuccess: ZFlow[_, _, _]
-  }
+  sealed trait Instruction
 
-  object Continuation {
+  object Instruction {
 
-    case object PopEnv extends Continuation {
-      def onError: ZFlow[_, _, _]   = ZFlow.unit
-      def onSuccess: ZFlow[_, _, _] = ZFlow.unit
-    }
+    case object PopEnv extends Instruction
+    final case class PushEnv(env: Remote[_]) extends Instruction
 
-    final case class PushEnv(env: Remote[_]) extends Continuation {
-      def onError: ZFlow[_, _, _]   = ZFlow.unit
-      def onSuccess: ZFlow[_, _, _] = ZFlow.unit
-    }
+    final case class Continuation[A, E, B](onError : ZFlow[E, E, B], onSuccess : ZFlow[A,E,B]) extends Instruction
 
-    def apply[R, E, A](onError0: ZFlow[R, E, A], onSuccess0: ZFlow[R, E, A]): Continuation =
-      new Continuation {
-        def onError: ZFlow[_, _, _] = onError0
-        def onSuccess: ZFlow[_, _, _] = onSuccess0
-      }
   }
 
   def make(
@@ -386,18 +371,18 @@ object PersistentExecutor {
     ).toLayer
 
   final case class State[E, A](
-    workflowId: String,
-    current: ZFlow[_, _, _],
-    tstate: TState,
-    stack: List[Continuation],
-    variables: Map[String, SchemaAndValue[
+                                workflowId: String,
+                                current: ZFlow[_, _, _],
+                                tstate: TState,
+                                stack: List[Instruction],
+                                variables: Map[String, SchemaAndValue[
       _
     ]], //TODO : change the _ to SchemaAndValue[_]. may not get compile error from this change.
-    result: DurablePromise[E, A],
-    envStack: List[SchemaAndValue[_]],
-    tempVarCounter: Int,
-    retry: List[FlowDurablePromise[_, _]],
-    compileStatus: PersistentCompileStatus
+                                result: DurablePromise[E, A],
+                                envStack: List[SchemaAndValue[_]],
+                                tempVarCounter: Int,
+                                retry: List[FlowDurablePromise[_, _]],
+                                compileStatus: PersistentCompileStatus
   ) {
 
     def currentEnvironment: SchemaAndValue[_] = envStack.headOption.getOrElse(SchemaAndValue[Unit](Schema[Unit], ()))

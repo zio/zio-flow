@@ -66,8 +66,8 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
       assertM(compileResult)(equalTo(List(15, 25, 35)))
     } @@ ignore,
     testM("Test Ensuring") {
-      val compileResult = ZFlow
-        .Ensuring(ZFlow.succeed(12), ZFlow.input[String])
+      val compileResult = ZFlow.succeed(12)
+        .ensuring(ZFlow.input[String])
         .provide("Some input")
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))

@@ -21,7 +21,7 @@ object ZFlowExecutor {
   State:
     Variables          = Map[String, Ref[Value]]
     Current            = The current ZFlow
-    Continuation Stack = What to do AFTER producing the current ZFlow value
+    Instruction Stack = What to do AFTER producing the current ZFlow value
   TransactionalState:
     NonTransactional |
     Transactional(parent: TransactionalState, undoLogStack: Stack[ZFlow], localReadVariables: Set[String])
