@@ -727,6 +727,12 @@ object Remote {
 
   def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24))
 
+  //TODO : Hackathon
+  def ofMillis(milliseconds : Remote[Long]) : Remote[Duration] = ???
+
+  //TODO : Hackathon
+  def ofNanos(nanoseconds : Remote[Long]) : Remote[Duration] = ???
+
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)
 
