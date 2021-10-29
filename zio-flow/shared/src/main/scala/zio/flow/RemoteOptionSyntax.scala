@@ -14,7 +14,7 @@ class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
   final def isEmpty: Remote[Boolean] = ???
 
   final def isDefined: Remote[Boolean] = ???
-  def knownSize: Remote[Int] = ???
+  def knownSize: Remote[Int]           = ???
 
   final def contains[A1 >: A](elem: A1): Remote[Boolean] = ???
 

@@ -21,7 +21,7 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
   final def isRight: Remote[Boolean] =
     handleEither(_ => Remote(false), _ => Remote(true))
 
-  def swap : Remote[Either[B,A]] = ???
+  def swap: Remote[Either[B, A]] = ???
 
   def getOrElse(or: => Remote[B]): Remote[B] = ???
 
