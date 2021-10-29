@@ -16,14 +16,6 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def toSeconds: Remote[Long] = self.durationToLong
 
-  def from(amount: Remote[TemporalAmount]) : Remote[Duration] = ???
-
-  def parse(charSequence : Remote[String]): Remote[Duration] = ???
-
-  def create(seconds :Remote[BigDecimal]) : Remote[Duration] = ???
-
-  def between(startInclusive: Remote[Temporal], endExclusive: Remote[Temporal]) : Remote[Duration] = ???
-
   def isZero : Remote[Boolean] = ???
 
   def isNegative : Remote[Boolean] = ???
@@ -40,4 +32,15 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def plusNanos(nanoToAdd : Remote[Long]) : Remote[Duration] = ???
 
+}
+
+object RemoteDuration {
+
+  def from(amount: Remote[TemporalAmount]) : Remote[Duration] = ???
+
+  def parse(charSequence : Remote[String]): Remote[Duration] = ???
+
+  def create(seconds :Remote[BigDecimal]) : Remote[Duration] = ???
+
+  def between(startInclusive: Remote[Temporal], endExclusive: Remote[Temporal]) : Remote[Duration] = ???
 }

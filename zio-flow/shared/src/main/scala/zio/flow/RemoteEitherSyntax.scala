@@ -1,5 +1,7 @@
 package zio.flow
 
+import scala.util.Try
+
 class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   final def handleEither[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C]): Remote[C] =
@@ -18,6 +20,14 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   final def isRight: Remote[Boolean] =
     handleEither(_ => Remote(false), _ => Remote(true))
+
+  def swap : Remote[Either[B,A]] = ???
+
+  def getOrElse(or: => Remote[B]): Remote[B] = ???
+
+  def toOption: Remote[Option[B]] = ???
+
+  def toTry(implicit ev: A <:< Throwable): Try[B] = ???
 }
 
 object RemoteEitherSyntax {

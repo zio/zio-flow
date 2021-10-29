@@ -22,4 +22,6 @@ class RemoteFractionalSyntax[A](self: Remote[A]) {
     implicit val schema = fractional.schema
     Remote(fractional.fromDouble(1.571)) - sinInverse(fractional)
   }
+
+  final def tanInverse(implicit fractional : Fractional[A]): Remote[A] = ???
 }
