@@ -1,6 +1,7 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
+import java.time.temporal.{ ChronoUnit, TemporalUnit }
 
 import scala.language.implicitConversions
 
@@ -472,6 +473,13 @@ object Remote {
       unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
   }
 
+  final case class DurationToSecsNanos(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+    override def evalWithSchema: Either[Remote[(Long, Long)], SchemaAndValue[(Long, Long)]] = unaryEval(duration)(
+      d => (d.getSeconds, d.getNano.toLong),
+      remoteDuration => DurationToSecsNanos(remoteDuration)
+    ).map(SchemaAndValue(Schema[(Long, Long)], _))
+  }
+
   final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
 
     override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = unaryEval(duration)(
@@ -484,6 +492,13 @@ object Remote {
     override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
       unaryEval(seconds)(Duration.ofSeconds, remoteS => LongToDuration(remoteS))
         .map(SchemaAndValue(Schema[Duration], _))
+  }
+
+  final case class AmountToDuration(amount: Remote[Long], temporal: Remote[TemporalUnit]) extends Remote[Duration] {
+    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] = binaryEval(amount, temporal)(
+      (amount, unit) => Duration.of(amount, unit),
+      (remoteAmount, remoteUnit) => AmountToDuration(remoteAmount, remoteUnit)
+    ).map(SchemaAndValue(Schema[Duration], _))
   }
 
   final case class Iterate[A](
@@ -727,11 +742,11 @@ object Remote {
 
   def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24))
 
-  //TODO : Hackathon
-  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] = ???
+  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(milliseconds, Remote(ChronoUnit.MILLIS))
 
-  //TODO : Hackathon
-  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] = ???
+  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(nanoseconds, Remote(ChronoUnit.NANOS))
 
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)
