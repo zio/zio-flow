@@ -28,6 +28,11 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         Remote(either).isLeft <-> either.isLeft
       }
     },
+    testM("getOrElse") {
+      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.anyInt) { (either, int) =>
+        Remote(either).getOrElse(int) <-> either.getOrElse(int)
+      }
+    },
     testM("swap") {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         Remote(either).swap <-> either.swap
