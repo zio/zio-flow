@@ -249,6 +249,23 @@ object Remote {
     }
   }
 
+  final case class SwapEither[A, B](
+    either: Remote[Either[A, B]]
+  ) extends Remote[Either[B, A]] {
+    override def evalWithSchema: Either[Remote[Either[B, A]], SchemaAndValue[Either[B, A]]] =
+      either.evalWithSchema match {
+        case Left(_)                              => Left(self)
+        case Right(schemaAndValue) =>
+          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+          Right(
+            SchemaAndValue(
+              Schema.EitherSchema(schemaEither.right, schemaEither.left),
+              schemaAndValue.value.asInstanceOf[Either[A, B]].swap
+            )
+          )
+      }
+  }
+
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
 
     override def evalWithSchema: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = {

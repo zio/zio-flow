@@ -9,7 +9,7 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
     testM("handleEither") {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         val expected = either.fold(_ * 2, if (_) 10 else 20)
-        val result   = Remote(either).handleEither(_ * 2, _.ifThenElse(10, 20))
+        val result = Remote(either).handleEither(_ * 2, _.ifThenElse(10, 20))
         result <-> expected
       }
     },
@@ -27,6 +27,11 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         Remote(either).isLeft <-> either.isLeft
       }
+    },
+    testM("swap") {
+      check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
+        Remote(either).swap <-> either.swap
+      }
     }
-  ) @@ TestAspect.ignore
+  )
 }
