@@ -34,8 +34,9 @@ object NumericSpec extends DefaultRunnableSpec {
       testOp[R, A]("Log", gen, gen)(_ log _)(ops.log),
       testOp[R, A]("Root", gen, gen)(_ root _)(ops.root),
       testOp[R, A]("Absolute", gen)(_.abs)(ops.abs),
-      testOp[R, A]("Minimum", gen, gen)(_ min  _)(ops.min),
-      testOp[R, A]("Maximum", gen, gen)(_ max  _)(ops.max)
+      testOp[R, A]("Minimum", gen, gen)(_ min _)(ops.min),
+      testOp[R, A]("Maximum", gen, gen)(_ max _)(ops.max),
+      testOp[R, A]("Floor", gen)(_.floor)(ops.floor)
     )
 
   // TODO: BigDecimal fails Log/Root specs.
@@ -85,7 +86,8 @@ object NumericSpec extends DefaultRunnableSpec {
     root: (A, A) => A,
     abs: A => A,
     min: (A, A) => A,
-    max: (A, A) => A
+    max: (A, A) => A,
+    floor: A => A
   )
 
   private object Operations {
@@ -100,7 +102,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toInt,
         abs = x => Math.abs(x),
         min = Math.min,
-        max = Math.max
+        max = Math.max,
+        floor = x => Math.floor(x.toDouble).toInt
       )
 
     val bigIntOperations: NumericOps[BigInt] =
@@ -114,7 +117,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toInt,
         abs = x => Math.abs(x.doubleValue).toInt,
         min = (x, y) => Math.min(x.doubleValue, y.doubleValue).toInt,
-        max = (x, y) => Math.max(x.doubleValue, y.doubleValue).toInt
+        max = (x, y) => Math.max(x.doubleValue, y.doubleValue).toInt,
+        floor = x => Math.floor(x.doubleValue).toInt
       )
 
     val bigDecimalOperations: NumericOps[BigDecimal] =
@@ -128,7 +132,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble),
         abs = x => Math.abs(x.doubleValue),
         min = (x, y) => Math.min(x.doubleValue, y.doubleValue),
-        max = (x, y) => Math.max(x.doubleValue, y.doubleValue)
+        max = (x, y) => Math.max(x.doubleValue, y.doubleValue),
+        floor = x => Math.floor(x.doubleValue)
       )
 
     val longOperations: NumericOps[Long] =
@@ -142,7 +147,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toLong,
         abs = x => Math.abs(x),
         min = Math.min,
-        max = Math.max
+        max = Math.max,
+        floor = x => Math.floor(x).toLong
       )
 
     val shortOperations: NumericOps[Short] =
@@ -156,7 +162,8 @@ object NumericSpec extends DefaultRunnableSpec {
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toShort,
         abs = x => Math.abs(x).toShort,
         min = (x, y) => Math.min(x.toDouble, y.toDouble).toShort,
-        max = (x, y) => Math.max(x.toDouble, y.toDouble).toShort
+        max = (x, y) => Math.max(x.toDouble, y.toDouble).toShort,
+        floor = x => Math.floor(x.toDouble).toShort
       )
 
     val doubleOperations: NumericOps[Double] = NumericOps[Double](
@@ -169,7 +176,8 @@ object NumericSpec extends DefaultRunnableSpec {
       root = (x, y) => Math.pow(x, 1 / y),
       abs = x => Math.abs(x),
       min = Math.min,
-      max = Math.max
+      max = Math.max,
+      floor = Math.floor
     )
 
     val floatOperations: NumericOps[Float] = NumericOps[Float](
@@ -182,7 +190,8 @@ object NumericSpec extends DefaultRunnableSpec {
       root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toFloat,
       abs = x => Math.abs(x),
       min = Math.min,
-      max = Math.max
+      max = Math.max,
+      floor = x => Math.floor(x.toDouble).toFloat
     )
   }
 }
