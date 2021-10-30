@@ -26,8 +26,10 @@ object RemoteBooleanSpec extends DefaultRunnableSpec {
       )
     },
     test("IfThenElse") {
-      Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12
-      Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
+      BoolAlgebra.all(
+        Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12,
+        Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
+      )
     }
   )
 

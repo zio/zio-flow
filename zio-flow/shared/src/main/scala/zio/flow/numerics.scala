@@ -281,7 +281,9 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def sin(a: A): A
 
-  def inverseSin(a: A): A = ???
+  def inverseSin(a: A): A
+
+  def inverseTan(a: A): A
 
 }
 
@@ -321,6 +323,11 @@ object Fractional {
     override def ceil(left: Float): Float = Math.ceil(left).toFloat
 
     override def round(left: Float): Float = Math.round(left)
+    
+    override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
+
+    override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
+
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -358,6 +365,11 @@ object Fractional {
     override def ceil(left: Double): Double = Math.ceil(left)
 
     override def round(left: Double): Double = Math.round(left)
+    
+    override def inverseSin(a: Double): Double = Math.asin(a)
+
+    override def inverseTan(a: Double): Double = Math.atan(a)
+
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -397,5 +409,10 @@ object Fractional {
     override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
 
     override def round(left: BigDecimal): BigDecimal = Math.round(left.doubleValue)
+    override def inverseSin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
+
+    override def inverseTan(a: BigDecimal): BigDecimal =
+      Math.atan(a.doubleValue)
+
   }
 }

@@ -204,6 +204,12 @@ object Remote {
       Remote.unaryEvalWithSchema(value)(fractional.inverseSin, SinInverseFractional(_, fractional), fractional.schema)
   }
 
+  final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
+  }
+
   final case class Either0[A, B](either: Either[Remote[A], Remote[B]]) extends Remote[Either[A, B]] {
     //TODO : Is this a valid function
     def toLeftSchema[T, U](schema: Schema[T]): Schema[Either[T, U]] = ???
