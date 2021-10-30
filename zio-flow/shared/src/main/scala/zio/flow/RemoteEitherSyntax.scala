@@ -23,13 +23,17 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   final def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
 
+  final def contains[B1 >: B](elem: Remote[B1]): Remote[Boolean] =
+    handleEither(_ => Remote(false), Remote.Equal(_, elem))
+
   final def forall(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(true), f)
 
   final def exists(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(false), f)
 
   final def getOrElse(or: => Remote[B]): Remote[B] = handleEither(_ => or, identity(_))
 
-  final def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] = handleEither(_ => or, _ => self)
+  final def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
+    handleEither(_ => or, _ => self)
 
   final def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
