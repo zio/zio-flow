@@ -29,6 +29,8 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   def getOrElse(or: => Remote[B]): Remote[B] = handleEither(_ => or, identity(_))
 
+  def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] = handleEither(_ => or, _ => self)
+
   def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
   def toTry(implicit ev: A <:< Throwable): Try[B] = ???
