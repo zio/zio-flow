@@ -33,8 +33,8 @@ object NumericSpec extends DefaultRunnableSpec {
       testOp[R, A]("Log", gen, gen)(_ log _)(ops.log),
       testOp[R, A]("Root", gen, gen)(_ root _)(ops.root),
       testOp[R, A]("Absolute", gen)(_.abs)(ops.abs),
-      testOp[R, A]("Minimum", gen, gen)(_ + _)(ops.min),
-      testOp[R, A]("Maximum", gen, gen)(_ + _)(ops.max)
+      testOp[R, A]("Minimum", gen, gen)(_ min  _)(ops.min),
+      testOp[R, A]("Maximum", gen, gen)(_ max  _)(ops.max)
     )
 
   // TODO: BigDecimal fails Log/Root specs.
@@ -50,7 +50,8 @@ object NumericSpec extends DefaultRunnableSpec {
       testOp[R, A]("Multiplication", gen, gen)(_ * _)(ops.multiplication),
       testOp[R, A]("Division", gen, gen.filterNot(ops.isZero))(_ / _)(ops.division),
       testOp[R, A]("Absolute", gen)(_.abs)(ops.abs),
-      testOp[R, A]("Minimum", gen, gen)(_ + _)(ops.min)
+      testOp[R, A]("Minimum", gen, gen)(_ min _)(ops.min),
+      testOp[R, A]("Maximum", gen, gen)(_ max _)(ops.max)
 //      testOp[R, A]("Log", gen, gen)(_ log _)(ops.log),
 //      testOp[R, A]("Root", gen, gen)(_ root _)(ops.root)
     )
