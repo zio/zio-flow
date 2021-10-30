@@ -43,4 +43,7 @@ class RemoteNumericSyntax[A](self: Remote[A]) {
 
   final def ceil(implicit numeric: Numeric[A]): Remote[A] =
     Remote.CeilNumeric(self.widen[A], numeric)
+
+  final def round(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.RoundNumeric(self.widen[A], numeric)
 }
