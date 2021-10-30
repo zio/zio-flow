@@ -2,6 +2,7 @@ package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.random.Random
+import zio.schema.Schema
 import zio.test._
 
 object RemoteEitherSpec extends DefaultRunnableSpec {
@@ -38,10 +39,22 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         Remote(either).swap <-> either.swap
       }
     },
+    testM("forall") {
+      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.boolean)) { (either, f) =>
+        Remote(either).forall(partialLift(f)) <-> either.forall(f)
+      }
+    },
     testM("toOption") {
       check(Gen.either(Gen.boolean, Gen.anyInt)) { either =>
         Remote(either).toOption <-> either.toOption
       }
     }
   )
+
+  private def partialLift[A, B: Schema](f: A => B): Remote[A] => Remote[B] = a =>
+    a.eval match {
+      case Left(_)      => throw new IllegalStateException("Lifted functions in test requires a local value.")
+      case Right(value) => Remote(f(value))
+    }
+
 }
