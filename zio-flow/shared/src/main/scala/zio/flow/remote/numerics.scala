@@ -328,6 +328,11 @@ object Fractional {
     override def ceil(left: Float): Float = Math.ceil(left).toFloat
 
     override def round(left: Float): Float = Math.round(left)
+
+    override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
+
+    override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
+
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -370,6 +375,11 @@ object Fractional {
     override def ceil(left: Double): Double = Math.ceil(left)
 
     override def round(left: Double): Double = Math.round(left)
+
+    override def inverseSin(a: Double): Double = Math.asin(a)
+
+    override def inverseTan(a: Double): Double = Math.atan(a)
+
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
