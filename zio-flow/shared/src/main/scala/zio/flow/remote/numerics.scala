@@ -22,6 +22,8 @@ sealed trait Numeric[A] {
   def log(left: A, right: A): A
 
   def abs(left: A): A
+
+  def min(left: A, right: A): A
 }
 
 object Numeric extends NumericImplicits0 {
@@ -47,6 +49,8 @@ object Numeric extends NumericImplicits0 {
     def mod(left: Int, right: Int): Int = left % right
 
     override def abs(left: Int): Int = Math.abs(left)
+
+    override def min(left: Int, right: Int): Int = Math.min(left, right)
   }
 }
 
@@ -72,6 +76,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[Short] = implicitly[Schema[Short]]
 
     override def abs(left: Short): Short = Math.abs(left).toShort
+
+    override def min(left: Short, right: Short): Short = Math.min(left, right).toShort
   }
 
   implicit case object NumericLong extends Numeric[Long] {
@@ -94,6 +100,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[Long] = implicitly[Schema[Long]]
 
     override def abs(left: Long): Long = Math.abs(left)
+
+    override def min(left: Long, right: Long): Long = Math.min(left, right)
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
@@ -120,6 +128,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[BigInt] = implicitly[Schema[BigInt]]
 
     override def abs(left: BigInt): BigInt = Math.abs(left.toInt)
+
+    override def min(left: BigInt, right: BigInt): BigInt = Math.min(left.toInt, right.toInt)
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
@@ -142,6 +152,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[Float] = implicitly[Schema[Float]]
 
     override def abs(left: Float): Float = Math.abs(left)
+
+    override def min(left: Float, right: Float): Float = Math.min(left, right)
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
@@ -164,6 +176,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[Double] = implicitly[Schema[Double]]
 
     override def abs(left: Double): Double = Math.abs(left)
+
+    override def min(left: Double, right: Double): Double = Math.min(left, right)
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
@@ -190,6 +204,8 @@ sealed trait NumericImplicits0 {
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
 
     override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
+
+    override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
   }
 }
 
@@ -237,6 +253,8 @@ object Fractional {
 
     override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
 
+
+    override def min(left: Float, right: Float): Float = Math.min(left, right)
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -269,6 +287,8 @@ object Fractional {
 
     override def inverseTan(a: Double): Double = Math.atan(a)
 
+
+    override def min(left: Double, right: Double): Double = Math.min(left, right)
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -304,5 +324,7 @@ object Fractional {
 
 
     override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
+
+    override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
   }
 }
