@@ -1,9 +1,7 @@
 package zio.flow
 
 import java.time.{ Duration, Instant }
-
 import scala.language.implicitConversions
-
 import zio.flow.Numeric.NumericInt
 import zio.schema.Schema
 
@@ -532,6 +530,43 @@ object Remote {
           val schemaA = schemaFromOption(schemaAndValue.schema.asInstanceOf[Schema[Option[A]]])
           schemaAndValue.value.fold(remoteB.evalWithSchema)(v => f(Literal(v, schemaA)).evalWithSchema)
       }
+  }
+
+  final case class ZipOption[A, B](remoteA: Remote[Option[A]], remoteB: Remote[Option[B]])
+      extends Remote[Option[(A, B)]] {
+
+    override def evalWithSchema: Either[Remote[Option[(A, B)]], SchemaAndValue[Option[(A, B)]]] = {
+      val lEval = remoteA.evalWithSchema
+      val rEval = remoteB.evalWithSchema
+      (lEval, rEval) match {
+        case (Right(SchemaAndValue(schemaA, leftA)), Right(SchemaAndValue(schemaB, rightA))) =>
+          val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
+          val rightVal: Option[B]    = rightA.asInstanceOf[Option[B]]
+          val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
+          val schemaBInst: Schema[B] = schemaB.asInstanceOf[Schema[B]]
+          Right(
+            SchemaAndValue(Schema.Optional(Schema.Tuple(schemaAInst, schemaBInst)), leftVal.zip(rightVal))
+          )
+        case _                                                                               => Left(Remote(None))
+      }
+    }
+  }
+
+  final case class ContainsOption[A](left: Remote[Option[A]], right: A) extends Remote[Boolean] {
+    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
+      val lEval = left.evalWithSchema
+
+      lEval match {
+        case (Right(SchemaAndValue(schemaA, leftA))) =>
+          val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
+          val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
+          val value: Literal[A]      = Literal(right, schemaAInst)
+          Right(
+            SchemaAndValue(Schema[Boolean], leftVal.contains(value.value))
+          )
+        case _                                       => Left(Remote(false))
+      }
+    }
   }
 
   object Lazy {

@@ -1,5 +1,8 @@
 package zio.flow
 
+import zio.flow.Remote.ContainsOption
+import zio.schema.DeriveSchema.gen
+
 class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
 
   def handleOption[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =
@@ -11,14 +14,15 @@ class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
   def isNone: Remote[Boolean] =
     handleOption(Remote(true), _ => Remote(false))
 
-  final def isEmpty: Remote[Boolean] = ???
+  final def isEmpty: Remote[Boolean] = isNone
 
-  final def isDefined: Remote[Boolean] = ???
-  def knownSize: Remote[Int]           = ???
+  final def isDefined: Remote[Boolean] = !isEmpty
 
-  final def contains[A1 >: A](elem: A1): Remote[Boolean] = ???
+  final def knownSize: Remote[Int] = handleOption(Remote(0), _ => Remote(1))
 
-  def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = ???
+  final def contains[A1 >: A](elem: A1): Remote[Boolean] = ContainsOption(self, elem)
 
-  final def zip[A1 >: A, B](that: Remote[Option[B]]): Remote[Option[(A1, B)]] = ???
+  def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = handleOption(alternative, _ => self)
+
+  final def zip[A1 >: A, B](that: Remote[Option[B]]): Remote[Option[(A1, B)]] = Remote.ZipOption(self, that)
 }
