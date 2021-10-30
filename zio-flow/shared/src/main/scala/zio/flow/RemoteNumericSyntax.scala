@@ -31,4 +31,7 @@ class RemoteNumericSyntax[A](self: Remote[A]) {
 
   final def abs(implicit numeric: Numeric[A]): Remote[A] =
     Remote.AbsoluteNumeric(self.widen[A], numeric)
+
+  final def min(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.MinNumeric(self.widen[A], that, numeric)
 }

@@ -162,6 +162,12 @@ object Remote {
       Remote.unaryEvalWithSchema(value)(numeric.abs, AbsoluteNumeric(_, numeric), numeric.schema)
   }
 
+  final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.binaryEvalWithSchema(left, right)(numeric.min, MinNumeric(_, _, numeric), numeric.schema)
+  }
+
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
