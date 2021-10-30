@@ -184,7 +184,10 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def sin(a: A): A
 
-  def inverseSin(a: A): A = ???
+  def inverseSin(a: A): A
+
+  def inverseTan(a: A): A
+
 }
 
 object Fractional {
@@ -211,6 +214,11 @@ object Fractional {
     override def sin(a: Float): Float = Math.sin(a.toDouble).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
+
+    override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
+
+    override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
+
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -236,6 +244,11 @@ object Fractional {
     override def sin(a: Double): Double = Math.sin(a)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
+
+    override def inverseSin(a: Double): Double = Math.asin(a)
+
+    override def inverseTan(a: Double): Double = Math.atan(a)
+
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -263,5 +276,11 @@ object Fractional {
     override def sin(a: BigDecimal): BigDecimal = Math.sin(a.doubleValue)
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+
+    override def inverseSin(a: BigDecimal): BigDecimal = ???
+
+    override def inverseTan(a: BigDecimal): BigDecimal =
+      Math.atan(a.doubleValue)
+
   }
 }
