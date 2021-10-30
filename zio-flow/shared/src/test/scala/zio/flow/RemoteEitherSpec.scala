@@ -44,6 +44,11 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         Remote(either).forall(partialLift(f)) <-> either.forall(f)
       }
     },
+    testM("exists") {
+      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.boolean)) { (either, f) =>
+        Remote(either).exists(partialLift(f)) <-> either.exists(f)
+      }
+    },
     testM("toOption") {
       check(Gen.either(Gen.boolean, Gen.anyInt)) { either =>
         Remote(either).toOption <-> either.toOption
