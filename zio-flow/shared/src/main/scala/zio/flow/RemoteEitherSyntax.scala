@@ -21,17 +21,17 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
   final def isRight: Remote[Boolean] =
     handleEither(_ => Remote(false), _ => Remote(true))
 
-  def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
+  final def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
 
-  def forall(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(true), f)
+  final def forall(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(true), f)
 
-  def exists(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(false), f)
+  final def exists(f: Remote[B] => Remote[Boolean]): Remote[Boolean] = handleEither(_ => Remote(false), f)
 
-  def getOrElse(or: => Remote[B]): Remote[B] = handleEither(_ => or, identity(_))
+  final def getOrElse(or: => Remote[B]): Remote[B] = handleEither(_ => or, identity(_))
 
-  def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] = handleEither(_ => or, _ => self)
+  final def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] = handleEither(_ => or, _ => self)
 
-  def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
+  final def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
   def toTry(implicit ev: A <:< Throwable): Try[B] = ???
 }
