@@ -24,6 +24,8 @@ sealed trait Numeric[A] {
   def abs(left: A): A
 
   def min(left: A, right: A): A
+
+  def max(left: A, right: A): A
 }
 
 object Numeric extends NumericImplicits0 {
@@ -51,6 +53,8 @@ object Numeric extends NumericImplicits0 {
     override def abs(left: Int): Int = Math.abs(left)
 
     override def min(left: Int, right: Int): Int = Math.min(left, right)
+
+    override def max(left: Int, right: Int): Int = Math.max(left, right)
   }
 }
 
@@ -78,6 +82,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: Short): Short = Math.abs(left).toShort
 
     override def min(left: Short, right: Short): Short = Math.min(left, right).toShort
+
+    override def max(left: Short, right: Short): Short = Math.max(left, right).toShort
   }
 
   implicit case object NumericLong extends Numeric[Long] {
@@ -102,6 +108,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: Long): Long = Math.abs(left)
 
     override def min(left: Long, right: Long): Long = Math.min(left, right)
+
+    override def max(left: Long, right: Long): Long = Math.max(left, right)
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
@@ -130,6 +138,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: BigInt): BigInt = Math.abs(left.toInt)
 
     override def min(left: BigInt, right: BigInt): BigInt = Math.min(left.toInt, right.toInt)
+
+    override def max(left: BigInt, right: BigInt): BigInt = Math.max(left.toInt, right.toInt)
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
@@ -154,6 +164,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: Float): Float = Math.abs(left)
 
     override def min(left: Float, right: Float): Float = Math.min(left, right)
+
+    override def max(left: Float, right: Float): Float = Math.max(left, right)
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
@@ -178,6 +190,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: Double): Double = Math.abs(left)
 
     override def min(left: Double, right: Double): Double = Math.min(left, right)
+
+    override def max(left: Double, right: Double): Double = Math.max(left, right)
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
@@ -206,6 +220,8 @@ sealed trait NumericImplicits0 {
     override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
 
     override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
+
+    override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
   }
 }
 
@@ -247,6 +263,8 @@ object Fractional {
     override def abs(left: Float): Float = Math.abs(left)
 
     override def min(left: Float, right: Float): Float = Math.min(left, right)
+
+    override def max(left: Float, right: Float): Float = Math.max(left, right)
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -276,6 +294,8 @@ object Fractional {
     override def abs(left: Double): Double = Math.abs(left)
 
     override def min(left: Double, right: Double): Double = Math.min(left, right)
+
+    override def max(left: Double, right: Double): Double = Math.max(left, right)
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -307,5 +327,7 @@ object Fractional {
     override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
 
     override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
+
+    override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
   }
 }
