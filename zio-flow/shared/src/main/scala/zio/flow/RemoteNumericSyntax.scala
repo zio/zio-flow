@@ -28,4 +28,7 @@ class RemoteNumericSyntax[A](self: Remote[A]) {
 
   final def mod(that: Remote[Int])(implicit ev: A <:< Int, numericInt: Numeric[Int]): Remote[Int] =
     Remote.ModNumeric(self.widen[Int], that)
+
+  final def abs(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.AbsoluteNumeric(self.widen[A], numeric)
 }
