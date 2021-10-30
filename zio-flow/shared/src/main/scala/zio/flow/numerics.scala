@@ -29,6 +29,8 @@ sealed trait Numeric[A] {
 
   def floor(left: A): A
 
+  def ceil(left: A): A
+
 }
 
 object Numeric extends NumericImplicits0 {
@@ -59,7 +61,9 @@ object Numeric extends NumericImplicits0 {
 
     override def max(left: Int, right: Int): Int = Math.max(left, right)
 
-    override def floor(left: Int): Int = Math.floor(left.toDouble).toInt
+    override def floor(left: Int): Int = Math.floor(left).toInt
+
+    override def ceil(left: Int): Int = Math.ceil(left).toInt
   }
 }
 
@@ -90,7 +94,9 @@ sealed trait NumericImplicits0 {
 
     override def max(left: Short, right: Short): Short = Math.max(left, right).toShort
 
-    override def floor(left: Short): Short = Math.floor(left.toDouble).toShort
+    override def floor(left: Short): Short = Math.floor(left).toShort
+
+    override def ceil(left: Short): Short = Math.ceil(left).toShort
   }
 
   implicit case object NumericLong extends Numeric[Long] {
@@ -118,7 +124,9 @@ sealed trait NumericImplicits0 {
 
     override def max(left: Long, right: Long): Long = Math.max(left, right)
 
-    override def floor(left: Long): Long = Math.floor(left.toDouble).toLong
+    override def floor(left: Long): Long = Math.floor(left).toLong
+
+    override def ceil(left: Long): Long = Math.ceil(left).toLong
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
@@ -151,6 +159,8 @@ sealed trait NumericImplicits0 {
     override def max(left: BigInt, right: BigInt): BigInt = Math.max(left.toInt, right.toInt)
 
     override def floor(left: BigInt): BigInt = Math.floor(left.doubleValue).toInt
+
+    override def ceil(left: BigInt): BigInt = Math.ceil(left.doubleValue).toInt
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
@@ -179,6 +189,8 @@ sealed trait NumericImplicits0 {
     override def max(left: Float, right: Float): Float = Math.max(left, right)
 
     override def floor(left: Float): Float = Math.floor(left.toDouble).toFloat
+
+    override def ceil(left: Float): Float = Math.ceil(left).toFloat
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
@@ -207,6 +219,8 @@ sealed trait NumericImplicits0 {
     override def max(left: Double, right: Double): Double = Math.max(left, right)
 
     override def floor(left: Double): Double = Math.floor(left)
+
+    override def ceil(left: Double): Double = Math.ceil(left)
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
@@ -239,6 +253,8 @@ sealed trait NumericImplicits0 {
     override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
 
     override def floor(left: BigDecimal): BigDecimal = Math.floor(left.doubleValue)
+
+    override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
   }
 }
 
@@ -285,6 +301,8 @@ object Fractional {
     override def max(left: Float, right: Float): Float = Math.max(left, right)
 
     override def floor(left: Float): Float = Math.floor(left.toDouble).toFloat
+
+    override def ceil(left: Float): Float = Math.ceil(left).toFloat
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -318,6 +336,8 @@ object Fractional {
     override def max(left: Double, right: Double): Double = Math.max(left, right)
 
     override def floor(left: Double): Double = Math.floor(left)
+
+    override def ceil(left: Double): Double = Math.ceil(left)
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -353,5 +373,7 @@ object Fractional {
     override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
 
     override def floor(left: BigDecimal): BigDecimal = Math.floor(left.doubleValue)
+
+    override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
   }
 }
