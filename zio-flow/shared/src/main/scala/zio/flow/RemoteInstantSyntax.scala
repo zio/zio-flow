@@ -19,36 +19,45 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     Remote.fromEpochSec(total)
   }
 
-  def get(field: Remote[TemporalField]): Remote[Int] = ???
+  def get(field: Remote[TemporalField]): Remote[Int] = Remote.fmap2(self, field)(_ get _)
 
-  def plus(amountToAdd: Remote[TemporalAmount]): Remote[Instant] = ???
+  def plus(amountToAdd: Remote[TemporalAmount]): Remote[Instant] = Remote.fmap2(self, amountToAdd)(_ plus _)
 
-  def plus(amountToAdd: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] = ???
+  def plus(amountToAdd: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] =
+    Remote.fmap3(self, amountToAdd, unit)(_ plus (_, _))
 
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant]     = ???
-  def plusMillis(milliSecondsToAdd: Remote[Long]): Remote[Instant] = ???
-  def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant]   = ???
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant] = Remote.fmap2(self, secondsToAdd)(_ plusSeconds _)
 
-  def minus(amountToSubtract: Remote[TemporalAmount]): Remote[Instant] = ???
+  def plusMillis(milliSecondsToAdd: Remote[Long]): Remote[Instant] =
+    Remote.fmap2(self, milliSecondsToAdd)(_ plusMillis _)
 
-  def minus(amountToSubtract: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] = ???
+  def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant] = Remote.fmap2(self, nanoSecondsToAdd)(_ plusNanos _)
 
-  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] = ???
+  def minus(amountToSubtract: Remote[TemporalAmount]): Remote[Instant] =
+    Remote.fmap2(self, amountToSubtract)(_ minus _)
 
-  def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] = ???
+  def minus(amountToSubtract: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] =
+    Remote.fmap3(self, amountToSubtract, unit)(_ minus (_, _)) // Remote.applyF2()
 
-  def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] = ???
+  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
+    Remote.fmap2(self, secondsToSubtract)(_ minusSeconds _)
+
+  def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] =
+    Remote.fmap2(self, nanosecondsToSubtract)(_ minusNanos _)
+
+  def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] =
+    Remote.fmap2(self, milliSecondsToSubtract)(_ minusMillis _)
 
 }
 
-object RemoteInstant {
-  def now(): Remote[Instant] = ???
+object RemoteInstantSyntax {
+  def now(): Remote[Instant] = Remote(Instant.now())
 
-  def now(clock: Remote[Clock]): Remote[Instant] = ???
+  def now(clock: Remote[Clock]): Remote[Instant] = Remote.fmap(clock)(Instant.now)
 
-  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = ???
+  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.fmap(second)(Instant.ofEpochSecond)
 
-  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = ???
+  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = Remote.fmap(milliSecond)(Instant.ofEpochMilli)
 
-  def parse(charSeq: Remote[String]): Remote[Instant] = ???
+  def parse(charSeq: Remote[String]): Remote[Instant] = Remote.fmap(charSeq)(Instant.parse)
 }

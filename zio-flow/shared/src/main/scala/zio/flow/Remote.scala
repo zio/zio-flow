@@ -460,6 +460,43 @@ object Remote {
     }
   }
 
+  final case class RemoteMapper[A, B: Schema](remote: Remote[A], fn: A => B) extends Remote[B] {
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] =
+      unaryEval(remote)(fn, remA => RemoteMapper(remA, fn))
+        .map(SchemaAndValue(Schema[B], _))
+  }
+
+  def fmap[A, B: Schema](remote: Remote[A])(fn: A => B): Remote[B] = RemoteMapper(remote, fn)
+
+  final case class RemoteMapper2[A, B, C: Schema](remoteA: Remote[A], remoteB: Remote[B], fn: (A, B) => C)
+      extends Remote[C] {
+    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] =
+      binaryEval(remoteA, remoteB)(fn(_, _), (remA, remB) => RemoteMapper2(remA, remB, fn))
+        .map(SchemaAndValue(Schema[C], _))
+  }
+
+  def fmap2[A, B, C: Schema](remoteA: Remote[A], remoteB: Remote[B])(fn: (A, B) => C): Remote[C] =
+    RemoteMapper2(remoteA, remoteB, fn)
+
+  final case class RemoteMapper3[A, B, C, D: Schema](
+    remoteA: Remote[A],
+    remoteB: Remote[B],
+    remoteC: Remote[C],
+    fn: (A, B, C) => D
+  ) extends Remote[D] {
+    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] =
+      ternaryEval(remoteA, remoteB, remoteC)(
+        fn(_, _, _),
+        (remA, remB, remC) => RemoteMapper3(remA, remB, remC, fn)
+      )
+        .map(SchemaAndValue(Schema[D], _))
+  }
+
+  def fmap3[A, B, C, D: Schema](remoteA: Remote[A], remoteB: Remote[B], remoteC: Remote[C])(
+    fn: (A, B, C) => D
+  ): Remote[D] =
+    RemoteMapper3(remoteA, remoteB, remoteC, fn)
+
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
     override def evalWithSchema: Either[Remote[Instant], SchemaAndValue[Instant]] =
       unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
@@ -583,6 +620,25 @@ object Remote {
       case Left(_)  =>
         Left(g(left, right))
       case Right(v) => Right(SchemaAndValue(schema, v))
+    }
+  }
+
+  private[zio] def ternaryEval[A, B, C, D, E](
+    remoteA: Remote[A],
+    remoteB: Remote[B],
+    remoteC: Remote[C]
+  )(f: (A, B, C) => E, g: (Remote[A], Remote[B], Remote[C]) => Remote[D]): Either[Remote[D], E] = {
+    val aEither = remoteA.eval
+    val bEither = remoteB.eval
+    val cEither = remoteC.eval
+    (for {
+      a <- aEither
+      b <- bEither
+      c <- cEither
+    } yield f(a, b, c)) match {
+      case Left(_)  =>
+        Left(g(remoteA, remoteB, remoteC))
+      case Right(v) => Right(v)
     }
   }
 
