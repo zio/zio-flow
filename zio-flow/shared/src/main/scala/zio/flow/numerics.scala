@@ -277,7 +277,7 @@ object Fractional {
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
 
-    override def inverseSin(a: BigDecimal): BigDecimal = ???
+    override def inverseSin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
 
     override def inverseTan(a: BigDecimal): BigDecimal =
       Math.atan(a.doubleValue)
