@@ -20,6 +20,8 @@ sealed trait Numeric[A] {
   def root(left: A, right: A): A
 
   def log(left: A, right: A): A
+
+  def abs(left: A): A
 }
 
 object Numeric extends NumericImplicits0 {
@@ -43,6 +45,8 @@ object Numeric extends NumericImplicits0 {
     override def negate(left: Int): Int = -1 * left
 
     def mod(left: Int, right: Int): Int = left % right
+
+    override def abs(left: Int): Int = Math.abs(left)
   }
 }
 
@@ -66,6 +70,8 @@ sealed trait NumericImplicits0 {
     override def negate(left: Short): Short = (-1 * left).toShort
 
     def schema: Schema[Short] = implicitly[Schema[Short]]
+
+    override def abs(left: Short): Short = Math.abs(left).toShort
   }
 
   implicit case object NumericLong extends Numeric[Long] {
@@ -86,6 +92,8 @@ sealed trait NumericImplicits0 {
     override def log(left: Long, right: Long): Long = (Math.log(left.toDouble) / Math.log(right.toDouble)).toLong
 
     def schema: Schema[Long] = implicitly[Schema[Long]]
+
+    override def abs(left: Long): Long = Math.abs(left)
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
@@ -110,6 +118,8 @@ sealed trait NumericImplicits0 {
     )
 
     def schema: Schema[BigInt] = implicitly[Schema[BigInt]]
+
+    override def abs(left: BigInt): BigInt = Math.abs(left.toInt)
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
@@ -130,6 +140,8 @@ sealed trait NumericImplicits0 {
     override def log(left: Float, right: Float): Float = (Math.log(left.toDouble) / Math.log(right.toDouble)).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
+
+    override def abs(left: Float): Float = Math.abs(left)
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
@@ -150,6 +162,8 @@ sealed trait NumericImplicits0 {
     override def log(left: Double, right: Double): Double = Math.log(left) / Math.log(right)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
+
+    override def abs(left: Double): Double = Math.abs(left)
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
@@ -174,6 +188,8 @@ sealed trait NumericImplicits0 {
     override def negate(left: BigDecimal): BigDecimal = -1 * left
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+
+    override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
   }
 }
 
@@ -215,6 +231,8 @@ object Fractional {
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
 
+    override def abs(left: Float): Float = Math.abs(left)
+
     override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
 
     override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
@@ -244,6 +262,8 @@ object Fractional {
     override def sin(a: Double): Double = Math.sin(a)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
+
+    override def abs(left: Double): Double = Math.abs(left)
 
     override def inverseSin(a: Double): Double = Math.asin(a)
 
@@ -282,5 +302,7 @@ object Fractional {
     override def inverseTan(a: BigDecimal): BigDecimal =
       Math.atan(a.doubleValue)
 
+
+    override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
   }
 }
