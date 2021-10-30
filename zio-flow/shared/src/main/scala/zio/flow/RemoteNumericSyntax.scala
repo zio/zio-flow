@@ -37,4 +37,7 @@ class RemoteNumericSyntax[A](self: Remote[A]) {
 
   final def max(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
     Remote.MaxNumeric(self.widen[A], that, numeric)
+
+  final def floor(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.FloorNumeric(self.widen[A], numeric)
 }
