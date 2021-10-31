@@ -6,7 +6,7 @@ import zio.schema.Schema
 import zio.test._
 
 object RemoteEitherSpec extends DefaultRunnableSpec {
-  def spec: ZSpec[TestConfig with Random with Annotations, Any] = suite("RemoteEitherSpec")(
+  def spec: ZSpec[TestConfig with Random with Sized with Annotations, Any] = suite("RemoteEitherSpec")(
     testM("handleEither") {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         val expected = either.fold(_ * 2, if (_) 10 else 20)
@@ -39,6 +39,11 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         Remote(eitherInt).orElse(eitherLong) <-> eitherInt.orElse(eitherLong)
       }
     },
+    testM("filterOrElse") {
+      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.function(Gen.boolean), Gen.boolean) { (either, f, zero) =>
+        Remote(either).filterOrElse(partialLift(f), Remote(zero)) <-> either.filterOrElse(f, zero)
+      }
+    },
     testM("swap") {
       check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
         Remote(either).swap <-> either.swap
@@ -63,7 +68,17 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
       check(Gen.either(Gen.boolean, Gen.anyInt)) { either =>
         Remote(either).toOption <-> either.toOption
       }
-    }
+    },
+    suite("collectAll")(
+      testM("return the list of all right results") {
+        check(Gen.listOf(Gen.anyInt)) { list =>
+          RemoteEitherSyntax.collectAll(Remote(list.map(Right(_)): List[Either[Short, Int]])) <-> Right(list)
+        }
+      },
+      test("return the first left result") {
+        RemoteEitherSyntax.collectAll(Remote(List(Right(2), Left("V"), Right(9), Right(0), Left("P")))) <-> Left("V")
+      }
+    ) @@ TestAspect.ignore
   )
 
   private def partialLift[A, B: Schema](f: A => B): Remote[A] => Remote[B] = a =>

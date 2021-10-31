@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.schema.Schema
+
 import scala.util.Try
 
 class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
@@ -35,6 +37,19 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
   final def orElse[A1 >: A, B1 >: B](or: => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
     handleEither(_ => or, _ => self)
 
+  final def filterOrElse[A1 >: A](p: Remote[B] => Remote[Boolean], zero: => Remote[A1])(implicit
+    bSchema: Schema[B] // FIXME Actually easily retrieved from Remote[B]
+  ): Remote[Either[A1, B]] =
+    handleEither(
+      _ => self,
+      a =>
+        Remote.Branch(
+          p(a),
+          self,
+          Remote.Either0(Left((zero, bSchema)))
+        )
+    )
+
   final def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
   def toTry(implicit ev: A <:< Throwable): Try[B] = ???
@@ -42,9 +57,11 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
 object RemoteEitherSyntax {
 
-  def collectAll[E, A](values: Remote[List[Either[E, A]]]): Remote[Either[E, List[A]]] = {
+  def collectAll[E, A](
+    values: Remote[List[Either[E, A]]]
+  )(implicit eSchema: Schema[E], aSchema: Schema[A]): Remote[Either[E, List[A]]] = {
 
-    def combine[E, A](
+    def combine(
       eitherList: RemoteEitherSyntax[E, List[A]],
       either: RemoteEitherSyntax[E, A]
     ): Remote[Either[E, List[A]]] =
@@ -53,13 +70,17 @@ object RemoteEitherSyntax {
         remoteList => combine2(either, remoteList).self
       )
 
-    def combine2[A, B](either: RemoteEitherSyntax[A, B], remoteList: Remote[List[B]]): RemoteEitherSyntax[A, List[B]] =
+    def combine2[U, V](either: RemoteEitherSyntax[U, V], remoteList: Remote[List[V]])(implicit
+      uSchema: Schema[U],
+      vSchema: Schema[V]
+    ): RemoteEitherSyntax[U, List[V]] =
       either.handleEither(
-        a => Remote.Either0(Left(a)),
-        b => Remote.Either0(Right(Remote.Cons(remoteList, b)))
+        u => Remote.Either0(Left((u, Schema.list(vSchema)))),
+        v => Remote.Either0(Right((uSchema, Remote.Cons(remoteList, v))))
       )
 
-    values.fold(Right(Nil): Remote[Either[E, List[A]]])((el: Remote[Either[E, List[A]]], e: Remote[Either[E, A]]) =>
+    // FIXME Expecting Schema for Either, but got a Schema for Transformm.
+    values.fold(Remote(Right(Nil)): Remote[Either[E, List[A]]])((el, e) =>
       combine(el, e)
     )
   }

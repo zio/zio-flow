@@ -210,22 +210,18 @@ object Remote {
       Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
   }
 
-  final case class Either0[A, B](either: Either[Remote[A], Remote[B]]) extends Remote[Either[A, B]] {
-    //TODO : Is this a valid function
-    def toLeftSchema[T, U](schema: Schema[T]): Schema[Either[T, U]] = ???
-
-    def toRightSchema[T, U](schema: Schema[T]): Schema[Either[U, T]] = ???
-
+  final case class Either0[A, B](either: Either[(Remote[A], Schema[B]), (Schema[A], Remote[B])])
+      extends Remote[Either[A, B]] {
     override def evalWithSchema: Either[Remote[Either[A, B]], SchemaAndValue[Either[A, B]]] = either match {
-      case Left(remoteA)  =>
+      case Left((remoteA, schemaB))  =>
         remoteA.evalWithSchema.fold(
-          remoteA => Left(Either0(Left(remoteA))),
-          a => Right(SchemaAndValue(toLeftSchema(a.schema), Left(a.value)))
+          remoteA => Left(Either0(Left((remoteA, schemaB)))),
+          a => Right(SchemaAndValue(Schema.EitherSchema(a.schema, schemaB), Left(a.value)))
         )
-      case Right(remoteB) =>
+      case Right((schemaA, remoteB)) =>
         remoteB.evalWithSchema.fold(
-          remoteB => Left(Either0(Right(remoteB))),
-          b => Right(SchemaAndValue(toRightSchema(b.schema), (Right(b.value))))
+          remoteB => Left(Either0(Right((schemaA, remoteB)))),
+          b => Right(SchemaAndValue(Schema.EitherSchema(schemaA, b.schema), (Right(b.value))))
         )
     }
   }
@@ -236,16 +232,14 @@ object Remote {
     right: Remote[B] => Remote[C]
   ) extends Remote[C] {
     override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = either.evalWithSchema match {
-      case Left(_)                              => Left(self)
-      case Right(SchemaAndValue(schema, value)) =>
-        val schemaEither = schema.asInstanceOf[Schema.EitherSchema[A, B]]
-        value match {
+      case Left(_)               => Left(self)
+      case Right(schemaAndValue) =>
+        val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+        schemaAndValue.value match {
           case Left(a)  => left(Literal(a, schemaEither.left)).evalWithSchema
           case Right(b) => right(Literal(b, schemaEither.right)).evalWithSchema
           case _        => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
         }
-      case Right(_)                             =>
-        throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
     }
   }
 
@@ -254,7 +248,7 @@ object Remote {
   ) extends Remote[Either[B, A]] {
     override def evalWithSchema: Either[Remote[Either[B, A]], SchemaAndValue[Either[B, A]]] =
       either.evalWithSchema match {
-        case Left(_)                              => Left(self)
+        case Left(_)               => Left(self)
         case Right(schemaAndValue) =>
           val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
           Right(
@@ -937,9 +931,9 @@ object Remote {
 
         case (l: Either0[l1, l2], Either0(either2)) =>
           (l.either, either2) match {
-            case (Left(l), Left(r))   => loop(l, r)
-            case (Right(l), Right(r)) => loop(l, r)
-            case _                    => false
+            case (Left((l, _)), Left((r, _)))   => loop(l, r)
+            case (Right((_, l)), Right((_, r))) => loop(l, r)
+            case _                              => false
           }
 
         case (
@@ -1027,8 +1021,13 @@ object Remote {
     loop(self, that)
   }
 
-  implicit def either[A, B](either0: Either[Remote[A], Remote[B]]): Remote[Either[A, B]] =
-    Either0(either0)
+  def sequenceEither[A, B](
+    either: Either[Remote[A], Remote[B]]
+  )(implicit aSchema: Schema[A], bSchema: Schema[B]): Remote[Either[A, B]] =
+    Either0(either match {
+      case Left(l)  => Left((l, bSchema))
+      case Right(r) => Right((aSchema, r))
+    })
 
   def fromEpochSec(seconds: Remote[Long]): Remote[Instant] =
     Remote.InstantFromLong(seconds)

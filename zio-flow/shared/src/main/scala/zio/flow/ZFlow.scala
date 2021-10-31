@@ -68,8 +68,10 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def orElseEither[R1 <: R, E2, A1 >: A, B](
     that: ZFlow[R1, E2, B]
-  )(implicit A1: Schema[A1], b: Schema[B]): ZFlow[R1, E2, Either[A1, B]] =
-    (self: ZFlow[R, E, A1]).map(Left(_)).catchAll(_ => that.map(Right(_)))
+  )(implicit a1Schema: Schema[A1], bSchema: Schema[B]): ZFlow[R1, E2, Either[A1, B]] =
+    (self: ZFlow[R, E, A1])
+      .map(a => Remote.sequenceEither(Left(a))(a1Schema, bSchema))
+      .catchAll(_ => that.map(b => Remote.sequenceEither(Right(b))(a1Schema, bSchema)))
 
   /**
    * Attempts to execute this flow, but then, if this flow is suspended due to performing a retry
@@ -194,7 +196,7 @@ object ZFlow {
     for {
       executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
       eithers        <- ZFlow.foreach(executingFlows)(_.await)
-      bs             <- ZFlow.fromEither(RemoteEitherSyntax.collectAll(eithers))
+      bs             <- ZFlow.fromEither(RemoteEitherSyntax.collectAll(eithers)(???, ???))
     } yield bs
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
