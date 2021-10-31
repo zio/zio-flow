@@ -325,8 +325,6 @@ object Remote {
     }
   }
 
-  private def asSchemaOf2[A, B](schema: Schema[(A, B)]): Schema.Tuple[A, B] = schema.asInstanceOf[Schema.Tuple[A, B]]
-
   private def asSchemaOf3[A, B, C](schema: Schema[((A, B), C)]): Schema.Tuple[(A, B), C] =
     schema.asInstanceOf[Schema.Tuple[(A, B), C]]
 
