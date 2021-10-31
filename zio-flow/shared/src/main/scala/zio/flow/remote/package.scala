@@ -1,5 +1,5 @@
 package zio.flow
-
+import scala.language.implicitConversions
 import zio.schema.{Schema, StandardType}
 import zio.schema.Schema.Primitive
 
