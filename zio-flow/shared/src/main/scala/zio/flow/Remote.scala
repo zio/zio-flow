@@ -831,8 +831,10 @@ object Remote {
           val rightVal: Option[B]    = rightA.asInstanceOf[Option[B]]
           val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
           val schemaBInst: Schema[B] = schemaB.asInstanceOf[Schema[B]]
+
+          val value = if (leftVal.isEmpty || rightVal.isEmpty) None else Some((leftVal.get, rightVal.get))
           Right(
-            SchemaAndValue(Schema.Optional(Schema.Tuple(schemaAInst, schemaBInst)), leftVal.zip(rightVal))
+            SchemaAndValue(Schema.Optional(Schema.Tuple(schemaAInst, schemaBInst)), value)
           )
         case _                                                                               => Left(Remote(None))
       }
