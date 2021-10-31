@@ -70,18 +70,18 @@ object RemoteEitherSyntax {
         remoteList => combine2(either, remoteList).self
       )
 
-    def combine2[U, V](either: RemoteEitherSyntax[U, V], remoteList: Remote[List[V]])(implicit
-      uSchema: Schema[U],
-      vSchema: Schema[V]
-    ): RemoteEitherSyntax[U, List[V]] =
+    def combine2(either: RemoteEitherSyntax[E, A], remoteList: Remote[List[A]]): RemoteEitherSyntax[E, List[A]] =
       either.handleEither(
-        u => Remote.Either0(Left((u, Schema.list(vSchema)))),
-        v => Remote.Either0(Right((uSchema, Remote.Cons(remoteList, v))))
+        e => Remote.Either0(Left((e, Schema.list(aSchema)))),
+        a => Remote.Either0(Right((eSchema, Remote.Cons(remoteList, a))))
       )
 
-    // FIXME Expecting Schema for Either, but got a Schema for Transformm.
-    values.fold(Remote(Right(Nil)): Remote[Either[E, List[A]]])((el, e) =>
-      combine(el, e)
-    )
+    def finalize(acc: RemoteEitherSyntax[E, List[A]]): Remote[Either[E, List[A]]] =
+      acc.handleEither(
+        _ => acc.self,
+        as => Remote.Either0(Right((eSchema, as.reverse)))
+      )
+
+    finalize(values.fold(Remote(Right(Nil): Either[E, List[A]]))(combine(_, _)))
   }
 }

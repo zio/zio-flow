@@ -78,7 +78,7 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
       test("return the first left result") {
         RemoteEitherSyntax.collectAll(Remote(List(Right(2), Left("V"), Right(9), Right(0), Left("P")))) <-> Left("V")
       }
-    ) @@ TestAspect.ignore
+    )
   )
 
   private def partialLift[A, B: Schema](f: A => B): Remote[A] => Remote[B] = a =>
