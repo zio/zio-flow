@@ -1,13 +1,12 @@
 package zio.flow
 
+import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
 import zio.flow.Numeric.NumericInt
 import zio.schema.Schema
-
-import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
 
 trait SchemaAndValue[+A] {
   type Subtype <: A
