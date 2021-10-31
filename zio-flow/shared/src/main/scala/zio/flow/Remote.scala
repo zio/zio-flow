@@ -357,7 +357,9 @@ object Remote {
           unaryEvalWithSchema(tuple)(
             t => t._1,
             remoteT => FirstOf3(remoteT),
-            asSchemaOf2(schemaOf3(schemaAndValue).left).left
+            schemaOf3(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .left
           )
       }
     }
@@ -373,7 +375,9 @@ object Remote {
           unaryEvalWithSchema(tuple)(
             t => t._2,
             remoteT => SecondOf3(remoteT),
-            schemaOf3(schemaAndValue).left.asInstanceOf[Schema.Tuple[A, B]].right
+            schemaOf3(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .right
           )
       }
     }
@@ -444,7 +448,9 @@ object Remote {
           unaryEvalWithSchema(tuple)(
             t => t._3,
             remoteT => ThirdOf4(remoteT),
-            schemaOf4(schemaAndValue).left.asInstanceOf[Schema.Tuple[(A, B), C]].right
+            schemaOf4(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .right
           )
       }
     }
@@ -537,7 +543,9 @@ object Remote {
           unaryEvalWithSchema(tuple)(
             t => t._4,
             remoteT => FourthOf5(remoteT),
-            schemaOf5(schemaAndValue).left.asInstanceOf[Schema.Tuple[((A, B), C), D]].right
+            schemaOf5(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+              .right
           )
       }
     }
