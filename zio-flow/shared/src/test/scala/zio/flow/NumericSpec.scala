@@ -4,7 +4,7 @@ import zio.flow.remote.Remote
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.schema.Schema
 import zio.test._
-
+import zio.flow.remote._
 object NumericSpec extends DefaultRunnableSpec {
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
