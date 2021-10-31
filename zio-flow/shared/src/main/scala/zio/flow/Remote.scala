@@ -156,6 +156,42 @@ object Remote {
       Remote.binaryEvalWithSchema(left, right)(NumericInt.mod, ModNumeric(_, _), Schema.primitive[Int])
   }
 
+  final case class AbsoluteNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.abs, AbsoluteNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.binaryEvalWithSchema(left, right)(numeric.min, MinNumeric(_, _, numeric), numeric.schema)
+  }
+
+  final case class MaxNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.binaryEvalWithSchema(left, right)(numeric.max, MaxNumeric(_, _, numeric), numeric.schema)
+  }
+
+  final case class FloorNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.floor, FloorNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class CeilNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.ceil, CeilNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class RoundNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.round, RoundNumeric(_, numeric), numeric.schema)
+  }
+
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
