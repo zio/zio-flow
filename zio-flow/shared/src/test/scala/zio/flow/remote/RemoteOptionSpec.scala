@@ -1,17 +1,17 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
 object RemoteOptionSpec extends DefaultRunnableSpec {
-  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess]                   = suite("RemoteOptionSpec")(
+  val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("RemoteOptionSpec")(
     test("HandleOption for Some") {
       val option: Remote[Option[Int]] = Remote(Option(12))
-      val optionHandled: Remote[Int]  = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
+      val optionHandled: Remote[Int] = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
       optionHandled <-> 24
     },
     test("HandleOption for None") {
-      val option        = Remote(None)
+      val option = Remote(None)
       val optionHandled = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
       optionHandled <-> 0
     },
@@ -32,5 +32,6 @@ object RemoteOptionSpec extends DefaultRunnableSpec {
       )
     }
   )
+
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("OptionSpec")(suite1)
 }

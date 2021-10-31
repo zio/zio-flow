@@ -1,7 +1,7 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test._
+import zio.test.{BoolAlgebra, DefaultRunnableSpec, ZSpec}
 
 object RemoteBooleanSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[Environment, Failure] = suite("RemoteBooleanSpec")(

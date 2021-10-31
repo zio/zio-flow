@@ -1,3 +1,3 @@
-package zio.flow
+package zio.flow.remote
 
 class RemoteVariableSpec {}
