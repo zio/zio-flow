@@ -31,6 +31,12 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
       r => r.asInstanceOf[Remote[Either[A1, C]]]
     )
 
+  final def joinLeft[A1 >: A, B1 >: B, C](implicit ev: A1 <:< Either[C, B1]): Remote[Either[C, B1]] =
+    handleEither(
+      l => l.asInstanceOf[Remote[Either[C, B1]]],
+      _ => self.asInstanceOf[Remote[Either[C, B1]]]
+    )
+
   final def contains[B1 >: B](elem: Remote[B1]): Remote[Boolean] =
     handleEither(_ => Remote(false), Remote.Equal(_, elem))
 
