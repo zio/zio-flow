@@ -1,6 +1,6 @@
 package zio.flow
 
-import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
+import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Clock, Duration, Instant }
 
 class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
@@ -19,45 +19,55 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     Remote.fromEpochSec(total)
   }
 
-  def get(field: Remote[TemporalField]): Remote[Int] = Remote.fmap2(self, field)(_ get _)
+  def minusDuration(duration: Remote[Duration]): Remote[Instant] = {
+    val longDuration = duration.toSeconds
+    val epochSecond  = getEpochSec
+    val total        = epochSecond - longDuration
 
-  def plus(amountToAdd: Remote[TemporalAmount]): Remote[Instant] = Remote.fmap2(self, amountToAdd)(_ plus _)
+    Remote.fromEpochSec(total)
+  }
+
+  def get(field: Remote[TemporalField]): Remote[Int] = Remote.TemporalFieldOfInstant(self, field)
+
+  def plus(amountToAdd: Remote[TemporalAmount]): Remote[Instant] =
+    self.plusDuration(Remote.DurationFromTemporalAmount(amountToAdd))
 
   def plus(amountToAdd: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] =
-    Remote.fmap3(self, amountToAdd, unit)(_ plus (_, _))
+    self.plusDuration(Remote.AmountToDuration(amountToAdd, unit))
 
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant] = Remote.fmap2(self, secondsToAdd)(_ plusSeconds _)
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant] =
+    Remote.fromEpochSec(self.getEpochSec + secondsToAdd)
 
   def plusMillis(milliSecondsToAdd: Remote[Long]): Remote[Instant] =
-    Remote.fmap2(self, milliSecondsToAdd)(_ plusMillis _)
+    self.plus(milliSecondsToAdd, ChronoUnit.MILLIS)
 
-  def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant] = Remote.fmap2(self, nanoSecondsToAdd)(_ plusNanos _)
+  def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant] =
+    self.plus(nanoSecondsToAdd, ChronoUnit.NANOS)
 
   def minus(amountToSubtract: Remote[TemporalAmount]): Remote[Instant] =
-    Remote.fmap2(self, amountToSubtract)(_ minus _)
+    self.minusDuration(Remote.DurationFromTemporalAmount(amountToSubtract))
 
   def minus(amountToSubtract: Remote[Long], unit: Remote[TemporalUnit]): Remote[Instant] =
-    Remote.fmap3(self, amountToSubtract, unit)(_ minus (_, _)) // Remote.applyF2()
+    self.minusDuration(Remote.AmountToDuration(amountToSubtract, unit))
 
   def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
-    Remote.fmap2(self, secondsToSubtract)(_ minusSeconds _)
+    Remote.fromEpochSec(self.getEpochSec - secondsToSubtract)
 
   def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] =
-    Remote.fmap2(self, nanosecondsToSubtract)(_ minusNanos _)
+    self.minus(nanosecondsToSubtract, ChronoUnit.NANOS)
 
   def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] =
-    Remote.fmap2(self, milliSecondsToSubtract)(_ minusMillis _)
-
+    self.minus(milliSecondsToSubtract, ChronoUnit.MILLIS)
 }
 
 object RemoteInstantSyntax {
   def now(): Remote[Instant] = Remote(Instant.now())
 
-  def now(clock: Remote[Clock]): Remote[Instant] = Remote.fmap(clock)(Instant.now)
+  def now(clock: Remote[Clock]): Remote[Instant] = ???
 
-  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.fmap(second)(Instant.ofEpochSecond)
+  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = ???
 
-  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = Remote.fmap(milliSecond)(Instant.ofEpochMilli)
+  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = ???
 
-  def parse(charSeq: Remote[String]): Remote[Instant] = Remote.fmap(charSeq)(Instant.parse)
+  def parse(charSeq: Remote[String]): Remote[Instant] = ???
 }

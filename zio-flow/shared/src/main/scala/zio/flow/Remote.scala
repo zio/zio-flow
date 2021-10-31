@@ -7,6 +7,8 @@ import scala.language.implicitConversions
 import zio.flow.Numeric.NumericInt
 import zio.schema.Schema
 
+import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
+
 trait SchemaAndValue[+A] {
   type Subtype <: A
 
@@ -460,43 +462,6 @@ object Remote {
     }
   }
 
-  final case class RemoteMapper[A, B: Schema](remote: Remote[A], fn: A => B) extends Remote[B] {
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] =
-      unaryEval(remote)(fn, remA => RemoteMapper(remA, fn))
-        .map(SchemaAndValue(Schema[B], _))
-  }
-
-  def fmap[A, B: Schema](remote: Remote[A])(fn: A => B): Remote[B] = RemoteMapper(remote, fn)
-
-  final case class RemoteMapper2[A, B, C: Schema](remoteA: Remote[A], remoteB: Remote[B], fn: (A, B) => C)
-      extends Remote[C] {
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] =
-      binaryEval(remoteA, remoteB)(fn(_, _), (remA, remB) => RemoteMapper2(remA, remB, fn))
-        .map(SchemaAndValue(Schema[C], _))
-  }
-
-  def fmap2[A, B, C: Schema](remoteA: Remote[A], remoteB: Remote[B])(fn: (A, B) => C): Remote[C] =
-    RemoteMapper2(remoteA, remoteB, fn)
-
-  final case class RemoteMapper3[A, B, C, D: Schema](
-    remoteA: Remote[A],
-    remoteB: Remote[B],
-    remoteC: Remote[C],
-    fn: (A, B, C) => D
-  ) extends Remote[D] {
-    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] =
-      ternaryEval(remoteA, remoteB, remoteC)(
-        fn(_, _, _),
-        (remA, remB, remC) => RemoteMapper3(remA, remB, remC, fn)
-      )
-        .map(SchemaAndValue(Schema[D], _))
-  }
-
-  def fmap3[A, B, C, D: Schema](remoteA: Remote[A], remoteB: Remote[B], remoteC: Remote[C])(
-    fn: (A, B, C) => D
-  ): Remote[D] =
-    RemoteMapper3(remoteA, remoteB, remoteC, fn)
-
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
     override def evalWithSchema: Either[Remote[Instant], SchemaAndValue[Instant]] =
       unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
@@ -507,6 +472,28 @@ object Remote {
 
     override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] =
       unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
+  }
+
+  final case class TemporalFieldOfInstant(instant: Remote[Instant], field: Remote[TemporalField]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      binaryEval(instant, field)(
+        _ get _,
+        (remoteInstant, remoteField) => TemporalFieldOfInstant(remoteInstant, remoteField)
+      )
+        .map(SchemaAndValue(Schema[Int], _))
+  }
+
+  final case class DurationFromTemporalAmount(amount: Remote[TemporalAmount]) extends Remote[Duration] {
+    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
+      unaryEval(amount)(a => Duration.from(a), remoteAmount => DurationFromTemporalAmount(remoteAmount))
+        .map(SchemaAndValue(Schema[Duration], _))
+  }
+
+  final case class AmountToDuration(amount: Remote[Long], temporal: Remote[TemporalUnit]) extends Remote[Duration] {
+    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] = binaryEval(amount, temporal)(
+      (amount, unit) => Duration.of(amount, unit),
+      (remoteAmount, remoteUnit) => AmountToDuration(remoteAmount, remoteUnit)
+    ).map(SchemaAndValue(Schema[Duration], _))
   }
 
   final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
@@ -620,25 +607,6 @@ object Remote {
       case Left(_)  =>
         Left(g(left, right))
       case Right(v) => Right(SchemaAndValue(schema, v))
-    }
-  }
-
-  private[zio] def ternaryEval[A, B, C, D, E](
-    remoteA: Remote[A],
-    remoteB: Remote[B],
-    remoteC: Remote[C]
-  )(f: (A, B, C) => E, g: (Remote[A], Remote[B], Remote[C]) => Remote[D]): Either[Remote[D], E] = {
-    val aEither = remoteA.eval
-    val bEither = remoteB.eval
-    val cEither = remoteC.eval
-    (for {
-      a <- aEither
-      b <- bEither
-      c <- cEither
-    } yield f(a, b, c)) match {
-      case Left(_)  =>
-        Left(g(remoteA, remoteB, remoteC))
-      case Right(v) => Right(v)
     }
   }
 
