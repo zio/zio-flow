@@ -110,8 +110,8 @@ object NumericSpec extends DefaultRunnableSpec {
         min = Math.min,
         max = Math.max,
         floor = x => Math.floor(x.toDouble).toInt,
-        ceil = x => Math.ceil(x).toInt,
-        round = x => Math.round(x)
+        ceil = x => Math.ceil(x.toDouble).toInt,
+        round = x => Math.round(x.toDouble).toInt
       )
 
     val bigIntOperations: NumericOps[BigInt] =
@@ -160,9 +160,9 @@ object NumericSpec extends DefaultRunnableSpec {
         abs = x => Math.abs(x),
         min = Math.min,
         max = Math.max,
-        floor = x => Math.floor(x).toLong,
-        ceil = x => Math.ceil(x).toLong,
-        round = x => Math.round(x)
+        floor = x => Math.floor(x.toDouble).toLong,
+        ceil = x => Math.ceil(x.toDouble).toLong,
+        round = x => Math.round(x.toDouble)
       )
 
     val shortOperations: NumericOps[Short] =
@@ -174,12 +174,12 @@ object NumericSpec extends DefaultRunnableSpec {
         isZero = _ == 0,
         log = (x, y) => (Math.log(x.toDouble) / Math.log(y.toDouble)).toShort,
         root = (x, y) => Math.pow(x.toDouble, 1 / y.toDouble).toShort,
-        abs = x => Math.abs(x).toShort,
+        abs = x => Math.abs(x.toDouble).toShort,
         min = (x, y) => Math.min(x.toDouble, y.toDouble).toShort,
         max = (x, y) => Math.max(x.toDouble, y.toDouble).toShort,
         floor = x => Math.floor(x.toDouble).toShort,
-        ceil = x => Math.ceil(x).toShort,
-        round = x => Math.round(x).toShort
+        ceil = x => Math.ceil(x.toDouble).toShort,
+        round = x => Math.round(x.toDouble).toShort
       )
 
     val doubleOperations: NumericOps[Double] = NumericOps[Double](
@@ -195,7 +195,7 @@ object NumericSpec extends DefaultRunnableSpec {
       max = Math.max,
       floor = Math.floor,
       ceil = x => Math.ceil(x),
-      round = x => Math.round(x)
+      round = x => Math.round(x).toDouble
     )
 
     val floatOperations: NumericOps[Float] = NumericOps[Float](
@@ -210,8 +210,8 @@ object NumericSpec extends DefaultRunnableSpec {
       min = Math.min,
       max = Math.max,
       floor = x => Math.floor(x.toDouble).toFloat,
-      ceil = x => Math.ceil(x).toFloat,
-      round = x => Math.round(x)
+      ceil = x => Math.ceil(x.toDouble).toFloat,
+      round = x => Math.round(x.toDouble).toFloat
     )
   }
 }
