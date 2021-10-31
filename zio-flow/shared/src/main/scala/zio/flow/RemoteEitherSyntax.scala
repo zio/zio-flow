@@ -50,6 +50,8 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
         )
     )
 
+  final def toSeq: Remote[Seq[B]] = handleEither(_ => Remote(Nil), b => Remote.Cons(Remote(Nil), b))
+
   final def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
   def toTry(implicit ev: A <:< Throwable): Try[B] = ???
