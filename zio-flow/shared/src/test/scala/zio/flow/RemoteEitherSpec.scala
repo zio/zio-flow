@@ -14,6 +14,21 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         result <-> expected
       }
     },
+    testM("flatMap") {
+      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.either(Gen.anyInt, Gen.anyLong))) { (either, f) =>
+        Remote(either).flatMap(partialLift(f)) <-> either.flatMap(f)
+      }
+    },
+    testM("map") {
+      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.anyLong)) { (either, f) =>
+        Remote(either).map(partialLift(f)) <-> either.map(f)
+      }
+    },
+    testM("flatten") {
+      check(Gen.either(Gen.anyInt, Gen.either(Gen.anyInt, Gen.anyLong))) { either =>
+        Remote(either).flatten <-> either.flatten
+      }
+    },
     testM("merge") {
       check(Gen.either(Gen.anyInt, Gen.anyInt)) { either =>
         Remote(either).merge <-> either.fold(identity, identity)

@@ -14,6 +14,19 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     right: Remote[B] => ZFlow[R, E, C]
   ): ZFlow[R, E, C] = ZFlow.unwrap(handleEither(left.andThen(Remote(_)), right.andThen(Remote(_))))
 
+  final def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]])(implicit
+    b1Schema: Schema[B1]
+  ): Remote[Either[A1, B1]] =
+    Remote.FlatMapEither(self, f, b1Schema)
+
+  final def map[B1](
+    f: Remote[B] => Remote[B1]
+  )(implicit aSchema: Schema[A], b1Schema: Schema[B1]): Remote[Either[A, B1]] =
+    Remote.FlatMapEither(self, (b: Remote[B]) => Remote.Either0(Right((aSchema, f(b)))), b1Schema)
+
+  final def flatten[A1 >: A, B1](implicit ev: B <:< Either[A1, B1], b1Schema: Schema[B1]): Remote[Either[A1, B1]] =
+    flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
+
   final def merge(implicit ev: Either[A, B] <:< Either[B, B]): Remote[B] =
     Remote.FoldEither[B, B, B](self.widen[Either[B, B]], identity(_), identity(_))
 

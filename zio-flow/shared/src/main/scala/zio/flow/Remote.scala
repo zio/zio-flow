@@ -226,6 +226,25 @@ object Remote {
     }
   }
 
+  final case class FlatMapEither[A, B, C](
+    either: Remote[Either[A, B]],
+    f: Remote[B] => Remote[Either[A, C]],
+    cSchema: Schema[C]
+  ) extends Remote[Either[A, C]] {
+    override def evalWithSchema: Either[Remote[Either[A, C]], SchemaAndValue[Either[A, C]]] =
+      either.evalWithSchema match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+          schemaAndValue.value match {
+            case Left(a)  => Right(SchemaAndValue(Schema.EitherSchema(schemaEither.left, cSchema), Left(a)))
+            case Right(b) => f(Remote(b)(schemaEither.right)).evalWithSchema
+            case _        =>
+              throw new IllegalStateException("Every remote FlatMapEither must be constructed using Remote[Either].")
+          }
+      }
+  }
+
   final case class FoldEither[A, B, C](
     either: Remote[Either[A, B]],
     left: Remote[A] => Remote[C],
