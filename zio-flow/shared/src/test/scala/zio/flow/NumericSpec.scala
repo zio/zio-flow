@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.flow.remote.Remote
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.schema.Schema
 import zio.test._
@@ -22,7 +23,7 @@ object NumericSpec extends DefaultRunnableSpec {
       )
     )
 
-  private def numericTests[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
+  private def numericTests[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
   ): Spec[R with TestConfig, TestFailure[Nothing], TestSuccess] =
     suite(name)(
@@ -36,7 +37,7 @@ object NumericSpec extends DefaultRunnableSpec {
 
   // TODO: BigDecimal fails Log/Root specs.
   //  It also fails Subtraction on 2.11 and 2.12.
-  private def numericTestsWithoutLogOrRoot[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
+  private def numericTestsWithoutLogOrRoot[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
   ) =
     suite(name)(
@@ -50,7 +51,7 @@ object NumericSpec extends DefaultRunnableSpec {
 //      testOp[R, A]("Root", gen, gen)(_ root _)(ops.root)
     )
 
-  private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
+  private def testOp[R, A: Schema: remote.Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
   )(op: (A, A) => A): ZSpec[R with TestConfig, Nothing] =
     testM(name) {

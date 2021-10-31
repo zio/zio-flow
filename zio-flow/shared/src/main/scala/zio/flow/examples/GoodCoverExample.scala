@@ -1,8 +1,11 @@
-package zio.flow
+package zio.flow.examples
+
+import zio.flow.remote.{Remote, RemoteVariable}
+import zio.flow.zFlow.ZFlow
+import zio.flow.{Activity, ActivityError, Variable}
+import zio.schema.{DeriveSchema, Schema}
 
 import java.time.Period
-
-import zio.schema.{ DeriveSchema, Schema }
 
 /**
  * 1. Get all policies that will expire in the next 60 days.

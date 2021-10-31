@@ -1,13 +1,14 @@
 package zio.flow
 
 import java.net.URI
-
 import zio.flow
 import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
+import zio.flow.remote.{Remote, RemoteVariable}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.schema.{ DeriveSchema, Schema }
+import zio.flow.zFlow.ZFlow
+import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.equalTo
-import zio.test.{ DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM }
+import zio.test.{DefaultRunnableSpec, Spec, TestFailure, TestSuccess, ZSpec, assertM}
 
 object GoodcoverUseCase extends DefaultRunnableSpec {
 

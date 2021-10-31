@@ -1,6 +1,7 @@
-package zio.flow
+package zio.flow.remote
 
-import zio.flow.Remote.{ Cons, apply }
+import zio.flow.remote
+import zio.flow.remote.Remote.{Cons, apply}
 
 class RemoteListSyntax[A](val self: Remote[List[A]]) {
 
@@ -63,10 +64,10 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
   final def length: Remote[Int] =
     self.fold[Int](0)((len, _) => len + 1)
 
-  final def product(implicit numeric: Numeric[A]): Remote[A] =
+  final def product(implicit numeric: remote.Numeric[A]): Remote[A] =
     fold[A](numeric.fromLong(1L))(_ * _)
 
-  final def sum(implicit numeric: Numeric[A]): Remote[A] =
+  final def sum(implicit numeric: remote.Numeric[A]): Remote[A] =
     fold[A](numeric.fromLong(0L))(_ + _)
 
   final def filter(predicate: Remote[A] => Remote[Boolean]): Remote[List[A]] =

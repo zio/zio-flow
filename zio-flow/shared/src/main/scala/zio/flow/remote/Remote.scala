@@ -1,11 +1,12 @@
-package zio.flow
+package zio.flow.remote
 
-import java.time.{ Duration, Instant }
-
-import scala.language.implicitConversions
-
-import zio.flow.Numeric.NumericInt
+import zio.flow.remote.Numeric.NumericInt
+import zio.flow.remote
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
+
+import java.time.{Duration, Instant}
+import scala.language.implicitConversions
 
 trait SchemaAndValue[+A] {
   type Subtype <: A
@@ -87,7 +88,7 @@ object Remote {
     def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = Left(self)
   }
 
-  final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
     def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEval(left, right)(
         (l, r) => SchemaAndValue(numeric.schema, numeric.add(l, r)),
@@ -115,37 +116,37 @@ object Remote {
     }
   }
 
-  final case class DivNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class DivNumeric[A](left: Remote[A], right: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEvalWithSchema(left, right)(numeric.divide, DivNumeric(_, _, numeric), numeric.schema)
   }
 
-  final case class MulNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class MulNumeric[A](left: Remote[A], right: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEvalWithSchema(left, right)(numeric.multiply, MulNumeric(_, _, numeric), numeric.schema)
   }
 
-  final case class PowNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class PowNumeric[A](left: Remote[A], right: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEvalWithSchema(left, right)(numeric.pow, PowNumeric(_, _, numeric), numeric.schema)
   }
 
-  final case class NegationNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class NegationNumeric[A](value: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.unaryEvalWithSchema(value)(numeric.negate, NegationNumeric(_, numeric), numeric.schema)
   }
 
-  final case class RootNumeric[A](value: Remote[A], n: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class RootNumeric[A](value: Remote[A], n: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEvalWithSchema(value, n)(numeric.root, RootNumeric(_, _, numeric), numeric.schema)
   }
 
-  final case class LogNumeric[A](value: Remote[A], base: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class LogNumeric[A](value: Remote[A], base: Remote[A], numeric: remote.Numeric[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.binaryEvalWithSchema(value, base)(numeric.log, PowNumeric(_, _, numeric), numeric.schema)
@@ -156,19 +157,19 @@ object Remote {
       Remote.binaryEvalWithSchema(left, right)(NumericInt.mod, ModNumeric(_, _), Schema.primitive[Int])
   }
 
-  final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+  final case class SinFractional[A](value: Remote[A], fractional: remote.Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.unaryEvalWithSchema(value)(a => fractional.sin(a), SinFractional(_, fractional), fractional.schema)
   }
 
-  final case class SinInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+  final case class SinInverseFractional[A](value: Remote[A], fractional: remote.Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.unaryEvalWithSchema(value)(fractional.inverseSin, SinInverseFractional(_, fractional), fractional.schema)
   }
 
-  final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+  final case class TanInverseFractional[A](value: Remote[A], fractional: remote.Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
@@ -431,7 +432,7 @@ object Remote {
           val schemaAndValue = rightVal.asInstanceOf[SchemaAndValue[List[A]]]
           Right(schemaAndValue.value.headOption match {
             case Some(v) =>
-              SchemaAndValue(
+              remote.SchemaAndValue(
                 toOptionSchema(
                   toTupleSchema(
                     (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {

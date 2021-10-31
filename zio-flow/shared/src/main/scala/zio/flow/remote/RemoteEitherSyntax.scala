@@ -1,4 +1,6 @@
-package zio.flow
+package zio.flow.remote
+
+import zio.flow.zFlow.ZFlow
 
 import scala.util.Try
 
