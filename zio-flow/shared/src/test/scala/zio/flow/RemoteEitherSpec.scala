@@ -49,6 +49,11 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         Remote(either).swap <-> either.swap
       }
     },
+    testM("joinRight") {
+      check(Gen.either(Gen.anyInt, Gen.either(Gen.anyInt, Gen.anyLong))) { either =>
+        Remote(either).joinRight <-> either.joinRight
+      }
+    },
     testM("contains") {
       check(Gen.either(Gen.boolean, Gen.anyInt), Gen.anyInt) { (either, int) =>
         Remote(either).contains(Remote(int)) <-> either.contains(int)

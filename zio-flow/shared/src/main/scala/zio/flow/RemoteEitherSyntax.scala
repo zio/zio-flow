@@ -25,6 +25,12 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   final def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
 
+  final def joinRight[A1 >: A, B1 >: B, C](implicit ev: B1 <:< Either[A1, C]): Remote[Either[A1, C]] =
+    handleEither(
+      _ => self.asInstanceOf[Remote[Either[A1, C]]],
+      r => r.asInstanceOf[Remote[Either[A1, C]]]
+    )
+
   final def contains[B1 >: B](elem: Remote[B1]): Remote[Boolean] =
     handleEither(_ => Remote(false), Remote.Equal(_, elem))
 
