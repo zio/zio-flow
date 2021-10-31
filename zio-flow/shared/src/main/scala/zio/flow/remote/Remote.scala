@@ -409,10 +409,12 @@ object Remote {
         case Right(schemaAndValue) =>
           unaryEvalWithSchema(tuple)(
             t => t._2,
-            remoteT => SecondOf3(remoteT),
-            schemaOf3(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .right
+            remoteT => SecondOf3(remoteT), {
+              println(schemaAndValue.schema)
+              schemaOf3(schemaAndValue).left
+                .asInstanceOf[Schema.Tuple[A, B]]
+                .right
+            }
           )
       }
     }
@@ -443,12 +445,14 @@ object Remote {
         case Right(schemaAndValue) =>
           unaryEvalWithSchema(tuple)(
             t => t._1,
-            remoteT => FirstOf4(remoteT),
-            schemaOf4(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .left
+            remoteT => FirstOf4(remoteT), {
+              println(schemaAndValue.schema)
+              schemaOf4(schemaAndValue).left
+                .asInstanceOf[Schema.Tuple[(A, B), C]]
+                .left
+                .asInstanceOf[Schema.Tuple[A, B]]
+                .left
+            }
           )
       }
     }
@@ -947,6 +951,21 @@ object Remote {
 
         case (Second(tuple1), Second(tuple2)) =>
           loop(tuple1, tuple2)
+
+        case (FirstOf3(tuple1), FirstOf3(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf3(tuple1), SecondOf3(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf3(tuple1), ThirdOf3(tuple2))   => loop(tuple1, tuple2)
+
+        case (FirstOf4(tuple1), FirstOf4(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf4(tuple1), SecondOf4(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf4(tuple1), ThirdOf4(tuple2))   => loop(tuple1, tuple2)
+        case (FourthOf4(tuple1), FourthOf4(tuple2)) => loop(tuple1, tuple2)
+
+        case (FirstOf5(tuple1), FirstOf5(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf5(tuple1), SecondOf5(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf5(tuple1), ThirdOf5(tuple2))   => loop(tuple1, tuple2)
+        case (FourthOf5(tuple1), FourthOf5(tuple2)) => loop(tuple1, tuple2)
+        case (FifthOf5(tuple1), FifthOf5(tuple2))   => loop(tuple1, tuple2)
 
         case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
           loop(predicate1, predicate2) &&
