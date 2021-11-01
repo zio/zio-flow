@@ -1,5 +1,7 @@
 package zio.flow
 
+import zio.flow.remote.Remote
+
 sealed trait Mappable[F[_]] {
   def performMap[A, B](fa: Remote[F[A]], ab: Remote[A] => Remote[B]): Remote[F[B]]
 

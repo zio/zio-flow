@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 class RemoteNumericSyntax[A](self: Remote[A]) {
 
