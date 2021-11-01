@@ -1,9 +1,9 @@
 package zio.flow.examples
 
-import java.io.IOException
+import zio.console.{ Console, getStrLn, putStrLn }
+import zio.{ App, ExitCode, URIO, ZIO }
 
-import zio.console.{Console, getStrLn, putStrLn}
-import zio.{App, ExitCode, URIO, ZIO}
+import java.io.IOException
 
 object HelloWorld extends App {
 
@@ -17,8 +17,8 @@ object HelloWorld extends App {
 
   val myAppLogic: ZIO[Console, IOException, Unit] =
     for {
-      _ <- putStrLn("Hello! What is your name?")
+      _    <- putStrLn("Hello! What is your name?")
       name <- getStrLn
-      _ <- putStrLn(s"Hello, $name, welcome to ZIO!")
+      _    <- putStrLn(s"Hello, $name, welcome to ZIO!")
     } yield ()
 }

@@ -1,13 +1,12 @@
 package zio.flow
 
+import zio.schema.Schema.Primitive
+import zio.schema.{ Schema, StandardType }
+
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.time.{Duration, Instant}
-
+import java.time.{ Duration, Instant }
 import scala.language.implicitConversions
-
-import zio.schema.Schema.Primitive
-import zio.schema.{Schema, StandardType}
 
 package object remote {
   type RemoteDuration    = Remote[Duration]

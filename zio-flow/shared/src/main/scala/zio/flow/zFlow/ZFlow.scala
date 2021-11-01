@@ -1,11 +1,11 @@
 package zio.flow.zFlow
 
-import java.time.{Duration, Instant}
-
-import zio.flow.remote.{Remote, RemoteEitherSyntax}
+import zio.flow.remote.{ Remote, RemoteEitherSyntax }
 import zio.flow.zFlow.ZFlow.Die
-import zio.flow.{Activity, ActivityError, ExecutingFlow, Variable}
+import zio.flow.{ Activity, ActivityError, ExecutingFlow, Variable }
 import zio.schema.Schema
+
+import java.time.{ Duration, Instant }
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
