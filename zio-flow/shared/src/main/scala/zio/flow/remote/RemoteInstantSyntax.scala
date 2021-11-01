@@ -1,7 +1,7 @@
 package zio.flow.remote
 
-import java.time.temporal.{TemporalAmount, TemporalField, TemporalUnit}
-import java.time.{Clock, Duration, Instant}
+import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
+import java.time.{ Clock, Duration, Instant }
 
 class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
   def isAfter(that: RemoteInstantSyntax): Remote[Boolean] = self.getEpochSec > that.getEpochSec

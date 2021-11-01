@@ -1,5 +1,7 @@
 package zio.flow.server
 
+import java.io.IOException
+
 import zio._
 import zio.clock._
 import zio.flow._
@@ -8,8 +10,6 @@ import zio.flow.server.PersistentExecutor.{ State, TState }
 import zio.flow.zFlow.ZFlow._
 import zio.flow.zFlow.{ ZFlow, ZFlowExecutor }
 import zio.schema.Schema
-
-import java.io.IOException
 
 final case class PersistentExecutor(
   clock: Clock.Service,

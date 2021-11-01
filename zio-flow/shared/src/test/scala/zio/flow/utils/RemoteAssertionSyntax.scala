@@ -1,8 +1,8 @@
 package zio.flow.utils
 
 import zio.flow.remote.Remote
-import zio.test.Assertion.{equalTo, isRight}
-import zio.test.{TestResult, assert}
+import zio.test.Assertion.{ equalTo, isRight }
+import zio.test.{ TestResult, assert }
 
 object RemoteAssertionSyntax {
 

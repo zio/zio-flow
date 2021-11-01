@@ -1,9 +1,9 @@
 package zio.flow.examples
 
-import zio.flow.remote.{Remote, _}
+import zio.flow.remote.{ Remote, _ }
 import zio.flow.zFlow.ZFlow
-import zio.flow.{Activity, ActivityError, EmailRequest, Variable}
-import zio.schema.{DeriveSchema, Schema}
+import zio.flow.{ Activity, ActivityError, EmailRequest, Variable }
+import zio.schema.{ DeriveSchema, Schema }
 
 object Example {
   // Remote[A] => Remote[(B, A)]

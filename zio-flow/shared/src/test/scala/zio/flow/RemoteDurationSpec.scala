@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.remote.{Remote, _}
+import zio.flow.remote.{ Remote, _ }
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 

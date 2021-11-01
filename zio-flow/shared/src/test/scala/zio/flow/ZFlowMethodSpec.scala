@@ -10,8 +10,8 @@ import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test._
-import zio.test.environment.{TestClock, TestConsole}
-import zio.{Has, ZIO}
+import zio.test.environment.{ TestClock, TestConsole }
+import zio.{ Has, ZIO }
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
