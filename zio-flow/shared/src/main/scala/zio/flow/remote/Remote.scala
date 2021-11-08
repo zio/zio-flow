@@ -1,10 +1,11 @@
-package zio.flow
+package zio.flow.remote
 
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
-import zio.flow.Numeric.NumericInt
+import zio.flow.remote.Numeric.NumericInt
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {

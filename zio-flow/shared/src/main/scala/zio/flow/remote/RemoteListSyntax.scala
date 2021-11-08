@@ -1,6 +1,6 @@
-package zio.flow
+package zio.flow.remote
 
-import zio.flow.Remote.{ Cons, apply }
+import zio.flow.remote.Remote.Cons
 
 class RemoteListSyntax[A](val self: Remote[List[A]]) {
 

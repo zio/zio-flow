@@ -1,8 +1,8 @@
-package zio.flow
+package zio.flow.examples
 
 import java.io.IOException
 
-import zio.console._
+import zio.console.{ Console, getStrLn, putStrLn }
 import zio.{ App, ExitCode, URIO, ZIO }
 
 object HelloWorld extends App {
