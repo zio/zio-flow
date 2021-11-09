@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.flow.Remote.ContainsOption
+import zio.flow.remote.Remote.ContainsOption
 import zio.schema.DeriveSchema.gen
 
 class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
