@@ -1,10 +1,12 @@
-package zio.flow
+package zio.flow.remote
 
+import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
-import zio.flow.Numeric.NumericInt
+import zio.flow.remote.Numeric.NumericInt
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {
@@ -757,6 +759,35 @@ object Remote {
       unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
   }
 
+  final case class TemporalFieldOfInstant(instant: Remote[Instant], field: Remote[TemporalField]) extends Remote[Int] {
+    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
+      binaryEval(instant, field)(
+        _ get _,
+        (remoteInstant, remoteField) => TemporalFieldOfInstant(remoteInstant, remoteField)
+      )
+        .map(SchemaAndValue(Schema[Int], _))
+  }
+
+  final case class DurationFromTemporalAmount(amount: Remote[TemporalAmount]) extends Remote[Duration] {
+    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
+      unaryEval(amount)(a => Duration.from(a), remoteAmount => DurationFromTemporalAmount(remoteAmount))
+        .map(SchemaAndValue(Schema[Duration], _))
+  }
+
+  final case class AmountToDuration(amount: Remote[Long], temporal: Remote[TemporalUnit]) extends Remote[Duration] {
+    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] = binaryEval(amount, temporal)(
+      (amount, unit) => Duration.of(amount, unit),
+      (remoteAmount, remoteUnit) => AmountToDuration(remoteAmount, remoteUnit)
+    ).map(SchemaAndValue(Schema[Duration], _))
+  }
+
+  final case class DurationToSecsNanos(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+    override def evalWithSchema: Either[Remote[(Long, Long)], SchemaAndValue[(Long, Long)]] = unaryEval(duration)(
+      d => (d.getSeconds, d.getNano.toLong),
+      remoteDuration => DurationToSecsNanos(remoteDuration)
+    ).map(SchemaAndValue(Schema[(Long, Long)], _))
+  }
+
   final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
 
     override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = unaryEval(duration)(
@@ -1060,17 +1091,17 @@ object Remote {
 
   def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.LongToDuration(seconds)
 
-  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60))
+  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
 
-  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60))
+  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60L))
 
-  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24))
+  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
 
-  //TODO : Hackathon
-  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] = ???
+  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(milliseconds, Remote(ChronoUnit.MILLIS))
 
-  //TODO : Hackathon
-  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] = ???
+  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(nanoseconds, Remote(ChronoUnit.NANOS))
 
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)

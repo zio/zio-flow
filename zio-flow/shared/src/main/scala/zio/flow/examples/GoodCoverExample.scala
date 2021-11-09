@@ -1,7 +1,10 @@
-package zio.flow
+package zio.flow.examples
 
 import java.time.Period
 
+import zio.flow.remote.{ Remote, RemoteVariable }
+import zio.flow.zFlow.ZFlow
+import zio.flow.{ Activity, ActivityError, Variable }
 import zio.schema.{ DeriveSchema, Schema }
 
 /**

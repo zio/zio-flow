@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.flow.remote.{ Remote, _ }
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
@@ -23,6 +24,36 @@ object RemoteInstantSpec extends DefaultRunnableSpec {
     testM("getEpochSec") {
       check(Gen.anyInstant) { d =>
         Remote(d).getEpochSec <-> d.getEpochSecond
+      }
+    },
+    testM("plusSeconds") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, s) =>
+        Remote(i).plusSeconds(Remote(s)) <-> i.plusSeconds(s)
+      }
+    },
+    testM("plusMills") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, ms) =>
+        Remote(i).plusMillis(Remote(ms)) <-> i.plusMillis(ms)
+      }
+    },
+    testM("plusNanos") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, ns) =>
+        Remote(i).plusMillis(Remote(ns)) <-> i.plusNanos(ns)
+      }
+    },
+    testM("minusSeconds") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, s) =>
+        Remote(i).minusSeconds(Remote(s)) <-> i.minusSeconds(s)
+      }
+    },
+    testM("minusMills") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, ms) =>
+        Remote(i).minusMillis(Remote(ms)) <-> i.minusMillis(ms)
+      }
+    },
+    testM("minusNanos") {
+      check(Gen.anyInstant, Gen.anyLong) { case (i, ns) =>
+        Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
   ) @@ TestAspect.ignore
