@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Clock, Duration, Instant }

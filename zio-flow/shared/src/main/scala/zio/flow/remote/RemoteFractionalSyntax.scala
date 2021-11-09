@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.schema.Schema
 
@@ -23,5 +23,7 @@ class RemoteFractionalSyntax[A](self: Remote[A]) {
     Remote(fractional.fromDouble(1.571)) - sinInverse(fractional)
   }
 
-  final def tanInverse(implicit fractional: Fractional[A]): Remote[A] = ???
+  final def tanInverse(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.TanInverseFractional(self, fractional)
+
 }

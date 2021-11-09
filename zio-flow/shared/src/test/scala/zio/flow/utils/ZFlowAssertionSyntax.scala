@@ -4,9 +4,10 @@ import java.net.URI
 
 import zio.clock.Clock
 import zio.console.Console
-import zio.flow.ZFlowExecutor.InMemory
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
-import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor, ZFlow }
+import zio.flow.zFlow.ZFlow
+import zio.flow.zFlow.ZFlowExecutor.InMemory
+import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor }
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.{ Has, Ref, ZIO, console }

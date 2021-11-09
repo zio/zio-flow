@@ -1,10 +1,12 @@
-package zio.flow
+package zio.flow.zFlow
 
 import java.time.Duration
 
 import zio._
 import zio.clock.Clock
 import zio.console.putStrLn
+import zio.flow.remote.Remote
+import zio.flow.{ ActivityError, ExecutingFlow, OperationExecutor }
 import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
@@ -336,7 +338,7 @@ object ZFlowExecutor {
         case Log(message) =>
           putStrLn(message)
             .provideLayer(zio.console.Console.live)
-            .to(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
+            .to(promise.asInstanceOf[Promise[java.io.IOException, Unit]]) as CompileStatus.Done
 
         case iterate0 @ Iterate(_, _, _) =>
           val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]

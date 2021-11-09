@@ -1,11 +1,12 @@
-package zio.flow
+package zio.flow.remote
 
-import java.time.temporal.{ TemporalAmount, TemporalField, TemporalUnit }
+import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
-import zio.flow.Numeric.NumericInt
+import zio.flow.remote.Numeric.NumericInt
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {
@@ -157,6 +158,42 @@ object Remote {
       Remote.binaryEvalWithSchema(left, right)(NumericInt.mod, ModNumeric(_, _), Schema.primitive[Int])
   }
 
+  final case class AbsoluteNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.abs, AbsoluteNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.binaryEvalWithSchema(left, right)(numeric.min, MinNumeric(_, _, numeric), numeric.schema)
+  }
+
+  final case class MaxNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.binaryEvalWithSchema(left, right)(numeric.max, MaxNumeric(_, _, numeric), numeric.schema)
+  }
+
+  final case class FloorNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.floor, FloorNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class CeilNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.ceil, CeilNumeric(_, numeric), numeric.schema)
+  }
+
+  final case class RoundNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(numeric.round, RoundNumeric(_, numeric), numeric.schema)
+  }
+
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
@@ -167,6 +204,12 @@ object Remote {
 
     override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Remote.unaryEvalWithSchema(value)(fractional.inverseSin, SinInverseFractional(_, fractional), fractional.schema)
+  }
+
+  final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
   }
 
   final case class Either0[A, B](either: Either[Remote[A], Remote[B]]) extends Remote[Either[A, B]] {
@@ -315,6 +358,249 @@ object Remote {
             t => t._2,
             remoteT => Second(remoteT),
             schemaAndValue.schema.asInstanceOf[Schema.Tuple[A, B]].right
+          )
+      }
+    }
+  }
+
+  private def asSchemaOf3[A, B, C](schema: Schema[((A, B), C)]): Schema.Tuple[(A, B), C] =
+    schema.asInstanceOf[Schema.Tuple[(A, B), C]]
+
+  private def asSchemaOf4[A, B, C, D](schema: Schema[(((A, B), C), D)]): Schema.Tuple[((A, B), C), D] =
+    schema.asInstanceOf[Schema.Tuple[((A, B), C), D]]
+
+  private def asSchemaOf5[A, B, C, D, E](schema: Schema[((((A, B), C), D), E)]): Schema.Tuple[(((A, B), C), D), E] =
+    schema.asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
+
+  private def schemaOf3[A, B, C](schemaAndValue: SchemaAndValue[(A, B, C)]): Schema.Tuple[(A, B), C] =
+    asSchemaOf3(schemaAndValue.schema.asInstanceOf[Schema.Transform[((A, B), C), _]].codec)
+
+  private def schemaOf4[A, B, C, D](schemaAndValue: SchemaAndValue[(A, B, C, D)]): Schema.Tuple[((A, B), C), D] =
+    asSchemaOf4(schemaAndValue.schema.asInstanceOf[Schema.Transform[(((A, B), C), D), _]].codec)
+
+  private def schemaOf5[A, B, C, D, E](
+    schemaAndValue: SchemaAndValue[(A, B, C, D, E)]
+  ): Schema.Tuple[(((A, B), C), D), E] =
+    asSchemaOf5(schemaAndValue.schema.asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]].codec)
+
+  final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._1,
+            remoteT => FirstOf3(remoteT),
+            schemaOf3(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .left
+          )
+      }
+    }
+  }
+
+  final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
+
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._2,
+            remoteT => SecondOf3(remoteT), {
+              println(schemaAndValue.schema)
+              schemaOf3(schemaAndValue).left
+                .asInstanceOf[Schema.Tuple[A, B]]
+                .right
+            }
+          )
+      }
+    }
+  }
+
+  final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
+
+    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._3,
+            remoteT => ThirdOf3(remoteT),
+            schemaOf3(schemaAndValue).right
+          )
+      }
+    }
+  }
+
+  final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._1,
+            remoteT => FirstOf4(remoteT), {
+              println(schemaAndValue.schema)
+              schemaOf4(schemaAndValue).left
+                .asInstanceOf[Schema.Tuple[(A, B), C]]
+                .left
+                .asInstanceOf[Schema.Tuple[A, B]]
+                .left
+            }
+          )
+      }
+    }
+  }
+
+  final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
+
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._2,
+            remoteT => SecondOf4(remoteT),
+            schemaOf4(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .right
+          )
+      }
+    }
+  }
+
+  final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
+    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._3,
+            remoteT => ThirdOf4(remoteT),
+            schemaOf4(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .right
+          )
+      }
+    }
+  }
+
+  final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
+    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._4,
+            remoteT => FourthOf4(remoteT),
+            schemaOf4(schemaAndValue).right
+          )
+      }
+    }
+  }
+
+  final case class FirstOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[A] {
+
+    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._1,
+            remoteT => FirstOf5(remoteT),
+            schemaOf5(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+              .left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .left
+          )
+      }
+    }
+  }
+
+  final case class SecondOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[B] {
+
+    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._2,
+            remoteT => SecondOf5(remoteT),
+            schemaOf5(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+              .left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .left
+              .asInstanceOf[Schema.Tuple[A, B]]
+              .right
+          )
+      }
+    }
+  }
+
+  final case class ThirdOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[C] {
+    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._3,
+            remoteT => ThirdOf5(remoteT),
+            schemaOf5(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+              .left
+              .asInstanceOf[Schema.Tuple[(A, B), C]]
+              .right
+          )
+      }
+    }
+  }
+
+  final case class FourthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[D] {
+    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._4,
+            remoteT => FourthOf5(remoteT),
+            schemaOf5(schemaAndValue).left
+              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+              .right
+          )
+      }
+    }
+  }
+
+  final case class FifthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[E] {
+    override def evalWithSchema: Either[Remote[E], SchemaAndValue[E]] = {
+      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
+      evaluatedTuple match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          unaryEvalWithSchema(tuple)(
+            t => t._5,
+            remoteT => FifthOf5(remoteT),
+            schemaOf5(schemaAndValue).right
           )
       }
     }
@@ -493,6 +779,13 @@ object Remote {
       (amount, unit) => Duration.of(amount, unit),
       (remoteAmount, remoteUnit) => AmountToDuration(remoteAmount, remoteUnit)
     ).map(SchemaAndValue(Schema[Duration], _))
+  }
+
+  final case class DurationToSecsNanos(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+    override def evalWithSchema: Either[Remote[(Long, Long)], SchemaAndValue[(Long, Long)]] = unaryEval(duration)(
+      d => (d.getSeconds, d.getNano.toLong),
+      remoteDuration => DurationToSecsNanos(remoteDuration)
+    ).map(SchemaAndValue(Schema[(Long, Long)], _))
   }
 
   final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
@@ -689,6 +982,21 @@ object Remote {
         case (Second(tuple1), Second(tuple2)) =>
           loop(tuple1, tuple2)
 
+        case (FirstOf3(tuple1), FirstOf3(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf3(tuple1), SecondOf3(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf3(tuple1), ThirdOf3(tuple2))   => loop(tuple1, tuple2)
+
+        case (FirstOf4(tuple1), FirstOf4(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf4(tuple1), SecondOf4(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf4(tuple1), ThirdOf4(tuple2))   => loop(tuple1, tuple2)
+        case (FourthOf4(tuple1), FourthOf4(tuple2)) => loop(tuple1, tuple2)
+
+        case (FirstOf5(tuple1), FirstOf5(tuple2))   => loop(tuple1, tuple2)
+        case (SecondOf5(tuple1), SecondOf5(tuple2)) => loop(tuple1, tuple2)
+        case (ThirdOf5(tuple1), ThirdOf5(tuple2))   => loop(tuple1, tuple2)
+        case (FourthOf5(tuple1), FourthOf5(tuple2)) => loop(tuple1, tuple2)
+        case (FifthOf5(tuple1), FifthOf5(tuple2))   => loop(tuple1, tuple2)
+
         case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
           loop(predicate1, predicate2) &&
             loop(ifTrue1, ifTrue2) &&
@@ -744,17 +1052,17 @@ object Remote {
 
   def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.LongToDuration(seconds)
 
-  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60))
+  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
 
-  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60))
+  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60L))
 
-  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24))
+  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
 
-  //TODO : Hackathon
-  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] = ???
+  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(milliseconds, Remote(ChronoUnit.MILLIS))
 
-  //TODO : Hackathon
-  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] = ???
+  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
+    Remote.AmountToDuration(nanoseconds, Remote(ChronoUnit.NANOS))
 
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)

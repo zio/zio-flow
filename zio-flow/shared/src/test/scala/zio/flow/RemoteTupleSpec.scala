@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.flow.remote.Remote
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
@@ -21,7 +22,7 @@ object RemoteTupleSpec extends DefaultRunnableSpec {
           tuple3._2 <-> "A",
           tuple3._3 <-> true
         )
-      } @@ TestAspect.ignore,
+      },
       test("Tuple4") {
         val tuple4 = Remote((1, "A", true, 10.5))
         BoolAlgebra.all(
@@ -30,7 +31,17 @@ object RemoteTupleSpec extends DefaultRunnableSpec {
           tuple4._3 <-> true,
           tuple4._4 <-> 10.5
         )
-      } @@ TestAspect.ignore
+      },
+      test("Tuple5") {
+        val tuple5 = Remote((1, "A", true, 10.5, "X"))
+        BoolAlgebra.all(
+          tuple5._1 <-> 1,
+          tuple5._2 <-> "A",
+          tuple5._3 <-> true,
+          tuple5._4 <-> 10.5,
+          tuple5._5 <-> "X"
+        )
+      }
     )
 
 }

@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
 
