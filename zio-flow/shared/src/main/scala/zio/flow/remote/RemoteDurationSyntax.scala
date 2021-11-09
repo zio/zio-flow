@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import java.time.Duration
 import java.time.temporal.{ Temporal, TemporalAmount }
@@ -16,21 +16,21 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def toSeconds: Remote[Long] = self.durationToLong
 
-  def isZero: Remote[Boolean] = ???
+  def isZero: Remote[Boolean] = self.toSeconds === 0L && self.getNano === 0L
 
-  def isNegative: Remote[Boolean] = ???
-  def getSeconds: Remote[Long]    = ???
-  def getNano: Remote[Long]       = ???
+  def isNegative: Remote[Boolean] = self.toSeconds < 0L
+  def getSeconds: Remote[Long]    = Remote.DurationToSecsNanos(self.widen[Duration])._1
+  def getNano: Remote[Long]       = Remote.DurationToSecsNanos(self.widen[Duration])._2
 
-  def plusDays(daysToAdd: Remote[Long]): Remote[Duration] = ???
+  def plusDays(daysToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofDays(daysToAdd))
 
-  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration] = ???
+  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofHours(hoursToAdd))
 
-  def plusMinutes(minsToAdd: Remote[Long]): Remote[Duration] = ???
+  def plusMinutes(minsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofMinutes(minsToAdd))
 
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = ???
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofSeconds(secondsToAdd))
 
-  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = ???
+  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofNanos(nanoToAdd))
 
 }
 

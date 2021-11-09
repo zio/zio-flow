@@ -1,5 +1,6 @@
 package zio.flow
 
+import zio.flow.remote.Remote
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.schema.Schema
 import zio.test._
@@ -16,7 +17,7 @@ object FractionalSpec extends DefaultRunnableSpec {
     )
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: FractionalOps[A])(implicit
-    fractionalA: Fractional[A]
+    fractionalA: remote.Fractional[A]
   ) =
     suite(name)(
       testOp[R, A]("Sin", gen)(_.sin)(ops.sin),
@@ -25,7 +26,7 @@ object FractionalSpec extends DefaultRunnableSpec {
       testOp[R, A]("Tan-Inverse", gen)(_.tanInverse)(ops.inverseTan)
     )
 
-  private def testOp[R, A: Schema: Fractional](name: String, gen: Gen[R, A])(
+  private def testOp[R, A: Schema: remote.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
   )(op: A => A): ZSpec[R with TestConfig, Nothing] =
     testM(name) {
