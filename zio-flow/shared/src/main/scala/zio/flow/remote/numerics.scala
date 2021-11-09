@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.schema.Schema
 
@@ -20,6 +20,19 @@ sealed trait Numeric[A] {
   def root(left: A, right: A): A
 
   def log(left: A, right: A): A
+
+  def abs(left: A): A
+
+  def min(left: A, right: A): A
+
+  def max(left: A, right: A): A
+
+  def floor(left: A): A
+
+  def ceil(left: A): A
+
+  def round(left: A): A
+
 }
 
 object Numeric extends NumericImplicits0 {
@@ -43,6 +56,18 @@ object Numeric extends NumericImplicits0 {
     override def negate(left: Int): Int = -1 * left
 
     def mod(left: Int, right: Int): Int = left % right
+
+    override def abs(left: Int): Int = Math.abs(left)
+
+    override def min(left: Int, right: Int): Int = Math.min(left, right)
+
+    override def max(left: Int, right: Int): Int = Math.max(left, right)
+
+    override def floor(left: Int): Int = Math.floor(left.toDouble).toInt
+
+    override def ceil(left: Int): Int = Math.ceil(left.toDouble).toInt
+
+    override def round(left: Int): Int = Math.round(left.toFloat)
   }
 }
 
@@ -66,6 +91,18 @@ sealed trait NumericImplicits0 {
     override def negate(left: Short): Short = (-1 * left).toShort
 
     def schema: Schema[Short] = implicitly[Schema[Short]]
+
+    override def abs(left: Short): Short = Math.abs(left.toDouble).toShort
+
+    override def min(left: Short, right: Short): Short = Math.min(left.toDouble, right.toDouble).toShort
+
+    override def max(left: Short, right: Short): Short = Math.max(left.toDouble, right.toDouble).toShort
+
+    override def floor(left: Short): Short = Math.floor(left.toDouble).toShort
+
+    override def ceil(left: Short): Short = Math.ceil(left.toDouble).toShort
+
+    override def round(left: Short): Short = Math.round(left.toDouble).toShort
   }
 
   implicit case object NumericLong extends Numeric[Long] {
@@ -86,6 +123,18 @@ sealed trait NumericImplicits0 {
     override def log(left: Long, right: Long): Long = (Math.log(left.toDouble) / Math.log(right.toDouble)).toLong
 
     def schema: Schema[Long] = implicitly[Schema[Long]]
+
+    override def abs(left: Long): Long = Math.abs(left)
+
+    override def min(left: Long, right: Long): Long = Math.min(left, right)
+
+    override def max(left: Long, right: Long): Long = Math.max(left, right)
+
+    override def floor(left: Long): Long = Math.floor(left.toDouble).toLong
+
+    override def ceil(left: Long): Long = Math.ceil(left.toDouble).toLong
+
+    override def round(left: Long): Long = Math.round(left.toDouble)
   }
 
   implicit case object NumericBigInt extends Numeric[BigInt] {
@@ -110,6 +159,18 @@ sealed trait NumericImplicits0 {
     )
 
     def schema: Schema[BigInt] = implicitly[Schema[BigInt]]
+
+    override def abs(left: BigInt): BigInt = Math.abs(left.toInt)
+
+    override def min(left: BigInt, right: BigInt): BigInt = Math.min(left.toInt, right.toInt)
+
+    override def max(left: BigInt, right: BigInt): BigInt = Math.max(left.toInt, right.toInt)
+
+    override def floor(left: BigInt): BigInt = Math.floor(left.doubleValue).toInt
+
+    override def ceil(left: BigInt): BigInt = Math.ceil(left.doubleValue).toInt
+
+    override def round(left: BigInt): BigInt = Math.round(left.doubleValue)
   }
 
   implicit case object NumericFloat extends Numeric[Float] {
@@ -130,6 +191,18 @@ sealed trait NumericImplicits0 {
     override def log(left: Float, right: Float): Float = (Math.log(left.toDouble) / Math.log(right.toDouble)).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
+
+    override def abs(left: Float): Float = Math.abs(left)
+
+    override def min(left: Float, right: Float): Float = Math.min(left, right)
+
+    override def max(left: Float, right: Float): Float = Math.max(left, right)
+
+    override def floor(left: Float): Float = Math.floor(left.toDouble).toFloat
+
+    override def ceil(left: Float): Float = Math.ceil(left.toDouble).toFloat
+
+    override def round(left: Float): Float = Math.round(left).toFloat
   }
 
   implicit case object NumericDouble extends Numeric[Double] {
@@ -150,6 +223,18 @@ sealed trait NumericImplicits0 {
     override def log(left: Double, right: Double): Double = Math.log(left) / Math.log(right)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
+
+    override def abs(left: Double): Double = Math.abs(left)
+
+    override def min(left: Double, right: Double): Double = Math.min(left, right)
+
+    override def max(left: Double, right: Double): Double = Math.max(left, right)
+
+    override def floor(left: Double): Double = Math.floor(left)
+
+    override def ceil(left: Double): Double = Math.ceil(left)
+
+    override def round(left: Double): Double = Math.round(left).toDouble
   }
 
   implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
@@ -174,6 +259,18 @@ sealed trait NumericImplicits0 {
     override def negate(left: BigDecimal): BigDecimal = -1 * left
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+
+    override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
+
+    override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
+
+    override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
+
+    override def floor(left: BigDecimal): BigDecimal = Math.floor(left.doubleValue)
+
+    override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
+
+    override def round(left: BigDecimal): BigDecimal = Math.round(left.doubleValue)
   }
 }
 
@@ -184,7 +281,10 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def sin(a: A): A
 
-  def inverseSin(a: A): A = ???
+  def inverseSin(a: A): A
+
+  def inverseTan(a: A): A
+
 }
 
 object Fractional {
@@ -211,6 +311,23 @@ object Fractional {
     override def sin(a: Float): Float = Math.sin(a.toDouble).toFloat
 
     def schema: Schema[Float] = implicitly[Schema[Float]]
+
+    override def abs(left: Float): Float = Math.abs(left)
+
+    override def min(left: Float, right: Float): Float = Math.min(left, right)
+
+    override def max(left: Float, right: Float): Float = Math.max(left, right)
+
+    override def floor(left: Float): Float = Math.floor(left.toDouble).toFloat
+
+    override def ceil(left: Float): Float = Math.ceil(left.toDouble).toFloat
+
+    override def round(left: Float): Float = Math.round(left).toFloat
+
+    override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
+
+    override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
+
   }
 
   implicit case object FractionalDouble extends Fractional[Double] {
@@ -236,6 +353,23 @@ object Fractional {
     override def sin(a: Double): Double = Math.sin(a)
 
     def schema: Schema[Double] = implicitly[Schema[Double]]
+
+    override def abs(left: Double): Double = Math.abs(left)
+
+    override def min(left: Double, right: Double): Double = Math.min(left, right)
+
+    override def max(left: Double, right: Double): Double = Math.max(left, right)
+
+    override def floor(left: Double): Double = Math.floor(left)
+
+    override def ceil(left: Double): Double = Math.ceil(left)
+
+    override def round(left: Double): Double = Math.round(left).toDouble
+
+    override def inverseSin(a: Double): Double = Math.asin(a)
+
+    override def inverseTan(a: Double): Double = Math.atan(a)
+
   }
 
   implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
@@ -263,5 +397,23 @@ object Fractional {
     override def sin(a: BigDecimal): BigDecimal = Math.sin(a.doubleValue)
 
     def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+
+    override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
+
+    override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
+
+    override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
+
+    override def floor(left: BigDecimal): BigDecimal = Math.floor(left.doubleValue)
+
+    override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
+
+    override def round(left: BigDecimal): BigDecimal = Math.round(left.doubleValue)
+
+    override def inverseSin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
+
+    override def inverseTan(a: BigDecimal): BigDecimal =
+      Math.atan(a.doubleValue)
+
   }
 }

@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 class RemoteBooleanSyntax(val self: Remote[Boolean]) {
 

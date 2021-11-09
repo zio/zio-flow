@@ -3,13 +3,14 @@ package zio.flow
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration.durationInt
-import zio.flow.ActivityError
+import zio.flow.remote._
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockActivity
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
+import zio.test._
 import zio.test.environment.{ TestClock, TestConsole }
-import zio.test.{ Spec, TestFailure, TestSuccess, _ }
 import zio.{ Has, ZIO }
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {

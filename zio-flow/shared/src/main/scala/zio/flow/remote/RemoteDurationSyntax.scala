@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import java.time.Duration
 import java.time.temporal.{ Temporal, TemporalAmount }
