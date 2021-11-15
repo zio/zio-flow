@@ -7,6 +7,8 @@ import zio._
 import zio.clock._
 import zio.console.putStrLn
 import zio.flow._
+import zio.flow.remote.{ Remote, SchemaAndValue }
+import zio.flow.zFlow.{ ZFlow, ZFlowExecutor }
 import zio.schema.DeriveSchema.gen
 import zio.schema._
 
@@ -19,7 +21,6 @@ final case class PersistentExecutor(
 ) extends ZFlowExecutor[String] {
 
   import PersistentExecutor._
-  import ZFlow._
 
   type Erased     = ZFlow[Any, Any, Any]
   type ErasedCont = Remote[Any] => ZFlow[Any, Any, Any]
@@ -70,23 +71,24 @@ final case class PersistentExecutor(
     } yield true).catchAll(_ => UIO(false))
 
   def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
+    import zio.flow.zFlow.ZFlow._
     def step(ref: Ref[State[E, A]]): IO[IOException, Unit] = {
 
       def onSuccess(value: Remote[_]): IO[IOException, Unit] =
         ref.get.flatMap { state =>
           state.stack match {
-            case Nil                                   =>
+            case Nil                                                =>
               eval(value).flatMap { schemaAndValue =>
                 state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit
               }
-            case Instruction.PopEnv :: newStack       =>
+            case Instruction.PopEnv :: newStack                     =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
                 onSuccess(value)
-            case Instruction.PushEnv(env) :: newStack =>
+            case Instruction.PushEnv(env) :: newStack               =>
               eval(env).flatMap { schemaAndValue =>
                 ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
               } *> onSuccess(value)
-            case Instruction.Continuation(_, onSuccess) :: newStack                         =>
+            case Instruction.Continuation(_, onSuccess) :: newStack =>
               ref.update(_.copy(current = onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
           }
@@ -95,18 +97,18 @@ final case class PersistentExecutor(
       def onError(value: Remote[_]): IO[IOException, Unit] =
         ref.get.flatMap { state =>
           state.stack match {
-            case Nil                                   =>
+            case Nil                                              =>
               eval(value).flatMap { schemaAndValue =>
                 state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit
               }
-            case Instruction.PopEnv :: newStack       =>
+            case Instruction.PopEnv :: newStack                   =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
                 onError(value)
-            case Instruction.PushEnv(env) :: newStack =>
+            case Instruction.PushEnv(env) :: newStack             =>
               eval(env).flatMap { schemaAndValue =>
                 ref.update(state => state.copy(stack = newStack, envStack = schemaAndValue :: state.envStack))
               } *> onError(value)
-            case Instruction.Continuation(onError,_) :: newStack                         =>
+            case Instruction.Continuation(onError, _) :: newStack =>
               ref.update(_.copy(current = onError.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
           }
@@ -119,7 +121,7 @@ final case class PersistentExecutor(
 
           case Now =>
             clock.instant.flatMap { currInstant =>
-              onSuccess(currInstant)
+              onSuccess(coerceRemote(lit(currInstant)))
             }
 
           case Input() =>
@@ -138,18 +140,18 @@ final case class PersistentExecutor(
           case Modify(svar, f0) =>
             val f                       = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
             val a: ZIO[Any, Nothing, A] = for {
-              vRefTuple  <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
-              value <- vRefTuple._2.get
-              tuple <- eval(f(lit(value))).map(_.value)
-              _     <- vRefTuple._2.set(tuple._2)
-              _     <- ref.update(_.addReadVar(vRefTuple._1))
+              vRefTuple <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
+              value     <- vRefTuple._2.get
+              tuple     <- eval(f(lit(value))).map(_.value)
+              _         <- vRefTuple._2.set(tuple._2)
+              _         <- ref.update(_.addReadVar(vRefTuple._1))
             } yield tuple._1
 
             a.flatMap { r =>
               onSuccess(r)
             }
 
-          case apply@Apply(_) =>
+          case apply @ Apply(_) =>
             ref.update { state =>
               val env = state.currentEnvironment
               state.copy(current = apply.lambda(env.toRemote.asInstanceOf[Remote[apply.ValueA]]))
@@ -157,7 +159,7 @@ final case class PersistentExecutor(
 
           case fold @ Fold(_, _, _) =>
             ref.update { state =>
-              val cont        = Instruction.Continuation(fold.ifError, fold.ifSuccess)
+              val cont = Instruction.Continuation(fold.ifError, fold.ifSuccess)
               state.copy(current = fold.value, stack = cont :: state.stack)
             } *> step(ref)
 
@@ -219,7 +221,7 @@ final case class PersistentExecutor(
               } yield ()
             }
 
-          case Provide(value, flow)    =>
+          case Provide(value, flow) =>
             eval(value).flatMap { schemaAndValue =>
               ref.update(state =>
                 state.copy(
@@ -239,7 +241,8 @@ final case class PersistentExecutor(
               _     <- state.getTransactionFlow match {
                          case Some(flow) =>
                            ref.update(
-                             _.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result)).setSuspended()
+                             _.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result))
+                               .setSuspended()
                            )
 
                          case None => ZIO.dieMessage("There is no transaction to retry.")
@@ -284,7 +287,7 @@ final case class PersistentExecutor(
           case Fail(error) =>
             onError(error)
 
-            case NewVar(name, initial) =>
+          case NewVar(name, initial) =>
             val variable = for {
               schemaAndValue <- eval(initial)
               vref           <- Ref.make(schemaAndValue.value.asInstanceOf[A])
@@ -351,10 +354,10 @@ object PersistentExecutor {
 
   object Instruction {
 
-    case object PopEnv extends Instruction
+    case object PopEnv                       extends Instruction
     final case class PushEnv(env: Remote[_]) extends Instruction
 
-    final case class Continuation[A, E, B](onError : ZFlow[E, E, B], onSuccess : ZFlow[A,E,B]) extends Instruction
+    final case class Continuation[A, E, B](onError: ZFlow[E, E, B], onSuccess: ZFlow[A, E, B]) extends Instruction
 
   }
 
@@ -371,18 +374,18 @@ object PersistentExecutor {
     ).toLayer
 
   final case class State[E, A](
-                                workflowId: String,
-                                current: ZFlow[_, _, _],
-                                tstate: TState,
-                                stack: List[Instruction],
-                                variables: Map[String, SchemaAndValue[
+    workflowId: String,
+    current: ZFlow[_, _, _],
+    tstate: TState,
+    stack: List[Instruction],
+    variables: Map[String, SchemaAndValue[
       _
     ]], //TODO : change the _ to SchemaAndValue[_]. may not get compile error from this change.
-                                result: DurablePromise[E, A],
-                                envStack: List[SchemaAndValue[_]],
-                                tempVarCounter: Int,
-                                retry: List[FlowDurablePromise[_, _]],
-                                compileStatus: PersistentCompileStatus
+    result: DurablePromise[E, A],
+    envStack: List[SchemaAndValue[_]],
+    tempVarCounter: Int,
+    retry: List[FlowDurablePromise[_, _]],
+    compileStatus: PersistentCompileStatus
   ) {
 
     def currentEnvironment: SchemaAndValue[_] = envStack.headOption.getOrElse(SchemaAndValue[Unit](Schema[Unit], ()))
@@ -414,58 +417,58 @@ object PersistentExecutor {
     //TODO scala map function
     private lazy val lookupName: Map[Any, String] =
       variables.map((t: (String, _)) => t._2 -> t._1)
+
+  }
+}
+
+sealed trait TState {
+  self =>
+  def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
+    case TState.Empty                                     => TState.Empty
+    case TState.Transaction(flow, readVars, compensation) =>
+      TState.Transaction(flow, readVars, newCompensation *> compensation)
+    //TODO : Compensation Failure semantics
   }
 
-  sealed trait TState {
-    self =>
-    def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
-      case TState.Empty                                     => TState.Empty
-      case TState.Transaction(flow, readVars, compensation) =>
-        TState.Transaction(flow, readVars, newCompensation *> compensation)
-      //TODO : Compensation Failure semantics
+  def addReadVar(name: String): TState = self match {
+    case TState.Empty                                     => TState.Empty
+    case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars + name, compensation)
+  }
+
+  def allVariables: Set[String] = self match {
+    case TState.Empty                       => Set()
+    case TState.Transaction(_, readVars, _) => readVars
+  }
+
+  def enterTransaction(flow: ZFlow[Any, _, _]): TState =
+    self match {
+      case TState.Empty => TState.Transaction(flow, Set(), ZFlow.unit)
+      case _            => self
     }
+}
 
-    def addReadVar(name: String): TState = self match {
-      case TState.Empty                                     => TState.Empty
-      case TState.Transaction(flow, readVars, compensation) => TState.Transaction(flow, readVars + name, compensation)
-    }
+object TState {
 
-    def allVariables: Set[String] = self match {
-      case TState.Empty                       => Set()
-      case TState.Transaction(_, readVars, _) => readVars
-    }
+  case object Empty extends TState
 
-    def enterTransaction(flow: ZFlow[Any, _, _]): TState =
-      self match {
-        case TState.Empty => TState.Transaction(flow, Set(), ZFlow.unit)
-        case _            => self
-      }
-  }
+  final case class Transaction(
+    flow: ZFlow[Any, _, _],
+    readVars: Set[String],
+    compensation: ZFlow[Any, ActivityError, Any]
+  ) extends TState
 
-  object TState {
+}
 
-    case object Empty extends TState
+final case class FlowDurablePromise[E, A](flow: ZFlow[Any, E, A], promise: DurablePromise[E, A])
 
-    final case class Transaction(
-      flow: ZFlow[Any, _, _],
-      readVars: Set[String],
-      compensation: ZFlow[Any, ActivityError, Any]
-    ) extends TState
+sealed trait PersistentCompileStatus
 
-  }
+object PersistentCompileStatus {
 
-  final case class FlowDurablePromise[E, A](flow: ZFlow[Any, E, A], promise: DurablePromise[E, A])
+  case object Running extends PersistentCompileStatus
 
-  sealed trait PersistentCompileStatus
+  case object Done extends PersistentCompileStatus
 
-  object PersistentCompileStatus {
-
-    case object Running extends PersistentCompileStatus
-
-    case object Done extends PersistentCompileStatus
-
-    case object Suspended extends PersistentCompileStatus
-
-  }
+  case object Suspended extends PersistentCompileStatus
 
 }

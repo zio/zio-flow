@@ -3,10 +3,11 @@ package zio.flow
 import java.net.URI
 import java.time.Instant
 
-import zio.flow.Remote.apply
-import zio.flow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
+import zio.flow.remote.{ Remote, _ }
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockInMemoryTestClock
+import zio.flow.zFlow.ZFlow
+import zio.flow.zFlow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.test.Assertion.{ dies, equalTo, fails, hasMessage }
@@ -52,7 +53,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     testM("Test Now") {
       val compileResult = ZFlow.now.evaluateTestInMem(implicitly[Schema[Instant]], nothingSchema)
       assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now().getEpochSecond))
-    } @@ignore,
+    } @@ ignore,
     testM("Test Unwrap") {
       val compileResult = ZFlow
         .Unwrap[Any, Nothing, Int](Remote(ZFlow.succeed(12)))
@@ -66,7 +67,8 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
       assertM(compileResult)(equalTo(List(15, 25, 35)))
     } @@ ignore,
     testM("Test Ensuring") {
-      val compileResult = ZFlow.succeed(12)
+      val compileResult = ZFlow
+        .succeed(12)
         .ensuring(ZFlow.input[String])
         .provide("Some input")
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)

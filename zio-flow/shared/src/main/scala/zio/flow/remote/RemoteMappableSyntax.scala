@@ -1,7 +1,8 @@
-package zio.flow
+package zio.flow.remote
 
-trait RemoteMappable[+A] {
-  def self: Remote[A]
+import zio.flow.Mappable
+
+class RemoteMappableSyntax[A](self: Remote[A]) {
 
   def filter[F[_], A1](
     predicate: Remote[A1] => Remote[Boolean]

@@ -1,18 +1,18 @@
 package zio.flow
 
-import zio.ZIO
+import java.time.Instant
+
 import zio.flow.ZFlowExecutorSpec.testActivity
+import zio.flow.remote._
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 import zio.test.Assertion._
-import zio.test.TestAspect._
 import zio.test._
-
-import java.time.Instant
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
-  implicit val nothingSchema: Schema[Nothing]               = Schema.fail("Nothing schema")
+  implicit val nothingSchema: Schema[Nothing]              = Schema.fail("Nothing schema")
   implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
 
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
@@ -26,9 +26,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testM("Test NewVar") {
       val compileResult = (for {
-        variable <- ZFlow.newVar("variable1", 10)
+        variable         <- ZFlow.newVar("variable1", 10)
         modifiedVariable <- variable.modify(isOdd)
-        v        <- modifiedVariable
+        v                <- modifiedVariable
       } yield v).evaluateLivePersistent(implicitly[Schema[Boolean]], nothingSchema)
       assertM(compileResult)(equalTo(false))
     },
@@ -48,7 +48,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testM("Test Fold") {
       val compileResult =
-        ZFlow.succeed(12).flatMap(rA => rA + 1).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
+        ZFlow.succeed(12).flatMap(rA => rA + Remote(1)).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
       assertM(compileResult)(equalTo(13))
     },
     testM("Test input") {
@@ -71,34 +71,29 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         ZFlow.succeed(12).ensuring(ZFlow.succeed(15)).evaluateLivePersistent(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test Provide - advanced"){
-      val zflow1 = for {
+    testM("Test Provide - advanced") {
+      val zflow1        = for {
         a <- ZFlow.succeed(15)
         b <- ZFlow.input[Int]
-      } yield a+ b
+      } yield a + b
       val compileResult = zflow1.provide(11).evaluateLivePersistent(Schema[Int], nothingSchema)
       assertM(compileResult)(equalTo(26))
     },
-    testM("Test Now"){
+    testM("Test Now") {
       val compileResult = ZFlow.now.evaluateLivePersistent(Schema[Instant], nothingSchema)
       assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now.getEpochSecond))
     },
-    testM("Test WaitTill"){
-      val twoSecsLater = Instant.now().getEpochSecond + 2
-      val compileResult = ZFlow.waitTill(Instant.ofEpochSecond(twoSecsLater)).evaluateLivePersistent(Schema[Unit], nothingSchema)
+    testM("Test WaitTill") {
+      val twoSecsLater  = Instant.now().getEpochSecond + 2
+      val compileResult =
+        ZFlow.waitTill(Remote(Instant.ofEpochSecond(twoSecsLater))).evaluateLivePersistent(Schema[Unit], nothingSchema)
       assertM(compileResult)(equalTo(()))
     },
-    testM("Test Activity"){
+    testM("Test Activity") {
       val compileResult = ZFlow.RunActivity(12, testActivity).evaluateLivePersistent(Schema[Int], Schema[ActivityError])
       assertM(compileResult)(equalTo(12))
-    },
-    testM("Test Iterate"){
-      val flow: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(Remote(12), (r : Remote[Int]) => ZFlow.succeed(r + 1), (r : Remote[Int]) => r === 15)
-      val compileResult = flow.evaluateLivePersistent(Schema[Int], nothingSchema)
-      assertM(compileResult)(equalTo(12))
-    } @@ignore
+    }
   )
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("All tests")(suite1)
 }
-

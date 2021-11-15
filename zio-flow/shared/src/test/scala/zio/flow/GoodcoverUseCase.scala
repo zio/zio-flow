@@ -4,7 +4,9 @@ import java.net.URI
 
 import zio.flow
 import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
+import zio.flow.remote.{ Remote, RemoteVariable }
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio.flow.zFlow.ZFlow
 import zio.schema.{ DeriveSchema, Schema }
 import zio.test.Assertion.equalTo
 import zio.test._
@@ -12,7 +14,6 @@ import zio.test._
 object GoodcoverUseCase extends DefaultRunnableSpec {
 
   case class Policy(id: String)
-
   implicit val policySchema: Schema[Policy]                = DeriveSchema.gen[Policy]
   implicit val emailRequestSchema: Schema[EmailRequest]    = DeriveSchema.gen[EmailRequest]
   implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
