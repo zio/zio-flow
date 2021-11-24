@@ -240,19 +240,16 @@ final case class PersistentExecutor(
             //TODO : Modify alters durable promise.
             //TODO : Some way of resuming a workflow (from the outside)
 
-//            //TODO : Implement something like compileStatus in State
-//            for {
-//              state <- ref.get
-//              _ <- state.getTransactionFlow match {
-//                case Some(flow) =>
-//                  ref.update(
-//                    _.addRetry(FlowDurablePromise(flow.asInstanceOf[ZFlow[Any, E, A]], state.result))
-//                      .setSuspended()
-//                  )
-//
-//                case None => ZIO.dieMessage("There is no transaction to retry.")
-//              }
-//            } yield ()
+            //TODO : Implement something like compileStatus in State
+
+            ref.get.flatMap(state => state.tstate match {
+              case TState.Empty => ZIO.die(new IllegalStateException("Invalid state. TState should not be empty in RetryUntil."))
+              case transaction @ TState.Transaction(_,_,_,fallbacks) => transaction.fallBacks match {
+                case ::(head, next) => ref.update(_.copy(current = head, tstate = transaction.popFallback))
+                case Nil => ref.update(_.copy(current = transaction.flow)) *> ref.get.flatMap { state => workflows.update {map => map.updated(state.workflowId, state)}}
+              }
+            })
+
 
           case OrTry(left, right) =>
             for {
@@ -458,12 +455,6 @@ sealed trait TState {
       case TState.Empty => None
       case tstate@TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = zflow :: fallBacks))
     }
-
-  def popFallback : Option[TState] =
-    self match {
-      case TState.Empty => None
-      case tstate @ TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = fallBacks.drop(1)))
-    }
 }
 
 object TState {
@@ -475,7 +466,10 @@ object TState {
                                 readVars: Set[String],
                                 compensation: ZFlow[Any, ActivityError, Any],
                                 fallBacks: List[ZFlow[Any, _, _]]
-                              ) extends TState
+                              ) extends TState { self =>
+    def popFallback : TState =
+      self.copy(fallBacks = fallBacks.drop(1))
+  }
 
 }
 
