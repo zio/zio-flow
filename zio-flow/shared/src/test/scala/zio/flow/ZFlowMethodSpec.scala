@@ -16,7 +16,6 @@ import zio.{ Has, ZIO }
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
   implicit val nothingSchema: Schema[Nothing]             = Schema.fail("Nothing schema")
-  implicit val activityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
   implicit val anySchema: Schema[Any]                     = Schema.fail("Schema for Any")
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
