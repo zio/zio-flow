@@ -6,6 +6,7 @@ import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
+import zio.Chunk
 import zio.schema.Schema.Primitive
 import zio.schema.{ Schema, StandardType }
 
@@ -18,6 +19,39 @@ package object remote {
 
   implicit val schemaDuration: Schema[Duration] = Primitive(StandardType.Duration(ChronoUnit.SECONDS))
   implicit val schemaInstant: Schema[Instant]   = Primitive(StandardType.Instant(DateTimeFormatter.BASIC_ISO_DATE))
+
+  implicit lazy val schemaThrowable: Schema[Throwable] =
+    Schema.CaseClass4(
+      field1 = Schema.Field("cause", schemaThrowable),
+      field2 = Schema.Field("message", Schema[String]),
+      field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
+      field4 = Schema.Field("suppressed", Schema[Chunk[Throwable]]),
+      construct =
+        (cause: Throwable, message: String, stackTrace: Chunk[StackTraceElement], suppressed: Chunk[Throwable]) => {
+          val throwable = new Throwable(message, cause)
+          throwable.setStackTrace(stackTrace.toArray)
+          suppressed.foreach(throwable.addSuppressed)
+          throwable
+        },
+      extractField1 = throwable => throwable.getCause,
+      extractField2 = throwable => throwable.getMessage,
+      extractField3 = throwable => Chunk.fromArray(throwable.getStackTrace),
+      extractField4 = throwable => Chunk.fromArray(throwable.getSuppressed)
+    )
+
+  implicit lazy val schemaStackTraceElement: Schema[StackTraceElement] =
+    Schema.CaseClass4(
+      field1 = Schema.Field("declaringClass", Schema[String]),
+      field2 = Schema.Field("methodName", Schema[String]),
+      field3 = Schema.Field("fileName", Schema[String]),
+      field4 = Schema.Field("lineNumber", Schema[Int]),
+      construct = (declaringClass: String, methodName: String, fileName: String, lineNumber: Int) =>
+        new StackTraceElement(declaringClass, methodName, fileName, lineNumber),
+      extractField1 = stackTraceElement => stackTraceElement.getClassName,
+      extractField2 = stackTraceElement => stackTraceElement.getMethodName,
+      extractField3 = stackTraceElement => stackTraceElement.getFileName,
+      extractField4 = stackTraceElement => stackTraceElement.getLineNumber
+    )
 
   implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
     Schema.EitherSchema(aSchema, bSchema)
