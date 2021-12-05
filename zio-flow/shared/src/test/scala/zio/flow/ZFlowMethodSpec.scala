@@ -15,13 +15,13 @@ import zio.{ Has, ZIO }
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
-  implicit val nothingSchema: Schema[Nothing]             = Schema.fail("Nothing schema")
-  implicit val anySchema: Schema[Any]                     = Schema.fail("Schema for Any")
+  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
+  implicit val anySchema: Schema[Any]         = Schema.fail("Schema for Any")
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit]                            = for {
+  ): ZFlow[Any, Nothing, Unit]                = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()

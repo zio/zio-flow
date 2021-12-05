@@ -19,7 +19,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
 
   implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing does not need to be serialised.")
 
-  implicit def variableSchema[A]: Schema[Variable[A]]      = Schema.fail("Variable schema")
+  implicit def variableSchema[A]: Schema[Variable[A]] = Schema.fail("Variable schema")
 
   val ifError: Remote[Int] => ZFlow[Any, Nothing, Int]      = r => ZFlow.succeed(r + 5)
   val ifSuccess: Remote[String] => ZFlow[Any, Nothing, Int] = r => ZFlow.succeed(r.length)
