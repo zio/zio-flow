@@ -62,58 +62,58 @@ final case class PersistentExecutor(
           case Return(value) =>
             ref.get.flatMap { state =>
               state.stack match {
-                case Nil           =>
+                case Nil    =>
                   eval(value).flatMap { schemaAndValue0 =>
                     val schemaAndValue = schemaAndValue0.asInstanceOf[SchemaAndValue[A]]
                     state.result.succeed(schemaAndValue.value: A).unit
                   }
-                case k :: newStack => ???
+                case _ :: _ => ???
               }
             }
 
           case Now => ???
 
-          case Input(schema) => ???
+          case Input(_) => ???
 
-          case WaitTill(instant) => ???
+          case WaitTill(_) => ???
 
-          case Modify(svar, f0) => ???
+          case Modify(_, _) => ???
 
-          case Fold(value, ifError, ifSuccess) => ???
+          case Fold(_, _, _) => ???
 
-          case RunActivity(input, activity) => ???
+          case RunActivity(_, _) => ???
 
-          case Transaction(flow) => ???
+          case Transaction(_) => ???
 
-          case Ensuring(flow, finalizer) => ???
+          case Ensuring(_, _) => ???
 
-          case Unwrap(remote) => ???
+          case Unwrap(_) => ???
 
-          case Foreach(values, body) => ???
+          case Foreach(_, _) => ???
 
-          case Fork(workflow) => ???
+          case Fork(_) => ???
 
-          case Timeout(flow, duration) => ???
+          case Timeout(_, _) => ???
 
-          case Provide(value, flow) => ???
+          case Provide(_, _) => ???
 
           case Die => ???
 
           case RetryUntil => ???
 
-          case OrTry(left, right) => ???
+          case OrTry(_, _) => ???
 
-          case Await(execFlow) => ???
+          case Await(_) => ???
 
-          case Interrupt(execFlow) => ???
+          case Interrupt(_) => ???
 
-          case Fail(error) => ???
+          case Fail(_) => ???
 
-          case NewVar(name, initial) => ???
+          case NewVar(_, _) => ???
 
-          case iterate0 @ Iterate(_, _, _) => ???
+          case Iterate(_, _, _) => ???
 
-          case Log(message) => ???
+          case Log(_) => ???
         }
       }
 
