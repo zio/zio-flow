@@ -6,15 +6,14 @@ import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport._
 import sbtbuildinfo._
 import dotty.tools.sbtplugin.DottyPlugin.autoImport._
 import BuildInfoKeys._
-import scalafix.sbt.ScalafixPlugin.autoImport._
 
 object BuildHelper {
-  val Scala211   = "2.11.12"
-  val Scala212   = "2.12.13"
-  val Scala213   = "2.13.4"
-  val ScalaDotty = "3.0.0-M3"
+  val Scala211 = "2.11.12"
+  val Scala212 = "2.12.15"
+  val Scala213 = "2.13.7"
+  val Scala3   = "3.1.0"
 
-  val SilencerVersion = "1.7.2"
+  val SilencerVersion = "1.7.7"
 
   private val stdOptions = Seq(
     "-deprecation",
@@ -26,7 +25,7 @@ object BuildHelper {
     if (sys.env.contains("CI")) {
       Seq("-Xfatal-warnings")
     } else {
-      Nil // to enable Scalafix locally
+      Nil
     }
   }
 
@@ -55,7 +54,7 @@ object BuildHelper {
     )
 
   val dottySettings = Seq(
-    crossScalaVersions += ScalaDotty,
+    crossScalaVersions += Scala3,
     scalacOptions ++= {
       if (isDotty.value)
         Seq("-noindent")
@@ -234,18 +233,9 @@ object BuildHelper {
       else
         Seq(
           "com.github.ghik" % "silencer-lib" % SilencerVersion % Provided cross CrossVersion.full,
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full),
-          compilerPlugin("org.typelevel"  %% "kind-projector"  % "0.11.3" cross CrossVersion.full)
+          compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full)
         )
     },
-    semanticdbEnabled := !isDotty.value, // enable SemanticDB
-    semanticdbOptions += "-P:semanticdb:synthetics:on",
-    semanticdbVersion := scalafixSemanticdb.revision, // use Scalafix compatible version
-    ThisBuild / scalafixScalaBinaryVersion := CrossVersion.binaryScalaVersion(scalaVersion.value),
-    ThisBuild / scalafixDependencies ++= List(
-      "com.github.liancheng" %% "organize-imports" % "0.4.4",
-      "com.github.vovapolu"  %% "scaluzzi"         % "0.1.16"
-    ),
     parallelExecution in Test := true,
     incOptions ~= (_.withLogRecompileOnMacro(false)),
     autoAPIMappings := true,
@@ -319,8 +309,6 @@ object BuildHelper {
         |
         |Useful sbt tasks:
         |${item("build")} - Prepares sources, compiles and runs tests.
-        |${item("prepare")} - Prepares sources by applying both scalafix and scalafmt
-        |${item("fix")} - Fixes sources files using scalafix
         |${item("fmt")} - Formats source files using scalafmt
         |${item("~compileJVM")} - Compiles all JVM modules (file-watch enabled)
         |${item("testJVM")} - Runs all JVM tests
