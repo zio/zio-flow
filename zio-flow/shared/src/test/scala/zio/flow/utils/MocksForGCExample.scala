@@ -15,9 +15,9 @@ object MocksForGCExample {
     new OperationExecutor[Console with Clock] {
       override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
         operation match {
-          case Operation.Http(url, _, _, _, _)   =>
+          case Operation.Http(url, _, _, _, _) =>
             console.putStrLn(s"Request to : ${url.toString}") *> ZIO.succeed(map.get(url).get.asInstanceOf[A])
-          case Operation.SendEmail(server, port) =>
+          case Operation.SendEmail(_, _)       =>
             console.putStrLn("Sending email") *> ZIO.succeed(().asInstanceOf[A])
         }
     }

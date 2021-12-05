@@ -22,7 +22,7 @@ jobs:
       - name: Cache scala dependencies
         uses: coursier/cache-action@v5
       - name: Lint code
-        run: sbt fmtCheck fixCheck
+        run: sbt fmtCheck
   
   test:
     runs-on: ubuntu-20.04
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.12.13', '2.13.4', '3.0.0-M3']
+        scala: ['2.12.15', '2.13.7']
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v2.3.4
