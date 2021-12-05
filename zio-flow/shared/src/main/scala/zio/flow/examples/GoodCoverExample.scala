@@ -19,14 +19,14 @@ import zio.schema.{DeriveSchema, Schema}
  *      reminder email to staff. They can set a variable once manual evaluation
  *      is completed. Otherwise, send email reminders every 2 days 2.2 Calculate
  *      - how many days to 45 days before policy renewal. And sleep till that
- *      period. 2.3 Check if the policy renewal is offered or not (function
- *      call) along with the terms of the new policy. 2.4 When there are 45 days
- *      remaining, send an email to the buyer offering renewal of policy. They
- *      can respond with `Renew/ Do not Renew`. A variable is set when they
- *      respond. 2.4 Send reminder emails every 2 days until the customer
- *      responds or time elapses 2.5 If the client wants to renew the policy,
- *      call payment service to deduct payment for this PolicyBuyer. Retry for
- *      30 days or until it succeeds.
+ *        period. 2.3 Check if the policy renewal is offered or not (function
+ *        call) along with the terms of the new policy. 2.4 When there are 45
+ *        days remaining, send an email to the buyer offering renewal of policy.
+ *        They can respond with `Renew/ Do not Renew`. A variable is set when
+ *        they respond. 2.4 Send reminder emails every 2 days until the customer
+ *        responds or time elapses 2.5 If the client wants to renew the policy,
+ *        call payment service to deduct payment for this PolicyBuyer. Retry for
+ *        30 days or until it succeeds.
  */
 object PolicyRenewalExample {
   type PolicyId        = String
