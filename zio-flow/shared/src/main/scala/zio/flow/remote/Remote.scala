@@ -669,11 +669,11 @@ object Remote {
       val rEval = right.evalWithSchema
       (lEval, rEval) match {
         //FIXME : fix when zio schema can compare Schemas
-        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+        case (Right(SchemaAndValue(_, leftA)), Right(SchemaAndValue(_, rightA))) =>
           Right(
             SchemaAndValue(Schema[Boolean], (leftA == rightA))
           )
-        case _                                                                                        => Left(self)
+        case _                                                                   => Left(self)
       }
     }
   }
@@ -697,8 +697,8 @@ object Remote {
         case Left(_)             => Schema.fail("Could not reduce.")
         case Right(schemaAndVal) =>
           schemaAndVal.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _) => schemaA
-            case _                              => Schema.fail[A]("Failure.")
+            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+            case _                                 => Schema.fail[A]("Failure.")
           }
       }
       list.eval match {
@@ -746,8 +746,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema.asInstanceOf[SchemaList[A]]
@@ -761,8 +761,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     schema match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema
@@ -997,22 +997,22 @@ object Remote {
 
         case (AddNumeric(left1, right1, numeric1), AddNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (DivNumeric(left1, right1, numeric1), DivNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (MulNumeric(left1, right1, numeric1), MulNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (PowNumeric(left1, right1, numeric1), PowNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (NegationNumeric(value1, numeric1), NegationNumeric(value2, numeric2)) =>
@@ -1069,7 +1069,7 @@ object Remote {
         case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
           loop(predicate1, predicate2) &&
             loop(ifTrue1, ifTrue2) &&
-            loop(ifFalse2, ifFalse2)
+            loop(ifFalse1, ifFalse2)
 
         case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
           // TODO: Support `==` and `hashCode` for `Sortable`.

@@ -27,7 +27,7 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
     },
     testM("flatten") {
       check(Gen.either(Gen.anyInt, Gen.either(Gen.anyInt, Gen.anyLong))) { either =>
-        Remote(either).flatten <-> either.flatten
+        Remote(either).flatten <-> either.fold(a => Left(a), b => b)
       }
     },
     testM("merge") {
@@ -52,7 +52,7 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
     },
     testM("orElse") {
       check(Gen.either(Gen.boolean, Gen.anyInt), Gen.either(Gen.boolean, Gen.anyLong)) { (eitherInt, eitherLong) =>
-        Remote(eitherInt).orElse(eitherLong) <-> eitherInt.orElse(eitherLong)
+        Remote(eitherInt).orElse(eitherLong) <-> eitherInt.fold(_ => eitherLong, b => Right(b))
       }
     },
     testM("filterOrElse") {
