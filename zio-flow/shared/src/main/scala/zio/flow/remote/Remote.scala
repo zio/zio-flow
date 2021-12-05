@@ -697,8 +697,8 @@ object Remote {
         case Left(_)             => Schema.fail("Could not reduce.")
         case Right(schemaAndVal) =>
           schemaAndVal.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _) => schemaA
-            case _                              => Schema.fail[A]("Failure.")
+            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+            case _                                 => Schema.fail[A]("Failure.")
           }
       }
       list.eval match {
@@ -746,8 +746,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema.asInstanceOf[SchemaList[A]]
@@ -761,8 +761,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     schema match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema
