@@ -2,28 +2,31 @@ package zio.flow.examples
 
 import java.time.Period
 
-import zio.flow.remote.{ Remote, RemoteVariable }
+import zio.flow.remote.{Remote, RemoteVariable}
 import zio.flow.zFlow.ZFlow
-import zio.flow.{ Activity, ActivityError, Variable }
-import zio.schema.{ DeriveSchema, Schema }
+import zio.flow.{Activity, ActivityError, Variable}
+import zio.schema.{DeriveSchema, Schema}
 
 /**
- * 1. Get all policies that will expire in the next 60 days.
- * 2. For each of these policies, do the following -
- * 2.1 Make multiple calls to internal/external services to evaluate if the buyer's risk has changed.
- * This determination is based on a bunch of different params -
- * 2.1.1 Have they claimed the policy in the past year?
- * 2.1.2 External (possibly flaky) service call to assess fire-risk of the property (based on address).
- * 2.1.3 Is manual evaluation required here? {based on the params from above service calls}
- * 2.1.3.1 If manual evaluation is required, send reminder email to staff. They can set a variable once manual evaluation is completed.
- * Otherwise, send email reminders every 2 days
- * 2.2 Calculate - how many days to 45 days before policy renewal. And sleep till that period.
- * 2.3 Check if the policy renewal is offered or not (function call) along with the terms of the new policy.
- * 2.4 When there are 45 days remaining, send an email to the buyer offering renewal of policy. They can respond with `Renew/ Do not Renew`.
- * A variable is set when they respond.
- * 2.4 Send reminder emails every 2 days until the customer responds or time elapses
- * 2.5 If the client wants to renew the policy, call payment service to deduct payment for this PolicyBuyer.
- * Retry for 30 days or until it succeeds.
+ *   1. Get all policies that will expire in the next 60 days. 2. For each of
+ *      these policies, do the following - 2.1 Make multiple calls to
+ *      internal/external services to evaluate if the buyer's risk has changed.
+ *      This determination is based on a bunch of different params - 2.1.1 Have
+ *      they claimed the policy in the past year? 2.1.2 External (possibly
+ *      flaky) service call to assess fire-risk of the property (based on
+ *      address). 2.1.3 Is manual evaluation required here? {based on the params
+ *      from above service calls} 2.1.3.1 If manual evaluation is required, send
+ *      reminder email to staff. They can set a variable once manual evaluation
+ *      is completed. Otherwise, send email reminders every 2 days 2.2 Calculate
+ *      - how many days to 45 days before policy renewal. And sleep till that
+ *      period. 2.3 Check if the policy renewal is offered or not (function
+ *      call) along with the terms of the new policy. 2.4 When there are 45 days
+ *      remaining, send an email to the buyer offering renewal of policy. They
+ *      can respond with `Renew/ Do not Renew`. A variable is set when they
+ *      respond. 2.4 Send reminder emails every 2 days until the customer
+ *      responds or time elapses 2.5 If the client wants to renew the policy,
+ *      call payment service to deduct payment for this PolicyBuyer. Retry for
+ *      30 days or until it succeeds.
  */
 object PolicyRenewalExample {
   type PolicyId        = String
@@ -207,9 +210,9 @@ object PolicyRenewalExample {
 
       for {
         policies <- getPoliciesAboutToExpire(Remote(Period.ofDays(60)))
-        _        <- ZFlow.foreachPar(policies) { policy =>
-                      performPolicyRenewal(policy, manualEvalDone, renewPolicy)
-                    }
+        _ <- ZFlow.foreachPar(policies) { policy =>
+               performPolicyRenewal(policy, manualEvalDone, renewPolicy)
+             }
       } yield ()
     }
 }

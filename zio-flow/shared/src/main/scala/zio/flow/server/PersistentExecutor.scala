@@ -5,10 +5,10 @@ import java.io.IOException
 import zio._
 import zio.clock._
 import zio.flow._
-import zio.flow.remote.{ Remote, SchemaAndValue }
-import zio.flow.server.PersistentExecutor.{ State, TState }
+import zio.flow.remote.{Remote, SchemaAndValue}
+import zio.flow.server.PersistentExecutor.{State, TState}
 import zio.flow.zFlow.ZFlow._
-import zio.flow.zFlow.{ ZFlow, ZFlowExecutor }
+import zio.flow.zFlow.{ZFlow, ZFlowExecutor}
 import zio.schema.Schema
 
 final case class PersistentExecutor(
@@ -62,7 +62,7 @@ final case class PersistentExecutor(
           case Return(value) =>
             ref.get.flatMap { state =>
               state.stack match {
-                case Nil    =>
+                case Nil =>
                   eval(value).flatMap { schemaAndValue0 =>
                     val schemaAndValue = schemaAndValue0.asInstanceOf[SchemaAndValue[A]]
                     state.result.succeed(schemaAndValue.value: A).unit
@@ -190,7 +190,7 @@ object PersistentExecutor {
   sealed trait TState {
     self =>
     def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
-      case TState.Empty                                     => TState.Empty
+      case TState.Empty => TState.Empty
       case TState.Transaction(flow, readVars, compensation) =>
         TState.Transaction(flow, readVars, newCompensation *> compensation)
       //TODO : Compensation Failure semantics

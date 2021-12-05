@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.remote.{ Remote, RemoteEitherSyntax }
+import zio.flow.remote.{Remote, RemoteEitherSyntax}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.random.Random
 import zio.schema.Schema

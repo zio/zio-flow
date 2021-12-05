@@ -10,8 +10,8 @@ import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test._
-import zio.test.environment.{ TestClock, TestConsole }
-import zio.{ Has, ZIO }
+import zio.test.environment.{TestClock, TestConsole}
+import zio.{Has, ZIO}
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
@@ -21,7 +21,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit]                = for {
+  ): ZFlow[Any, Nothing, Unit] = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()
@@ -87,8 +87,8 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
         val evaluated: ZIO[Clock with Console, Nothing, Boolean] = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           //TODO : This waits for timeoutDuration time
-          _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 1L)
-          bool          <- remoteBoolVar.get
+          _    <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 1L)
+          bool <- remoteBoolVar.get
         } yield bool).evaluateLiveInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         assertM(evaluated)(equalTo(true))
