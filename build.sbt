@@ -24,6 +24,7 @@ addCommandAlias("fmt", "all scalafmtSbt scalafmtAll")
 addCommandAlias("fix", "scalafixAll")
 addCommandAlias("fmtCheck", "all scalafmtSbtCheck scalafmtCheckAll")
 addCommandAlias("fixCheck", "scalafixAll --check")
+addCommandAlias("testJVM", "zioFlowTestsJVM/test")
 
 val zioVersion       = "1.0.11"
 val zioSchemaVersion = "0.1.1"
@@ -47,18 +48,35 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"          % zioVersion,
-      "dev.zio" %% "zio-test"     % zioVersion % "test",
-      "dev.zio" %% "zio-test-sbt" % zioVersion % "test",
       "dev.zio" %% "zio-schema"   % zioSchemaVersion
     )
   )
-  .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
 
 lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
 
 lazy val zioFlowJVM = zioFlow.jvm
   .settings(dottySettings)
+
+lazy val zioFlowTests = crossProject(JSPlatform, JVMPlatform)
+  .in(file("zio-flow-tests"))
+  .dependsOn(zioFlow)
+  .settings(stdSettings("zio-flow-tests"))
+  .settings(crossProjectSettings)
+  .settings(buildInfoSettings("zio.flow"))
+  .settings(
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio-test"     % zioVersion % "test",
+      "dev.zio" %% "zio-test-sbt" % zioVersion % "test"
+    )
+  )
+  .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
+
+  lazy val zioFlowTestsJS = zioFlowTests.js
+    .settings(scalaJSUseMainModuleInitializer := true)
+
+  lazy val zioFlowTestsJVM = zioFlowTests.jvm
+    .settings(dottySettings)
 
 lazy val docs = project
   .in(file("zio-flow-docs"))
