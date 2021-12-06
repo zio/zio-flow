@@ -5,6 +5,7 @@ import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
+import zio.Chunk
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
@@ -72,6 +73,13 @@ sealed trait Remote[+A] {
 }
 
 object Remote {
+
+  /**
+   * Constructs accessors that can be used modify remote versions of user
+   * defined data types.
+   */
+  def makeAccessors[A](implicit schema: Schema[A]): schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
+    schema.makeAccessors(RemoteAccessorBuilder)
 
   final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
     def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
@@ -917,6 +925,69 @@ object Remote {
         case _                                       => Left(Remote(false))
       }
     }
+  }
+
+  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(schema, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
+        case _                                    => Left(self)
+      }
+  }
+
+  final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(schemaWhole, whole)) =>
+          piece.evalWithSchema match {
+            case Right(SchemaAndValue(schemaPiece, piece)) =>
+              val newValue = lens.unsafeSet(piece)(whole)
+              Right(SchemaAndValue(lens.schemaWhole, newValue))
+            case _                                         => Left(self)
+          }
+        case _                                         => Left(self)
+      }
+  }
+
+  final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
+    def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(schema, whole)) =>
+          Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
+        case _                                    => Left(self)
+      }
+  }
+
+  final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      piece.evalWithSchema match {
+        case Right(SchemaAndValue(schema, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
+        case _                                    => Left(self)
+      }
+  }
+
+  final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
+    def evalWithSchema: Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(schema, whole)) =>
+          Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
+        case _                                    => Left(self)
+      }
+  }
+
+  final case class TraversalSet[S, A](whole: Remote[S], piece: Remote[Chunk[A]], traversal: RemoteTraversal[S, A])
+      extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(schema, whole)) =>
+          piece.evalWithSchema match {
+            case Right(SchemaAndValue(schemaPiece, piece)) =>
+              val newValue = traversal.unsafeSet(whole)(piece)
+              Right(SchemaAndValue(traversal.schemaWhole, newValue))
+            case _                                         => Left(self)
+          }
+        case _                                    => Left(self)
+      }
   }
 
   object Lazy {
