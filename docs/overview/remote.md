@@ -109,7 +109,7 @@ We should be sure to define our schemas in the companion objects of the data typ
 
 Other than that the hardest thing is remembering to import ZIO Schema!
 
-With the schema defined this way, we can construt remote versions of `PaymentMethod` values just like we did for `Int` values:
+With the schema defined this way, we can construct remote versions of `PaymentMethod` values just like we did for `Int` values:
 
 ```scala
 val remotePaymentMethod: Remote[PaymentMethod] =
