@@ -930,48 +930,48 @@ object Remote {
   final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
     def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       whole.evalWithSchema match {
-        case Right(SchemaAndValue(schema, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
-        case _                                    => Left(self)
+        case Right(SchemaAndValue(_, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
+        case _                               => Left(self)
       }
   }
 
   final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
     def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
       whole.evalWithSchema match {
-        case Right(SchemaAndValue(schemaWhole, whole)) =>
+        case Right(SchemaAndValue(_, whole)) =>
           piece.evalWithSchema match {
-            case Right(SchemaAndValue(schemaPiece, piece)) =>
+            case Right(SchemaAndValue(_, piece)) =>
               val newValue = lens.unsafeSet(piece)(whole)
               Right(SchemaAndValue(lens.schemaWhole, newValue))
-            case _                                         => Left(self)
+            case _                               => Left(self)
           }
-        case _                                         => Left(self)
+        case _                               => Left(self)
       }
   }
 
   final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
     def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
       whole.evalWithSchema match {
-        case Right(SchemaAndValue(schema, whole)) =>
+        case Right(SchemaAndValue(_, whole)) =>
           Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
-        case _                                    => Left(self)
+        case _                               => Left(self)
       }
   }
 
   final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
     def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
       piece.evalWithSchema match {
-        case Right(SchemaAndValue(schema, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
-        case _                                    => Left(self)
+        case Right(SchemaAndValue(_, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
+        case _                               => Left(self)
       }
   }
 
   final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
     def evalWithSchema: Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]] =
       whole.evalWithSchema match {
-        case Right(SchemaAndValue(schema, whole)) =>
+        case Right(SchemaAndValue(_, whole)) =>
           Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
-        case _                                    => Left(self)
+        case _                               => Left(self)
       }
   }
 
@@ -979,14 +979,14 @@ object Remote {
       extends Remote[S] {
     def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
       whole.evalWithSchema match {
-        case Right(SchemaAndValue(schema, whole)) =>
+        case Right(SchemaAndValue(_, whole)) =>
           piece.evalWithSchema match {
-            case Right(SchemaAndValue(schemaPiece, piece)) =>
+            case Right(SchemaAndValue(_, piece)) =>
               val newValue = traversal.unsafeSet(whole)(piece)
               Right(SchemaAndValue(traversal.schemaWhole, newValue))
-            case _                                         => Left(self)
+            case _                               => Left(self)
           }
-        case _                                    => Left(self)
+        case _                               => Left(self)
       }
   }
 
