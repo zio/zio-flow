@@ -281,6 +281,24 @@ object Remote {
       }
   }
 
+  final case class Try[A](either: Either[(Remote[Throwable], Schema[A]), Remote[A]]) extends Remote[scala.util.Try[A]] {
+    self =>
+
+    def evalWithSchema: Either[Remote[scala.util.Try[A]], SchemaAndValue[scala.util.Try[A]]] =
+      either match {
+        case Left((remoteThrowable, schemaA)) =>
+          remoteThrowable.evalWithSchema.fold(
+            _ => Left(self),
+            throwable => Right(SchemaAndValue(schemaTry(schemaA), scala.util.Failure(throwable.value)))
+          )
+        case Right(remoteA) =>
+          remoteA.evalWithSchema.fold(
+            _ => Left(self),
+            a => Right(SchemaAndValue(schemaTry(a.schema), scala.util.Success(a.value)))
+          )
+      }
+  }
+
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
 
     override def evalWithSchema: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = {

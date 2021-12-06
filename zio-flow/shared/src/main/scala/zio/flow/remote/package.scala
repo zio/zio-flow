@@ -53,6 +53,26 @@ package object remote {
       extractField4 = stackTraceElement => stackTraceElement.getLineNumber
     )
 
+  implicit def schemaTry[A](implicit schema: Schema[A]): Schema[scala.util.Try[A]] =
+    Schema.Enum2[scala.util.Failure[A], scala.util.Success[A], scala.util.Try[A]](
+      case1 = Schema.Case("Failure", schemaFailure, _.asInstanceOf[scala.util.Failure[A]]),
+      case2 = Schema.Case("Success", schemaSuccess, _.asInstanceOf[scala.util.Success[A]])
+    )
+
+  implicit def schemaFailure[A]: Schema[scala.util.Failure[A]] =
+    Schema.CaseClass1(
+      field = Schema.Field("exception", Schema[Throwable]),
+      construct = (throwable: Throwable) => scala.util.Failure(throwable),
+      extractField = _.exception
+    )
+
+  implicit def schemaSuccess[A](implicit schema: Schema[A]): Schema[scala.util.Success[A]] =
+    Schema.CaseClass1(
+      field = Schema.Field("value", schema),
+      construct = (value: A) => scala.util.Success(value),
+      extractField = _.value
+    )
+
   implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
     Schema.EitherSchema(aSchema, bSchema)
 
