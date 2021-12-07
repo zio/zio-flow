@@ -1,7 +1,5 @@
 package zio.flow
 
-import zio.flow.{ Remote, ZFlow }
-
 sealed trait ZFlowTransaction {
 
   /**

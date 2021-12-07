@@ -7,7 +7,6 @@ import scala.language.implicitConversions
 
 import zio.flow.remote.{ Fractional, Numeric }
 import zio.flow.remote.Numeric.NumericInt
-import zio.flow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {
