@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.flow.remote.Remote.ContainsOption
+import zio.flow._
 import zio.schema.DeriveSchema.gen
 
 class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
@@ -20,7 +20,7 @@ class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
 
   final def knownSize: Remote[Int] = handleOption(Remote(0), _ => Remote(1))
 
-  final def contains[A1 >: A](elem: A1): Remote[Boolean] = ContainsOption(self, elem)
+  final def contains[A1 >: A](elem: A1): Remote[Boolean] = Remote.ContainsOption(self, elem)
 
   def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = handleOption(alternative, _ => self)
 

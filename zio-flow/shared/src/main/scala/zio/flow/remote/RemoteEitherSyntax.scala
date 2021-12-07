@@ -2,7 +2,7 @@ package zio.flow.remote
 
 import scala.util.Try
 
-import zio.flow.zFlow.ZFlow
+import zio.flow.{ Remote, ZFlow }
 import zio.schema.Schema
 
 class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {

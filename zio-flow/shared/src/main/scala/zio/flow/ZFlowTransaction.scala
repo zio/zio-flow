@@ -1,6 +1,6 @@
-package zio.flow.zFlow
+package zio.flow
 
-import zio.flow.remote.Remote
+import zio.flow.{ Remote, ZFlow }
 
 sealed trait ZFlowTransaction {
 

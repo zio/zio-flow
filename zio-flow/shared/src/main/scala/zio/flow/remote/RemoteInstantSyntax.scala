@@ -1,5 +1,7 @@
 package zio.flow.remote
 
+import zio.flow._
+
 import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Clock, Duration, Instant }
 

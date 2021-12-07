@@ -1,6 +1,5 @@
 package zio.flow
 
-import zio.flow.remote.{ Remote, RemoteEitherSyntax }
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.random.Random
 import zio.schema.Schema
@@ -103,11 +102,13 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
     suite("collectAll")(
       testM("return the list of all right results") {
         check(Gen.listOf(Gen.anyInt)) { list =>
-          RemoteEitherSyntax.collectAll(Remote(list.map(Right(_)): List[Either[Short, Int]])) <-> Right(list)
+          remote.RemoteEitherSyntax.collectAll(Remote(list.map(Right(_)): List[Either[Short, Int]])) <-> Right(list)
         }
       },
       test("return the first left result") {
-        RemoteEitherSyntax.collectAll(Remote(List(Right(2), Left("V"), Right(9), Right(0), Left("P")))) <-> Left("V")
+        remote.RemoteEitherSyntax.collectAll(Remote(List(Right(2), Left("V"), Right(9), Right(0), Left("P")))) <-> Left(
+          "V"
+        )
       }
     )
   )

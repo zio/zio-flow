@@ -1,12 +1,13 @@
-package zio.flow.remote
+package zio.flow
 
 import java.time.temporal.{ ChronoUnit, TemporalAmount, TemporalField, TemporalUnit }
 import java.time.{ Duration, Instant }
 
 import scala.language.implicitConversions
 
+import zio.flow.remote.{ Fractional, Numeric }
 import zio.flow.remote.Numeric.NumericInt
-import zio.flow.zFlow.ZFlow
+import zio.flow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] {

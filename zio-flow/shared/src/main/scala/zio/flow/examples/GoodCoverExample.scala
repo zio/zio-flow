@@ -2,9 +2,7 @@ package zio.flow.examples
 
 import java.time.Period
 
-import zio.flow.remote.{ Remote, RemoteVariable }
-import zio.flow.zFlow.ZFlow
-import zio.flow.{ Activity, ActivityError, Variable }
+import zio.flow._
 import zio.schema.{ DeriveSchema, Schema }
 
 /**

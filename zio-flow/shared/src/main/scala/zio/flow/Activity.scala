@@ -1,8 +1,5 @@
 package zio.flow
 
-import zio.flow.remote.Remote
-import zio.flow.zFlow.ZFlow
-
 final case class Activity[-R, A](
   name: String,
   description: String,

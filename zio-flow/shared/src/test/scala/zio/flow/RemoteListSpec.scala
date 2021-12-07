@@ -1,7 +1,5 @@
 package zio.flow
 
-import zio.flow.remote.Remote.Cons
-import zio.flow.remote.{ Remote, _ }
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
@@ -30,7 +28,7 @@ object RemoteListSpec extends DefaultRunnableSpec {
     },
     test("Cons") {
       val l1   = Remote(1 :: 2 :: 3 :: Nil)
-      val cons = Cons(l1, Remote(4))
+      val cons = Remote.Cons(l1, Remote(4))
       cons <-> (4 :: 1 :: 2 :: 3 :: Nil)
     },
     test("Fold") {

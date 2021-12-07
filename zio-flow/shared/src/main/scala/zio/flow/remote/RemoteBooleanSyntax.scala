@@ -1,5 +1,7 @@
 package zio.flow.remote
 
+import zio.flow.Remote
+
 class RemoteBooleanSyntax(val self: Remote[Boolean]) {
 
   final def not: Remote[Boolean] = Remote.Not(self)

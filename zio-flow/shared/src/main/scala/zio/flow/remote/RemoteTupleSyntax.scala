@@ -1,5 +1,7 @@
 package zio.flow.remote
 
+import zio.flow._
+
 class RemoteTuple2Syntax[A, B](val self: Remote[(A, B)]) {
   def _1: Remote[A] = Remote.First(self)
   def _2: Remote[B] = Remote.Second(self)

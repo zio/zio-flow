@@ -1,5 +1,7 @@
 package zio.flow.remote
 
+import zio.flow._
+
 class RemoteRelationalSyntax[A](self: Remote[A]) {
 
   final def <(that: Remote[A]): Remote[Boolean] =
