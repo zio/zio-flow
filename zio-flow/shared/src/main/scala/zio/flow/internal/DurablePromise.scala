@@ -1,4 +1,4 @@
-package zio.flow.server
+package zio.flow.internal
 
 import java.io.IOException
 

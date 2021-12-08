@@ -1,4 +1,4 @@
-package zio.flow.zFlow
+package zio.flow.internal
 
 import java.time.Duration
 

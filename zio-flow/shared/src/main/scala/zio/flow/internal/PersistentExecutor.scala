@@ -1,13 +1,12 @@
-package zio.flow.server
+package zio.flow.internal
 
 import java.io.IOException
 
 import zio._
 import zio.clock._
 import zio.flow._
-import zio.flow.server.PersistentExecutor.{ State, TState }
+import zio.flow.internal.PersistentExecutor.{ State, TState }
 import zio.flow.ZFlow._
-import zio.flow.zFlow.ZFlowExecutor
 import zio.schema.Schema
 
 final case class PersistentExecutor(
