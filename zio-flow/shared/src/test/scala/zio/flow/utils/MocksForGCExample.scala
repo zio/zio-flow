@@ -5,7 +5,7 @@ import java.net.URI
 import zio.clock.Clock
 import zio.console.Console
 import zio.flow.GoodcoverUseCase.Policy
-import zio.flow.zFlow.ZFlowExecutor.InMemory
+import zio.flow.internal.ZFlowExecutor.InMemory
 import zio.flow.{ ActivityError, Operation, OperationExecutor }
 import zio.{ Has, Ref, ZIO, console }
 
