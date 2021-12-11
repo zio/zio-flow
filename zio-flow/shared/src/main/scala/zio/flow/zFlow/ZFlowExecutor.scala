@@ -367,6 +367,10 @@ object ZFlowExecutor {
                 }
               )
           loop(initial)
+
+      case Apply(_) => ???
+
+      case Fold(_, _, _) => ???
       }
   }
 
