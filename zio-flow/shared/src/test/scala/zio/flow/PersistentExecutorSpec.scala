@@ -92,6 +92,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testM("Test Activity") {
       val compileResult = ZFlow.RunActivity(12, testActivity).evaluateLivePersistent(Schema[Int], Schema[ActivityError])
       assertM(compileResult)(equalTo(12))
+    },
+    testM("Test Iterate") {
+      val flow = ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
+      val compileResult = flow.evaluateLivePersistent(Schema[Int], nothingSchema)
+      assertM(compileResult)(equalTo(10))
     }
   )
 

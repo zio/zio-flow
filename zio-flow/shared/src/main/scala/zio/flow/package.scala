@@ -1,6 +1,5 @@
 package zio
 
-import scala.language.implicitConversions
 package object flow {
   type ActivityError = Throwable
 

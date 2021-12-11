@@ -112,6 +112,8 @@ final case class PersistentExecutor(
             case Instruction.Continuation(onError, _) :: newStack =>
               ref.update(_.copy(current = onError.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
+            case Instruction.PopFallback :: _ =>
+              ???
           }
         }
 
@@ -235,7 +237,7 @@ final case class PersistentExecutor(
 
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
-          case RetryUntil =>
+          case RetryUntil => ???
             // TODO : get the tstate. If there s a fallback, do it right away. Otherwise, enter suspended mode.(Set the durable promise)
             //TODO : Modify alters durable promise.
             //TODO : Some way of resuming a workflow (from the outside)
@@ -254,14 +256,14 @@ final case class PersistentExecutor(
 //              }
 //            } yield ()
 
-          case OrTry(left, right) =>
-            for {
-              state <- ref.get
-              _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
-                case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
-                case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
-              }
-            } yield ()
+          case OrTry(left, right) => ???
+            // for {
+            //   state <- ref.get
+            //   _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
+            //     case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
+            //     case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
+            //   }
+            // } yield ()
 
           case Await(execFlow) =>
             val joined = for {
@@ -297,39 +299,50 @@ final case class PersistentExecutor(
 
             variable.flatMap(vref => onSuccess(lit((name, vref))))
 
-          case iterate0@Iterate(_, _, _) => ???
-          //TODO :
+          case Iterate(initial, step0, predicate) =>
+            ref.modify { state =>
+              val tempVarCounter = state.tempVarCounter
+              val tempVarName = s"_zflow_tempvar_${tempVarCounter}"
 
-          //1. create a variable to hold an A (state type)
-          //2. evaluate the initial A
-          //3. store the A inside the variable
-          //4. begin the loop
-          // 4.1 Test the predicate on the variable `A`
-          // 4.2 If the predicate is true, :
-          //    4.2.1 then update the current flow to the flow we get from step function
-          //    4.2.2 push a new continuation to the stack that will continue the loop
-          //  4.3 If the predicate is false,:
-          //      4.3.1 get the value of the temp variable
-          //      4.3.2 delete the temp variable
-          //      4.3.3 inspect the stack - terminate with  a value (complete the promise) or continue by feeding this value into continuation
+              def iterate[R, E, A](
+                step: Remote[A] => ZFlow[R, E, A],
+                predicate: Remote[A] => Remote[Boolean],
+                stateVar: Remote[Variable[A]],
+                boolRemote: Remote[Boolean]
+              ): ZFlow[R, E, A] =
+                ZFlow.ifThenElse(boolRemote)(
+                  stateVar.get.flatMap { a =>
+                    step(a).flatMap { a =>
+                      stateVar.set(a).flatMap { _ =>
+                        val boolRemote = predicate(a)
+                        iterate(step, predicate, stateVar, boolRemote)
+                      }
+                    }
+                  },
+                  stateVar.get
+                )
 
-          //            ref.modify { state =>
-          //              val tempVarName = s"_zflow_tempvar_${state.tempVarCounter}"
-          //              val newState = state.copy(tempVarCounter = state.tempVarCounter + 1) //TODO Add helper
-          //              val zflow = for {
-          //                stateVar <- ZFlow.newVar(tempVarName, iterate0.initial).asInstanceOf[RemoteVariable[A]]
-          //                stateValue <- stateVar.get
-          //                boolRemote = iterate0.predicate(stateValue.asInstanceOf)
-          //                //stateValue <- ZFlow.ifThenElse(boolRemote)(ifTrue = ???, ifFalse = ???)
-          //              } yield stateValue
-          //
-          //              (zflow, newState)
-          //            }.flatMap(zflow => ref.update(_.copy(current = zflow)) *> step(ref))
+              val zFlow = for {
+                stateVar   <- ZFlow.newVar(tempVarName, initial)
+                stateValue <- stateVar.get
+                boolRemote <- predicate(stateValue)
+                _          <- ZFlow.log(s"stateValue = $stateValue")
+                _          <- ZFlow.log(s"boolRemote = $boolRemote")
+                _          <- ZFlow.log(s"boolRemote = $boolRemote")
+                stateValue <- iterate(step0, predicate, stateVar, boolRemote)
+              } yield stateValue
+
+              val updatedState = state.copy(current = zFlow, tempVarCounter = tempVarCounter + 1)
+
+              step(ref) -> updatedState
+            }.flatten
 
           case Log(message) =>
             val log = putStrLn(message).provideLayer(zio.console.Console.live)
 
             log *> onSuccess(())
+
+          case Fold2(_, _, _) => ???
         }
       )
     }
@@ -421,9 +434,8 @@ object PersistentExecutor {
     def getVariable(name: String): Option[SchemaAndValue[_]] = variables.get(name)
 
     //TODO scala map function
-    private lazy val lookupName: Map[Any, String] =
-      variables.map((t: (String, _)) => t._2 -> t._1)
-
+    // private lazy val lookupName: Map[Any, String] =
+    //   variables.map((t: (String, _)) => t._2 -> t._1)
   }
 
 }
@@ -439,7 +451,7 @@ sealed trait TState {
 
   def addReadVar(name: String): TState = self match {
     case TState.Empty => TState.Empty
-    case TState.Transaction(flow, readVars, compensation, _) => TState.Transaction(flow, readVars + name, compensation)
+    case TState.Transaction(flow, readVars, compensation, fallbacks) => TState.Transaction(flow, readVars + name, compensation, fallbacks)
   }
 
   def allVariables: Set[String] = self match {
