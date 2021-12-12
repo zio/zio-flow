@@ -653,14 +653,15 @@ object Remote {
       val lEval = left.evalWithSchema
       val rEval = right.evalWithSchema
       (lEval, rEval) match {
-        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(_, rightA))) =>
           Right(
             SchemaAndValue(
               Schema[Boolean],
               leftSchemaA.ordering.asInstanceOf[Ordering[Any]].compare(leftA, rightA) <= 0
             )
           )
-        case _                                                                                        => Left(self)
+        case _                                                                             =>
+          Left(self)
       }
     }
   }
