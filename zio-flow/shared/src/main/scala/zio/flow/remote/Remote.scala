@@ -212,24 +212,39 @@ object Remote {
       Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
   }
 
-  final case class Either0[A, B](either: Either[Remote[A], Remote[B]]) extends Remote[Either[A, B]] {
-    //TODO : Is this a valid function
-    def toLeftSchema[T, U](schema: Schema[T]): Schema[Either[T, U]] = ???
-
-    def toRightSchema[T, U](schema: Schema[T]): Schema[Either[U, T]] = ???
-
+  final case class Either0[A, B](either: Either[(Remote[A], Schema[B]), (Schema[A], Remote[B])])
+      extends Remote[Either[A, B]] {
     override def evalWithSchema: Either[Remote[Either[A, B]], SchemaAndValue[Either[A, B]]] = either match {
-      case Left(remoteA)  =>
+      case Left((remoteA, schemaB))  =>
         remoteA.evalWithSchema.fold(
-          remoteA => Left(Either0(Left(remoteA))),
-          a => Right(SchemaAndValue(toLeftSchema(a.schema), Left(a.value)))
+          remoteA => Left(Either0(Left((remoteA, schemaB)))),
+          a => Right(SchemaAndValue(Schema.EitherSchema(a.schema, schemaB), Left(a.value)))
         )
-      case Right(remoteB) =>
+      case Right((schemaA, remoteB)) =>
         remoteB.evalWithSchema.fold(
-          remoteB => Left(Either0(Right(remoteB))),
-          b => Right(SchemaAndValue(toRightSchema(b.schema), (Right(b.value))))
+          remoteB => Left(Either0(Right((schemaA, remoteB)))),
+          b => Right(SchemaAndValue(Schema.EitherSchema(schemaA, b.schema), (Right(b.value))))
         )
     }
+  }
+
+  final case class FlatMapEither[A, B, C](
+    either: Remote[Either[A, B]],
+    f: Remote[B] => Remote[Either[A, C]],
+    cSchema: Schema[C]
+  ) extends Remote[Either[A, C]] {
+    override def evalWithSchema: Either[Remote[Either[A, C]], SchemaAndValue[Either[A, C]]] =
+      either.evalWithSchema match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+          schemaAndValue.value match {
+            case Left(a)  => Right(SchemaAndValue(Schema.EitherSchema(schemaEither.left, cSchema), Left(a)))
+            case Right(b) => f(Remote(b)(schemaEither.right)).evalWithSchema
+            case _        =>
+              throw new IllegalStateException("Every remote FlatMapEither must be constructed using Remote[Either].")
+          }
+      }
   }
 
   final case class FoldEither[A, B, C](
@@ -238,17 +253,32 @@ object Remote {
     right: Remote[B] => Remote[C]
   ) extends Remote[C] {
     override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = either.evalWithSchema match {
-      case Left(_)                              => Left(self)
-      case Right(SchemaAndValue(schema, value)) =>
-        val schemaEither = schema.asInstanceOf[Schema.EitherSchema[A, B]]
-        value match {
+      case Left(_)               => Left(self)
+      case Right(schemaAndValue) =>
+        val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+        schemaAndValue.value match {
           case Left(a)  => left(Literal(a, schemaEither.left)).evalWithSchema
           case Right(b) => right(Literal(b, schemaEither.right)).evalWithSchema
           case _        => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
         }
-      case Right(_)                             =>
-        throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
     }
+  }
+
+  final case class SwapEither[A, B](
+    either: Remote[Either[A, B]]
+  ) extends Remote[Either[B, A]] {
+    override def evalWithSchema: Either[Remote[Either[B, A]], SchemaAndValue[Either[B, A]]] =
+      either.evalWithSchema match {
+        case Left(_)               => Left(self)
+        case Right(schemaAndValue) =>
+          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
+          Right(
+            SchemaAndValue(
+              Schema.EitherSchema(schemaEither.right, schemaEither.left),
+              schemaAndValue.value.asInstanceOf[Either[A, B]].swap
+            )
+          )
+      }
   }
 
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
@@ -639,11 +669,11 @@ object Remote {
       val rEval = right.evalWithSchema
       (lEval, rEval) match {
         //FIXME : fix when zio schema can compare Schemas
-        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+        case (Right(SchemaAndValue(_, leftA)), Right(SchemaAndValue(_, rightA))) =>
           Right(
             SchemaAndValue(Schema[Boolean], (leftA == rightA))
           )
-        case _                                                                                        => Left(self)
+        case _                                                                   => Left(self)
       }
     }
   }
@@ -667,8 +697,8 @@ object Remote {
         case Left(_)             => Schema.fail("Could not reduce.")
         case Right(schemaAndVal) =>
           schemaAndVal.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _) => schemaA
-            case _                              => Schema.fail[A]("Failure.")
+            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+            case _                                 => Schema.fail[A]("Failure.")
           }
       }
       list.eval match {
@@ -716,8 +746,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema.asInstanceOf[SchemaList[A]]
@@ -731,8 +761,8 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     schema match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
+                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case _                                 =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
                     schemaAndValue.schema
@@ -967,22 +997,22 @@ object Remote {
 
         case (AddNumeric(left1, right1, numeric1), AddNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (DivNumeric(left1, right1, numeric1), DivNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (MulNumeric(left1, right1, numeric1), MulNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (PowNumeric(left1, right1, numeric1), PowNumeric(left2, right2, numeric2)) =>
           loop(left1, left2) &&
-            loop(right1, right1) &&
+            loop(right1, right2) &&
             (numeric1 == numeric2)
 
         case (NegationNumeric(value1, numeric1), NegationNumeric(value2, numeric2)) =>
@@ -990,9 +1020,9 @@ object Remote {
 
         case (l: Either0[l1, l2], Either0(either2)) =>
           (l.either, either2) match {
-            case (Left(l), Left(r))   => loop(l, r)
-            case (Right(l), Right(r)) => loop(l, r)
-            case _                    => false
+            case (Left((l, _)), Left((r, _)))   => loop(l, r)
+            case (Right((_, l)), Right((_, r))) => loop(l, r)
+            case _                              => false
           }
 
         case (
@@ -1039,7 +1069,7 @@ object Remote {
         case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
           loop(predicate1, predicate2) &&
             loop(ifTrue1, ifTrue2) &&
-            loop(ifFalse2, ifFalse2)
+            loop(ifFalse1, ifFalse2)
 
         case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
           // TODO: Support `==` and `hashCode` for `Sortable`.
@@ -1080,8 +1110,13 @@ object Remote {
     loop(self, that)
   }
 
-  implicit def either[A, B](either0: Either[Remote[A], Remote[B]]): Remote[Either[A, B]] =
-    Either0(either0)
+  def sequenceEither[A, B](
+    either: Either[Remote[A], Remote[B]]
+  )(implicit aSchema: Schema[A], bSchema: Schema[B]): Remote[Either[A, B]] =
+    Either0(either match {
+      case Left(l)  => Left((l, bSchema))
+      case Right(r) => Right((aSchema, r))
+    })
 
   def fromEpochSec(seconds: Remote[Long]): Remote[Instant] =
     Remote.InstantFromLong(seconds)
