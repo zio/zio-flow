@@ -47,7 +47,7 @@ object DurableLog {
     topics: Ref[Map[String, Topic]],
     indexedStore: IndexedStore
   ) extends DurableLog {
-    def append(topic: String, value: Chunk[Byte]): IO[IOException, Long]                 =
+    def append(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
       getTopic(topic).flatMap { case Topic(hub, semaphore) =>
         semaphore.withPermit {
           indexedStore.put(topic, value).flatMap { position =>
@@ -80,7 +80,7 @@ object DurableLog {
     private def collectFrom(
       stream: ZStream[Any, IOException, (Chunk[Byte], Long)],
       position: Long
-    ): ZStream[Any, IOException, Chunk[Byte]]       =
+    ): ZStream[Any, IOException, Chunk[Byte]] =
       stream.collect { case (value, index) if index >= position => value }
 
     private def getTopic(topic: String): UIO[Topic] =
@@ -88,7 +88,7 @@ object DurableLog {
         topics.get(topic) match {
           case Some(Topic(hub, semaphore)) =>
             Topic(hub, semaphore) -> topics
-          case None                        =>
+          case None =>
             val hub       = unsafeMakeHub[(Chunk[Byte], Long)]()
             val semaphore = unsafeMakeSemaphore(1)
             Topic(hub, semaphore) -> topics.updated(topic, Topic(hub, semaphore))
