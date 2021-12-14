@@ -17,7 +17,7 @@
 package zio.flow.remote
 
 import zio.flow.zFlow.ZFlow
-import zio.flow.{ ActivityError, ExecutingFlow, FlowId }
+import zio.flow.{ActivityError, ExecutingFlow, FlowId}
 
 class RemoteExecutingFlowSyntax[A](self: Remote[A]) {
 

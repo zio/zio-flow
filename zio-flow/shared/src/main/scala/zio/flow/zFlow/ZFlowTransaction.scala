@@ -21,7 +21,8 @@ import zio.flow.remote.Remote
 sealed trait ZFlowTransaction {
 
   /**
-   * Suspends the transaction until the variables in the transaction are modified from the outside.
+   * Suspends the transaction until the variables in the transaction are
+   * modified from the outside.
    */
   def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Any]
 }

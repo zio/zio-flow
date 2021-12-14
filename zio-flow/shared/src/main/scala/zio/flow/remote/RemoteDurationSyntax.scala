@@ -17,7 +17,7 @@
 package zio.flow.remote
 
 import java.time.Duration
-import java.time.temporal.{ Temporal, TemporalAmount }
+import java.time.temporal.{Temporal, TemporalAmount}
 
 class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 

@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.remote.{ Remote, RemoteEitherSyntax }
+import zio.flow.remote._
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.random.Random
 import zio.schema.Schema
@@ -109,7 +109,12 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
       test("return the first left result") {
         RemoteEitherSyntax.collectAll(Remote(List(Right(2), Left("V"), Right(9), Right(0), Left("P")))) <-> Left("V")
       }
-    )
+    ),
+    testM("toTry") {
+      check(Gen.either(Gen.throwable, Gen.anyInt)) { either =>
+        Remote(either).toTry <-> either.toTry
+      }
+    }
   )
 
   private def partialLift[A, B: Schema](f: A => B): Remote[A] => Remote[B] = a =>

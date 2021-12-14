@@ -96,7 +96,8 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
 
   final def toOption: Remote[Option[B]] = handleEither(_ => Remote(None), Remote.Some0(_))
 
-  def toTry(implicit ev: A <:< Throwable): Try[B] = ???
+  def toTry(implicit ev: A <:< Throwable, schema: Schema[B]): Remote[Try[B]] =
+    handleEither(a => Remote.Try(Left(a.widen(ev) -> schema)), b => Remote.Try(Right(b)))
 }
 
 object RemoteEitherSyntax {
