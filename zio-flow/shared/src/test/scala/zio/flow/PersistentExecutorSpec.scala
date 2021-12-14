@@ -13,7 +13,7 @@ import zio.test._
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   implicit val nothingSchema: Schema[Nothing]              = Schema.fail("Nothing schema")
-  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
+  //implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
 
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
