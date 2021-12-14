@@ -697,7 +697,7 @@ object Remote {
         case Left(_)             => Schema.fail("Could not reduce.")
         case Right(schemaAndVal) =>
           schemaAndVal.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _) => schemaA
+            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
             case _                              => Schema.fail[A]("Failure.")
           }
       }
@@ -731,50 +731,49 @@ object Remote {
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
 
-    override def evalWithSchema: Either[Remote[Option[(A, List[A])]], SchemaAndValue[Option[(A, List[A])]]] = {
-      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]] = ???
+    override def evalWithSchema: Either[Remote[Option[(A, List[A])]], SchemaAndValue[Option[(A, List[A])]]] = ???
+//     { implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]] = ???
+//
+//      implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
 
-      implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
-
-      list.evalWithSchema.fold(
-        remote => Left(UnCons(remote)),
-        rightVal => {
-          val schemaAndValue = rightVal.asInstanceOf[SchemaAndValue[List[A]]]
-          Right(schemaAndValue.value.headOption match {
-            case Some(v) =>
-              SchemaAndValue(
-                toOptionSchema(
-                  toTupleSchema(
-                    (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
-                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-                    },
-                    schemaAndValue.schema.asInstanceOf[SchemaList[A]]
-                  )
-                ),
-                Some((v.asInstanceOf[A], schemaAndValue.value.tail.asInstanceOf[List[A]]))
-              )
-            case None    =>
-              val schema = schemaAndValue.schema.asInstanceOf[SchemaList[A]]
-              SchemaAndValue(
-                toOptionSchema(
-                  toTupleSchema(
-                    schema match {
-                      case Schema.Sequence(schemaA, _, _) => schemaA
-                      case _                              =>
-                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-                    },
-                    schemaAndValue.schema
-                  )
-                ),
-                None
-              )
-            case _       => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-          })
-        }
-      )
-    }
+//      list.evalWithSchema.fold(
+//        remote => Left(UnCons(remote)),
+//        rightVal => {
+//          val schemaAndValue = rightVal.asInstanceOf[SchemaAndValue[List[A]]]
+//          Right(schemaAndValue.value.headOption match {
+//            case Some(v) =>
+//              SchemaAndValue(
+//                toOptionSchema(
+//                  toTupleSchema(
+//                    (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
+//                      case Schema.Sequence(schemaA, _, _,_) => schemaA
+//                      case _                              =>
+//                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
+//                    },
+//                    schemaAndValue.schema.asInstanceOf[SchemaList[A]]
+//                  )
+//                ),
+//                Some((v.asInstanceOf[A], schemaAndValue.value.tail.asInstanceOf[List[A]]))
+//              )
+//            case None    =>
+//              val schema = schemaAndValue.schema.asInstanceOf[SchemaList[A]]
+//              SchemaAndValue(
+//                toOptionSchema(
+//                  toTupleSchema(
+//                    schema match {
+//                      case Schema.Sequence(schemaA, _, _, _) => schemaA
+//                      case _                              =>
+//                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
+//                    },
+//                    schemaAndValue.schema
+//                  )
+//                ),
+//                None
+//              )
+//            case _       => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
+//          })
+//        }
+//      )
   }
 
   final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {

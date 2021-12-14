@@ -1,7 +1,8 @@
 package zio.flow.server
 
+import zio.flow.remote.Remote
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.flow.{Remote, ZFlow}
+import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.ignore

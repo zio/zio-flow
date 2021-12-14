@@ -246,19 +246,19 @@ final case class PersistentExecutor(
               case TState.Empty => ZIO.die(new IllegalStateException("Invalid state. TState should not be empty in RetryUntil."))
               case transaction @ TState.Transaction(_,_,_,fallbacks) => transaction.fallBacks match {
                 case ::(head, next) => ref.update(_.copy(current = head, tstate = transaction.popFallback))
-                case Nil => ref.update(_.copy(current = transaction.flow)) *> ref.get.flatMap { state => workflows.update {map => map.updated(state.workflowId, state)}}
+              //  case Nil => ref.update(_.copy(current = transaction.flow)) *> ref.get.flatMap { state => workflows.update {map => map.updated(state.workflowId, state)}}
               }
             })
 
 
-          case OrTry(left, right) =>
-            for {
-              state <- ref.get
-              _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
-                case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
-                case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
-              }
-            } yield ()
+          case OrTry(left, right) => ???
+//            for {
+//              state <- ref.get
+//              _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.toRemote)) match {
+//                case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
+//                case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
+//              }
+//            } yield ()
 
           case Await(execFlow) =>
             val joined = for {
