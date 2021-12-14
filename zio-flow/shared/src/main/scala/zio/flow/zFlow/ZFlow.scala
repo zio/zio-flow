@@ -1,10 +1,10 @@
 package zio.flow.zFlow
 
-import java.time.{ Duration, Instant }
+import java.time.{Duration, Instant}
 
-import zio.flow.remote.{ Remote, RemoteEitherSyntax }
+import zio.flow.remote.{Remote, RemoteEitherSyntax}
 import zio.flow.zFlow.ZFlow.Die
-import zio.flow.{ Activity, ActivityError, ExecutingFlow, Variable }
+import zio.flow.{Activity, ActivityError, ExecutingFlow, Variable}
 import zio.schema.Schema
 
 // ZFlow - models a workflow
@@ -76,12 +76,13 @@ sealed trait ZFlow[-R, +E, +A] {
       .catchAll(_ => that.map(b => Remote.sequenceEither(Right(b))(a1Schema, bSchema)))
 
   /**
-   * Attempts to execute this flow, but then, if this flow is suspended due to performing a retry
-   * operation inside a transaction (because conditions necessary for executing this flow are not
-   * yet ready), then will switch over to the specified flow.
+   * Attempts to execute this flow, but then, if this flow is suspended due to
+   * performing a retry operation inside a transaction (because conditions
+   * necessary for executing this flow are not yet ready), then will switch over
+   * to the specified flow.
    *
-   * If this flow never suspends, then it will always execute to success or failure, and the
-   * specified flow will never be executed.
+   * If this flow never suspends, then it will always execute to success or
+   * failure, and the specified flow will never be executed.
    */
   final def orTry[R1 <: R, E1 >: E, A1 >: A](that: ZFlow[R1, E1, A1]): ZFlow[R1, E1, A1] =
     ZFlow.OrTry(self, that)

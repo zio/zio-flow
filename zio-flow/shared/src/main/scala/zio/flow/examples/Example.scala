@@ -1,9 +1,9 @@
 package zio.flow.examples
 
-import zio.flow.remote.{ Remote, _ }
+import zio.flow.remote.{Remote, _}
 import zio.flow.zFlow.ZFlow
-import zio.flow.{ Activity, ActivityError, EmailRequest, Variable }
-import zio.schema.{ DeriveSchema, Schema }
+import zio.flow.{Activity, ActivityError, EmailRequest, Variable}
+import zio.schema.{DeriveSchema, Schema}
 
 object Example {
   // Remote[A] => Remote[(B, A)]
@@ -62,17 +62,17 @@ object EmailCampaign {
     Activity[EmailRequest, Unit]("send-email", "sends an email", ???, ???, ???)
 
   /**
-   * 1. Get reviews of restaurants in a certain category (e.g. "Asian").
-   * 2. If there are 2 days of good reviews, we send a coupon to people
-   * in that city for restaurants in that category.
+   *   1. Get reviews of restaurants in a certain category (e.g. "Asian"). 2. If
+   *      there are 2 days of good reviews, we send a coupon to people in that
+   *      city for restaurants in that category.
    */
   lazy val emailCampaign: ZFlow[(City, Cuisine), ActivityError, Any] = {
     def waitForPositiveReviews(restaurants: Remote[List[Restaurant]]) =
       ZFlow(0).iterate((count: Remote[Int]) =>
         for {
-          reviews  <- ZFlow.foreach(restaurants) { restaurant =>
-                        getReviews(restaurant)
-                      }
+          reviews <- ZFlow.foreach(restaurants) { restaurant =>
+                       getReviews(restaurant)
+                     }
           average  <- ZFlow(reviews.sum / reviews.length)
           newCount <- ZFlow((average > 5).ifThenElse(count + 1, 0))
           _        <- ZFlow.ifThenElse(newCount !== 3)(ZFlow.sleep(Remote.ofDays(1L)), ZFlow.unit)
@@ -89,10 +89,10 @@ object EmailCampaign {
 }
 
 /**
- * A real-world example that models the workflow of uber-eats.
- * The workflow is launched when the user places an order on the app.
- * There are 2 phases to the workflow - 1. Restaurant phase and 2. Rider phase.
- * The Rider phase begins when the Restaurant phase reaches completion.
+ * A real-world example that models the workflow of uber-eats. The workflow is
+ * launched when the user places an order on the app. There are 2 phases to the
+ * workflow - 1. Restaurant phase and 2. Rider phase. The Rider phase begins
+ * when the Restaurant phase reaches completion.
  */
 object UberEatsExample {
   type Restaurant = String
@@ -158,10 +158,10 @@ object UberEatsExample {
   ): ZFlow[(User, Address, Restaurant, Order), ActivityError, Unit] =
     for {
       orderConfStatus <- getOrderConfirmationStatus(restaurant, order)
-      _               <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
-                           processOrderWorkflow,
-                           cancelOrderWorkflow(restaurant, order)
-                         )
+      _ <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
+             processOrderWorkflow,
+             cancelOrderWorkflow(restaurant, order)
+           )
     } yield ()
 
   lazy val getOrderState: Activity[(User, Restaurant, Order), OrderState]         = ???
@@ -181,11 +181,11 @@ object UberEatsExample {
       ZFlow(OrderState.Waiting: OrderState).iterate((orderState: Remote[OrderState]) =>
         for {
           currOrderState <- getOrderState(user, restaurant, order)
-          _              <- ZFlow.ifThenElse(currOrderState !== orderState)(
-                              pushOrderStatusNotification(user, restaurant, order),
-                              ZFlow.unit
-                            )
-          _              <- ZFlow.sleep(Remote.ofMinutes(2L))
+          _ <- ZFlow.ifThenElse(currOrderState !== orderState)(
+                 pushOrderStatusNotification(user, restaurant, order),
+                 ZFlow.unit
+               )
+          _ <- ZFlow.sleep(Remote.ofMinutes(2L))
         } yield currOrderState
       )(_ !== (OrderState.FoodPacked: OrderState))
 

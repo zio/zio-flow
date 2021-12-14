@@ -9,7 +9,7 @@ final case class Activity[-R, A](
   operation: Operation[R, A],
   check: ZFlow[R, ActivityError, A],
   compensate: ZFlow[A, ActivityError, Any]
-)               { self =>
+) { self =>
   def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] = ZFlow.RunActivity(input, self)
 
   def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit ev: (R1, R2) <:< R): ZFlow[Any, ActivityError, A] =
