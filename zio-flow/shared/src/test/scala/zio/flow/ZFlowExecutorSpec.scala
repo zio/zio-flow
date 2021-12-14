@@ -3,24 +3,23 @@ package zio.flow
 import java.net.URI
 import java.time.Instant
 
-import zio.flow.remote.{ Remote, _ }
+import zio.flow.remote.{Remote, _}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockInMemoryTestClock
 import zio.flow.zFlow.ZFlow
-import zio.flow.zFlow.ZFlowExecutor.InMemory.{ CompileStatus, State, TState }
+import zio.flow.zFlow.ZFlowExecutor.InMemory.{CompileStatus, State, TState}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
-import zio.test.Assertion.{ dies, equalTo, fails, hasMessage }
+import zio.test.Assertion.{dies, equalTo, fails, hasMessage}
 import zio.test.TestAspect.ignore
 import zio.test._
-import zio.{ Promise, Ref }
+import zio.{Promise, Ref}
 
 object ZFlowExecutorSpec extends DefaultRunnableSpec {
 
   implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing does not need to be serialised.")
 
-  implicit def variableSchema[A]: Schema[Variable[A]]      = Schema.fail("Variable schema")
-  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
+  implicit def variableSchema[A]: Schema[Variable[A]] = Schema.fail("Variable schema")
 
   val ifError: Remote[Int] => ZFlow[Any, Nothing, Int]      = r => ZFlow.succeed(r + 5)
   val ifSuccess: Remote[String] => ZFlow[Any, Nothing, Int] = r => ZFlow.succeed(r.length)
@@ -174,9 +173,9 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
   val suite2: Spec[Environment, TestFailure[Nothing], TestSuccess] =
     suite("Test RetryUntil")(testM("Test compile status of RetryUntil") {
       val result = for {
-        inMemory      <- mockInMemoryTestClock
-        promise       <- Promise.make[Nothing, String]
-        ref           <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
+        inMemory <- mockInMemoryTestClock
+        promise  <- Promise.make[Nothing, String]
+        ref      <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
         compileResult <-
           inMemory.compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))
       } yield compileResult
