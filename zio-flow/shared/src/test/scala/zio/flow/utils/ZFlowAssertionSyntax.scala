@@ -2,7 +2,6 @@ package zio.flow.utils
 
 import java.io.IOException
 import java.net.URI
-
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.flow.server.{ DurableLog, KeyValueStore, PersistentExecutor }

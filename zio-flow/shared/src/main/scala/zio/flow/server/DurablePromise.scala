@@ -1,7 +1,6 @@
 package zio.flow.server
 
 import java.io.IOException
-
 import zio._
 import zio.console.putStrLn
 import zio.schema._
@@ -19,5 +18,4 @@ final case class DurablePromise[E, A](promiseId: String, durableLog: DurableLog,
 object DurablePromise {
   def make[E, A](promiseId: String, durableLog: DurableLog, promise: Promise[E, A]): DurablePromise[E, A] =
     DurablePromise(promiseId, durableLog, promise)
-
 }

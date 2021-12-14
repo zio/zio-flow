@@ -2,7 +2,6 @@ package zio.flow.server
 
 import java.io.IOException
 import java.time.Duration
-
 import zio._
 import zio.clock._
 import zio.console.putStrLn
@@ -10,6 +9,7 @@ import zio.flow._
 import zio.flow.remote.{Remote, SchemaAndValue}
 import zio.flow.zFlow.{ZFlow, ZFlowExecutor}
 import zio.schema.DeriveSchema.gen
+
 import zio.schema._
 
 final case class PersistentExecutor(
@@ -91,7 +91,7 @@ final case class PersistentExecutor(
             case Instruction.Continuation(_, onSuccess) :: newStack =>
               ref.update(_.copy(current = onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
-            case Instruction.PopFallback :: newStack => ref.update(state => state.copy(stack = newStack, tstate = state.tstate.popFallback.getOrElse(state.tstate))) *> onSuccess(value) //TODO : Fail in an elegant way
+            case Instruction.PopFallback :: newStack => ref.update(state => state.copy(stack = newStack, tstate = state.tstate.popFallback)) *> onSuccess(value) //TODO : Fail in an elegant way
           }
         }
 
@@ -333,14 +333,16 @@ final case class PersistentExecutor(
 
     val durablePZio =
       Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
-    val stateZio = durablePZio.map(dp =>
+    val stateZio    = durablePZio.map(dp =>
+
       State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, Nil, PersistentCompileStatus.Running)
     )
 
     (for {
-      state <- stateZio
-      ref <- Ref.make[State[E, A]](state)
-      _ <- step(ref)
+
+      state  <- stateZio
+      ref    <- Ref.make[State[E, A]](state)
+      _      <- step(ref)
       result <- state.result.awaitEither
     } yield result).orDie.absolve
   }
@@ -436,7 +438,7 @@ sealed trait TState {
 
   def addReadVar(name: String): TState = self match {
     case TState.Empty => TState.Empty
-    case TState.Transaction(flow, readVars, compensation, _) => TState.Transaction(flow, readVars + name, compensation)
+    case TState.Transaction(flow, readVars, compensation, _) => TState.Transaction(flow, readVars + name, compensation, Nil)
   }
 
   def allVariables: Set[String] = self match {
@@ -455,6 +457,8 @@ sealed trait TState {
       case TState.Empty => None
       case tstate@TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = zflow :: fallBacks))
     }
+
+  def popFallback : TState = ???
 }
 
 object TState {
@@ -467,7 +471,7 @@ object TState {
                                 compensation: ZFlow[Any, ActivityError, Any],
                                 fallBacks: List[ZFlow[Any, _, _]]
                               ) extends TState { self =>
-    def popFallback : TState =
+    override def popFallback : TState =
       self.copy(fallBacks = fallBacks.drop(1))
   }
 
