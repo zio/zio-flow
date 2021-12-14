@@ -43,7 +43,7 @@ object IndexedStore {
     def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
       topics.modify { topics =>
         topics.get(topic) match {
-          case Some(values) => values.length.toLong -> topics.updated(topic, values.appended(value))
+          case Some(values) => values.length.toLong -> topics.updated(topic, values :+ value)
           case None         => 0L                   -> topics.updated(topic, Chunk(value))
         }
       }
