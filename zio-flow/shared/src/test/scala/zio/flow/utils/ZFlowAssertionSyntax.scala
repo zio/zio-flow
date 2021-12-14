@@ -8,11 +8,13 @@ import zio.flow.server.{ DurableLog, KeyValueStore, PersistentExecutor }
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
 import zio.flow.zFlow.ZFlow
 import zio.flow.zFlow.ZFlowExecutor.InMemory
-import zio.flow.{ Activity, ActivityError, Operation, OperationExecutor }
+import zio.flow.{Activity, ActivityError, Operation, OperationExecutor}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.stream.ZStream
 import zio.{ Chunk, Has, IO, Ref, ZIO, console }
+import zio.{Has, Ref, ZIO, console}
+
 
 object ZFlowAssertionSyntax {
 

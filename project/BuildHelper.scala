@@ -4,17 +4,15 @@ import explicitdeps.ExplicitDepsPlugin.autoImport._
 import sbtcrossproject.CrossPlugin.autoImport._
 import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport._
 import sbtbuildinfo._
-import dotty.tools.sbtplugin.DottyPlugin.autoImport._
 import BuildInfoKeys._
-import scalafix.sbt.ScalafixPlugin.autoImport._
 
 object BuildHelper {
-  val Scala211   = "2.11.12"
-  val Scala212   = "2.12.13"
-  val Scala213   = "2.13.4"
-  val ScalaDotty = "3.0.0-M3"
+  val Scala211 = "2.11.12"
+  val Scala212 = "2.12.15"
+  val Scala213 = "2.13.7"
+  val Scala3   = "3.1.0"
 
-  val SilencerVersion = "1.7.2"
+  val SilencerVersion = "1.7.7"
 
   private val stdOptions = Seq(
     "-deprecation",
@@ -26,7 +24,7 @@ object BuildHelper {
     if (sys.env.contains("CI")) {
       Seq("-Xfatal-warnings")
     } else {
-      Nil // to enable Scalafix locally
+      Nil
     }
   }
 
@@ -50,27 +48,15 @@ object BuildHelper {
 
   def buildInfoSettings(packageName: String) =
     Seq(
-      buildInfoKeys := Seq[BuildInfoKey](organization, moduleName, name, version, scalaVersion, sbtVersion, isSnapshot),
+      buildInfoKeys    := Seq[BuildInfoKey](organization, moduleName, name, version, scalaVersion, sbtVersion, isSnapshot),
       buildInfoPackage := packageName
     )
 
   val dottySettings = Seq(
-    crossScalaVersions += ScalaDotty,
-    scalacOptions ++= {
-      if (isDotty.value)
-        Seq("-noindent")
-      else
-        Seq()
-    },
-    scalacOptions --= {
-      if (isDotty.value)
-        Seq("-Xfatal-warnings")
-      else
-        Seq()
-    },
+    crossScalaVersions += Scala3,
     sources in (Compile, doc) := {
       val old = (Compile / doc / sources).value
-      if (isDotty.value) {
+      if (scalaVersion.value == Scala3) {
         Nil
       } else {
         old
@@ -78,7 +64,7 @@ object BuildHelper {
     },
     parallelExecution in Test := {
       val old = (Test / parallelExecution).value
-      if (isDotty.value) {
+      if (scalaVersion.value == Scala3) {
         false
       } else {
         old
@@ -129,9 +115,9 @@ object BuildHelper {
     initialCommands in Compile in console := initialCommandsStr
   )
 
-  def extraOptions(scalaVersion: String, isDotty: Boolean, optimize: Boolean) =
+  def extraOptions(scalaVersion: String, optimize: Boolean) =
     CrossVersion.partialVersion(scalaVersion) match {
-      case _ if isDotty  =>
+      case Some((3, _)) =>
         Seq(
           "-language:implicitConversions",
           "-Xignore-scala2-macros"
@@ -173,7 +159,7 @@ object BuildHelper {
           "-Xmax-classfile-name",
           "242"
         ) ++ std2xOptions
-      case _             => Seq.empty
+      case _ => Seq.empty
     }
 
   def platformSpecificSources(platform: String, conf: String, baseDirectory: File)(versions: String*) = for {
@@ -183,7 +169,7 @@ object BuildHelper {
     if result.exists
   } yield result
 
-  def crossPlatformSources(scalaVer: String, platform: String, conf: String, baseDir: File, isDotty: Boolean) = {
+  def crossPlatformSources(scalaVer: String, platform: String, conf: String, baseDir: File) = {
     val versions = CrossVersion.partialVersion(scalaVer) match {
       case Some((2, 11)) =>
         List("2.11", "2.11+", "2.11-2.12", "2.x")
@@ -191,9 +177,9 @@ object BuildHelper {
         List("2.12", "2.11+", "2.12+", "2.11-2.12", "2.12-2.13", "2.x")
       case Some((2, 13)) =>
         List("2.13", "2.11+", "2.12+", "2.13+", "2.12-2.13", "2.x")
-      case _ if isDotty  =>
+      case Some((3, _)) =>
         List("dotty", "2.11+", "2.12+", "2.13+", "3.x")
-      case _             =>
+      case _ =>
         List()
     }
     platformSpecificSources(platform, conf, baseDir)(versions: _*)
@@ -205,8 +191,7 @@ object BuildHelper {
         scalaVersion.value,
         crossProjectPlatform.value.identifier,
         "main",
-        baseDirectory.value,
-        isDotty.value
+        baseDirectory.value
       )
     },
     Test / unmanagedSourceDirectories ++= {
@@ -214,38 +199,27 @@ object BuildHelper {
         scalaVersion.value,
         crossProjectPlatform.value.identifier,
         "test",
-        baseDirectory.value,
-        isDotty.value
+        baseDirectory.value
       )
     }
   )
 
   def stdSettings(prjName: String) = Seq(
-    name := s"$prjName",
-    crossScalaVersions := Seq(Scala211, Scala212, Scala213),
+    name                     := s"$prjName",
+    crossScalaVersions       := Seq(Scala211, Scala212, Scala213),
     ThisBuild / scalaVersion := Scala213,
-    scalacOptions := stdOptions ++ extraOptions(scalaVersion.value, isDotty.value, optimize = !isSnapshot.value),
+    scalacOptions            := stdOptions ++ extraOptions(scalaVersion.value, optimize = !isSnapshot.value),
     libraryDependencies ++= {
-      if (isDotty.value)
+      if (scalaVersion.value == Scala3)
         Seq(
-          ("com.github.ghik" % s"silencer-lib_$Scala213" % SilencerVersion % Provided)
-            .withDottyCompat(scalaVersion.value)
+          "com.github.ghik" % s"silencer-lib_$Scala213" % SilencerVersion % Provided
         )
       else
         Seq(
           "com.github.ghik" % "silencer-lib" % SilencerVersion % Provided cross CrossVersion.full,
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full),
-          compilerPlugin("org.typelevel"  %% "kind-projector"  % "0.11.3" cross CrossVersion.full)
+          compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full)
         )
     },
-    semanticdbEnabled := !isDotty.value, // enable SemanticDB
-    semanticdbOptions += "-P:semanticdb:synthetics:on",
-    semanticdbVersion := scalafixSemanticdb.revision, // use Scalafix compatible version
-    ThisBuild / scalafixScalaBinaryVersion := CrossVersion.binaryScalaVersion(scalaVersion.value),
-    ThisBuild / scalafixDependencies ++= List(
-      "com.github.liancheng" %% "organize-imports" % "0.4.4",
-      "com.github.vovapolu"  %% "scaluzzi"         % "0.1.16"
-    ),
     parallelExecution in Test := true,
     incOptions ~= (_.withLogRecompileOnMacro(false)),
     autoAPIMappings := true,
@@ -263,7 +237,7 @@ object BuildHelper {
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, x)) if x <= 12 =>
           Seq(compilerPlugin(("org.scalamacros" % "paradise" % "2.1.1").cross(CrossVersion.full)))
-        case _                       => Seq.empty
+        case _ => Seq.empty
       }
     }
   )
@@ -271,7 +245,7 @@ object BuildHelper {
   def macroDefinitionSettings = Seq(
     scalacOptions += "-language:experimental.macros",
     libraryDependencies ++= {
-      if (isDotty.value) Seq()
+      if (scalaVersion.value == Scala3) Seq()
       else
         Seq(
           "org.scala-lang" % "scala-reflect"  % scalaVersion.value % "provided",
@@ -287,20 +261,11 @@ object BuildHelper {
 
   def nativeSettings = Seq(
     Test / skip := true,
-    doc / skip := true,
+    doc / skip  := true,
     SettingKey[Boolean](
       "ide-skip-project" // Exclude from Intellij because Scala Native projects break it - https://github.com/scala-native/scala-native/issues/1007#issuecomment-370402092
-    ) := true,
+    )                       := true,
     Compile / doc / sources := Seq.empty
-  )
-
-  val scalaReflectTestSettings: List[Setting[_]] = List(
-    libraryDependencies ++= {
-      if (isDotty.value)
-        Seq(("org.scala-lang" % "scala-reflect" % Scala213 % Test).withDottyCompat(scalaVersion.value))
-      else
-        Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value % Test)
-    }
   )
 
   def welcomeMessage = onLoadMessage := {
@@ -319,8 +284,6 @@ object BuildHelper {
         |
         |Useful sbt tasks:
         |${item("build")} - Prepares sources, compiles and runs tests.
-        |${item("prepare")} - Prepares sources by applying both scalafix and scalafmt
-        |${item("fix")} - Fixes sources files using scalafix
         |${item("fmt")} - Formats source files using scalafmt
         |${item("~compileJVM")} - Compiles all JVM modules (file-watch enabled)
         |${item("testJVM")} - Runs all JVM tests
