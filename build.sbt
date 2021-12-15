@@ -62,7 +62,6 @@ lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
 
 lazy val zioFlowJVM = zioFlow.jvm
-  .settings(dottySettings)
 
 lazy val docs = project
   .in(file("zio-flow-docs"))
@@ -93,7 +92,5 @@ lazy val examples = crossProject(JSPlatform, JVMPlatform)
   .dependsOn(zioFlow)
 
 lazy val examplesJS = examples.js
-  .settings(dottySettings)
 
 lazy val examplesJVM = examples.jvm
-  .settings(dottySettings)
