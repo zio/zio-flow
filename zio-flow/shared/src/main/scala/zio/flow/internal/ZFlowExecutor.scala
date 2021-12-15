@@ -39,9 +39,9 @@ object ZFlowExecutor {
   State:
     Variables          = Map[String, Ref[Value]]
     Current            = The current ZFlow
-    Continuation Stack = What to do AFTER producing the current ZFlow value
+    Instruction Stack = What to do AFTER producing the current ZFlow value
   TransactionalState:
-    NonTransactionl |
+    NonTransactional |
     Transactional(parent: TransactionalState, undoLogStack: Stack[ZFlow], localReadVariables: Set[String])
 
   On every transaction, capture new transaction details:
@@ -161,13 +161,13 @@ object ZFlowExecutor {
                              Promise
                                .make[E, A]
                                .flatMap(p1 =>
-                                 compile(p1, ref, input, fold.ifError(lit(error))) <* p1.await.to(promise)
+                                 compile(p1, ref, input, fold.ifError.provide(lit(error))) <* p1.await.to(promise)
                                ),
                            success =>
                              Promise
                                .make[E, A]
                                .flatMap(p2 =>
-                                 compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await
+                                 compile(p2, ref, input, fold.ifSuccess.provide(lit(success))) <* p2.await
                                    .to(promise)
                                    .forkDaemon
                                )
@@ -179,17 +179,17 @@ object ZFlowExecutor {
                                Promise
                                  .make[E, A]
                                  .flatMap(p1 =>
-                                   compile(p1, ref, input, fold.ifError(lit(error))) <* p1.await.to(promise)
+                                   compile(p1, ref, input, fold.ifError.provide(lit(error))) <* p1.await.to(promise)
                                  ),
                              success =>
                                Promise
                                  .make[E, A]
                                  .flatMap(p2 =>
-                                   compile(p2, ref, input, fold.ifSuccess(lit(success))) <* p2.await.to(promise)
+                                   compile(p2, ref, input, fold.ifSuccess.provide(lit(success))) <* p2.await.to(promise)
                                  )
                            )
-                           .forkDaemon *>
-                           ZIO.succeed(CompileStatus.Suspended)
+                           .forkDaemon
+                           .as(CompileStatus.Suspended)
           } yield status2
 
         case RunActivity(input, activity) =>
@@ -205,7 +205,7 @@ object ZFlowExecutor {
             status <- compile(promise, ref, input, flow.provide(lit(input)))
           } yield status
 
-        case Input(_) => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
+        case Input() => ZIO.succeed(input.asInstanceOf[A]).to(promise) as CompileStatus.Done
 
         case Ensuring(flow, finalizer) =>
           for {
@@ -359,12 +359,9 @@ object ZFlowExecutor {
         case iterate0 @ Iterate(_, _, _) =>
           val iterate = iterate0.asInstanceOf[Iterate[I, E, A]]
 
-          val Iterate(self, step, predicate) = iterate
+          val Iterate(initial, step, predicate) = iterate
 
-          def loop(a: A): ZIO[R, Nothing, CompileStatus] = {
-
-            val remoteA: Remote[A] = lit(a)
-
+          def loop(remoteA: Remote[A]): ZIO[R, Nothing, CompileStatus] =
             Promise
               .make[E, A]
               .flatMap(p1 =>
@@ -374,32 +371,21 @@ object ZFlowExecutor {
                       status <- compile(p1, ref, input, step(remoteA))
                       status <-
                         if (status == CompileStatus.Done)
-                          p1.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop))
+                          p1.await.run
+                            .flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, a => loop(lit(a))))
                         else
                           p1.await.run
-                            .flatMap(e => e.fold(cause => promise.halt(cause), loop))
+                            .flatMap(e => e.fold(cause => promise.halt(cause), a => loop(lit(a))))
                             .forkDaemon as CompileStatus.Suspended
                     } yield status
                   else
-                    promise.succeed(a) as CompileStatus.Done
+                    eval(remoteA).flatMap(a => promise.succeed(a) as CompileStatus.Done)
                 }
               )
-          }
+          loop(initial)
 
-          Promise
-            .make[E, A]
-            .flatMap(p =>
-              for {
-                status <- compile(p, ref, input, self)
-                status <-
-                  if (status == CompileStatus.Done)
-                    p.await.run.flatMap(e => e.fold(cause => promise.halt(cause) as CompileStatus.Done, loop(_)))
-                  else
-                    p.await.run
-                      .flatMap(e => e.fold(cause => promise.halt(cause), loop))
-                      .forkDaemon as CompileStatus.Suspended
-              } yield status
-            )
+        case Apply(lambda) =>
+          compile(promise, ref, (), lambda(lit(input)))
       }
   }
 
@@ -422,8 +408,9 @@ object ZFlowExecutor {
 
     final case class State(
       tstate: TState,
-      variables: Map[String, Ref[_]],
-      retry: UIO[Any] = ZIO.unit
+      variables: Map[String, Ref[_]], // TODO : variable should be case class (TRef, TReEntrantLock), instead of Ref
+      retry: UIO[Any] = ZIO.unit      // TODO : Delete this, use zio STM's retry mechanism
+      //TODO : Add a variable lock of type TReentrantLock
     ) {
       self =>
 

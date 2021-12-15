@@ -79,7 +79,7 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   def manualEvalReminderFlow(
     manualEvalDone: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
-    ZFlow(true),
+    Remote(true),
     (_: Remote[Boolean]) =>
       for {
         bool <- manualEvalDone
@@ -95,7 +95,7 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   def policyPaymentReminderFlow(
     renewPolicy: RemoteVariable[Boolean]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
-    ZFlow(true),
+    Remote(true),
     (_: Remote[Boolean]) =>
       for {
         _    <- ZFlow.log("Inside policy renewal reminder flow.")
@@ -138,7 +138,6 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
         policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
         _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
       } yield ()).evaluateInMemForGCExample
-
       assertM(result)(equalTo(()))
     })
 

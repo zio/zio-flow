@@ -114,7 +114,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     suite("Test Iterate")(
       testM("Iterate a fixed number of times") {
         val iterateZflow: ZFlow[Any, ActivityError, Int] = ZFlow.Iterate(
-          ZFlow.succeed(12),
+          Remote(12),
           (remoteInt: Remote[Int]) =>
             for {
               rInt <- remoteInt + 1
@@ -134,7 +134,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
         val boolVarZFlow: ZFlow[Any, Nothing, Variable[Boolean]] = ZFlow.newVar("boolVarForIterate", true)
 
         def iterateZflow(boolVar: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
-          ZFlow(true),
+          Remote(true),
           (_: Remote[Boolean]) =>
             for {
               bool <- boolVar

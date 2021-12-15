@@ -24,6 +24,7 @@ sealed trait ZFlowTransaction {
    */
   def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Any]
 }
+
 object ZFlowTransaction {
   private[flow] val instance: ZFlowTransaction =
     new ZFlowTransaction {

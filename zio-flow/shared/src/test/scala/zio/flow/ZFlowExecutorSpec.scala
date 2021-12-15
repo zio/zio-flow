@@ -49,7 +49,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     },
     testM("Test Now") {
       val compileResult = ZFlow.now.evaluateTestInMem(implicitly[Schema[Instant]], nothingSchema)
-      assertM(compileResult)(equalTo(Instant.now()))
+      assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now().getEpochSecond))
     } @@ ignore,
     testM("Test Unwrap") {
       val compileResult = ZFlow
@@ -65,7 +65,8 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     } @@ ignore,
     testM("Test Ensuring") {
       val compileResult = ZFlow
-        .Ensuring(ZFlow.succeed(12), ZFlow.input[String])
+        .succeed(12)
+        .ensuring(ZFlow.input[String])
         .provide("Some input")
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
@@ -157,14 +158,12 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
       }
     },
     testM("Test Iterate") {
-      val compileResult = ZFlow
-        .Iterate[Any, ActivityError, Int](
-          ZFlow.RunActivity[Any, Int](12, testActivity),
-          (r: Remote[Int]) => ZFlow.succeed(r + 1),
-          (r: Remote[Int]) => r === Remote(15)
-        )
-        .evaluateTestInMem(implicitly[Schema[Int]], implicitly[Schema[ActivityError]])
-      assertM(compileResult)(equalTo(12))
+      val compileResult: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(
+        Remote(12),
+        (r: Remote[Int]) => ZFlow.succeed(r + 1),
+        (r: Remote[Int]) => r === Remote(15)
+      )
+      assertM(compileResult.evaluateTestInMem(implicitly[Schema[Int]], implicitly[Schema[ActivityError]]))(equalTo(12))
     }
   )
 
