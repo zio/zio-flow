@@ -21,11 +21,12 @@ import java.time.{Duration, Instant}
 
 import scala.language.implicitConversions
 
+import zio.Chunk
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
-trait SchemaAndValue[+A] {
+trait SchemaAndValue[+A] { self =>
   type Subtype <: A
 
   def schema: Schema[Subtype]
@@ -33,6 +34,8 @@ trait SchemaAndValue[+A] {
   def value: Subtype
 
   def toRemote: Remote[A] = Remote.Literal(value, schema)
+
+  def unsafeCoerce[B]: SchemaAndValue[B] = self.asInstanceOf[SchemaAndValue[B]]
 }
 
 object SchemaAndValue {
@@ -89,6 +92,13 @@ sealed trait Remote[+A] {
 
 object Remote {
 
+  /**
+   * Constructs accessors that can be used modify remote versions of user
+   * defined data types.
+   */
+  def makeAccessors[A](implicit schema: Schema[A]): schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
+    schema.makeAccessors(RemoteAccessorBuilder)
+
   final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
     def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
       Right(SchemaAndValue(schema, value))
@@ -113,22 +123,20 @@ object Remote {
       )
   }
 
-  final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[A => B] {
-    def evalWithSchema: Either[Remote[A => B], SchemaAndValue[A => B]] = Left(this)
+  final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
+    def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = Left(this)
   }
 
-  final case class RemoteApply[A, B](fn: Remote[A => B], a: Remote[A]) extends Remote[B] {
+  final case class RemoteApply[A, B](remotefn: RemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
 
     override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
       val aEval = a.evalWithSchema
       aEval match {
         case Left(_) => Left(self)
         case Right(schemaAndValue) =>
-          fn match {
-            case RemoteFunction(fn) =>
-              fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema)).evalWithSchema
-            case _ => throw new IllegalStateException("Every remote function must be constructed using RemoteFunction.")
-          }
+          remotefn
+            .fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema))
+            .evalWithSchema
       }
     }
   }
@@ -687,10 +695,12 @@ object Remote {
       val lEval = left.evalWithSchema
       val rEval = right.evalWithSchema
       (lEval, rEval) match {
-        //FIXME : fix when zio schema can compare Schemas
-        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(rightSchemaA, rightA))) =>
+        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(_, rightA))) =>
           Right(
-            SchemaAndValue(Schema[Boolean], (leftA != rightA) && (leftSchemaA.hashCode() < rightSchemaA.hashCode()))
+            SchemaAndValue(
+              Schema[Boolean],
+              leftSchemaA.ordering.asInstanceOf[Ordering[Any]].compare(leftA, rightA) <= 0
+            )
           )
         case _ => Left(self)
       }
@@ -951,6 +961,69 @@ object Remote {
         case _ => Left(Remote(false))
       }
     }
+  }
+
+  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
+    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(_, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
+        case _                               => Left(self)
+      }
+  }
+
+  final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(_, whole)) =>
+          piece.evalWithSchema match {
+            case Right(SchemaAndValue(_, piece)) =>
+              val newValue = lens.unsafeSet(piece)(whole)
+              Right(SchemaAndValue(lens.schemaWhole, newValue))
+            case _                               => Left(self)
+          }
+        case _                               => Left(self)
+      }
+  }
+
+  final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
+    def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(_, whole)) =>
+          Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
+        case _                               => Left(self)
+      }
+  }
+
+  final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      piece.evalWithSchema match {
+        case Right(SchemaAndValue(_, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
+        case _                               => Left(self)
+      }
+  }
+
+  final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
+    def evalWithSchema: Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(_, whole)) =>
+          Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
+        case _                               => Left(self)
+      }
+  }
+
+  final case class TraversalSet[S, A](whole: Remote[S], piece: Remote[Chunk[A]], traversal: RemoteTraversal[S, A])
+      extends Remote[S] {
+    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
+      whole.evalWithSchema match {
+        case Right(SchemaAndValue(_, whole)) =>
+          piece.evalWithSchema match {
+            case Right(SchemaAndValue(_, piece)) =>
+              val newValue = traversal.unsafeSet(whole)(piece)
+              Right(SchemaAndValue(traversal.schemaWhole, newValue))
+            case _                               => Left(self)
+          }
+        case _                               => Left(self)
+      }
   }
 
   object Lazy {

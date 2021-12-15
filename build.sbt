@@ -33,6 +33,9 @@ lazy val root = project
     unusedCompileDependenciesFilter -= moduleFilter("org.scala-js", "scalajs-library")
   )
   .aggregate(
+    docs,
+    examplesJVM,
+    examplesJS,
     zioFlowJVM,
     zioFlowJS
   )
@@ -49,7 +52,8 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-test"              % zioVersion % "test",
       "dev.zio" %% "zio-test-sbt"          % zioVersion % "test",
       "dev.zio" %% "zio-schema"            % zioSchemaVersion,
-      "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion
+      "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion,
+      "dev.zio" %% "zio-schema-optics"     % zioSchemaVersion
     )
   )
   .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
@@ -71,7 +75,7 @@ lazy val docs = project
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % zioVersion
     ),
-    unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(root),
+    unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(zioFlowJVM),
     target in (ScalaUnidoc, unidoc)              := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",
     cleanFiles += (target in (ScalaUnidoc, unidoc)).value,
     docusaurusCreateSite     := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
@@ -79,3 +83,17 @@ lazy val docs = project
   )
   .dependsOn(zioFlowJVM)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
+
+lazy val examples = crossProject(JSPlatform, JVMPlatform)
+  .in(file("zio-flow-examples"))
+  .settings(stdSettings("zio-flow-examples"))
+  .settings(crossProjectSettings)
+  .settings(buildInfoSettings("zio.flow"))
+  .settings(skip.in(publish) := true)
+  .dependsOn(zioFlow)
+
+lazy val examplesJS = examples.js
+  .settings(dottySettings)
+
+lazy val examplesJVM = examples.jvm
+  .settings(dottySettings)

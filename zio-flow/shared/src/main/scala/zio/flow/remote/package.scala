@@ -89,9 +89,6 @@ package object remote {
       extractField = _.value
     )
 
-  implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
-    Schema.EitherSchema(aSchema, bSchema)
-
   implicit def RemoteVariable[A](remote: Remote[Variable[A]]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
     remote
   )
