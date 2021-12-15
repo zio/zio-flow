@@ -52,7 +52,8 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-test"              % zioVersion % "test",
       "dev.zio" %% "zio-test-sbt"          % zioVersion % "test",
       "dev.zio" %% "zio-schema"            % zioSchemaVersion,
-      "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion
+      "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion,
+      "dev.zio" %% "zio-schema-optics"     % zioSchemaVersion
     )
   )
   .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
