@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-package zio.flow.zFlow
+package zio.flow
 
 import java.time.{Duration, Instant}
 
-import zio.flow.remote.{Remote, RemoteEitherSyntax}
-import zio.flow.zFlow.ZFlow.Die
-import zio.flow.{Activity, ActivityError, ExecutingFlow, Variable}
 import zio.schema.Schema
 
 // ZFlow - models a workflow
@@ -84,7 +81,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
 
-  final def orDie: ZFlow[R, Nothing, A] = Die
+  final def orDie: ZFlow[R, Nothing, A] = ZFlow.Die
 
   final def orElse[R1 <: R, E2, A1 >: A](that: ZFlow[R1, E2, A1])(implicit A1: Schema[A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).catchAll(_ => that)
@@ -227,7 +224,7 @@ object ZFlow {
     for {
       executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
       eithers        <- ZFlow.foreach(executingFlows)(_.await)
-      bs             <- ZFlow.fromEither(RemoteEitherSyntax.collectAll(eithers)(???, ???))
+      bs             <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers)(???, ???))
     } yield bs
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =

@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow._
 import zio.schema.Schema
 
 class RemoteFractionalSyntax[A](self: Remote[A]) {

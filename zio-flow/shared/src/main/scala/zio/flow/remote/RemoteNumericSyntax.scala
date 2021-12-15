@@ -16,6 +16,8 @@
 
 package zio.flow.remote
 
+import zio.flow._
+
 class RemoteNumericSyntax[A](self: Remote[A]) {
 
   final def +(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =

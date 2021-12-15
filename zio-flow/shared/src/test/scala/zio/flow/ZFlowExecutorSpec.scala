@@ -3,11 +3,9 @@ package zio.flow
 import java.net.URI
 import java.time.Instant
 
-import zio.flow.remote.{Remote, _}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockInMemoryTestClock
-import zio.flow.zFlow.ZFlow
-import zio.flow.zFlow.ZFlowExecutor.InMemory.{CompileStatus, State, TState}
+import zio.flow.internal.ZFlowExecutor.InMemory.{CompileStatus, State, TState}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 import zio.test.Assertion.{dies, equalTo, fails, hasMessage}

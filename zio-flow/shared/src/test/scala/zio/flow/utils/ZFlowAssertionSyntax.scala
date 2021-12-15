@@ -5,10 +5,10 @@ import java.net.URI
 
 import zio.clock.Clock
 import zio.console.{Console, putStrLn}
-import zio.flow.server.{DurableLog, KeyValueStore, PersistentExecutor}
+import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
-import zio.flow.zFlow.ZFlow
-import zio.flow.zFlow.ZFlowExecutor.InMemory
+import zio.flow.ZFlow
+import zio.flow.internal.ZFlowExecutor.InMemory
 import zio.flow.{Activity, ActivityError, Operation, OperationExecutor}
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema

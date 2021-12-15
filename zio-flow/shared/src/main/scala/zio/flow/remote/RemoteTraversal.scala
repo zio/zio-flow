@@ -16,7 +16,8 @@
 
 package zio.flow.remote
 
-import zio.{ Chunk, ChunkBuilder }
+import zio.{Chunk, ChunkBuilder}
+import zio.flow._
 import zio.schema._
 
 /**
@@ -44,8 +45,7 @@ sealed trait RemoteTraversal[S, A] { self =>
     Remote.TraversalGet(s, self)
 
   /**
-   * Sets the elements of the specified collection type to the specified
-   * values.
+   * Sets the elements of the specified collection type to the specified values.
    */
   def set(s: Remote[S])(as: Remote[Chunk[A]]): Remote[S] =
     Remote.TraversalSet(s, as, self)
@@ -58,24 +58,24 @@ sealed trait RemoteTraversal[S, A] { self =>
     set(s)(f(get(s)))
 
   /**
-   * Gets the elements of the specified collection type outside the context of
-   * a remote value.
+   * Gets the elements of the specified collection type outside the context of a
+   * remote value.
    */
-  private[remote] def unsafeGet(s: S): Chunk[A]
+  private[flow] def unsafeGet(s: S): Chunk[A]
 
   /**
-   * Sets the elements of the specified collection type to the specified
-   * values outside the context of a remote value.
+   * Sets the elements of the specified collection type to the specified values
+   * outside the context of a remote value.
    */
-  private[remote] def unsafeSet(s: S)(as: Chunk[A]): S
+  private[flow] def unsafeSet(s: S)(as: Chunk[A]): S
 }
 
 object RemoteTraversal {
 
   /**
    * Unsafely constructs a remote traversal from a description of the structure
-   * of the collection and element types. The caller is responsible for
-   * ensuring that the element type corresponds to the collection type.
+   * of the collection and element types. The caller is responsible for ensuring
+   * that the element type corresponds to the collection type.
    */
   def unsafeMake[S, A](collection: Schema.Collection[S, A], element: Schema[A]): RemoteTraversal[S, A] =
     Primitive(collection, element)
@@ -93,7 +93,7 @@ object RemoteTraversal {
       (collection.asInstanceOf[Schema.Collection[_, _]]) match {
         case sequence @ Schema.Sequence(_, _, _, _) =>
           sequence.asInstanceOf[Schema.Sequence[S, A]].toChunk(s)
-        case Schema.MapSchema(_, _, _)              =>
+        case Schema.MapSchema(_, _, _) =>
           Chunk.fromIterable(s.asInstanceOf[Map[_, _]]).asInstanceOf[Chunk[A]]
       }
 
@@ -110,7 +110,7 @@ object RemoteTraversal {
           while (leftIterator.hasNext)
             builder += leftIterator.next()
           sequence.asInstanceOf[Schema.Sequence[S, A]].fromChunk(builder.result())
-        case Schema.MapSchema(_, _, _)              =>
+        case Schema.MapSchema(_, _, _) =>
           (s.asInstanceOf[Map[_, _]] ++ as).asInstanceOf[S]
       }
   }

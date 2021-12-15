@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.internal
 
 import java.io.IOException
 import java.time.Duration
@@ -23,10 +23,7 @@ import zio._
 import zio.clock._
 import zio.console.putStrLn
 import zio.flow._
-import zio.flow.remote.{Remote, SchemaAndValue}
-import zio.flow.zFlow.{ZFlow, ZFlowExecutor}
-import zio.schema.DeriveSchema.gen
-import zio.schema._
+import zio.schema.Schema
 
 final case class PersistentExecutor(
   clock: Clock.Service,
@@ -87,7 +84,7 @@ final case class PersistentExecutor(
     } yield true).catchAll(_ => UIO(false))
 
   def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
-    import zio.flow.zFlow.ZFlow._
+    import zio.flow.ZFlow._
     def step(ref: Ref[State[E, A]]): IO[IOException, Unit] = {
 
       def onSuccess(value: Remote[_]): IO[IOException, Unit] =

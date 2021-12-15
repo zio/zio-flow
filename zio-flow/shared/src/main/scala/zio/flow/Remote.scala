@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.remote
+package zio.flow
 
 import java.time.temporal.{ChronoUnit, TemporalAmount, TemporalField, TemporalUnit}
 import java.time.{Duration, Instant}
@@ -22,8 +22,8 @@ import java.time.{Duration, Instant}
 import scala.language.implicitConversions
 
 import zio.Chunk
+import zio.flow.remote._
 import zio.flow.remote.Numeric.NumericInt
-import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
 trait SchemaAndValue[+A] { self =>
@@ -979,9 +979,9 @@ object Remote {
             case Right(SchemaAndValue(_, piece)) =>
               val newValue = lens.unsafeSet(piece)(whole)
               Right(SchemaAndValue(lens.schemaWhole, newValue))
-            case _                               => Left(self)
+            case _ => Left(self)
           }
-        case _                               => Left(self)
+        case _ => Left(self)
       }
   }
 
@@ -990,7 +990,7 @@ object Remote {
       whole.evalWithSchema match {
         case Right(SchemaAndValue(_, whole)) =>
           Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
-        case _                               => Left(self)
+        case _ => Left(self)
       }
   }
 
@@ -1007,7 +1007,7 @@ object Remote {
       whole.evalWithSchema match {
         case Right(SchemaAndValue(_, whole)) =>
           Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
-        case _                               => Left(self)
+        case _ => Left(self)
       }
   }
 
@@ -1020,9 +1020,9 @@ object Remote {
             case Right(SchemaAndValue(_, piece)) =>
               val newValue = traversal.unsafeSet(whole)(piece)
               Right(SchemaAndValue(traversal.schemaWhole, newValue))
-            case _                               => Left(self)
+            case _ => Left(self)
           }
-        case _                               => Left(self)
+        case _ => Left(self)
       }
   }
 
