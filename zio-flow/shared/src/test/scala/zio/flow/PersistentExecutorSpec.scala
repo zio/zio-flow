@@ -12,8 +12,7 @@ import zio.test._
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
-  implicit val nothingSchema: Schema[Nothing]              = Schema.fail("Nothing schema")
-  implicit val acitivityErrorSchema: Schema[ActivityError] = Schema.fail("Activity Error schema")
+  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
 
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
@@ -48,7 +47,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testM("Test Fold") {
       val compileResult =
-        ZFlow.succeed(12).flatMap(rA => rA + Remote(1)).evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
+        ZFlow
+          .succeed(12)
+          .flatMap(rA => rA + Remote(1))
+          .evaluateLivePersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
       assertM(compileResult)(equalTo(13))
     },
     testM("Test input") {
@@ -72,7 +74,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       assertM(compileResult)(equalTo(12))
     },
     testM("Test Provide - advanced") {
-      val zflow1        = for {
+      val zflow1 = for {
         a <- ZFlow.succeed(15)
         b <- ZFlow.input[Int]
       } yield a + b
@@ -84,7 +86,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now.getEpochSecond))
     },
     testM("Test WaitTill") {
-      val twoSecsLater  = Instant.now().getEpochSecond + 2
+      val twoSecsLater = Instant.now().getEpochSecond + 2
       val compileResult =
         ZFlow.waitTill(Remote(Instant.ofEpochSecond(twoSecsLater))).evaluateLivePersistent(Schema[Unit], nothingSchema)
       assertM(compileResult)(equalTo(()))
@@ -94,7 +96,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       assertM(compileResult)(equalTo(12))
     },
     testM("Test Iterate") {
-      val flow = ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
+      val flow          = ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
       val compileResult = flow.evaluateLivePersistent(Schema[Int], nothingSchema)
       assertM(compileResult)(equalTo(10))
     }

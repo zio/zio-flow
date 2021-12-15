@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.server
 
 import java.io.IOException
@@ -13,16 +29,16 @@ import zio.schema.DeriveSchema.gen
 import zio.schema._
 
 final case class PersistentExecutor(
-                                     clock: Clock.Service,
-                                     durableLog: DurableLog,
-                                     kvStore: KeyValueStore,
-                                     opExec: OperationExecutor[Any],
-                                     workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
-                                   ) extends ZFlowExecutor[String] {
+  clock: Clock.Service,
+  durableLog: DurableLog,
+  kvStore: KeyValueStore,
+  opExec: OperationExecutor[Any],
+  workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
+) extends ZFlowExecutor[String] {
 
   import PersistentExecutor._
 
-  type Erased = ZFlow[Any, Any, Any]
+  type Erased     = ZFlow[Any, Any, Any]
   type ErasedCont = Remote[Any] => ZFlow[Any, Any, Any]
 
   def erase(flow: ZFlow[_, _, _]): Erased = flow.asInstanceOf[Erased]
@@ -55,17 +71,17 @@ final case class PersistentExecutor(
 
   def getVariable(workflowId: String, variableName: String): UIO[Option[Any]] =
     (for {
-      map <- workflows.get
+      map      <- workflows.get
       stateRef <- ZIO.fromOption(map.get(workflowId))
-      state <- stateRef.get
-      value <- ZIO.fromOption(state.getVariable(variableName))
+      state    <- stateRef.get
+      value    <- ZIO.fromOption(state.getVariable(variableName))
     } yield value).optional
 
   def setVariable(workflowId: String, variableName: String, value: SchemaAndValue[_]): UIO[Boolean] =
     (for {
-      map <- workflows.get
+      map      <- workflows.get
       stateRef <- ZIO.fromOption(map.get(workflowId))
-      _ <- stateRef.update(state => state.copy(variables = state.variables.updated(variableName, value)))
+      _        <- stateRef.update(state => state.copy(variables = state.variables.updated(variableName, value)))
       // TODO: It is time to retry a workflow that is suspended, because a variable changed.
       // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
     } yield true).catchAll(_ => UIO(false))
@@ -91,7 +107,10 @@ final case class PersistentExecutor(
             case Instruction.Continuation(_, onSuccess) :: newStack =>
               ref.update(_.copy(current = onSuccess.provide(coerceRemote(value)), stack = newStack)) *>
                 step(ref)
-            case Instruction.PopFallback :: newStack => ref.update(state => state.copy(stack = newStack, tstate = state.tstate.popFallback.getOrElse(state.tstate))) *> onSuccess(value) //TODO : Fail in an elegant way
+            case Instruction.PopFallback :: newStack =>
+              ref.update(state =>
+                state.copy(stack = newStack, tstate = state.tstate.popFallback.getOrElse(state.tstate))
+              ) *> onSuccess(value) //TODO : Fail in an elegant way
           }
         }
 
@@ -135,8 +154,8 @@ final case class PersistentExecutor(
           case WaitTill(instant) =>
             val wait = for {
               start <- clock.instant
-              end <- eval(instant).map(_.value)
-              _ <- clock.sleep(Duration.between(start, end))
+              end   <- eval(instant).map(_.value)
+              _     <- clock.sleep(Duration.between(start, end))
             } yield ()
             wait *> onSuccess(())
 
@@ -144,23 +163,23 @@ final case class PersistentExecutor(
             val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
             val a: ZIO[Any, Nothing, A] = for {
               vRefTuple <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
-              value <- vRefTuple._2.get
-              tuple <- eval(f(lit(value))).map(_.value)
-              _ <- vRefTuple._2.set(tuple._2)
-              _ <- ref.update(_.addReadVar(vRefTuple._1))
+              value     <- vRefTuple._2.get
+              tuple     <- eval(f(lit(value))).map(_.value)
+              _         <- vRefTuple._2.set(tuple._2)
+              _         <- ref.update(_.addReadVar(vRefTuple._1))
             } yield tuple._1
 
             a.flatMap { r =>
               onSuccess(r)
             }
 
-          case apply@Apply(_) =>
+          case apply @ Apply(_) =>
             ref.update { state =>
               val env = state.currentEnvironment
               state.copy(current = apply.lambda(env.toRemote.asInstanceOf[Remote[apply.ValueA]]))
             } *> step(ref)
 
-          case fold@Fold(_, _, _) =>
+          case fold @ Fold(_, _, _) =>
             ref.update { state =>
               val cont = Instruction.Continuation(fold.ifError, fold.ifSuccess)
               state.copy(current = fold.value, stack = cont :: state.stack)
@@ -168,9 +187,9 @@ final case class PersistentExecutor(
 
           case RunActivity(input, activity) =>
             val a = for {
-              inp <- eval(input)
+              inp    <- eval(input)
               output <- opExec.execute(inp.value, activity.operation)
-              _ <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
+              _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
             } yield output
 
             a.foldM(
@@ -181,7 +200,9 @@ final case class PersistentExecutor(
           case Transaction(flow) =>
             val env = state.currentEnvironment.value
             for {
-              _ <- ref.update(_.enterTransaction(flow.provide(lit(env.asInstanceOf)))) // TODO : Casting to Nothing will fail
+              _ <- ref.update(
+                     _.enterTransaction(flow.provide(lit(env.asInstanceOf)))
+                   ) // TODO : Casting to Nothing will fail
               _ <- ref.update(_.copy(current = flow))
               _ <- step(ref)
             } yield ()
@@ -199,10 +220,10 @@ final case class PersistentExecutor(
           case Unwrap(remote) =>
             (for {
               evaluatedFlow <- eval(remote)
-              _ <- ref.update(_.copy(current = evaluatedFlow.value))
+              _             <- ref.update(_.copy(current = evaluatedFlow.value))
             } yield ()) *> step(ref)
 
-          case foreach@Foreach(_, _) => ???
+          case foreach @ Foreach(_, _) => ???
 
           case Fork(workflow) =>
             val fiber = for {
@@ -215,12 +236,12 @@ final case class PersistentExecutor(
           case Timeout(flow, duration) =>
             ref.get.flatMap { state =>
               for {
-                d <- eval(duration).map(_.value)
+                d      <- eval(duration).map(_.value)
                 output <- ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provide(Has(clock))
                 _ <- output match {
-                  case Some(value) => state.result.succeed(value.asInstanceOf)
-                  case None => state.result.succeed(().asInstanceOf)
-                }
+                       case Some(value) => state.result.succeed(value.asInstanceOf)
+                       case None        => state.result.succeed(().asInstanceOf)
+                     }
               } yield ()
             }
 
@@ -238,9 +259,9 @@ final case class PersistentExecutor(
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil => ???
-            // TODO : get the tstate. If there s a fallback, do it right away. Otherwise, enter suspended mode.(Set the durable promise)
-            //TODO : Modify alters durable promise.
-            //TODO : Some way of resuming a workflow (from the outside)
+          // TODO : get the tstate. If there s a fallback, do it right away. Otherwise, enter suspended mode.(Set the durable promise)
+          //TODO : Modify alters durable promise.
+          //TODO : Some way of resuming a workflow (from the outside)
 
 //            //TODO : Implement something like compileStatus in State
 //            for {
@@ -257,18 +278,18 @@ final case class PersistentExecutor(
 //            } yield ()
 
           case OrTry(left, right) => ???
-            // for {
-            //   state <- ref.get
-            //   _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
-            //     case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
-            //     case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
-            //   }
-            // } yield ()
+          // for {
+          //   state <- ref.get
+          //   _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
+          //     case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
+          //     case Some(tstate) => ref.set(state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)) *> step(ref)
+          //   }
+          // } yield ()
 
           case Await(execFlow) =>
             val joined = for {
               execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-              result <- execflow.join
+              result   <- execflow.join
             } yield result
 
             joined.foldM(
@@ -283,7 +304,7 @@ final case class PersistentExecutor(
             } yield exit.toEither
 
             interrupt.flatMap {
-              case Left(error) => onError(lit(error))
+              case Left(error)    => onError(lit(error))
               case Right(success) => onSuccess(success)
             }
 
@@ -293,8 +314,8 @@ final case class PersistentExecutor(
           case NewVar(name, initial) =>
             val variable = for {
               schemaAndValue <- eval(initial)
-              vref <- Ref.make(schemaAndValue.value.asInstanceOf[A])
-              _ <- ref.update(_.addVariable(name, schemaAndValue))
+              vref           <- Ref.make(schemaAndValue.value.asInstanceOf[A])
+              _              <- ref.update(_.addVariable(name, schemaAndValue))
             } yield vref
 
             variable.flatMap(vref => onSuccess(lit((name, vref))))
@@ -302,7 +323,7 @@ final case class PersistentExecutor(
           case Iterate(initial, step0, predicate) =>
             ref.modify { state =>
               val tempVarCounter = state.tempVarCounter
-              val tempVarName = s"_zflow_tempvar_${tempVarCounter}"
+              val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
 
               def iterate[R, E, A](
                 step: Remote[A] => ZFlow[R, E, A],
@@ -341,8 +362,6 @@ final case class PersistentExecutor(
             val log = putStrLn(message).provideLayer(zio.console.Console.live)
 
             log *> onSuccess(())
-
-          case Fold2(_, _, _) => ???
         }
       )
     }
@@ -354,9 +373,9 @@ final case class PersistentExecutor(
     )
 
     (for {
-      state <- stateZio
-      ref <- Ref.make[State[E, A]](state)
-      _ <- step(ref)
+      state  <- stateZio
+      ref    <- Ref.make[State[E, A]](state)
+      _      <- step(ref)
       result <- state.result.awaitEither
     } yield result).orDie.absolve
   }
@@ -379,37 +398,37 @@ object PersistentExecutor {
   }
 
   def make(
-            opEx: OperationExecutor[Any]
-          ): ZLayer[Clock with Has[DurableLog] with Has[KeyValueStore], Nothing, Has[ZFlowExecutor[String]]] =
+    opEx: OperationExecutor[Any]
+  ): ZLayer[Clock with Has[DurableLog] with Has[KeyValueStore], Nothing, Has[ZFlowExecutor[String]]] =
     (
       for {
         durableLog <- ZIO.service[DurableLog]
-        kvStore <- ZIO.service[KeyValueStore]
-        clock <- ZIO.service[Clock.Service]
-        ref <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
+        kvStore    <- ZIO.service[KeyValueStore]
+        clock      <- ZIO.service[Clock.Service]
+        ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
       } yield PersistentExecutor(clock, durableLog, kvStore, opEx, ref)
-      ).toLayer
+    ).toLayer
 
   final case class State[E, A](
-                                workflowId: String,
-                                current: ZFlow[_, _, _],
-                                tstate: TState,
-                                stack: List[Instruction],
-                                variables: Map[String, SchemaAndValue[
-                                  _
-                                ]], //TODO : change the _ to SchemaAndValue[_]. may not get compile error from this change.
-                                result: DurablePromise[E, A],
-                                envStack: List[SchemaAndValue[_]],
-                                tempVarCounter: Int,
-                                retry: List[FlowDurablePromise[_, _]],
-                                compileStatus: PersistentCompileStatus
-                              ) {
+    workflowId: String,
+    current: ZFlow[_, _, _],
+    tstate: TState,
+    stack: List[Instruction],
+    variables: Map[String, SchemaAndValue[
+      _
+    ]], //TODO : change the _ to SchemaAndValue[_]. may not get compile error from this change.
+    result: DurablePromise[E, A],
+    envStack: List[SchemaAndValue[_]],
+    tempVarCounter: Int,
+    retry: List[FlowDurablePromise[_, _]],
+    compileStatus: PersistentCompileStatus
+  ) {
 
     def currentEnvironment: SchemaAndValue[_] = envStack.headOption.getOrElse(SchemaAndValue[Unit](Schema[Unit], ()))
 
     def pushEnv(schemaAndValue: SchemaAndValue[_]): State[E, A] = copy(envStack = schemaAndValue :: envStack)
 
-    def pushInstruction(instruction : Instruction) : State[E,A] = copy(stack = instruction :: stack)
+    def pushInstruction(instruction: Instruction): State[E, A] = copy(stack = instruction :: stack)
 
     def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State[E, A] =
       copy(tstate = tstate.addCompensation(newCompensation))
@@ -423,7 +442,7 @@ object PersistentExecutor {
     def enterTransaction(flow: ZFlow[Any, _, _]): State[E, A] = copy(tstate = tstate.enterTransaction(flow))
 
     def getTransactionFlow: Option[ZFlow[Any, _, _]] = tstate match {
-      case TState.Empty => None
+      case TState.Empty                      => None
       case TState.Transaction(flow, _, _, _) => Some(flow)
     }
 
@@ -451,29 +470,30 @@ sealed trait TState {
 
   def addReadVar(name: String): TState = self match {
     case TState.Empty => TState.Empty
-    case TState.Transaction(flow, readVars, compensation, fallbacks) => TState.Transaction(flow, readVars + name, compensation, fallbacks)
+    case TState.Transaction(flow, readVars, compensation, fallbacks) =>
+      TState.Transaction(flow, readVars + name, compensation, fallbacks)
   }
 
   def allVariables: Set[String] = self match {
-    case TState.Empty => Set()
+    case TState.Empty                          => Set()
     case TState.Transaction(_, readVars, _, _) => readVars
   }
 
   def enterTransaction(flow: ZFlow[Any, _, _]): TState =
     self match {
       case TState.Empty => TState.Transaction(flow, Set(), ZFlow.unit, Nil)
-      case _ => self
+      case _            => self
     }
 
   def addFallback(zflow: ZFlow[Any, _, _]): Option[TState] =
     self match {
-      case TState.Empty => None
-      case tstate@TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = zflow :: fallBacks))
+      case TState.Empty                                    => None
+      case tstate @ TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = zflow :: fallBacks))
     }
 
-  def popFallback : Option[TState] =
+  def popFallback: Option[TState] =
     self match {
-      case TState.Empty => None
+      case TState.Empty                                    => None
       case tstate @ TState.Transaction(_, _, _, fallBacks) => Some(tstate.copy(fallBacks = fallBacks.drop(1)))
     }
 }
@@ -483,11 +503,11 @@ object TState {
   case object Empty extends TState
 
   final case class Transaction(
-                                flow: ZFlow[Any, _, _],
-                                readVars: Set[String],
-                                compensation: ZFlow[Any, ActivityError, Any],
-                                fallBacks: List[ZFlow[Any, _, _]]
-                              ) extends TState
+    flow: ZFlow[Any, _, _],
+    readVars: Set[String],
+    compensation: ZFlow[Any, ActivityError, Any],
+    fallBacks: List[ZFlow[Any, _, _]]
+  ) extends TState
 
 }
 
