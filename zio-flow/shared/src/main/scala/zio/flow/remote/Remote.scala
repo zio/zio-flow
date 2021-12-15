@@ -129,11 +129,6 @@ object Remote {
           remotefn
             .fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema))
             .evalWithSchema
-        // fn match {
-        //   case RemoteFunction(fn) =>
-        //     fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema)).evalWithSchema
-        //   case _ => throw new IllegalStateException("Every remote function must be constructed using RemoteFunction.")
-        // }
       }
     }
   }
