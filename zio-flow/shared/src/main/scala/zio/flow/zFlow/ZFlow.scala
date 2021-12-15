@@ -54,7 +54,8 @@ sealed trait ZFlow[-R, +E, +A] {
   final def catchAll[R1 <: R, E1 >: E, A1 >: A: Schema, E2](f: Remote[E] => ZFlow[R1, E2, A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).foldM(f, ZFlow(_))
 
-  final def ensuring(flow: ZFlow[Any, Nothing, Any]): ZFlow[R, E, A] = ZFlow.Ensuring(self, flow)
+  final def ensuring[R1 <: R](flow: ZFlow[R1, Nothing, Any]): ZFlow[R1, E, A] =
+    ZFlow.input[R1].flatMap(r => ZFlow.Ensuring(self, flow.provide(r)))
 
   final def flatMap[R1 <: R, E1 >: E, B](f: Remote[A] => ZFlow[R1, E1, B]): ZFlow[R1, E1, B] =
     self.foldM(ZFlow.Fail(_), f)
@@ -62,7 +63,11 @@ sealed trait ZFlow[-R, +E, +A] {
   final def foldM[R1 <: R, E1 >: E, E2, B](
     error: Remote[E] => ZFlow[R1, E2, B],
     success: Remote[A] => ZFlow[R1, E2, B]
-  ): ZFlow[R1, E2, B] = ZFlow.Fold(self, error, success)
+  ): ZFlow[R1, E2, B] = {
+    def ifError(r1: Remote[R1]): ZFlow[E, E2, B]   = ZFlow.Apply(e => error(e).provide(r1))
+    def ifSuccess(r1: Remote[R1]): ZFlow[A, E2, B] = ZFlow.Apply(a => success(a).provide(r1))
+    ZFlow.Apply(r1 => ZFlow.Fold(self.provide(r1), ifError(r1), ifSuccess(r1)))
+  }
 
   final def fork: ZFlow[R, Nothing, ExecutingFlow[E, A]] = ZFlow.Fork(self)
 
@@ -74,7 +79,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]
   ): ZFlow[R1, E1, A1] =
-    ZFlow.Iterate(self, step, predicate)
+    self.flatMap(remoteA => ZFlow.Iterate(remoteA, step, predicate))
 
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
@@ -135,12 +140,19 @@ object ZFlow {
 
   final case class Fold[R, E1, E2, A, B](
     value: ZFlow[R, E1, A],
-    ifError: Remote[E1] => ZFlow[R, E2, B],
-    ifSuccess: Remote[A] => ZFlow[R, E2, B]
+    ifError: ZFlow[E1, E2, B],
+    ifSuccess: ZFlow[A, E2, B]
   ) extends ZFlow[R, E2, B] {
     type ValueE = E1
     type ValueA = A
     type ValueR = R
+    type ValueB = B
+  }
+
+  final case class Apply[A, E, B](lambda: Remote[A] => ZFlow[Any, E, B]) extends ZFlow[A, E, B] {
+    type ValueE = E
+    type ValueA = A
+    type ValueB = B
   }
 
   final case class Log(message: String) extends ZFlow[Any, Nothing, Unit]
@@ -149,9 +161,9 @@ object ZFlow {
 
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
-  final case class Input[R](schema: Schema[R]) extends ZFlow[R, Nothing, R]
+  final case class Input[R]() extends ZFlow[R, Nothing, R]
 
-  final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[R, Nothing, Any]) extends ZFlow[R, E, A]
+  final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[Any, Nothing, Any]) extends ZFlow[R, E, A]
 
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
@@ -178,7 +190,7 @@ object ZFlow {
 
   case object Die extends ZFlow[Any, Nothing, Nothing]
 
-  case object RetryUntil extends ZFlow[Any, Nothing, Nothing]
+  case object RetryUntil extends ZFlow[Any, Nothing, Nothing] // TODO : Change to ZFlow[Any, Nothing, Any]
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
@@ -191,7 +203,7 @@ object ZFlow {
   final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]]
 
   case class Iterate[R, E, A](
-    self: ZFlow[R, E, A],
+    initial: Remote[A],
     step: Remote[A] => ZFlow[R, E, A],
     predicate: Remote[A] => Remote[Boolean]
   ) extends ZFlow[R, E, A]
@@ -221,7 +233,7 @@ object ZFlow {
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
-  def input[R: Schema]: ZFlow[R, Nothing, R] = Input(implicitly[Schema[R]])
+  def input[R]: ZFlow[R, Nothing, R] = Input[R]()
 
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Variable[A]] = NewVar(name, initial)
 

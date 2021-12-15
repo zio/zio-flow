@@ -25,7 +25,7 @@ import zio.flow.remote.Numeric.NumericInt
 import zio.flow.zFlow.ZFlow
 import zio.schema.Schema
 
-trait SchemaAndValue[+A] {
+trait SchemaAndValue[+A] { self =>
   type Subtype <: A
 
   def schema: Schema[Subtype]
@@ -33,6 +33,8 @@ trait SchemaAndValue[+A] {
   def value: Subtype
 
   def toRemote: Remote[A] = Remote.Literal(value, schema)
+
+  def unsafeCoerce[B]: SchemaAndValue[B] = self.asInstanceOf[SchemaAndValue[B]]
 }
 
 object SchemaAndValue {
@@ -113,22 +115,20 @@ object Remote {
       )
   }
 
-  final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[A => B] {
-    def evalWithSchema: Either[Remote[A => B], SchemaAndValue[A => B]] = Left(this)
+  final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
+    def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = Left(this)
   }
 
-  final case class RemoteApply[A, B](fn: Remote[A => B], a: Remote[A]) extends Remote[B] {
+  final case class RemoteApply[A, B](remotefn: RemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
 
     override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
       val aEval = a.evalWithSchema
       aEval match {
         case Left(_) => Left(self)
         case Right(schemaAndValue) =>
-          fn match {
-            case RemoteFunction(fn) =>
-              fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema)).evalWithSchema
-            case _ => throw new IllegalStateException("Every remote function must be constructed using RemoteFunction.")
-          }
+          remotefn
+            .fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema))
+            .evalWithSchema
       }
     }
   }
