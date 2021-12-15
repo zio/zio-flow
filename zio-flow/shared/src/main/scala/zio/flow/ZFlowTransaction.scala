@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.zFlow
-
-import zio.flow.remote.Remote
+package zio.flow
 
 sealed trait ZFlowTransaction {
 

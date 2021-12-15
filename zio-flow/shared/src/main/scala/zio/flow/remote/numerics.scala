@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow.Remote
 import zio.schema.Schema
 
 sealed trait Numeric[A] {

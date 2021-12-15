@@ -1,8 +1,6 @@
 package zio.flow.examples
 
-import zio.flow.remote.{Remote, _}
-import zio.flow.zFlow.ZFlow
-import zio.flow.{Activity, ActivityError, EmailRequest, Variable}
+import zio.flow._
 import zio.schema.{DeriveSchema, Schema}
 
 object Example {

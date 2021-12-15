@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Mappable
+import zio.flow.{Mappable, Remote}
 
 class RemoteMappableSyntax[A](self: Remote[A]) {
 

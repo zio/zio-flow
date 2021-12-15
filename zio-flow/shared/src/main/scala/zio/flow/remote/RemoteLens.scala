@@ -16,13 +16,14 @@
 
 package zio.flow.remote
 
+import zio.flow._
 import zio.schema._
 
 import scala.collection.immutable.ListMap
 
 /**
- * A `RemoteLens[S, A]` knows how to access a field `A` of a product type `S`
- * in the context of a remote value.
+ * A `RemoteLens[S, A]` knows how to access a field `A` of a product type `S` in
+ * the context of a remote value.
  */
 sealed trait RemoteLens[S, A] { self =>
 
@@ -58,24 +59,24 @@ sealed trait RemoteLens[S, A] { self =>
     set(s)(f(get(s)))
 
   /**
-   * Gets the value of the field of the specified product type
-   * outside the context of a remote value.
+   * Gets the value of the field of the specified product type outside the
+   * context of a remote value.
    */
-  private[remote] def unsafeGet(s: S): A
+  private[flow] def unsafeGet(s: S): A
 
   /**
-   * Sets the field of the specified product type to the specified value
-   * outside the context of a remote value.
+   * Sets the field of the specified product type to the specified value outside
+   * the context of a remote value.
    */
-  private[remote] def unsafeSet(a: A)(s: S): S
+  private[flow] def unsafeSet(a: A)(s: S): S
 }
 
 object RemoteLens {
 
   /**
    * Unsafely constructs a remote lens from a description of the structure of
-   * the product type and field. The caller is responsible for ensuring that
-   * the field exists in the product type.
+   * the product type and field. The caller is responsible for ensuring that the
+   * field exists in the product type.
    */
   private[remote] def unsafeMake[S, A](product: Schema.Record[S], field: Schema.Field[A]): RemoteLens[S, A] =
     Primitive(product, field)
@@ -100,7 +101,7 @@ object RemoteLens {
               }
             }
             .getOrElse(throw new IllegalStateException(s"No field found with label ${field.label}"))
-        case _                           => throw new IllegalStateException("Unexpected dynamic value for product type")
+        case _ => throw new IllegalStateException("Unexpected dynamic value for product type")
       }
 
     def unsafeSet(a: A)(s: S): S =
@@ -111,7 +112,7 @@ object RemoteLens {
             case Left(error)  => throw new IllegalStateException(error)
             case Right(value) => value
           }
-        case _                           => throw new IllegalStateException("Unexpected dynamic value for product type")
+        case _ => throw new IllegalStateException("Unexpected dynamic value for product type")
       }
 
     def spliceRecord(

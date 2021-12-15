@@ -1,7 +1,7 @@
 package zio.flow
 
 import zio._
-import zio.flow.server._
+import zio.flow.internal._
 import zio.random.Random
 import zio.test._
 

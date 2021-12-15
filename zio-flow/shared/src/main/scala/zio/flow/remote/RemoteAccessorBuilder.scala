@@ -20,9 +20,8 @@ import zio.schema._
 
 /**
  * A `RemoteAccessorBuilder` knows how to build accessors for remote
- * descriptions of sum and product types. This allows easily getting or
- * setting fields of user defined product types or fields of user defined sum
- * types.
+ * descriptions of sum and product types. This allows easily getting or setting
+ * fields of user defined product types or fields of user defined sum types.
  */
 object RemoteAccessorBuilder extends AccessorBuilder {
 

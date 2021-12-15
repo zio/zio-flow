@@ -16,8 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Variable
-import zio.flow.zFlow.ZFlow
+import zio.flow._
 
 class RemoteVariableSyntax[A](val self: Remote[Variable[A]]) extends AnyVal {
   def get: ZFlow[Any, Nothing, A] = self.modify((a: Remote[A]) => (a, a))

@@ -16,11 +16,12 @@
 
 package zio.flow.remote
 
+import zio.flow._
 import zio.schema._
 
 /**
- * A `RemotePrism[S, A]` knows how to access a case `A` of a sum type `S` in
- * the context of a remote value.
+ * A `RemotePrism[S, A]` knows how to access a case `A` of a sum type `S` in the
+ * context of a remote value.
  */
 sealed trait RemotePrism[S, A] { self =>
 
@@ -37,8 +38,8 @@ sealed trait RemotePrism[S, A] { self =>
   def schemaWhole: Schema[S]
 
   /**
-   * Gets the case of the specified sum type if it exists or returns
-   * `None` otherwise.
+   * Gets the case of the specified sum type if it exists or returns `None`
+   * otherwise.
    */
   def get(s: Remote[S]): Remote[Option[A]] =
     Remote.PrismGet(s, self)
@@ -50,24 +51,24 @@ sealed trait RemotePrism[S, A] { self =>
     Remote.PrismSet(a, self)
 
   /**
-   * Gets the case of the specified sum type if it exists or returns
-   * `None` otherwise outside the context of a remote value.
+   * Gets the case of the specified sum type if it exists or returns `None`
+   * otherwise outside the context of a remote value.
    */
-  private[remote] def unsafeGet(s: S): Option[A]
+  private[flow] def unsafeGet(s: S): Option[A]
 
   /**
-   * Views the specified case as an instance of the sum type outside the
-   * context of a remote value.
+   * Views the specified case as an instance of the sum type outside the context
+   * of a remote value.
    */
-  private[remote] def unsafeSet(a: A): S
+  private[flow] def unsafeSet(a: A): S
 }
 
 object RemotePrism {
 
   /**
    * Unsafely constructs a remote prism from a description of the structure of
-   * the sum type and case. The caller is responsible for ensuring that
-   * the case is one of the cases of the sum type.
+   * the sum type and case. The caller is responsible for ensuring that the case
+   * is one of the cases of the sum type.
    */
   private[remote] def unsafeMake[S, A](product: Schema.Enum[S], term: Schema.Case[A, S]): RemotePrism[S, A] =
     Primitive(product, term)

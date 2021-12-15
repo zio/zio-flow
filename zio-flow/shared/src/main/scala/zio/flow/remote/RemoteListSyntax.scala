@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.remote.Remote.Cons
+import zio.flow._
 
 class RemoteListSyntax[A](val self: Remote[List[A]]) {
 
@@ -33,7 +33,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       Remote
         .UnCons(self.widen[List[A]])
         .widen[Option[(A, List[A])]]
-        .handleOption(Nil, (tuple: Remote[(A, List[A])]) => Cons(tuple._2.take(num - Remote(1)), tuple._1))
+        .handleOption(Nil, (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
     (num > Remote(0)).ifThenElse(ifTrue, Nil)
   }
 
@@ -44,7 +44,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       .handleOption(
         Remote(Nil),
         (tuple: Remote[(A, List[A])]) =>
-          predicate(tuple._1).ifThenElse(Cons(tuple._2.takeWhile(predicate), tuple._1), Nil)
+          predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Nil)
       )
 
   def drop(num: Remote[Int]): Remote[List[A]] = {
@@ -86,7 +86,9 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     fold[A](numeric.fromLong(0L))(_ + _)
 
   final def filter(predicate: Remote[A] => Remote[Boolean]): Remote[List[A]] =
-    fold[List[A]](Remote(Nil))((a2: Remote[List[A]], a1: Remote[A]) => predicate(a1).ifThenElse(Cons(a2, a1), a2))
+    fold[List[A]](Remote(Nil))((a2: Remote[List[A]], a1: Remote[A]) =>
+      predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
+    )
 
   final def isEmpty: Remote[Boolean] =
     self.headOption.isNone.ifThenElse(Remote(true), Remote(false))
