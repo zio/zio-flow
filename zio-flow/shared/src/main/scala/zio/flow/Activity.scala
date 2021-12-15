@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow
 
 final case class Activity[-R, A](
@@ -6,7 +22,7 @@ final case class Activity[-R, A](
   operation: Operation[R, A],
   check: ZFlow[R, ActivityError, A],
   compensate: ZFlow[A, ActivityError, Any]
-)               { self =>
+) { self =>
   def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] = ZFlow.RunActivity(input, self)
 
   def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit ev: (R1, R2) <:< R): ZFlow[Any, ActivityError, A] =

@@ -8,19 +8,18 @@ import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockActivity
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test._
-import zio.test.environment.{ TestClock, TestConsole }
-import zio.{ Has, ZIO }
+import zio.test.environment.{TestClock, TestConsole}
+import zio.{Has, ZIO}
 
 object ZFlowMethodSpec extends DefaultRunnableSpec {
 
-  implicit val nothingSchema: Schema[Nothing]             = Schema.fail("Nothing schema")
-  implicit val activityErrorSchema: Schema[ActivityError] = Schema.fail("Activity error schema")
-  implicit val anySchema: Schema[Any]                     = Schema.fail("Schema for Any")
+  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
+  implicit val anySchema: Schema[Any]         = Schema.fail("Schema for Any")
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit]                            = for {
+  ): ZFlow[Any, Nothing, Unit] = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()
@@ -86,8 +85,8 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
         val evaluated: ZIO[Clock with Console, Nothing, Boolean] = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           //TODO : This waits for timeoutDuration time
-          _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 1L)
-          bool          <- remoteBoolVar.get
+          _    <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 1L)
+          bool <- remoteBoolVar.get
         } yield bool).evaluateLiveInMem(implicitly[Schema[Boolean]], nothingSchema)
 
         assertM(evaluated)(equalTo(true))

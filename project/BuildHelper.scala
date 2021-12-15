@@ -48,7 +48,7 @@ object BuildHelper {
 
   def buildInfoSettings(packageName: String) =
     Seq(
-      buildInfoKeys := Seq[BuildInfoKey](organization, moduleName, name, version, scalaVersion, sbtVersion, isSnapshot),
+      buildInfoKeys    := Seq[BuildInfoKey](organization, moduleName, name, version, scalaVersion, sbtVersion, isSnapshot),
       buildInfoPackage := packageName
     )
 
@@ -117,7 +117,7 @@ object BuildHelper {
 
   def extraOptions(scalaVersion: String, optimize: Boolean) =
     CrossVersion.partialVersion(scalaVersion) match {
-      case Some((3, _))  =>
+      case Some((3, _)) =>
         Seq(
           "-language:implicitConversions",
           "-Xignore-scala2-macros"
@@ -159,7 +159,7 @@ object BuildHelper {
           "-Xmax-classfile-name",
           "242"
         ) ++ std2xOptions
-      case _             => Seq.empty
+      case _ => Seq.empty
     }
 
   def platformSpecificSources(platform: String, conf: String, baseDirectory: File)(versions: String*) = for {
@@ -177,9 +177,9 @@ object BuildHelper {
         List("2.12", "2.11+", "2.12+", "2.11-2.12", "2.12-2.13", "2.x")
       case Some((2, 13)) =>
         List("2.13", "2.11+", "2.12+", "2.13+", "2.12-2.13", "2.x")
-      case Some((3, _))  =>
+      case Some((3, _)) =>
         List("dotty", "2.11+", "2.12+", "2.13+", "3.x")
-      case _             =>
+      case _ =>
         List()
     }
     platformSpecificSources(platform, conf, baseDir)(versions: _*)
@@ -205,10 +205,10 @@ object BuildHelper {
   )
 
   def stdSettings(prjName: String) = Seq(
-    name := s"$prjName",
-    crossScalaVersions := Seq(Scala211, Scala212, Scala213),
+    name                     := s"$prjName",
+    crossScalaVersions       := Seq(Scala211, Scala212, Scala213),
     ThisBuild / scalaVersion := Scala213,
-    scalacOptions := stdOptions ++ extraOptions(scalaVersion.value, optimize = !isSnapshot.value),
+    scalacOptions            := stdOptions ++ extraOptions(scalaVersion.value, optimize = !isSnapshot.value),
     libraryDependencies ++= {
       if (scalaVersion.value == Scala3)
         Seq(
@@ -216,7 +216,7 @@ object BuildHelper {
         )
       else
         Seq(
-          "com.github.ghik" % "silencer-lib"            % SilencerVersion % Provided cross CrossVersion.full,
+          "com.github.ghik" % "silencer-lib" % SilencerVersion % Provided cross CrossVersion.full,
           compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full)
         )
     },
@@ -237,7 +237,7 @@ object BuildHelper {
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, x)) if x <= 12 =>
           Seq(compilerPlugin(("org.scalamacros" % "paradise" % "2.1.1").cross(CrossVersion.full)))
-        case _                       => Seq.empty
+        case _ => Seq.empty
       }
     }
   )
@@ -261,10 +261,10 @@ object BuildHelper {
 
   def nativeSettings = Seq(
     Test / skip := true,
-    doc / skip := true,
+    doc / skip  := true,
     SettingKey[Boolean](
       "ide-skip-project" // Exclude from Intellij because Scala Native projects break it - https://github.com/scala-native/scala-native/issues/1007#issuecomment-370402092
-    ) := true,
+    )                       := true,
     Compile / doc / sources := Seq.empty
   )
 

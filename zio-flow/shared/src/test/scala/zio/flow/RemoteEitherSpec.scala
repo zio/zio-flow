@@ -110,7 +110,12 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
           "V"
         )
       }
-    )
+    ),
+    testM("toTry") {
+      check(Gen.either(Gen.throwable, Gen.anyInt)) { either =>
+        Remote(either).toTry <-> either.toTry
+      }
+    }
   )
 
   private def partialLift[A, B: Schema](f: A => B): Remote[A] => Remote[B] = a =>

@@ -1,6 +1,22 @@
+/*
+ * Copyright 2021 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow
 
-import java.time.{ Duration, Instant }
+import java.time.{Duration, Instant}
 
 import zio.schema.Schema
 
@@ -73,12 +89,13 @@ sealed trait ZFlow[-R, +E, +A] {
       .catchAll(_ => that.map(b => Remote.sequenceEither(Right(b))(a1Schema, bSchema)))
 
   /**
-   * Attempts to execute this flow, but then, if this flow is suspended due to performing a retry
-   * operation inside a transaction (because conditions necessary for executing this flow are not
-   * yet ready), then will switch over to the specified flow.
+   * Attempts to execute this flow, but then, if this flow is suspended due to
+   * performing a retry operation inside a transaction (because conditions
+   * necessary for executing this flow are not yet ready), then will switch over
+   * to the specified flow.
    *
-   * If this flow never suspends, then it will always execute to success or failure, and the
-   * specified flow will never be executed.
+   * If this flow never suspends, then it will always execute to success or
+   * failure, and the specified flow will never be executed.
    */
   final def orTry[R1 <: R, E1 >: E, A1 >: A](that: ZFlow[R1, E1, A1]): ZFlow[R1, E1, A1] =
     ZFlow.OrTry(self, that)
