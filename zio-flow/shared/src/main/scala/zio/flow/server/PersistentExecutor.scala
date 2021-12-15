@@ -223,7 +223,7 @@ final case class PersistentExecutor(
               _             <- ref.update(_.copy(current = evaluatedFlow.value))
             } yield ()) *> step(ref)
 
-          case foreach @ Foreach(_, _) => ???
+          case Foreach(_, _) => ???
 
           case Fork(workflow) =>
             val fiber = for {
@@ -277,7 +277,7 @@ final case class PersistentExecutor(
 //              }
 //            } yield ()
 
-          case OrTry(left, right) => ???
+          case OrTry(_, _) => ???
           // for {
           //   state <- ref.get
           //   _ <- state.tstate.addFallback(right.provide(state.currentEnvironment.value)) match {
