@@ -2,7 +2,6 @@ package zio.flow.utils
 
 import java.io.IOException
 import java.net.URI
-
 import zio.clock.Clock
 import zio.console.{Console, putStrLn}
 import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor}
@@ -82,6 +81,17 @@ object ZFlowAssertionSyntax {
           ref
         )
       )
+
+    val mockPersistentTestClock = (for {
+      clock <- ZIO.service[Clock.Service]
+      ref   <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
+    } yield PersistentExecutor(
+      clock,
+      doesNothingDurableLog,
+      doesNothingKVStore,
+      mockOpExec.asInstanceOf[OperationExecutor[Any]],
+      ref
+    ))
   }
 
   import Mocks._
@@ -114,6 +124,11 @@ object ZFlowAssertionSyntax {
 
     def evaluateLivePersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Any, E, A] = for {
       persistentEval <- mockPersistentLiveClock
+      result         <- persistentEval.submit("1234", zflow)
+    } yield result
+
+    def evaluateTestPersistent(implicit schemaA: Schema[A], schemaE: Schema[E]) = for {
+      persistentEval <- mockPersistentTestClock
       result         <- persistentEval.submit("1234", zflow)
     } yield result
   }
