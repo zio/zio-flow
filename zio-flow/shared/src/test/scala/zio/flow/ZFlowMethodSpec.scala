@@ -3,8 +3,8 @@ package zio.flow
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration.durationInt
+import zio.flow.utils.MockHelpers.mockActivity
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.flow.utils.ZFlowAssertionSyntax.Mocks.mockActivity
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test._
