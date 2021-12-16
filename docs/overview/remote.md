@@ -18,7 +18,7 @@ Generally ZIO Flow will require that the values we work with be `Remote` values 
 For example, compare the signature of the `map` operator on `ZIO` and `ZFlow`:
 
 ```scala mdoc
-import zio.flow.remote._
+import zio.flow._
 
 trait ZIO[-R, +E, +A] {
   def map[B](f: A => B): ZIO[R, E, B]
@@ -45,8 +45,6 @@ The main way ZIO Flow does this is by providing operators on remote values that 
 
 ```scala mdoc:reset
 import zio.flow._
-import zio.flow.remote._
-import zio.flow.zFlow._
 
 val left: Remote[Int] = Remote(1)
 val right: Remote[Int] = Remote(1)
