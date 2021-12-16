@@ -238,8 +238,6 @@ final case class PersistentExecutor(
               _             <- ref.update(_.copy(current = evaluatedFlow.value))
             } yield ()) *> step(ref)
 
-          case Foreach(_, _) => ???
-
           case Fork(workflow) =>
             val fiber = for {
               _ <- ref.update(_.copy(current = workflow))

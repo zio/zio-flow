@@ -228,53 +228,6 @@ object ZFlowExecutor {
             status        <- compile(promise, ref, input, evaluatedFlow)
           } yield status
 
-        case forEach @ Foreach(values, body) =>
-          for {
-            list        <- eval(values)
-            unitPromise <- Promise.make[Nothing, Unit]
-            _           <- unitPromise.succeed(())
-            listRef     <- Ref.make(List.empty[Exit[E, forEach.Element]])
-            tuple <- list.foldLeft[ZIO[R, Nothing, (CompileStatus, Promise[Nothing, Unit])]](
-                       ZIO.succeed((CompileStatus.Done, unitPromise))
-                     ) { case (effect, element) =>
-                       effect.flatMap { case (previousStatus, previousPromise) =>
-                         if (previousStatus == CompileStatus.Done)
-                           for {
-                             _              <- previousPromise.await
-                             p              <- Promise.make[E, forEach.Element]
-                             status         <- compile(p, ref, input, body(lit(element)))
-                             elementPromise <- Promise.make[Nothing, Unit]
-                             _ <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise.succeed(
-                                    ()
-                                  )).forkDaemon
-                           } yield (status, elementPromise)
-                         else {
-                           Promise
-                             .make[Nothing, Unit]
-                             .flatMap(elementPromise =>
-                               (previousPromise.await *>
-                                 (for {
-                                   p <- Promise.make[E, forEach.Element]
-                                   _ <- compile(p, ref, input, body(lit(element)))
-                                   _ <- (p.await.run.flatMap(exit => listRef.update(exit :: _)) *> elementPromise
-                                          .succeed(())).forkDaemon
-                                 } yield ())).forkDaemon as ((CompileStatus.Suspended, elementPromise))
-                             )
-                         }
-                       }
-                     }
-            (previousStatus, previousPromise) = tuple
-            completePromise = listRef.get
-                                .map(l => Exit.collectAll(l.reverse).get)
-                                .flatMap(exit => promise.done(exit.map(_.asInstanceOf[A])))
-
-            status <- if (previousStatus == CompileStatus.Done)
-                        (previousPromise.await *> completePromise) as CompileStatus.Done
-                      else {
-                        (previousPromise.await *> completePromise).forkDaemon as CompileStatus.Suspended
-                      }
-          } yield status
-
         case fork @ Fork(workflow) =>
           for {
             innerPromise <- Promise.make[fork.ValueE, fork.ValueA]
