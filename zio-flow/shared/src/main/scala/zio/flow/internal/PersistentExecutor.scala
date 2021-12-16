@@ -24,6 +24,7 @@ import zio.clock._
 import zio.console.putStrLn
 import zio.flow._
 import zio.schema.Schema
+import zio.stream._
 
 final case class PersistentExecutor(
   clock: Clock.Service,
@@ -74,14 +75,40 @@ final case class PersistentExecutor(
       value    <- ZIO.fromOption(state.getVariable(variableName))
     } yield value).optional
 
-  def setVariable(workflowId: String, variableName: String, value: SchemaAndValue[_]): UIO[Boolean] =
-    (for {
-      map      <- workflows.get
-      stateRef <- ZIO.fromOption(map.get(workflowId))
-      _        <- stateRef.update(state => state.copy(variables = state.variables.updated(variableName, value)))
-      // TODO: It is time to retry a workflow that is suspended, because a variable changed.
-      // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
-    } yield true).catchAll(_ => UIO(false))
+  def setVariable(workflowId: String, variableName: String, value: SchemaAndValue[_]): UIO[Boolean] = {
+    val _ = workflowId // TODO: concept of variable ownership
+    workflows.get.flatMap { map =>
+      getWorkflowIds(variableName).flatMap { workflowIds =>
+        ZIO.foreach_(workflowIds) { workflowId =>
+          updateState(workflowId, map, variableName, value) *>
+          getFlow(workflowId, map).flatMap(flow =>
+            submit(???, flow)( // TODO: unique id
+              Schema.fail("This schema is not intended to be serialized"),
+              Schema.fail("This schema is not intended to be serialized")
+            ).forkDaemon
+          )
+        }
+      }.as(true)
+    }.orElseSucceed(false)
+  }
+
+  def getWorkflowIds[A](variableName: String): IO[IOException, Set[String]] =
+    kvStore
+      .scanAll(s"_zflow_suspended_workflows_readVar_$variableName")
+      .map { case (key, _) => new String(key.toArray) }
+      .run(ZSink.collectAllToSet)
+
+  def getFlow(workflowId: String, map: Map[String, Ref[PersistentExecutor.State[_, _]]]): IO[Unit, Erased] =
+    map.get(workflowId) match {
+      case Some(stateRef) => stateRef.get.map(state => erase(state.current))
+      case None           => ZIO.fail(())
+    }
+
+  def updateState(workflowId: String, map: Map[String, Ref[PersistentExecutor.State[_, _]]], variableName: String, value: SchemaAndValue[_]): IO[Unit, Unit] =
+    map.get(workflowId) match {
+      case Some(stateRef) => stateRef.update(state => state.copy(variables = state.variables.updated(variableName, value)))
+      case None => ZIO.fail(())
+    }
 
   def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
     import zio.flow.ZFlow._
@@ -159,21 +186,6 @@ final case class PersistentExecutor(
             wait *> onSuccess(())
 
           case Modify(svar, f0) =>
-            def deserializeDurablePromise(bytes: Chunk[Byte]): DurablePromise[_, _] =
-              ??? // TODO: implement deserialization of durable promise
-
-            def resume[A](variableName: String, oldValue: A, newValue: A): UIO[Unit] =
-              if (oldValue == newValue)
-                ZIO.unit
-              else
-                kvStore
-                  .scanAll(s"_zflow_suspended_workflows_readVar_$variableName")
-                  .foreach { case (_, value) =>
-                    val durablePromise = deserializeDurablePromise(value)
-                    durablePromise.asInstanceOf[DurablePromise[Nothing, Unit]].succeed(())
-                  }
-                  .orDie // TODO: handle errors looking up from key value store
-
             val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
             val a: ZIO[Any, Nothing, A] = for {
               vRefTuple <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
@@ -181,7 +193,6 @@ final case class PersistentExecutor(
               tuple     <- eval(f(lit(value))).map(_.value)
               _         <- vRefTuple._2.set(tuple._2)
               _         <- ref.update(_.addReadVar(vRefTuple._1))
-              _         <- resume(vRefTuple._1, value, tuple._1)
             } yield tuple._1
 
             a.flatMap { r =>
@@ -276,42 +287,34 @@ final case class PersistentExecutor(
           case RetryUntil =>
             def storeSuspended(
               readVars: Set[String],
-              durablePromise: DurablePromise[Nothing, Unit]
+              workflowId: String
             ): IO[IOException, Unit] = {
               def namespace(readVar: String): String =
                 s"_zflow_suspended_workflows_readVar_$readVar"
-              def key(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
-                Chunk.fromArray(durablePromise.promiseId.getBytes)
-              def value(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
-                ??? // TODO : Implement serialization of DurablePromise
-              ZIO.foreach_(readVars)(readVar =>
-                kvStore.put(namespace(readVar), key(durablePromise), value(durablePromise))
-              )
+              def key(workflowId: String): Chunk[Byte] =
+                Chunk.fromArray(workflowId.getBytes)
+              val value: Chunk[Byte] =
+                Chunk.empty
+              ZIO.foreach_(readVars)(readVar => kvStore.put(namespace(readVar), key(workflowId), value))
             }
 
             ref.modify { state =>
               state.tstate match {
                 case TState.Empty =>
-                  ZIO.unit -> state.copy(current = ZFlow.unit)
+                  ZIO.dieMessage("The RetryUntil operator can only be used inside transactions") -> state
                 case transaction @ TState.Transaction(_, _, _, fallback :: fallbacks) =>
                   val tstate = transaction.copy(fallbacks = fallbacks)
-                  ZIO.unit -> state.copy(current = fallback, tstate = tstate)
+                  step(ref) -> state.copy(current = fallback, tstate = tstate)
                 case TState.Transaction(_, readVars, _, Nil) =>
-                  val promise = Promise.unsafeMake[Nothing, Unit](Fiber.Id.None)
-                  val durablePromise = DurablePromise.make[Nothing, Unit](
-                    s"_zflow_workflow_${state.workflowId}_durablepromise_${state.promiseIdCounter}",
-                    durableLog,
-                    promise
-                  )
-                  storeSuspended(readVars, durablePromise) *>
-                    durablePromise.awaitEither(Schema.fail("nothing schema"), Schema[Unit]) ->
-                    state.copy(
-                      current = ZFlow.unit,
-                      compileStatus = PersistentCompileStatus.Suspended,
-                      promiseIdCounter = state.promiseIdCounter + 1
-                    )
+                  // TODO: get values of all the readVars
+                  // Then call store suspended
+                  // Then check if any of the readVars have changed
+                  // If they have changed keep running
+                  // Otherwise enter suspended
+                  storeSuspended(readVars, state.workflowId) ->
+                    state.copy(current = ZFlow.unit)
               }
-            }.flatten *> step(ref)
+            }.flatten
 
           case OrTry(left, right) =>
             for {
@@ -408,7 +411,7 @@ final case class PersistentExecutor(
     val durablePZio =
       Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
     val stateZio = durablePZio.map(dp =>
-      State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, 0, Nil, PersistentCompileStatus.Running)
+      State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, Nil, PersistentCompileStatus.Running)
     )
 
     (for {
@@ -459,7 +462,6 @@ object PersistentExecutor {
     result: DurablePromise[E, A],
     envStack: List[SchemaAndValue[_]],
     tempVarCounter: Int,
-    promiseIdCounter: Int,
     retry: List[FlowDurablePromise[_, _]],
     compileStatus: PersistentCompileStatus
   ) {
