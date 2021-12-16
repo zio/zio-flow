@@ -59,7 +59,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     },
     testM("Test ForEach") {
       val compileResult = ZFlow
-        .Foreach[Any, Nothing, Int, Int](Remote(List(10, 20, 30)), (a: Remote[Int]) => a + 5)
+        .foreach(Remote(List(10, 20, 30)))(_ + 5)
         .evaluateTestInMem(implicitly[Schema[List[Int]]], nothingSchema)
       assertM(compileResult)(equalTo(List(15, 25, 35)))
     } @@ ignore,

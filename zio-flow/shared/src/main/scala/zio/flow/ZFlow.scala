@@ -164,12 +164,6 @@ object ZFlow {
 
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
-  final case class Foreach[R, E, A, B](values: Remote[List[A]], body: Remote[A] => ZFlow[R, E, B])
-      extends ZFlow[R, E, List[B]] {
-    type Element = B
-
-  }
-
   final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
     type ValueE = E
     type ValueA = A
@@ -216,7 +210,14 @@ object ZFlow {
     ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
-    Foreach(values, body)
+    ZFlow.unwrap {
+      values.fold[ZFlow[R, E, List[B]]](ZFlow.succeed(Remote(Nil))) { (bs, a) =>
+        for {
+          bs <- ZFlow.unwrap(bs)
+          b  <- body(a)
+        } yield Remote.Cons(bs, b)
+      }
+    }.map(_.reverse)
 
   def foreachPar[R, A, B](
     values: Remote[List[A]]
