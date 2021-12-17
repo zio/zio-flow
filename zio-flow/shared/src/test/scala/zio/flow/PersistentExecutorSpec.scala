@@ -3,6 +3,7 @@ package zio.flow
 import zio.clock.currentTime
 import zio.duration.durationInt
 import zio.flow.ZFlowExecutorSpec.testActivity
+import zio.flow.internal.{DurableLog, IndexedStore}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion._
@@ -112,5 +113,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     assertM(flow.evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema))(equalTo(12))
   })
 
-  override def spec = suite("All tests")(suite1)
+  val layer = IndexedStore.live >>> DurableLog.live
+
+  override def spec = suite("All tests")(suite1).provideCustomLayer(layer)
 }

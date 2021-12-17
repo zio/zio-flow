@@ -92,7 +92,7 @@ final case class PersistentExecutor(
           state.stack match {
             case Nil =>
               eval(value).flatMap { schemaAndValue =>
-                state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit
+                state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit.provide(Has(durableLog))
               }
             case Instruction.PopEnv :: newStack =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
@@ -116,7 +116,7 @@ final case class PersistentExecutor(
           state.stack match {
             case Nil =>
               eval(value).flatMap { schemaAndValue =>
-                state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit
+                state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit.provide(Has(durableLog))
               }
             case Instruction.PopEnv :: newStack =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
@@ -170,7 +170,7 @@ final case class PersistentExecutor(
                   .scanAll(s"_zflow_suspended_workflows_readVar_$variableName")
                   .foreach { case (_, value) =>
                     val durablePromise = deserializeDurablePromise(value)
-                    durablePromise.asInstanceOf[DurablePromise[Nothing, Unit]].succeed(())
+                    durablePromise.asInstanceOf[DurablePromise[Nothing, Unit]].succeed(()).provide(Has(durableLog))
                   }
                   .orDie // TODO: handle errors looking up from key value store
 
@@ -252,8 +252,8 @@ final case class PersistentExecutor(
                 d      <- eval(duration).map(_.value)
                 output <- ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provide(Has(clock))
                 _ <- output match {
-                       case Some(value) => state.result.succeed(value.asInstanceOf)
-                       case None        => state.result.succeed(().asInstanceOf)
+                       case Some(value) => state.result.succeed(value.asInstanceOf).provide(Has(durableLog))
+                       case None        => state.result.succeed(().asInstanceOf).provide(Has(durableLog))
                      }
               } yield ()
             }
@@ -295,14 +295,11 @@ final case class PersistentExecutor(
                   val tstate = transaction.copy(fallbacks = fallbacks)
                   ZIO.unit -> state.copy(current = fallback, tstate = tstate)
                 case TState.Transaction(_, readVars, _, Nil) =>
-                  val promise = Promise.unsafeMake[Nothing, Unit](Fiber.Id.None)
                   val durablePromise = DurablePromise.make[Nothing, Unit](
-                    s"_zflow_workflow_${state.workflowId}_durablepromise_${state.promiseIdCounter}",
-                    durableLog,
-                    promise
+                    s"_zflow_workflow_${state.workflowId}_durablepromise_${state.promiseIdCounter}"
                   )
                   storeSuspended(readVars, durablePromise) *>
-                    durablePromise.awaitEither(Schema.fail("nothing schema"), Schema[Unit]) ->
+                    durablePromise.awaitEither(Schema.fail("nothing schema"), Schema[Unit]).provide(Has(durableLog)) ->
                     state.copy(
                       current = ZFlow.unit,
                       compileStatus = PersistentCompileStatus.Suspended,
@@ -403,17 +400,15 @@ final case class PersistentExecutor(
       )
     }
 
-    val durablePZio =
-      Promise.make[E, A].map(promise => DurablePromise.make[E, A](uniqueId + "_result", durableLog, promise))
-    val stateZio = durablePZio.map(dp =>
-      State(uniqueId, flow, TState.Empty, Nil, Map(), dp, Nil, 0, 0, Nil, PersistentCompileStatus.Running)
-    )
+    val durablePromise =
+      DurablePromise.make[E, A](uniqueId + "_result")
+    val state =
+      State(uniqueId, flow, TState.Empty, Nil, Map(), durablePromise, Nil, 0, 0, Nil, PersistentCompileStatus.Running)
 
     (for {
-      state  <- stateZio
       ref    <- Ref.make[State[E, A]](state)
       _      <- step(ref)
-      result <- state.result.awaitEither
+      result <- state.result.awaitEither.provide(Has(durableLog))
     } yield result).orDie.absolve
   }
 }

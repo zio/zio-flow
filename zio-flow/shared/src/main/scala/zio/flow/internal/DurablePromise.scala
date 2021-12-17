@@ -16,23 +16,41 @@
 
 package zio.flow.internal
 
-import java.io.IOException
+import java.io._
 
 import zio._
-import zio.console.putStrLn
 import zio.schema._
 
-final case class DurablePromise[E, A](promiseId: String, durableLog: DurableLog, promise: Promise[E, A]) {
-  def succeed(value: A)(implicit schemaA: Schema[A]): IO[IOException, Boolean] =
-    putStrLn("Succeed on Promise " + promise).provide(Has(console.Console.Service.live)) *> promise.succeed(value)
+final case class DurablePromise[E, A](promiseId: String) {
 
-  def fail(error: E)(implicit schemaE: Schema[E]): IO[IOException, Boolean] = promise.fail(error)
+  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[Has[DurableLog], IOException, Either[E, A]] =
+    DurableLog.subscribe(topic(promiseId), 0L).runHead.map(value => deserialize[E, A](value.get))
 
-  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): IO[IOException, Either[E, A]] =
-    putStrLn("Await on Promise " + promise).provide(Has(console.Console.Service.live)) *> promise.await.either
+  def fail(error: E)(implicit schemaE: Schema[E]): ZIO[Has[DurableLog], IOException, Boolean] =
+    DurableLog.append(topic(promiseId), serialize(Left(error))).map(_ == 0L)
+
+  def succeed(value: A)(implicit schemaA: Schema[A]): ZIO[Has[DurableLog], IOException, Boolean] =
+    DurableLog.append(topic(promiseId), serialize(Right(value))).map(_ == 0L)
+
+  private def deserialize[E, A](value: Chunk[Byte])(implicit schemaE: Schema[E], schemaA: Schema[A]): Either[E, A] = {
+    val ios = new ObjectInputStream(new ByteArrayInputStream(value.toArray))
+    ios.readObject().asInstanceOf[Either[E, A]]
+  }
+
+  private def serialize[A](a: A)(implicit schema: Schema[A]): Chunk[Byte] = {
+    val bf  = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(bf)
+    oos.writeObject(a)
+    oos.close()
+    Chunk.fromArray(bf.toByteArray)
+  }
+
+  private def topic(promiseId: String): String =
+    s"_zflow_durable_promise_$promiseId"
 }
 
 object DurablePromise {
-  def make[E, A](promiseId: String, durableLog: DurableLog, promise: Promise[E, A]): DurablePromise[E, A] =
-    DurablePromise(promiseId, durableLog, promise)
+
+  def make[E, A](promiseId: String): DurablePromise[E, A] =
+    DurablePromise(promiseId)
 }
