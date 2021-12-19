@@ -6,11 +6,13 @@ import zio.stream.ZStream
 
 import java.io.IOException
 
-object IndexedStoreDurable {
+object DurableIndexedStore {
 
   final case class IndexedStoreLive(rocksDB: service.RocksDB) extends IndexedStore {
 
-    private def incrementPosition(topic: String): IO[IOException, Long] = ???
+    private def incrementPosition(topic: String): IO[IOException, Long] = for {
+      pos <- position(topic)
+    } yield pos + 1
 
     private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
       rocksDB.initialHandles
