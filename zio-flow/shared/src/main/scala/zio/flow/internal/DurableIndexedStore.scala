@@ -51,9 +51,6 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
   override def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] = for {
     colFam <- getColFamilyHandle(topic)
     _ <- transactionDB.atomically {
-           //TODO : Deal with Chunk.fromArray on Option
-           //TODO : Deal with Protobuf decode and either return type
-           //TODO : General cleanup
            Transaction.getForUpdate(
              colFam,
              ProtobufCodec.encode(Schema[String])("POSITION").toArray,
@@ -63,20 +60,12 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
                .put(
                  colFam,
                  ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-                 ProtobufCodec
-                   .encode(Schema[Long])(
-                     (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
-                   )
-                   .toArray
+                 incPosition(posBytes)
                ) >>= { _ =>
                Transaction
                  .put(
                    colFam,
-                   ProtobufCodec
-                     .encode(Schema[Long])(
-                       (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
-                     )
-                     .toArray,
+                   incPosition(posBytes),
                    value.toArray
                  )
                  .refineToOrDie[IOException]
@@ -86,6 +75,16 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
 
     newPos <- position(topic)
   } yield newPos
+
+  private def incPosition(posBytes: Option[Array[Byte]]): Array[Byte] =
+    ProtobufCodec
+      .encode(Schema[Long])(
+        ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)) match {
+          case Left(error) => throw new IOException(error)
+          case Right(p)    => p + 1
+        }
+      )
+      .toArray
 
   override def scan(topic: String, from: Long, inclusiveTo: Long): ZStream[Any, IOException, Chunk[Byte]] =
     ZStream.fromEffect(getColFamilyHandle(topic)).flatMap { cf =>
@@ -99,23 +98,17 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
 }
 
 object DurableIndexedStore {
-  def live(topic: String): ZLayer[Has[service.TransactionDB], Throwable, Has[DurableIndexedStore]] = {
-    val database: ZLayer[Any, Throwable, TransactionDB] =
-      TransactionDB.live(new Options().setCreateIfMissing(true), "/zio_flow_transaction_db")
-    (for {
-      di <-
-        ZIO
-          .service[service.TransactionDB]
-          .map(transactionDB => DurableIndexedStore(transactionDB))
-          .provideLayer(database)
-      cfHandle <- di.getColFamilyHandle(topic)
-      _ <- TransactionDB
-             .put(
-               cfHandle,
-               ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-               ProtobufCodec.encode(Schema[Long])(0L).toArray
-             )
-             .provideLayer(database)
-    } yield di).toLayer
-  }
+  def live(topic: String): ZLayer[TransactionDB, Throwable, Has[DurableIndexedStore]] = (for {
+    di <-
+      ZIO
+        .service[service.TransactionDB]
+        .map(transactionDB => DurableIndexedStore(transactionDB))
+    cfHandle <- di.addTopic(topic)
+    _ <- TransactionDB
+           .put(
+             cfHandle,
+             ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+             ProtobufCodec.encode(Schema[Long])(0L).toArray
+           )
+  } yield di).toLayer
 }
