@@ -22,9 +22,8 @@ inThisBuild(
 addCommandAlias("fmt", "all scalafmtSbt scalafmtAll")
 addCommandAlias("fmtCheck", "all scalafmtSbtCheck scalafmtCheckAll")
 
-val zioVersion        = "1.0.12"
-val zioRocksDbVersion = "0.3.0"
-val zioSchemaVersion  = "0.1.4"
+val zioVersion       = "1.0.12"
+val zioSchemaVersion = "0.1.4"
 
 lazy val root = project
   .in(file("."))
@@ -48,12 +47,13 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"                   % zioVersion,
-      "dev.zio" %% "zio-rocksdb"           % zioRocksDbVersion,
       "dev.zio" %% "zio-test"              % zioVersion % "test",
       "dev.zio" %% "zio-test-sbt"          % zioVersion % "test",
       "dev.zio" %% "zio-schema"            % zioSchemaVersion,
       "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion,
-      "dev.zio" %% "zio-schema-optics"     % zioSchemaVersion
+      "dev.zio" %% "zio-schema-optics"     % zioSchemaVersion,
+      "dev.zio" %% "zio-schema-protobuf"   % zioSchemaVersion,
+      "dev.zio" %% "zio-rocksdb"           % "0.1-SNAPSHOT"
     )
   )
   .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))

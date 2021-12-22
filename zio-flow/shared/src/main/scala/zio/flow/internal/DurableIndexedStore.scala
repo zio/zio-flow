@@ -1,47 +1,108 @@
 package zio.flow.internal
-import org.rocksdb.ColumnFamilyHandle
-import zio.rocksdb.service
-import zio.{Chunk, IO, UIO, ZIO}
+import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, Options}
+import zio.rocksdb.{RocksDB, Transaction, TransactionDB, service}
+import zio.schema.Schema
+import zio.schema.codec.ProtobufCodec
 import zio.stream.ZStream
+import zio.{Chunk, Has, IO, Task, UIO, ZIO, ZLayer}
 
 import java.io.IOException
 
-object DurableIndexedStore {
+final case class DurableIndexedStore(rocksDB: service.RocksDB, transactionDB: service.TransactionDB)
+    extends IndexedStore {
 
-  final case class IndexedStoreLive(rocksDB: service.RocksDB) extends IndexedStore {
+  def addTopic(topic: String): Task[ColumnFamilyHandle] =
+    for {
+      colFam <-
+        transactionDB.createColumnFamily(
+          new ColumnFamilyDescriptor(ProtobufCodec.encode(Schema[String])(topic).toArray)
+        )
+      _ <- transactionDB.put(
+             colFam,
+             ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+             ProtobufCodec.encode(Schema[Long])(0L).toArray
+           )
+    } yield colFam
 
-    private def incrementPosition(topic: String): IO[IOException, Long] = for {
-      pos <- position(topic)
-    } yield pos + 1
+  override def position(topic: String): IO[IOException, Long] = (for {
+    cfHandle <- getColFamilyHandle(topic)
+    positionBytes <-
+      transactionDB.get(cfHandle, ProtobufCodec.encode(Schema[String])("POSITION").toArray).orDie
+    position <- ZIO.fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes.get)))
+  } yield position).mapError(s => new IOException(s))
 
-    private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
-      rocksDB.initialHandles
-        .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
-        .refineToOrDie[IOException]
+  //TODO: Initial handles does not get all column handles
+  private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+    rocksDB.initialHandles
+      .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
+      .refineToOrDie[IOException]
 
-    def getColFamilyHandle(namespace: String): UIO[ColumnFamilyHandle] =
+  def getColFamilyHandle(topic: String): UIO[ColumnFamilyHandle] =
+    for {
+      namespaces <- getNamespaces(rocksDB).orDie
+      cf         <- ZIO.succeed(namespaces.get(ProtobufCodec.encode(Schema[String])(topic)))
+      handle <- cf match {
+                  case Some(h) => ZIO.succeed(h)
+                  case None    => addTopic(topic).orDie
+                }
+    } yield handle
+
+  override def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] = for {
+    colFam <- getColFamilyHandle(topic)
+    _ <- transactionDB.atomically {
+           //TODO : Deal with Chunk.fromArray
+           //TODO : Add support for ColumnFamilyHandle
+           //TODO : Deal with Protobuf decode and either return type
+           Transaction.getForUpdate(ProtobufCodec.encode(Schema[String])("POSITION").toArray, exclusive = true) >>= {
+             posBytes =>
+              Transaction
+                 .put(
+                   ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+                   ProtobufCodec.encode(Schema[Long])(
+                     (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
+                   ).toArray
+                 ) >>= { _ =>
+                Transaction.put(ProtobufCodec.encode(Schema[Long])(
+                  (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
+                ).toArray, value.toArray).refineToOrDie[IOException]
+              }
+           }
+         }.refineToOrDie[IOException]
+
+    newPos <- position(topic)
+  } yield newPos
+
+  override def scan(topic: String, from: Long, inclusiveTo: Long): ZStream[Any, IOException, Chunk[Byte]] =
+    ZStream.fromEffect(getColFamilyHandle(topic)).flatMap { cf =>
       for {
-        namespaces <- getNamespaces(rocksDB).orDie
-        cf         <- ZIO.succeed(namespaces(Chunk.fromArray(namespace.getBytes)))
-      } yield cf
+        k <- ZStream.fromIterable(from to inclusiveTo)
+        value <-
+          ZStream.fromEffect(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
+      } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
+    }
+}
 
-    override def position(topic: String): IO[IOException, Long] = for {
-      cfHandle <- getColFamilyHandle(topic)
-      position <- rocksDB.get(cfHandle, "POSITION".getBytes()).orDie
-    } yield new String(position.get).toLong // TODO: use zio-schema, protobuf encoding instead
-
-    override def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] = for {
-      namespace <- getColFamilyHandle(topic)
-      pos       <- incrementPosition(topic)
-      _         <- rocksDB.put(namespace, pos.toString.getBytes(), value.toArray).refineToOrDie[IOException]
-    } yield pos
-
-    override def scan(topic: String, from: Long, inclusiveTo: Long): ZStream[Any, IOException, Chunk[Byte]] =
-      ZStream.fromEffect(getColFamilyHandle(topic)).flatMap { cf =>
-        for {
-          k     <- ZStream.fromIterable(from to inclusiveTo)
-          value <- ZStream.fromEffect(rocksDB.get(cf, k.toString.getBytes()).refineToOrDie[IOException])
-        } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
-      }
+object DurableIndexedStore {
+  def live(topic: String): ZLayer[Has[service.TransactionDB], Throwable, Has[DurableIndexedStore]] = {
+    val cfDescriptor: List[ColumnFamilyDescriptor] = List {
+      new ColumnFamilyDescriptor(topic.getBytes())
+    }
+    val database: ZLayer[Any, Throwable, RocksDB] =
+      RocksDB.live(new DBOptions().setCreateIfMissing(true), "/zio_flow_rocks_db", cfDescriptor)
+    val transactionDB: ZLayer[Any, Throwable, TransactionDB] =
+      TransactionDB.live(new Options().setCreateIfMissing(true), "/zio_flow_transaction_db")
+    (for {
+      transactionDB <- ZIO.service[service.TransactionDB].provideLayer(transactionDB)
+      di <-
+        ZIO.service[service.RocksDB].map(rocksDb => DurableIndexedStore(rocksDb, transactionDB)).provideLayer(database)
+      cfHandle <- di.getColFamilyHandle(topic)
+      _ <- RocksDB
+             .put(
+               cfHandle,
+               ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+               ProtobufCodec.encode(Schema[Long])(0L).toArray
+             )
+             .provideLayer(database)
+    } yield di).toLayer
   }
 }
