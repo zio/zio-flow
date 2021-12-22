@@ -8,8 +8,7 @@ import zio.{Chunk, Has, IO, Task, UIO, ZIO, ZLayer}
 
 import java.io.IOException
 
-final case class DurableIndexedStore(transactionDB: service.TransactionDB)
-    extends IndexedStore {
+final case class DurableIndexedStore(transactionDB: service.TransactionDB) extends IndexedStore {
 
   def addTopic(topic: String): Task[ColumnFamilyHandle] =
     for {
@@ -32,7 +31,9 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB)
   } yield position).mapError(s => new IOException(s))
 
   //TODO: Initial handles does not get all column handles
-  private def getNamespaces(transactionDB: service.TransactionDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+  private def getNamespaces(
+    transactionDB: service.TransactionDB
+  ): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
     transactionDB.initialHandles
       .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
       .refineToOrDie[IOException]
@@ -53,19 +54,33 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB)
            //TODO : Deal with Chunk.fromArray on Option
            //TODO : Add support for ColumnFamilyHandle
            //TODO : Deal with Protobuf decode and either return type
-           Transaction.getForUpdate(ProtobufCodec.encode(Schema[String])("POSITION").toArray, exclusive = true) >>= {
-             posBytes =>
-              Transaction
-                 .put(
-                   ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-                   ProtobufCodec.encode(Schema[Long])(
+           Transaction.getForUpdate(
+             colFam,
+             ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+             exclusive = true
+           ) >>= { posBytes =>
+             Transaction
+               .put(
+                 colFam,
+                 ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+                 ProtobufCodec
+                   .encode(Schema[Long])(
                      (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
-                   ).toArray
-                 ) >>= { _ =>
-                Transaction.put(ProtobufCodec.encode(Schema[Long])(
-                  (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
-                ).toArray, value.toArray).refineToOrDie[IOException]
-              }
+                   )
+                   .toArray
+               ) >>= { _ =>
+               Transaction
+                 .put(
+                   colFam,
+                   ProtobufCodec
+                     .encode(Schema[Long])(
+                       (ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)).right.get) + 1
+                     )
+                     .toArray,
+                   value.toArray
+                 )
+                 .refineToOrDie[IOException]
+             }
            }
          }.refineToOrDie[IOException]
 
@@ -77,7 +92,8 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB)
       for {
         k <- ZStream.fromIterable(from to inclusiveTo)
         value <-
-          ZStream.fromEffect(transactionDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
+          ZStream
+            .fromEffect(transactionDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
       } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
     }
 }
@@ -89,7 +105,10 @@ object DurableIndexedStore {
     (for {
       transactionDB <- ZIO.service[service.TransactionDB]
       di <-
-        ZIO.service[service.TransactionDB].map(transactionDB => DurableIndexedStore(transactionDB)).provideLayer(database)
+        ZIO
+          .service[service.TransactionDB]
+          .map(transactionDB => DurableIndexedStore(transactionDB))
+          .provideLayer(database)
       cfHandle <- di.getColFamilyHandle(topic)
       _ <- TransactionDB
              .put(
