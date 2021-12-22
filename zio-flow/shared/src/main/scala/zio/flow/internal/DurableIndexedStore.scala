@@ -1,6 +1,6 @@
 package zio.flow.internal
-import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, Options}
-import zio.rocksdb.{RocksDB, Transaction, TransactionDB, service}
+import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, Options}
+import zio.rocksdb.{Transaction, TransactionDB, service}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
 import zio.stream.ZStream
@@ -8,7 +8,7 @@ import zio.{Chunk, Has, IO, Task, UIO, ZIO, ZLayer}
 
 import java.io.IOException
 
-final case class DurableIndexedStore(rocksDB: service.RocksDB, transactionDB: service.TransactionDB)
+final case class DurableIndexedStore(transactionDB: service.TransactionDB)
     extends IndexedStore {
 
   def addTopic(topic: String): Task[ColumnFamilyHandle] =
@@ -32,14 +32,14 @@ final case class DurableIndexedStore(rocksDB: service.RocksDB, transactionDB: se
   } yield position).mapError(s => new IOException(s))
 
   //TODO: Initial handles does not get all column handles
-  private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
-    rocksDB.initialHandles
+  private def getNamespaces(transactionDB: service.TransactionDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+    transactionDB.initialHandles
       .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
       .refineToOrDie[IOException]
 
   def getColFamilyHandle(topic: String): UIO[ColumnFamilyHandle] =
     for {
-      namespaces <- getNamespaces(rocksDB).orDie
+      namespaces <- getNamespaces(transactionDB).orDie
       cf         <- ZIO.succeed(namespaces.get(ProtobufCodec.encode(Schema[String])(topic)))
       handle <- cf match {
                   case Some(h) => ZIO.succeed(h)
@@ -50,7 +50,7 @@ final case class DurableIndexedStore(rocksDB: service.RocksDB, transactionDB: se
   override def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] = for {
     colFam <- getColFamilyHandle(topic)
     _ <- transactionDB.atomically {
-           //TODO : Deal with Chunk.fromArray
+           //TODO : Deal with Chunk.fromArray on Option
            //TODO : Add support for ColumnFamilyHandle
            //TODO : Deal with Protobuf decode and either return type
            Transaction.getForUpdate(ProtobufCodec.encode(Schema[String])("POSITION").toArray, exclusive = true) >>= {
@@ -77,26 +77,21 @@ final case class DurableIndexedStore(rocksDB: service.RocksDB, transactionDB: se
       for {
         k <- ZStream.fromIterable(from to inclusiveTo)
         value <-
-          ZStream.fromEffect(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
+          ZStream.fromEffect(transactionDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
       } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
     }
 }
 
 object DurableIndexedStore {
   def live(topic: String): ZLayer[Has[service.TransactionDB], Throwable, Has[DurableIndexedStore]] = {
-    val cfDescriptor: List[ColumnFamilyDescriptor] = List {
-      new ColumnFamilyDescriptor(topic.getBytes())
-    }
-    val database: ZLayer[Any, Throwable, RocksDB] =
-      RocksDB.live(new DBOptions().setCreateIfMissing(true), "/zio_flow_rocks_db", cfDescriptor)
-    val transactionDB: ZLayer[Any, Throwable, TransactionDB] =
+    val database: ZLayer[Any, Throwable, TransactionDB] =
       TransactionDB.live(new Options().setCreateIfMissing(true), "/zio_flow_transaction_db")
     (for {
-      transactionDB <- ZIO.service[service.TransactionDB].provideLayer(transactionDB)
+      transactionDB <- ZIO.service[service.TransactionDB]
       di <-
-        ZIO.service[service.RocksDB].map(rocksDb => DurableIndexedStore(rocksDb, transactionDB)).provideLayer(database)
+        ZIO.service[service.TransactionDB].map(transactionDB => DurableIndexedStore(transactionDB)).provideLayer(database)
       cfHandle <- di.getColFamilyHandle(topic)
-      _ <- RocksDB
+      _ <- TransactionDB
              .put(
                cfHandle,
                ProtobufCodec.encode(Schema[String])("POSITION").toArray,
