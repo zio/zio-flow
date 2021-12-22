@@ -52,8 +52,8 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
     colFam <- getColFamilyHandle(topic)
     _ <- transactionDB.atomically {
            //TODO : Deal with Chunk.fromArray on Option
-           //TODO : Add support for ColumnFamilyHandle
            //TODO : Deal with Protobuf decode and either return type
+           //TODO : General cleanup
            Transaction.getForUpdate(
              colFam,
              ProtobufCodec.encode(Schema[String])("POSITION").toArray,
@@ -103,7 +103,6 @@ object DurableIndexedStore {
     val database: ZLayer[Any, Throwable, TransactionDB] =
       TransactionDB.live(new Options().setCreateIfMissing(true), "/zio_flow_transaction_db")
     (for {
-      transactionDB <- ZIO.service[service.TransactionDB]
       di <-
         ZIO
           .service[service.TransactionDB]
