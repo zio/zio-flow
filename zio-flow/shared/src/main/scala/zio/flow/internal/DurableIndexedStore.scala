@@ -1,6 +1,7 @@
 package zio.flow.internal
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle}
-import zio.rocksdb.{Transaction, TransactionDB, service}
+import zio.rocksdb.service.TransactionDB
+import zio.rocksdb.{Transaction, service}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
 import zio.stream.ZStream
@@ -30,11 +31,11 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
     position <- ZIO.fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes.get)))
   } yield position).mapError(s => new IOException(s))
 
-  //TODO: Initial handles does not get all column handles
+  
   private def getNamespaces(
     transactionDB: service.TransactionDB
   ): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
-    transactionDB.initialHandles
+    transactionDB.ownedColumnFamilyHandles()
       .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
       .refineToOrDie[IOException]
 
@@ -68,11 +69,10 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
                    incPosition(posBytes),
                    value.toArray
                  )
-                 .refineToOrDie[IOException]
+                 //.refineToOrDie[IOException]
              }
            }
          }.refineToOrDie[IOException]
-
     newPos <- position(topic)
   } yield newPos
 
@@ -98,17 +98,15 @@ final case class DurableIndexedStore(transactionDB: service.TransactionDB) exten
 }
 
 object DurableIndexedStore {
-  def live(topic: String): ZLayer[TransactionDB, Throwable, Has[DurableIndexedStore]] = (for {
-    di <-
-      ZIO
-        .service[service.TransactionDB]
-        .map(transactionDB => DurableIndexedStore(transactionDB))
-    cfHandle <- di.addTopic(topic)
-    _ <- TransactionDB
-           .put(
-             cfHandle,
-             ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-             ProtobufCodec.encode(Schema[Long])(0L).toArray
-           )
+
+  def live(topic : String): ZLayer[Has[TransactionDB], Throwable, Has[DurableIndexedStore]] = (for {
+  transactionDB <- ZIO.service[service.TransactionDB]
+  di <- ZIO.succeed(DurableIndexedStore(transactionDB))
+  _ <- di.addTopic(topic)
+  } yield di).toLayer
+
+  def live: ZLayer[Has[TransactionDB], Throwable, Has[DurableIndexedStore]] = (for {
+    transactionDB <- ZIO.service[service.TransactionDB]
+    di <- ZIO.succeed(DurableIndexedStore(transactionDB))
   } yield di).toLayer
 }

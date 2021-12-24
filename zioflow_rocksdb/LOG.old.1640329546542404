@@ -1,0 +1,89 @@
+2021/12/24-12:34:58.170284 70000ad6f000 RocksDB version: 6.4.6
+2021/12/24-12:34:58.170333 70000ad6f000 Git sha rocksdb_build_git_sha:e3169e3ea8762d2f34880742106858a23c8dc8b7
+2021/12/24-12:34:58.170336 70000ad6f000 Compile date Nov 24 2019
+2021/12/24-12:34:58.170339 70000ad6f000 DB SUMMARY
+2021/12/24-12:34:58.170368 70000ad6f000 SST files in zioflow_rocksdb dir, Total Num: 0, files: 
+2021/12/24-12:34:58.170370 70000ad6f000 Write Ahead Log file in zioflow_rocksdb: 
+2021/12/24-12:34:58.170371 70000ad6f000                         Options.error_if_exists: 0
+2021/12/24-12:34:58.170373 70000ad6f000                       Options.create_if_missing: 0
+2021/12/24-12:34:58.170374 70000ad6f000                         Options.paranoid_checks: 1
+2021/12/24-12:34:58.170375 70000ad6f000                                     Options.env: 0x13f9080d0
+2021/12/24-12:34:58.170376 70000ad6f000                                Options.info_log: 0x7fe656686150
+2021/12/24-12:34:58.170377 70000ad6f000                Options.max_file_opening_threads: 16
+2021/12/24-12:34:58.170378 70000ad6f000                              Options.statistics: 0x0
+2021/12/24-12:34:58.170379 70000ad6f000                               Options.use_fsync: 0
+2021/12/24-12:34:58.170381 70000ad6f000                       Options.max_log_file_size: 0
+2021/12/24-12:34:58.170382 70000ad6f000                  Options.max_manifest_file_size: 1073741824
+2021/12/24-12:34:58.170383 70000ad6f000                   Options.log_file_time_to_roll: 0
+2021/12/24-12:34:58.170384 70000ad6f000                       Options.keep_log_file_num: 1000
+2021/12/24-12:34:58.170384 70000ad6f000                    Options.recycle_log_file_num: 0
+2021/12/24-12:34:58.170385 70000ad6f000                         Options.allow_fallocate: 1
+2021/12/24-12:34:58.170386 70000ad6f000                        Options.allow_mmap_reads: 0
+2021/12/24-12:34:58.170387 70000ad6f000                       Options.allow_mmap_writes: 0
+2021/12/24-12:34:58.170388 70000ad6f000                        Options.use_direct_reads: 0
+2021/12/24-12:34:58.170388 70000ad6f000                        Options.use_direct_io_for_flush_and_compaction: 0
+2021/12/24-12:34:58.170389 70000ad6f000          Options.create_missing_column_families: 0
+2021/12/24-12:34:58.170390 70000ad6f000                              Options.db_log_dir: 
+2021/12/24-12:34:58.170391 70000ad6f000                                 Options.wal_dir: zioflow_rocksdb
+2021/12/24-12:34:58.170392 70000ad6f000                Options.table_cache_numshardbits: 6
+2021/12/24-12:34:58.170392 70000ad6f000                      Options.max_subcompactions: 1
+2021/12/24-12:34:58.170393 70000ad6f000                  Options.max_background_flushes: -1
+2021/12/24-12:34:58.170394 70000ad6f000                         Options.WAL_ttl_seconds: 0
+2021/12/24-12:34:58.170395 70000ad6f000                       Options.WAL_size_limit_MB: 0
+2021/12/24-12:34:58.170396 70000ad6f000             Options.manifest_preallocation_size: 4194304
+2021/12/24-12:34:58.170397 70000ad6f000                     Options.is_fd_close_on_exec: 1
+2021/12/24-12:34:58.170398 70000ad6f000                   Options.advise_random_on_open: 1
+2021/12/24-12:34:58.170398 70000ad6f000                    Options.db_write_buffer_size: 0
+2021/12/24-12:34:58.170399 70000ad6f000                    Options.write_buffer_manager: 0x7fe6566864f0
+2021/12/24-12:34:58.170400 70000ad6f000         Options.access_hint_on_compaction_start: 1
+2021/12/24-12:34:58.170401 70000ad6f000  Options.new_table_reader_for_compaction_inputs: 0
+2021/12/24-12:34:58.170401 70000ad6f000           Options.random_access_max_buffer_size: 1048576
+2021/12/24-12:34:58.170402 70000ad6f000                      Options.use_adaptive_mutex: 0
+2021/12/24-12:34:58.170403 70000ad6f000                            Options.rate_limiter: 0x0
+2021/12/24-12:34:58.170404 70000ad6f000     Options.sst_file_manager.rate_bytes_per_sec: 0
+2021/12/24-12:34:58.170405 70000ad6f000                       Options.wal_recovery_mode: 2
+2021/12/24-12:34:58.170406 70000ad6f000                  Options.enable_thread_tracking: 0
+2021/12/24-12:34:58.170406 70000ad6f000                  Options.enable_pipelined_write: 0
+2021/12/24-12:34:58.170425 70000ad6f000                  Options.unordered_write: 0
+2021/12/24-12:34:58.170426 70000ad6f000         Options.allow_concurrent_memtable_write: 1
+2021/12/24-12:34:58.170427 70000ad6f000      Options.enable_write_thread_adaptive_yield: 1
+2021/12/24-12:34:58.170428 70000ad6f000             Options.write_thread_max_yield_usec: 100
+2021/12/24-12:34:58.170429 70000ad6f000            Options.write_thread_slow_yield_usec: 3
+2021/12/24-12:34:58.170430 70000ad6f000                               Options.row_cache: None
+2021/12/24-12:34:58.170430 70000ad6f000                              Options.wal_filter: None
+2021/12/24-12:34:58.170431 70000ad6f000             Options.avoid_flush_during_recovery: 0
+2021/12/24-12:34:58.170432 70000ad6f000             Options.allow_ingest_behind: 0
+2021/12/24-12:34:58.170433 70000ad6f000             Options.preserve_deletes: 0
+2021/12/24-12:34:58.170434 70000ad6f000             Options.two_write_queues: 0
+2021/12/24-12:34:58.170435 70000ad6f000             Options.manual_wal_flush: 0
+2021/12/24-12:34:58.170435 70000ad6f000             Options.atomic_flush: 0
+2021/12/24-12:34:58.170436 70000ad6f000             Options.avoid_unnecessary_blocking_io: 0
+2021/12/24-12:34:58.170437 70000ad6f000                 Options.persist_stats_to_disk: 0
+2021/12/24-12:34:58.170438 70000ad6f000                 Options.log_readahead_size: 0
+2021/12/24-12:34:58.170439 70000ad6f000             Options.max_background_jobs: 2
+2021/12/24-12:34:58.170439 70000ad6f000             Options.max_background_compactions: -1
+2021/12/24-12:34:58.170440 70000ad6f000             Options.avoid_flush_during_shutdown: 0
+2021/12/24-12:34:58.170441 70000ad6f000           Options.writable_file_max_buffer_size: 1048576
+2021/12/24-12:34:58.170442 70000ad6f000             Options.delayed_write_rate : 16777216
+2021/12/24-12:34:58.170443 70000ad6f000             Options.max_total_wal_size: 0
+2021/12/24-12:34:58.170444 70000ad6f000             Options.delete_obsolete_files_period_micros: 21600000000
+2021/12/24-12:34:58.170445 70000ad6f000                   Options.stats_dump_period_sec: 600
+2021/12/24-12:34:58.170445 70000ad6f000                 Options.stats_persist_period_sec: 600
+2021/12/24-12:34:58.170446 70000ad6f000                 Options.stats_history_buffer_size: 1048576
+2021/12/24-12:34:58.170447 70000ad6f000                          Options.max_open_files: -1
+2021/12/24-12:34:58.170448 70000ad6f000                          Options.bytes_per_sync: 0
+2021/12/24-12:34:58.170449 70000ad6f000                      Options.wal_bytes_per_sync: 0
+2021/12/24-12:34:58.170449 70000ad6f000                   Options.strict_bytes_per_sync: 0
+2021/12/24-12:34:58.170450 70000ad6f000       Options.compaction_readahead_size: 0
+2021/12/24-12:34:58.170451 70000ad6f000 Compression algorithms supported:
+2021/12/24-12:34:58.170454 70000ad6f000 	kZSTD supported: 1
+2021/12/24-12:34:58.170455 70000ad6f000 	kZlibCompression supported: 1
+2021/12/24-12:34:58.170456 70000ad6f000 	kXpressCompression supported: 0
+2021/12/24-12:34:58.170457 70000ad6f000 	kSnappyCompression supported: 1
+2021/12/24-12:34:58.170458 70000ad6f000 	kZSTDNotFinalCompression supported: 1
+2021/12/24-12:34:58.170459 70000ad6f000 	kLZ4HCCompression supported: 1
+2021/12/24-12:34:58.170460 70000ad6f000 	kLZ4Compression supported: 1
+2021/12/24-12:34:58.170460 70000ad6f000 	kBZip2Compression supported: 1
+2021/12/24-12:34:58.170466 70000ad6f000 Fast CRC32 supported: Not supported on x86
+2021/12/24-12:34:58.170580 70000ad6f000 [_impl/db_impl.cc:395] Shutdown: canceling all background work
+2021/12/24-12:34:58.170629 70000ad6f000 [_impl/db_impl.cc:575] Shutdown complete
