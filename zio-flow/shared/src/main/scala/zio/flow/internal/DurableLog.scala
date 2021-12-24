@@ -16,10 +16,10 @@
 
 package zio.flow.internal
 
-import java.io.IOException
-
 import zio._
 import zio.stream._
+
+import java.io.IOException
 
 trait DurableLog {
   def append(topic: String, value: Chunk[Byte]): IO[IOException, Long]

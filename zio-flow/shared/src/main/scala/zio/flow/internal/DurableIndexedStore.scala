@@ -1,5 +1,5 @@
 package zio.flow.internal
-import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, Options}
+import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle}
 import zio.rocksdb.{Transaction, TransactionDB, service}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
