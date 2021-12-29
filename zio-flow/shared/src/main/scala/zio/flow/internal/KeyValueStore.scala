@@ -19,25 +19,48 @@ package zio.flow.internal
 import java.io.IOException
 
 import org.rocksdb.ColumnFamilyHandle
-import zio._
 import zio.rocksdb._
-import zio.stream._
+import zio.{Chunk, Has, IO, UIO, ZLayer, ZIO}
+import zio.stream.ZStream
 
 trait KeyValueStore {
+
   def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean]
+
   def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]]
+
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
 }
 
 object KeyValueStore {
 
-  val live: ZLayer[RocksDB, IOException, Has[KeyValueStore]] =
-    ZLayer.fromEffect {
-      for {
-        rocksDB    <- ZIO.service[service.RocksDB]
-        namespaces <- getNamespaces(rocksDB)
-      } yield KeyValueStoreLive(rocksDB, namespaces)
+  val live: ZLayer[RocksDB, IOException, Has[KeyValueStore]] = {
+    for {
+      rocksDB    <- ZIO.service[service.RocksDB]
+      namespaces <- getNamespaces(rocksDB)
+    } yield {
+      KeyValueStoreLive(rocksDB, namespaces)
     }
+  }.toLayer
+
+  def put(
+    namespace: String,
+    key: Chunk[Byte],
+    value: Chunk[Byte]
+  ): ZIO[Has[KeyValueStore], IOException, Boolean] =
+    ZIO.accessM(
+      _.get.put(namespace, key, value)
+    )
+
+  def get(namespace: String, key: Chunk[Byte]): ZIO[Has[KeyValueStore], IOException, Option[Chunk[Byte]]] =
+    ZIO.accessM(
+      _.get.get(namespace, key)
+    )
+
+  def scanAll(namespace: String): ZStream[Has[KeyValueStore], IOException, (Chunk[Byte], Chunk[Byte])] =
+    ZStream.accessStream(
+      _.get.scanAll(namespace)
+    )
 
   private final case class KeyValueStoreLive(rocksDB: service.RocksDB, namespaces: Map[Chunk[Byte], ColumnFamilyHandle])
       extends KeyValueStore {
