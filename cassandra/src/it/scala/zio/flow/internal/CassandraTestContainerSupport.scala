@@ -5,7 +5,7 @@ import com.dimafeng.testcontainers.CassandraContainer
 import java.net.InetSocketAddress
 import org.testcontainers.utility.DockerImageName
 import zio.{&, Has, URLayer, ZIO, ZManaged}
-import zio.blocking.{Blocking, blocking, effectBlocking}
+import zio.blocking.{Blocking, effectBlocking}
 
 object CassandraTestContainerSupport {
 
@@ -47,17 +47,15 @@ object CassandraTestContainerSupport {
       _ <- createKeyspace(ipAddress)
       session <-
         ZManaged.make {
-          blocking {
-            ZIO.fromCompletionStage(
-              CqlSession.builder
-                .addContactPoint(ipAddress)
-                .withKeyspace(
-                  CqlIdentifier.fromCql(testKeyspaceName)
-                )
-                .withLocalDatacenter(testDataCenter)
-                .buildAsync()
-            )
-          }
+          ZIO.fromCompletionStage(
+            CqlSession.builder
+              .addContactPoint(ipAddress)
+              .withKeyspace(
+                CqlIdentifier.fromCql(testKeyspaceName)
+              )
+              .withLocalDatacenter(testDataCenter)
+              .buildAsync()
+          )
         } { session =>
           effectBlocking {
             session.close()
@@ -85,21 +83,19 @@ object CassandraTestContainerSupport {
     }.toLayer
 
   private def createKeyspace(ipAddress: InetSocketAddress) = ZManaged.make {
-    blocking {
-      for {
-        session <-
-          ZIO.fromCompletionStage(
-            CqlSession.builder
-              .addContactPoint(ipAddress)
-              .withLocalDatacenter(testDataCenter)
-              .buildAsync()
-          )
-        _ <-
-          ZIO.fromCompletionStage(
-            session.executeAsync(createKeyspaceScript)
-          )
-      } yield session
-    }
+    for {
+      session <-
+        ZIO.fromCompletionStage(
+          CqlSession.builder
+            .addContactPoint(ipAddress)
+            .withLocalDatacenter(testDataCenter)
+            .buildAsync()
+        )
+      _ <-
+        ZIO.fromCompletionStage(
+          session.executeAsync(createKeyspaceScript)
+        )
+    } yield session
   } { session =>
     effectBlocking(
       session.close()

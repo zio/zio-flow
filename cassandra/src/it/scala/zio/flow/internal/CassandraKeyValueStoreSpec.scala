@@ -2,7 +2,7 @@ package zio.flow.internal
 
 import zio.{Chunk, Has, URLayer, ZIO}
 import zio.blocking.Blocking
-import zio.test.Assertion._
+import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkNM}
 
@@ -59,10 +59,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
         checkNM(10)(
           nonEmptyByteChunkGen
         ) { key =>
-          val tableName = newTimeBasedName()
+          val nonExistingTableName = newTimeBasedName()
 
           KeyValueStore
-            .get(tableName, key)
+            .get(nonExistingTableName, key)
             .map { retrieved =>
               assertTrue(
                 retrieved.isEmpty
@@ -89,10 +89,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
         }
       },
       testM("should return empty result for a `scanAll` call when the table does not exist.") {
-        val tableName = newTimeBasedName()
+        val nonExistingTableName = newTimeBasedName()
 
         KeyValueStore
-          .scanAll(tableName)
+          .scanAll(nonExistingTableName)
           .runCollect
           .map { retrieved =>
             assertTrue(
@@ -101,7 +101,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           }
       },
       testM("should return all key-value pairs for a `scanAll` call.") {
-        val tableName = newTimeBasedName()
+        val uniqueTableName = newTimeBasedName()
         val keyValuePairs =
           Chunk
             .fromIterable(1 to 10_000)
@@ -114,11 +114,11 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           putSuccesses <-
             ZIO
               .foreach(keyValuePairs) { case (key, value) =>
-                KeyValueStore.put(tableName, key, value)
+                KeyValueStore.put(uniqueTableName, key, value)
               }
           retrieved <-
             KeyValueStore
-              .scanAll(tableName)
+              .scanAll(uniqueTableName)
               .runCollect
         } yield {
           assertTrue(
