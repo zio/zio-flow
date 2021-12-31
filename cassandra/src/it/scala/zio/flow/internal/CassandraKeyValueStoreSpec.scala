@@ -104,7 +104,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
         val uniqueTableName = newTimeBasedName()
         val keyValuePairs =
           Chunk
-            .fromIterable(1 to 5_001)
+            .fromIterable(1 to 5001)
             .map { n =>
               Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
             }
