@@ -11,9 +11,11 @@ object CassandraTestContainerSupport {
 
   type CassandraSessionLayer = URLayer[Blocking, Has[CqlSession]]
 
+  private val cassandra = "cassandra"
+
   object DockerImageTag {
-    val cassandraV3: String = "cassandra:3.11.11"
-    val cassandraV4: String = "cassandra:4.0.1"
+    val cassandraV3: String = s"$cassandra:3.11.11"
+    val cassandraV4: String = s"$cassandra:4.0.1"
     val scyllaDb: String =
       // This nightly build supports Apple M1; Will point to a regular version when v4.6 is released.
       "scylladb/scylla-nightly:4.6.rc1-0.20211227.283788828"
@@ -71,7 +73,7 @@ object CassandraTestContainerSupport {
           CassandraContainer(
             DockerImageName
               .parse(imageTag)
-              .asCompatibleSubstituteFor("cassandra")
+              .asCompatibleSubstituteFor(cassandra)
           )
         container.start()
         container
