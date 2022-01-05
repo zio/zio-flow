@@ -1,17 +1,40 @@
 package zio.flow.internal
 
+import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
+import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.dimafeng.testcontainers.CassandraContainer
+
 import java.net.InetSocketAddress
 import org.testcontainers.utility.DockerImageName
 import zio.{&, Has, URLayer, ZIO, ZManaged}
 import zio.blocking.{Blocking, effectBlocking}
+import zio.ZIO.{fromCompletionStage => execAsync}
 
 object CassandraTestContainerSupport {
 
   type CassandraSessionLayer = URLayer[Blocking, Has[CqlSession]]
 
-  private val cassandra = "cassandra"
+  private val cassandra        = "cassandra"
+  private val testKeyspaceName = "CassandraKeyValueStoreSpec_Keyspace"
+  private val testDataCenter   = "datacenter1"
+
+  private val createTable =
+    SchemaBuilder
+      .createTable(testKeyspaceName, CassandraKeyValueStore.tableName)
+      .withPartitionKey(
+        CassandraKeyValueStore.namespaceColumnName,
+        DataTypes.TEXT
+      )
+      .withPartitionKey(
+        CassandraKeyValueStore.keyColumnName,
+        DataTypes.BLOB
+      )
+      .withColumn(
+        CassandraKeyValueStore.valueColumnName,
+        DataTypes.BLOB
+      )
+      .build
 
   object DockerImageTag {
     val cassandraV3: String = s"$cassandra:3.11.11"
@@ -20,9 +43,6 @@ object CassandraTestContainerSupport {
       // This nightly build supports Apple M1; Will point to a regular version when v4.6 is released.
       "scylladb/scylla-nightly:4.6.rc1-0.20211227.283788828"
   }
-
-  val testKeyspaceName: String = "CassandraKeyValueStoreSpec_Keyspace"
-  val testDataCenter: String   = "datacenter1"
 
   val createKeyspaceScript: String =
     s"CREATE KEYSPACE $testKeyspaceName WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
@@ -49,7 +69,7 @@ object CassandraTestContainerSupport {
       _ <- createKeyspace(ipAddress)
       session <-
         ZManaged.make {
-          ZIO.fromCompletionStage(
+          execAsync(
             CqlSession.builder
               .addContactPoint(ipAddress)
               .withKeyspace(
@@ -87,15 +107,19 @@ object CassandraTestContainerSupport {
   private def createKeyspace(ipAddress: InetSocketAddress) = ZManaged.make {
     for {
       session <-
-        ZIO.fromCompletionStage(
+        execAsync(
           CqlSession.builder
             .addContactPoint(ipAddress)
             .withLocalDatacenter(testDataCenter)
             .buildAsync()
         )
       _ <-
-        ZIO.fromCompletionStage(
+        execAsync(
           session.executeAsync(createKeyspaceScript)
+        )
+      _ <-
+        execAsync(
+          session.executeAsync(createTable)
         )
     } yield session
   } { session =>

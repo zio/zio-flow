@@ -1,15 +1,13 @@
 package zio.flow.internal
 
-import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement}
-import com.datastax.oss.driver.api.core.servererrors.InvalidQueryException
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder.literal
-import com.datastax.oss.driver.api.querybuilder.{QueryBuilder, SchemaBuilder}
+import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 
 import java.io.IOException
 import java.nio.ByteBuffer
-import zio.{Chunk, Has, IO, URLayer, ZIO, ZRef}
+import zio.{Chunk, Has, IO, URLayer, ZIO}
 import zio.stream.ZStream
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
@@ -17,143 +15,106 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
   private val keyspace =
     session.getKeyspace
-      .orElse(null: CqlIdentifier)
+      .orElse(null: CqlIdentifier) // scalafix:ok DisableSyntax.null
+
+  private val table =
+    CqlIdentifier.fromCql(CassandraKeyValueStore.tableName)
+
+  private val cqlSelect =
+    QueryBuilder.selectFrom(keyspace, table)
+
+  private val cqlInsert =
+    QueryBuilder.insertInto(keyspace, table)
 
   override def put(
     namespace: String,
     key: Chunk[Byte],
     value: Chunk[Byte]
   ): IO[IOException, Boolean] = {
-    val insert =
-      QueryBuilder
-        .insertInto(keyspace, tableOf(namespace))
-        .value(
-          keyColumnName,
-          byteBufferFrom(key)
-        )
-        .value(
-          valueColumnName,
-          byteBufferFrom(value)
-        )
-        .build
+    val insert = cqlInsert
+      .value(
+        namespaceColumnName,
+        literal(namespace)
+      )
+      .value(
+        keyColumnName,
+        byteBufferFrom(key)
+      )
+      .value(
+        valueColumnName,
+        byteBufferFrom(value)
+      )
+      .build
 
-    val operation =
-      executeAsync(insert, session).as(true)
-
-    operation.catchSome {
-      case error: InvalidQueryException if tableDoesNotExist(error, namespace) =>
-        val createTable =
-          SchemaBuilder
-            .createTable(keyspace, tableOf(namespace))
-            .withPartitionKey(keyColumnName, DataTypes.BLOB)
-            .withColumn(valueColumnName, DataTypes.BLOB)
-            .build
-
-        executeAsync(createTable, session) *> operation
-    }.mapError(
-      refineToIOException("Error putting key-value pair")
-    )
+    executeAsync(insert, session)
+      .mapBoth(
+        refineToIOException(s"Error putting key-value pair for <$namespace> namespace"),
+        _ => true
+      )
   }
 
   override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] = {
-    val query =
-      QueryBuilder
-        .selectFrom(keyspace, tableOf(namespace))
-        .column(valueColumnName)
-        .whereColumn(keyColumnName)
-        .isEqualTo(
-          byteBufferFrom(key)
+    val query = cqlSelect
+      .column(valueColumnName)
+      .whereColumn(namespaceColumnName)
+      .isEqualTo(
+        literal(namespace)
+      )
+      .whereColumn(keyColumnName)
+      .isEqualTo(
+        byteBufferFrom(key)
+      )
+      .limit(1)
+      .build
+
+    executeAsync(query, session).flatMap { result =>
+      if (result.remaining > 0)
+        ZIO.some(
+          blobValueOf(valueColumnName, result.one)
         )
-        .limit(1)
-        .build
-
-    val operation =
-      executeAsync(query, session).map { result =>
-        if (result.remaining > 0)
-          Option(
-            blobValueOf(valueColumnName, result.one)
-          )
-        else None
-      }.catchSome {
-        case error: InvalidQueryException if tableDoesNotExist(error, namespace) =>
-          ZIO.none
-      }
-
-    operation.mapError(
-      refineToIOException("Error retrieving or reading value")
+      else
+        ZIO.none
+    }.mapError(
+      refineToIOException(s"Error retrieving or reading value for <$namespace> namespace")
     )
   }
 
   override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] = {
-    val operation =
-      ZStream.unwrap {
-        val query =
-          QueryBuilder
-            .selectFrom(keyspace, tableOf(namespace))
-            .column(keyColumnName)
-            .column(valueColumnName)
-            .build
+    val query = cqlSelect
+      .column(keyColumnName)
+      .column(valueColumnName)
+      .whereColumn(namespaceColumnName)
+      .isEqualTo(
+        literal(namespace)
+      )
+      .allowFiltering
+      .build
 
-        executeAsync(query, session).map { pageResult1 =>
-          val morePages =
-            if (pageResult1.hasMorePages)
-              pageMoreFrom(pageResult1)
-            else
-              ZStream.empty
+    ZStream
+      .paginateChunkM(
+        executeAsync(query, session)
+      )(_.map { result =>
+        val pairs = byteChunkPairsFrom(result)
 
-          val retrieved = byteChunkPairsFrom(pageResult1)
+        val nextPage =
+          if (result.hasMorePages)
+            Option(
+              ZIO.fromCompletionStage(result.fetchNextPage())
+            )
+          else
+            None
 
-          ZStream
-            .fromChunk(retrieved)
-            .concat(morePages)
-        }
-      }.catchSome {
-        case error: InvalidQueryException if tableDoesNotExist(error, namespace) =>
-          ZStream.empty
-      }
-
-    operation.mapError(
-      refineToIOException("Error scanning all key-value pairs")
-    )
+        pairs -> nextPage
+      })
+      .mapError(
+        refineToIOException(s"Error scanning all key-value pairs for <$namespace> namespace")
+      )
   }
 
   private def executeAsync(statement: SimpleStatement, session: CqlSession) =
     ZIO.fromCompletionStage(
       session.executeAsync(statement)
     )
-
-  private def pageMoreFrom(pageResult1: AsyncResultSet) =
-    ZStream {
-      for {
-        hasMorePagesRef <- ZRef.make(true).toManaged_
-        currentPageRef  <- ZRef.make(pageResult1).toManaged_
-        paging =
-          for {
-            hasMorePages <- hasMorePagesRef.get
-            currentPage  <- currentPageRef.get
-            byteChunkPairs <-
-              if (hasMorePages) {
-                for {
-                  newPageResult <-
-                    ZIO
-                      .fromCompletionStage(
-                        currentPage.fetchNextPage()
-                      )
-                      .mapError(Option(_))
-                  _ <- hasMorePagesRef
-                         .set(newPageResult.hasMorePages)
-                  _ <- currentPageRef
-                         .set(newPageResult)
-                } yield {
-                  byteChunkPairsFrom(newPageResult)
-                }
-              } else ZIO.fail(None)
-          } yield byteChunkPairs
-      } yield paging
-    }
-
-  private def tableOf(name: String) =
-    CqlIdentifier.fromInternal(name)
 
   private def byteBufferFrom(bytes: Chunk[Byte]) =
     literal(
@@ -178,15 +139,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
     Chunk.fromIterable(keyValuePairs)
   }
 
-  private def tableDoesNotExist(error: InvalidQueryException, targetTable: String) = {
-    val possibleErrorMessages =
-      List(
-        s"unconfigured table $targetTable",
-        s"table $targetTable does not exist"
-      )
-    possibleErrorMessages.contains(error.getMessage)
-  }
-
   private def refineToIOException(errorContext: String): Throwable => IOException = {
     case error: IOException =>
       error
@@ -203,17 +155,18 @@ object CassandraKeyValueStore {
       .map(new CassandraKeyValueStore(_))
       .toLayer
 
+  val tableName: String =
+    withDoubleQuotes("_zflow_key_value_store")
+
+  val namespaceColumnName: String =
+    withDoubleQuotes("namespace")
+
   val keyColumnName: String =
-    withPrefix("key")
+    withDoubleQuotes("key")
 
   val valueColumnName: String =
-    withPrefix("value")
+    withDoubleQuotes("value")
 
   private def withDoubleQuotes(string: String) =
     "\"" + string + "\""
-
-  private def withPrefix(columnName: String) =
-    withDoubleQuotes(
-      "_zflow_key_value_store_" + columnName
-    )
 }

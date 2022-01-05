@@ -6,8 +6,6 @@ import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkNM}
 
-import java.time.Instant
-
 object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
 
   private val cqlNameGen =
@@ -40,29 +38,34 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
 
   private def testUsing(keyValueStore: URLayer[Blocking, Has[KeyValueStore]], label: String) =
     suite(label)(
-      testM("should be able to `put` a key-value pair and then `get` it back.") {
+      testM("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
         checkNM(10)(
           cqlNameGen,
           nonEmptyByteChunkGen,
+          byteChunkGen,
           byteChunkGen
-        ) { (tableName, key, value) =>
+        ) { (namespace, key, value1, value2) =>
           for {
-            putSucceeded <- KeyValueStore.put(tableName, key, value)
-            retrieved    <- KeyValueStore.get(tableName, key)
+            putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
+            retrieved1    <- KeyValueStore.get(namespace, key)
+            putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
+            retrieved2    <- KeyValueStore.get(namespace, key)
           } yield assertTrue(
-            retrieved.get == value,
-            putSucceeded
+            putSucceeded1,
+            retrieved1.get == value1,
+            putSucceeded2,
+            retrieved2.get == value2
           )
         }
       },
-      testM("should return empty result for a `get` call when the table does not exist.") {
+      testM("should return empty result for a `get` call when the namespace does not exist.") {
         checkNM(10)(
           nonEmptyByteChunkGen
         ) { key =>
-          val nonExistingTableName = newTimeBasedName()
+          val nonExistentNamespace = newTimeBasedName()
 
           KeyValueStore
-            .get(nonExistingTableName, key)
+            .get(nonExistentNamespace, key)
             .map { retrieved =>
               assertTrue(
                 retrieved.isEmpty
@@ -75,13 +78,13 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           cqlNameGen,
           nonEmptyByteChunkGen,
           byteChunkGen
-        ) { (tableName, key, value) =>
+        ) { (namespace, key, value) =>
           val nonExistingKey =
             Chunk.fromIterable(newTimeBasedName().getBytes)
 
           for {
-            putSucceeded <- KeyValueStore.put(tableName, key, value)
-            retrieved    <- KeyValueStore.get(tableName, nonExistingKey)
+            putSucceeded <- KeyValueStore.put(namespace, key, value)
+            retrieved    <- KeyValueStore.get(namespace, nonExistingKey)
           } yield assertTrue(
             retrieved.isEmpty,
             putSucceeded
@@ -89,10 +92,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
         }
       },
       testM("should return empty result for a `scanAll` call when the table does not exist.") {
-        val nonExistingTableName = newTimeBasedName()
+        val nonExistentNamespace = newTimeBasedName()
 
         KeyValueStore
-          .scanAll(nonExistingTableName)
+          .scanAll(nonExistentNamespace)
           .runCollect
           .map { retrieved =>
             assertTrue(
@@ -101,10 +104,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           }
       },
       testM("should return all key-value pairs for a `scanAll` call.") {
-        val uniqueTableName = newTimeBasedName()
+        val uniqueNamespace = newTimeBasedName()
         val keyValuePairs =
           Chunk
-            .fromIterable(1 to 5001)
+            .fromIterable(1 to 5_001)
             .map { n =>
               Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
             }
@@ -114,11 +117,11 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           putSuccesses <-
             ZIO
               .foreach(keyValuePairs) { case (key, value) =>
-                KeyValueStore.put(uniqueTableName, key, value)
+                KeyValueStore.put(uniqueNamespace, key, value)
               }
           retrieved <-
             KeyValueStore
-              .scanAll(uniqueTableName)
+              .scanAll(uniqueNamespace)
               .runCollect
         } yield {
           assertTrue(
@@ -134,7 +137,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
     ).provideCustomLayerShared(keyValueStore) @@ nondeterministic @@ sequential
 
   private def newTimeBasedName() =
-    s"${Instant.now}"
+    s"${java.time.Instant.now}"
       .replaceAll(":", "_")
       .replaceAll(".", "_")
 }
