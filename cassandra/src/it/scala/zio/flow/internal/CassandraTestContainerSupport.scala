@@ -26,7 +26,7 @@ object CassandraTestContainerSupport {
         CassandraKeyValueStore.namespaceColumnName,
         DataTypes.TEXT
       )
-      .withPartitionKey(
+      .withClusteringColumn(
         CassandraKeyValueStore.keyColumnName,
         DataTypes.BLOB
       )

@@ -87,7 +87,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .isEqualTo(
         literal(namespace)
       )
-      .allowFiltering
       .build
 
     ZStream
