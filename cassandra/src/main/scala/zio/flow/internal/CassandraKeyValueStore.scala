@@ -7,7 +7,7 @@ import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 
 import java.io.IOException
 import java.nio.ByteBuffer
-import zio.{Chunk, Has, IO, URLayer, ZIO}
+import zio.{Chunk, Has, IO, Task, URLayer, ZIO}
 import zio.stream.ZStream
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
@@ -69,9 +69,9 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     executeAsync(query, session).flatMap { result =>
       if (result.remaining > 0)
-        ZIO.some(
+        Task {
           blobValueOf(valueColumnName, result.one)
-        )
+        }.asSome
       else
         ZIO.none
     }.mapError(
