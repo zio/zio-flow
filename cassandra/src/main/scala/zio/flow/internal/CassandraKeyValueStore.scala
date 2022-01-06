@@ -1,6 +1,6 @@
 package zio.flow.internal
 
-import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement}
+import com.datastax.oss.driver.api.core.cql.{Row, SimpleStatement}
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder.literal
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder
@@ -89,11 +89,26 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       )
       .build
 
+    lazy val errorContext =
+      s"Error scanning all key-value pairs for <$namespace> namespace"
+
     ZStream
-      .paginateChunkM(
+      .paginateM(
         executeAsync(query, session)
       )(_.map { result =>
-        val pairs = byteChunkPairsFrom(result)
+        val pairs =
+          ZStream
+            .fromJavaIterator(
+              result.currentPage.iterator
+            )
+            .mapM { row =>
+              Task {
+                blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
+              }
+            }
+            .mapError(
+              refineToIOException(errorContext)
+            )
 
         val nextPage =
           if (result.hasMorePages)
@@ -103,11 +118,12 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
           else
             None
 
-        pairs -> nextPage
+        (pairs, nextPage)
       })
       .mapError(
-        refineToIOException(s"Error scanning all key-value pairs for <$namespace> namespace")
+        refineToIOException(errorContext)
       )
+      .flatten
   }
 
   private def executeAsync(statement: SimpleStatement, session: CqlSession) =
@@ -126,17 +142,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         .getByteBuffer(columnName)
         .array
     )
-
-  private def byteChunkPairsFrom(cResult: AsyncResultSet) = {
-    import scala.collection.JavaConverters._
-
-    val keyValuePairs =
-      cResult.currentPage.asScala.map { row =>
-        blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
-      }
-
-    Chunk.fromIterable(keyValuePairs)
-  }
 
   private def refineToIOException(errorContext: String): Throwable => IOException = {
     case error: IOException =>
