@@ -29,20 +29,21 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
   def getEpochSec: Remote[Long] =
     Remote.InstantToLong(self)
 
-  def plusDuration(duration: Remote[Duration]): Remote[Instant] = {
-    val longDuration = duration.toSeconds
-    val epochSecond  = getEpochSec
-    val total        = longDuration + epochSecond
+  def toEpochSecsNanos: Remote[(Long, Int)] =
+    Remote.InstantToTuple(self)
 
-    Remote.fromEpochSec(total)
+  def plusDuration(duration: Remote[Duration]): Remote[Instant] = {
+    val durationSecsNanos = duration.toSecsNanos
+    val instantEpochSecsNanos = toEpochSecsNanos
+
+    Remote.ToInstantPlusDuration(instantEpochSecsNanos, durationSecsNanos)
   }
 
   def minusDuration(duration: Remote[Duration]): Remote[Instant] = {
-    val longDuration = duration.toSeconds
-    val epochSecond  = getEpochSec
-    val total        = epochSecond - longDuration
+    val durationSecsNanos = duration.toSecsNanos
+    val instantEpochSecsNanos = toEpochSecsNanos
 
-    Remote.fromEpochSec(total)
+    Remote.ToInstantMinusDuration(instantEpochSecsNanos, durationSecsNanos)
   }
 
   def get(field: Remote[TemporalField]): Remote[Int] = Remote.TemporalFieldOfInstant(self, field)
@@ -54,13 +55,13 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     self.plusDuration(Remote.AmountToDuration(amountToAdd, unit))
 
   def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant] =
-    Remote.fromEpochSec(self.getEpochSec + secondsToAdd)
+    self.plusDuration(Remote.AmountToDuration(secondsToAdd, Remote(ChronoUnit.SECONDS)))
 
   def plusMillis(milliSecondsToAdd: Remote[Long]): Remote[Instant] =
-    self.plus(milliSecondsToAdd, ChronoUnit.MILLIS)
+    self.plusDuration(Remote.AmountToDuration(milliSecondsToAdd, Remote(ChronoUnit.MILLIS)))
 
   def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant] =
-    self.plus(nanoSecondsToAdd, ChronoUnit.NANOS)
+    self.plusDuration(Remote.AmountToDuration(nanoSecondsToAdd, Remote(ChronoUnit.NANOS)))
 
   def minus(amountToSubtract: Remote[TemporalAmount]): Remote[Instant] =
     self.minusDuration(Remote.DurationFromTemporalAmount(amountToSubtract))
@@ -69,13 +70,13 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     self.minusDuration(Remote.AmountToDuration(amountToSubtract, unit))
 
   def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
-    Remote.fromEpochSec(self.getEpochSec - secondsToSubtract)
+    self.minusDuration(Remote.AmountToDuration(secondsToSubtract, Remote(ChronoUnit.SECONDS)))
 
   def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] =
-    self.minus(nanosecondsToSubtract, ChronoUnit.NANOS)
+    self.minusDuration(Remote.AmountToDuration(nanosecondsToSubtract, Remote(ChronoUnit.NANOS)))
 
   def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] =
-    self.minus(milliSecondsToSubtract, ChronoUnit.MILLIS)
+    self.minusDuration(Remote.AmountToDuration(milliSecondsToSubtract, Remote(ChronoUnit.MILLIS)))
 }
 
 object RemoteInstantSyntax {

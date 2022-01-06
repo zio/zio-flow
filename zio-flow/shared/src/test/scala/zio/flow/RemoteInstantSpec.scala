@@ -1,7 +1,10 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.random.Random
 import zio.test._
+
+import java.time.Instant
 
 object RemoteInstantSpec extends ZIOSpecDefault {
   override def spec = suite("RemoteInstantSpec")(
@@ -26,34 +29,40 @@ object RemoteInstantSpec extends ZIOSpecDefault {
       }
     },
     test("plusSeconds") {
-      check(Gen.instant, Gen.long) { case (i, s) =>
+      check(genInstant, genLong) { case (i, s) =>
         Remote(i).plusSeconds(Remote(s)) <-> i.plusSeconds(s)
       }
     },
     test("plusMills") {
-      check(Gen.instant, Gen.long) { case (i, ms) =>
+      check(genInstant, genLong) { case (i, ms) =>
         Remote(i).plusMillis(Remote(ms)) <-> i.plusMillis(ms)
       }
     },
     test("plusNanos") {
-      check(Gen.instant, Gen.long) { case (i, ns) =>
+      check(genInstantt, Gen.long) { case (i, ns) =>
         Remote(i).plusMillis(Remote(ns)) <-> i.plusNanos(ns)
       }
     },
     test("minusSeconds") {
-      check(Gen.instant, Gen.long) { case (i, s) =>
+      check(genInstant, genLong) { case (i, s) =>
         Remote(i).minusSeconds(Remote(s)) <-> i.minusSeconds(s)
       }
     },
     test("minusMills") {
-      check(Gen.instant, Gen.long) { case (i, ms) =>
+      check(genInstant, genLong) { case (i, ms) =>
         Remote(i).minusMillis(Remote(ms)) <-> i.minusMillis(ms)
       }
     },
     test("minusNanos") {
-      check(Gen.instant, Gen.long) { case (i, ns) =>
+      check(genInstant, genLong) { case (i, ns) =>
         Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
-  ) @@ TestAspect.ignore
+  )
+
+  private def genLong: Gen[Random, Long] =
+    Gen.long(Int.MinValue.toLong, Int.MaxValue.toLong)
+
+  private def genInstant: Gen[Random, Instant] =
+    Gen.instant(Instant.EPOCH, Instant.MAX)
 }
