@@ -1,7 +1,7 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.random.Random
+import zio.flow.utils.TestGen
 import zio.test._
 
 object RemoteDurationSpec extends ZIOSpecDefault {
@@ -37,37 +37,34 @@ object RemoteDurationSpec extends ZIOSpecDefault {
       }
     },
     test("plusNanos") {
-      check(Gen.finiteDuration, Gen.long) { (d, l) =>
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
         Remote(d).plusNanos(l) <-> d.plusNanos(l)
       }
     },
     test("plusSeconds") {
-      check(Gen.finiteDuration, Gen.long) { (d, l) =>
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
         Remote(d).plusSeconds(l) <-> d.plusSeconds(l)
       }
     },
     test("plusMinutes") {
-      check(Gen.finiteDuration, Gen.long) { (d, l) =>
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
         Remote(d).plusMinutes(l) <-> d.plusMinutes(l)
       }
     },
     test("plusHours") {
-      check(Gen.finiteDuration, Gen.long) { (d, l) =>
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
         Remote(d).plusHours(l) <-> d.plusHours(l)
       }
     },
     test("plusDays") {
-      check(Gen.finiteDuration, Gen.long) { (d, l) =>
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
         Remote(d).plusDays(l) <-> d.plusDays(l)
       }
     },
-    test("toSeconds") {
-      check(Gen.finiteDuration) { d =>
+    testM("toSeconds") {
+      check(Gen.anyFiniteDuration) { d =>
         Remote(d).toSeconds <-> d.getSeconds
       }
     }
   )
-
-  private def genLong: Gen[Random, Long] =
-    Gen.long(Int.MinValue.toLong, Int.MaxValue.toLong)
 }
