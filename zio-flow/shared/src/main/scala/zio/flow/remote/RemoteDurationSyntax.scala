@@ -24,15 +24,18 @@ import java.time.temporal.{Temporal, TemporalAmount}
 class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def plusDuration2(that: Remote[Duration]): Remote[Duration] =
-    Remote.ofSeconds(self.toSeconds + that.toSeconds)
+    secsNanosToPlusDuration(self.toSecsNanos, that.toSecsNanos)
 
   def minusDuration(that: Remote[Duration]): Remote[Duration] =
-    Remote.ofSeconds(self.toSeconds - that.toSeconds)
+    secsNanosToMinusDuration(self.toSecsNanos, that.toSecsNanos)
 
   def durationToLong: Remote[Long] =
     Remote.DurationToLong(self.widen[Duration])
 
   def toSeconds: Remote[Long] = self.durationToLong
+
+  def toSecsNanos: Remote[(Long, Long)] =
+    Remote.DurationToSecsNanos(self)
 
   def isZero: Remote[Boolean] = self.toSeconds === 0L && self.getNano === 0L
 
@@ -50,6 +53,11 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofNanos(nanoToAdd))
 
+  private def secsNanosToPlusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)]): Remote[Duration] =
+    Remote.SecsNanosToPlusDuration(left, right)
+
+  private def secsNanosToMinusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)]): Remote[Duration] =
+    Remote.SecsNanosToMinusDuration(left, right)
 }
 
 object RemoteDuration {

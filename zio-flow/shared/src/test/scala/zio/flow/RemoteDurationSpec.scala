@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.random.Random
 import zio.test._
 
 object RemoteDurationSpec extends ZIOSpecDefault {
@@ -65,6 +66,8 @@ object RemoteDurationSpec extends ZIOSpecDefault {
         Remote(d).toSeconds <-> d.getSeconds
       }
     }
-  ) @@ TestAspect.ignore
+  )
 
+  private def genLong: Gen[Random, Long] =
+    Gen.long(Int.MinValue.toLong, Int.MaxValue.toLong)
 }
