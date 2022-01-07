@@ -850,18 +850,23 @@ object Remote {
         .map(SchemaAndValue(Schema[Int], _))
   }
 
-  final case class ToInstantPlusDuration(epoch: Remote[(Long, Int)], secsNanosDuration: Remote[(Long, Long)]) extends Remote[Instant] {
+  final case class ToInstantPlusDuration(epoch: Remote[(Long, Int)], duration: Remote[(Long, Long)])
+      extends Remote[Instant] {
     override def evalWithSchema: Either[Remote[Instant], SchemaAndValue[Instant]] =
-      binaryEval(epoch, secsNanosDuration)(
+      binaryEval(epoch, duration)(
         (epoch, duration) => Instant.ofEpochSecond(epoch._1, epoch._2).plusSeconds(duration._1).plusNanos(duration._2),
         (remoteE, remoteD) => ToInstantPlusDuration(remoteE, remoteD)
       ).map(SchemaAndValue(Schema[Instant], _))
   }
 
-  final case class ToInstantMinusDuration(epoch: Remote[(Long, Int)], secsNanosDuration: Remote[(Long, Long)]) extends Remote[Instant] {
+  final case class ToInstantMinusDuration(epoch: Remote[(Long, Int)], duration: Remote[(Long, Long)])
+      extends Remote[Instant] {
     override def evalWithSchema: Either[Remote[Instant], SchemaAndValue[Instant]] =
-      binaryEval(epoch, secsNanosDuration)(
-        (epoch, duration) => Instant.ofEpochSecond(epoch._1, epoch._2).minusSeconds(duration._1).minusNanos(duration._2),
+      binaryEval(epoch, duration)(
+        (
+          epoch,
+          duration
+        ) => Instant.ofEpochSecond(epoch._1, epoch._2).minusSeconds(duration._1).minusNanos(duration._2),
         (remoteE, remoteD) => ToInstantMinusDuration(remoteE, remoteD)
       ).map(SchemaAndValue(Schema[Instant], _))
   }
@@ -908,7 +913,8 @@ object Remote {
         .map(SchemaAndValue(Schema[Duration], _))
   }
 
-  final case class SecsNanosToPlusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)]) extends Remote[Duration] {
+  final case class SecsNanosToPlusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)])
+      extends Remote[Duration] {
     override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
       binaryEval(left, right)(
         (left, right) => Duration.ofSeconds(left._1, left._2).plus(Duration.ofSeconds(right._1, right._2)),
@@ -916,7 +922,8 @@ object Remote {
       ).map(SchemaAndValue(Schema[Duration], _))
   }
 
-  final case class SecsNanosToMinusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)]) extends Remote[Duration] {
+  final case class SecsNanosToMinusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)])
+      extends Remote[Duration] {
     override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
       binaryEval(left, right)(
         (left, right) => Duration.ofSeconds(left._1, left._2).minus(Duration.ofSeconds(right._1, right._2)),

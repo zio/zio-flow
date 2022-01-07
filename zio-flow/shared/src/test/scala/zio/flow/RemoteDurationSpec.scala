@@ -8,7 +8,7 @@ object RemoteDurationSpec extends ZIOSpecDefault {
   override def spec = suite("RemoteDurationSpec")(
     test("plusDuration2") {
       check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
-        (Remote(d1) plusDuration2 Remote(d2)) <-> (d1 plus d2)
+        (Remote(d1) plusDuration Remote(d2)) <-> (d1 plus d2)
       }
     },
     test("minusDuration") {

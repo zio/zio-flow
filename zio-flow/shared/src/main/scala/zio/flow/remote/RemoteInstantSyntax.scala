@@ -33,14 +33,14 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     Remote.InstantToTuple(self)
 
   def plusDuration(duration: Remote[Duration]): Remote[Instant] = {
-    val durationSecsNanos = duration.toSecsNanos
+    val durationSecsNanos     = duration.toSecsNanos
     val instantEpochSecsNanos = toEpochSecsNanos
 
     Remote.ToInstantPlusDuration(instantEpochSecsNanos, durationSecsNanos)
   }
 
   def minusDuration(duration: Remote[Duration]): Remote[Instant] = {
-    val durationSecsNanos = duration.toSecsNanos
+    val durationSecsNanos     = duration.toSecsNanos
     val instantEpochSecsNanos = toEpochSecsNanos
 
     Remote.ToInstantMinusDuration(instantEpochSecsNanos, durationSecsNanos)

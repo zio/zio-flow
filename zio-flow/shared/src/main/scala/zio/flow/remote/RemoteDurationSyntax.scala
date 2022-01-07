@@ -23,7 +23,7 @@ import java.time.temporal.{Temporal, TemporalAmount}
 
 class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
-  def plusDuration2(that: Remote[Duration]): Remote[Duration] =
+  def plusDuration(that: Remote[Duration]): Remote[Duration] =
     secsNanosToPlusDuration(self.toSecsNanos, that.toSecsNanos)
 
   def minusDuration(that: Remote[Duration]): Remote[Duration] =
@@ -43,15 +43,15 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def getSeconds: Remote[Long]    = Remote.DurationToSecsNanos(self.widen[Duration])._1
   def getNano: Remote[Long]       = Remote.DurationToSecsNanos(self.widen[Duration])._2
 
-  def plusDays(daysToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofDays(daysToAdd))
+  def plusDays(daysToAdd: Remote[Long]): Remote[Duration] = plusDuration(Remote.ofDays(daysToAdd))
 
-  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofHours(hoursToAdd))
+  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration] = plusDuration(Remote.ofHours(hoursToAdd))
 
-  def plusMinutes(minsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofMinutes(minsToAdd))
+  def plusMinutes(minsToAdd: Remote[Long]): Remote[Duration] = plusDuration(Remote.ofMinutes(minsToAdd))
 
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofSeconds(secondsToAdd))
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plusDuration(Remote.ofSeconds(secondsToAdd))
 
-  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofNanos(nanoToAdd))
+  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = plusDuration(Remote.ofNanos(nanoToAdd))
 
   private def secsNanosToPlusDuration(left: Remote[(Long, Long)], right: Remote[(Long, Long)]): Remote[Duration] =
     Remote.SecsNanosToPlusDuration(left, right)
