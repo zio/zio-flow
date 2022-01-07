@@ -1,9 +1,9 @@
 package zio.flow.internal
 
-import com.datastax.oss.driver.api.core.cql.{Row, SimpleStatement}
+import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement}
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder.literal
-import com.datastax.oss.driver.api.querybuilder.QueryBuilder
+import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
 
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -16,9 +16,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   private val keyspace =
     session.getKeyspace
       .orElse(null: CqlIdentifier) // scalafix:ok DisableSyntax.null
-
-  private val table =
-    CqlIdentifier.fromCql(CassandraKeyValueStore.tableName)
 
   private val cqlSelect =
     QueryBuilder.selectFrom(keyspace, table)
@@ -125,30 +122,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       )
       .flatten
   }
-
-  private def executeAsync(statement: SimpleStatement, session: CqlSession) =
-    ZIO.fromCompletionStage(
-      session.executeAsync(statement)
-    )
-
-  private def byteBufferFrom(bytes: Chunk[Byte]) =
-    literal(
-      ByteBuffer.wrap(bytes.toArray)
-    )
-
-  private def blobValueOf(columnName: String, row: Row) =
-    Chunk.fromArray(
-      row
-        .getByteBuffer(columnName)
-        .array
-    )
-
-  private def refineToIOException(errorContext: String): Throwable => IOException = {
-    case error: IOException =>
-      error
-    case error =>
-      new IOException(s"$errorContext: <${error.getMessage}>.", error)
-  }
 }
 
 object CassandraKeyValueStore {
@@ -170,6 +143,33 @@ object CassandraKeyValueStore {
 
   val valueColumnName: String =
     withDoubleQuotes("value")
+
+  val table: CqlIdentifier =
+    CqlIdentifier.fromCql(tableName)
+
+  def executeAsync(statement: SimpleStatement, session: CqlSession): Task[AsyncResultSet] =
+    ZIO.fromCompletionStage(
+      session.executeAsync(statement)
+    )
+
+  def byteBufferFrom(bytes: Chunk[Byte]): Literal =
+    literal(
+      ByteBuffer.wrap(bytes.toArray)
+    )
+
+  def blobValueOf(columnName: String, row: Row): Chunk[Byte] =
+    Chunk.fromArray(
+      row
+        .getByteBuffer(columnName)
+        .array
+    )
+
+  def refineToIOException(errorContext: String): Throwable => IOException = {
+    case error: IOException =>
+      error
+    case error =>
+      new IOException(s"$errorContext: <${error.getMessage}>.", error)
+  }
 
   private def withDoubleQuotes(string: String) =
     "\"" + string + "\""
