@@ -25,7 +25,7 @@ addCommandAlias("fmtCheck", "all scalafmtSbtCheck scalafmtCheckAll")
 val zioVersion       = "1.0.12"
 val zioSchemaVersion = "0.1.4"
 
-// ThisBuild / resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+ThisBuild / resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 lazy val root = project
   .in(file("."))
@@ -55,7 +55,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio"    %% "zio-schema-derivation" % zioSchemaVersion,
       "dev.zio"    %% "zio-schema-optics"     % zioSchemaVersion,
       "dev.zio"    %% "zio-schema-protobuf"   % zioSchemaVersion,
-      "dev.zio"    %% "zio-rocksdb"           % "0.4-SNAPSHOT",
+      "dev.zio"    %% "zio-rocksdb"           % "0.3.0+7-3d3cd489-SNAPSHOT",
       "org.rocksdb" % "rocksdbjni"            % "6.4.6"
     )
   )

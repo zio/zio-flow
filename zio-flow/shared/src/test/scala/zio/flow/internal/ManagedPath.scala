@@ -1,9 +1,9 @@
 package zio.flow.internal
 
-import zio.{ Task, URIO, ZManaged }
+import zio.{Task, URIO, ZManaged}
 
 import java.io.File
-import java.nio.file.{ Files, Path }
+import java.nio.file.{Files, Path}
 
 object ManagedPath {
   private def createTempDirectory: Task[Path] = Task {
