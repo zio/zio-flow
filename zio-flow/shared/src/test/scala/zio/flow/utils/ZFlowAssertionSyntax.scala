@@ -1,8 +1,6 @@
 package zio.flow.utils
 
-import zio.{Has, ZIO}
-import zio.clock.Clock
-import zio.console.Console
+import zio._
 import zio.flow.ZFlow
 import zio.flow.internal.DurableLog
 import zio.flow.utils.MocksForGCExample.mockInMemoryForGCExample
@@ -38,13 +36,13 @@ object ZFlowAssertionSyntax {
       compileResult
     }
 
-    def evaluateLivePersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Has[DurableLog], E, A] =
+    def evaluateLivePersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[DurableLog, E, A] =
       for {
         persistentEval <- mockPersistentLiveClock
         result         <- persistentEval.submit("1234", zflow)
       } yield result
 
-    def evaluateTestPersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Clock with Has[DurableLog], E, A] =
+    def evaluateTestPersistent(implicit schemaA: Schema[A], schemaE: Schema[E]): ZIO[Clock with DurableLog, E, A] =
       for {
         persistentEval <- mockPersistentTestClock
         result         <- persistentEval.submit("1234", zflow)

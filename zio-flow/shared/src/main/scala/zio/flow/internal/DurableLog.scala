@@ -28,13 +28,13 @@ trait DurableLog {
 
 object DurableLog {
 
-  def append(topic: String, value: Chunk[Byte]): ZIO[Has[DurableLog], IOException, Long] =
-    ZIO.serviceWith(_.append(topic, value))
+  def append(topic: String, value: Chunk[Byte]): ZIO[DurableLog, IOException, Long] =
+    ZIO.serviceWithZIO(_.append(topic, value))
 
-  def subscribe(topic: String, position: Long): ZStream[Has[DurableLog], IOException, Chunk[Byte]] =
+  def subscribe(topic: String, position: Long): ZStream[DurableLog, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.subscribe(topic, position))
 
-  val live: ZLayer[Has[IndexedStore], Nothing, Has[DurableLog]] =
+  val live: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.fromManaged {
       for {
         indexedStore <- ZManaged.service[IndexedStore]
@@ -58,17 +58,17 @@ object DurableLog {
       }
     def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
       ZStream.unwrapManaged {
-        getTopic(topic).toManaged_.flatMap { case Topic(hub, _) =>
+        getTopic(topic).toManaged.flatMap { case Topic(hub, _) =>
           hub.subscribe.flatMap { subscription =>
-            subscription.size.toManaged_.flatMap { size =>
+            subscription.size.toManaged.flatMap { size =>
               if (size > 0)
-                subscription.take.toManaged_.map { case (value, index) =>
+                subscription.take.toManaged.map { case (value, index) =>
                   indexedStore.scan(topic, position, index) ++
                     ZStream(value) ++
                     ZStream.fromQueue(subscription).map(_._1)
                 }
               else
-                indexedStore.position(topic).toManaged_.map { currentPosition =>
+                indexedStore.position(topic).toManaged.map { currentPosition =>
                   indexedStore.scan(topic, position, currentPosition) ++
                     collectFrom(ZStream.fromQueue(subscription), currentPosition)
                 }

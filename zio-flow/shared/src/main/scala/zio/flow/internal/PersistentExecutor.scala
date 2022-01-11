@@ -20,13 +20,11 @@ import java.io.IOException
 import java.time.Duration
 
 import zio._
-import zio.clock._
-import zio.console.putStrLn
 import zio.flow._
 import zio.schema.Schema
 
 final case class PersistentExecutor(
-  clock: Clock.Service,
+  clock: Clock,
   durableLog: DurableLog,
   kvStore: KeyValueStore,
   opExec: OperationExecutor[Any],
@@ -72,7 +70,7 @@ final case class PersistentExecutor(
       stateRef <- ZIO.fromOption(map.get(workflowId))
       state    <- stateRef.get
       value    <- ZIO.fromOption(state.getVariable(variableName))
-    } yield value).optional
+    } yield value).unsome
 
   def setVariable(workflowId: String, variableName: String, value: SchemaAndValue[_]): UIO[Boolean] =
     (for {
@@ -92,7 +90,10 @@ final case class PersistentExecutor(
           state.stack match {
             case Nil =>
               eval(value).flatMap { schemaAndValue =>
-                state.result.succeed(schemaAndValue.value.asInstanceOf[A]).unit.provide(Has(durableLog))
+                state.result
+                  .succeed(schemaAndValue.value.asInstanceOf[A])
+                  .unit
+                  .provideEnvironment(ZEnvironment(durableLog))
               }
             case Instruction.PopEnv :: newStack =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
@@ -116,7 +117,10 @@ final case class PersistentExecutor(
           state.stack match {
             case Nil =>
               eval(value).flatMap { schemaAndValue =>
-                state.result.fail(schemaAndValue.value.asInstanceOf[E]).unit.provide(Has(durableLog))
+                state.result
+                  .fail(schemaAndValue.value.asInstanceOf[E])
+                  .unit
+                  .provideEnvironment(ZEnvironment(durableLog))
               }
             case Instruction.PopEnv :: newStack =>
               ref.update(state => state.copy(stack = newStack, envStack = state.envStack.tail)) *>
@@ -170,7 +174,10 @@ final case class PersistentExecutor(
                   .scanAll(s"_zflow_suspended_workflows_readVar_$variableName")
                   .foreach { case (_, value) =>
                     val durablePromise = deserializeDurablePromise(value)
-                    durablePromise.asInstanceOf[DurablePromise[Nothing, Unit]].succeed(()).provide(Has(durableLog))
+                    durablePromise
+                      .asInstanceOf[DurablePromise[Nothing, Unit]]
+                      .succeed(())
+                      .provideEnvironment(ZEnvironment(durableLog))
                   }
                   .orDie // TODO: handle errors looking up from key value store
 
@@ -207,7 +214,7 @@ final case class PersistentExecutor(
               _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
             } yield output
 
-            a.foldM(
+            a.foldZIO(
               error => onError(lit(error)),
               success => onSuccess(lit(success))
             )
@@ -249,11 +256,13 @@ final case class PersistentExecutor(
           case Timeout(flow, duration) =>
             ref.get.flatMap { state =>
               for {
-                d      <- eval(duration).map(_.value)
-                output <- ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provide(Has(clock))
+                d <- eval(duration).map(_.value)
+                output <-
+                  ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provideEnvironment(ZEnvironment(clock))
                 _ <- output match {
-                       case Some(value) => state.result.succeed(value.asInstanceOf).provide(Has(durableLog))
-                       case None        => state.result.succeed(().asInstanceOf).provide(Has(durableLog))
+                       case Some(value) =>
+                         state.result.succeed(value.asInstanceOf).provideEnvironment(ZEnvironment(durableLog))
+                       case None => state.result.succeed(().asInstanceOf).provideEnvironment(ZEnvironment(durableLog))
                      }
               } yield ()
             }
@@ -282,7 +291,7 @@ final case class PersistentExecutor(
                 Chunk.fromArray(durablePromise.promiseId.getBytes)
               def value(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
                 ??? // TODO : Implement serialization of DurablePromise
-              ZIO.foreach_(readVars)(readVar =>
+              ZIO.foreachDiscard(readVars)(readVar =>
                 kvStore.put(namespace(readVar), key(durablePromise), value(durablePromise))
               )
             }
@@ -299,7 +308,9 @@ final case class PersistentExecutor(
                     s"_zflow_workflow_${state.workflowId}_durablepromise_${state.promiseIdCounter}"
                   )
                   storeSuspended(readVars, durablePromise) *>
-                    durablePromise.awaitEither(Schema.fail("nothing schema"), Schema[Unit]).provide(Has(durableLog)) ->
+                    durablePromise
+                      .awaitEither(Schema.fail("nothing schema"), Schema[Unit])
+                      .provideEnvironment(ZEnvironment(durableLog)) ->
                     state.copy(
                       current = ZFlow.unit,
                       compileStatus = PersistentCompileStatus.Suspended,
@@ -326,7 +337,7 @@ final case class PersistentExecutor(
               result   <- execflow.join
             } yield result
 
-            joined.foldM(
+            joined.foldZIO(
               error => onError(lit(error)),
               success => onSuccess(success)
             )
@@ -393,7 +404,7 @@ final case class PersistentExecutor(
             }.flatten
 
           case Log(message) =>
-            val log = putStrLn(message).provideLayer(zio.console.Console.live)
+            val log = Console.printLine(message).provideLayer(Console.live)
 
             log *> onSuccess(())
         }
@@ -408,7 +419,7 @@ final case class PersistentExecutor(
     (for {
       ref    <- Ref.make[State[E, A]](state)
       _      <- step(ref)
-      result <- state.result.awaitEither.provide(Has(durableLog))
+      result <- state.result.awaitEither.provideEnvironment(ZEnvironment(durableLog))
     } yield result).orDie.absolve
   }
 }
@@ -431,12 +442,12 @@ object PersistentExecutor {
 
   def make(
     opEx: OperationExecutor[Any]
-  ): ZLayer[Clock with Has[DurableLog] with Has[KeyValueStore], Nothing, Has[ZFlowExecutor[String]]] =
+  ): ZLayer[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] =
     (
       for {
         durableLog <- ZIO.service[DurableLog]
         kvStore    <- ZIO.service[KeyValueStore]
-        clock      <- ZIO.service[Clock.Service]
+        clock      <- ZIO.service[Clock]
         ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
       } yield PersistentExecutor(clock, durableLog, kvStore, opEx, ref)
     ).toLayer

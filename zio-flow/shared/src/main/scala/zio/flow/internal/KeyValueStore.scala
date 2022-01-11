@@ -31,15 +31,15 @@ trait KeyValueStore {
 
 object KeyValueStore {
 
-  val live: ZLayer[RocksDB, IOException, Has[KeyValueStore]] =
-    ZLayer.fromEffect {
+  val live: ZLayer[RocksDB, IOException, KeyValueStore] =
+    ZLayer {
       for {
-        rocksDB    <- ZIO.service[service.RocksDB]
+        rocksDB    <- ZIO.service[RocksDB]
         namespaces <- getNamespaces(rocksDB)
       } yield KeyValueStoreLive(rocksDB, namespaces)
     }
 
-  private final case class KeyValueStoreLive(rocksDB: service.RocksDB, namespaces: Map[Chunk[Byte], ColumnFamilyHandle])
+  private final case class KeyValueStoreLive(rocksDB: RocksDB, namespaces: Map[Chunk[Byte], ColumnFamilyHandle])
       extends KeyValueStore {
 
     def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
@@ -68,7 +68,7 @@ object KeyValueStore {
       ZIO.succeed(namespaces(Chunk.fromArray(namespace.getBytes)))
   }
 
-  private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+  private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
     rocksDB.initialHandles
       .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
       .refineToOrDie[IOException]

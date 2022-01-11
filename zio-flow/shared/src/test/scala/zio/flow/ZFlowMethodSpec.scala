@@ -1,17 +1,13 @@
 package zio.flow
 
-import zio.clock.Clock
-import zio.console.Console
-import zio.duration.durationInt
+import zio._
 import zio.flow.utils.MockHelpers.mockActivity
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion.equalTo
 import zio.test._
-import zio.test.environment.{TestClock, TestConsole}
-import zio.{Has, ZIO}
 
-object ZFlowMethodSpec extends DefaultRunnableSpec {
+object ZFlowMethodSpec extends ZIOSpecDefault {
 
   implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
   implicit val anySchema: Schema[Any]         = Schema.fail("Schema for Any")
@@ -34,11 +30,11 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     bool <- remoteBoolVar.get
   } yield bool
 
-  val suite1: Spec[Has[Clock.Service] with Has[zio.console.Console.Service] with Has[TestClock.Service], TestFailure[
+  val suite1: Spec[Clock with Console with TestClock, TestFailure[
     Nothing
   ], TestSuccess] =
     suite("Test `waitUnit` with `timeout`")(
-      testM("`timeout` duration met") {
+      test("`timeout` duration met") {
         val evaluated = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 2L, 5L)
@@ -53,7 +49,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
 
         assertM(result)(equalTo(false))
       },
-      testM("`waitUntil` proceeds on variable change") {
+      test("`waitUntil` proceeds on variable change") {
         val evaluated = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 5L, 2L)
@@ -70,9 +66,9 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
       }
     )
 
-  val suite2: Spec[Has[Clock.Service] with Has[Console.Service], TestFailure[Nothing], TestSuccess] =
+  val suite2: Spec[Clock with Console, TestFailure[Nothing], TestSuccess] =
     suite("Test `waitUnit` with `timeout` - uses live clock")(
-      testM("`timeout` duration met") {
+      test("`timeout` duration met") {
         val evaluated: ZIO[Clock with Console, Nothing, Boolean] = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           _             <- waitUntilOnBoolVarZFlow(remoteBoolVar, 1L, 100L)
@@ -81,7 +77,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
 
         assertM(evaluated)(equalTo(false))
       },
-      testM("waitUntil proceeds on variable change") {
+      test("waitUntil proceeds on variable change") {
         val evaluated: ZIO[Clock with Console, Nothing, Boolean] = (for {
           remoteBoolVar <- ZFlow.newVar("boolVariable", false)
           //TODO : This waits for timeoutDuration time
@@ -94,7 +90,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
     )
 
   val suite3: Spec[Clock with Console with TestConsole, TestFailure[ActivityError], TestSuccess] =
-    suite("Test ZFlow.when")(testM("With RunActivity") {
+    suite("Test ZFlow.when")(test("With RunActivity") {
       val whenZflow: ZFlow[Any, ActivityError, Unit] = for {
         remoteBool <- Remote(true)
         _          <- ZFlow.when(remoteBool)(ZFlow.RunActivity(12, mockActivity))
@@ -108,11 +104,11 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
       assertM(result)(equalTo(Vector("Activity processing\n")))
     })
 
-  val suite5: Spec[Has[Clock.Service] with Has[zio.console.Console.Service] with Has[TestClock.Service] with Has[
-    Clock.Service
-  ] with Has[zio.console.Console.Service] with Has[TestConsole.Service], TestFailure[Throwable], TestSuccess] =
+  val suite5: Spec[Clock with Console with TestClock with Clock with Console with TestConsole, TestFailure[
+    Throwable
+  ], TestSuccess] =
     suite("Test Iterate")(
-      testM("Iterate a fixed number of times") {
+      test("Iterate a fixed number of times") {
         val iterateZflow: ZFlow[Any, ActivityError, Int] = ZFlow.Iterate(
           Remote(12),
           (remoteInt: Remote[Int]) =>
@@ -130,7 +126,7 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
 
         assertM(result)(equalTo(Vector("Activity processing\n", "Activity processing\n", "Activity processing\n")))
       },
-      testM("Iterate on combination of `timeout` and `waitUntil`") {
+      test("Iterate on combination of `timeout` and `waitUntil`") {
         val boolVarZFlow: ZFlow[Any, Nothing, Variable[Boolean]] = ZFlow.newVar("boolVarForIterate", true)
 
         def iterateZflow(boolVar: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
@@ -161,8 +157,8 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
       }
     )
 
-  val suite4: Spec[TestClock with Clock with zio.console.Console, TestFailure[ActivityError], TestSuccess] =
-    suite("More test on waitUntil")(testM("waitUntil and do-while") {
+  val suite4: Spec[TestClock with Clock with Console, TestFailure[ActivityError], TestSuccess] =
+    suite("More test on waitUntil")(test("waitUntil and do-while") {
       def doWhileOnWaitUntil(boolVar: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Any] = ZFlow.doWhile({
         for {
           _    <- boolVar.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
@@ -186,6 +182,6 @@ object ZFlowMethodSpec extends DefaultRunnableSpec {
       assertM(result)(equalTo(()))
     })
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
+  override def spec =
     suite("Testing interactions between ZFlows")(suite1, suite2, suite3, suite4, suite5)
 }
