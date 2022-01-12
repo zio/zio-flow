@@ -1,5 +1,6 @@
 package zio.flow.internal
 
+import CassandraKeyValueStore._
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement}
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder.literal
@@ -11,7 +12,6 @@ import zio.{Chunk, Has, IO, Task, URLayer, ZIO}
 import zio.stream.ZStream
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
-  import CassandraKeyValueStore._
 
   private val keyspace =
     session.getKeyspace
@@ -67,8 +67,8 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
     executeAsync(query, session).flatMap { result =>
       if (result.remaining > 0)
         Task {
-          blobValueOf(valueColumnName, result.one)
-        }.asSome
+          Option(blobValueOf(valueColumnName, result.one))
+        }
       else
         ZIO.none
     }.mapError(
@@ -136,13 +136,13 @@ object CassandraKeyValueStore {
     withDoubleQuotes("_zflow_key_value_store")
 
   val namespaceColumnName: String =
-    withDoubleQuotes("namespace")
+    withColumnPrefix("namespace")
 
   val keyColumnName: String =
-    withDoubleQuotes("key")
+    withColumnPrefix("key")
 
   val valueColumnName: String =
-    withDoubleQuotes("value")
+    withColumnPrefix("value")
 
   val table: CqlIdentifier =
     CqlIdentifier.fromCql(tableName)
@@ -170,6 +170,9 @@ object CassandraKeyValueStore {
     case error =>
       new IOException(s"$errorContext: <${error.getMessage}>.", error)
   }
+
+  private def withColumnPrefix(s: String) =
+    withDoubleQuotes("zflow_kv_" + s)
 
   private def withDoubleQuotes(string: String) =
     "\"" + string + "\""
