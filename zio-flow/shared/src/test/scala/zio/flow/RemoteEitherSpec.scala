@@ -1,107 +1,106 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.random.Random
 import zio.schema.Schema
 import zio.test._
 
-object RemoteEitherSpec extends DefaultRunnableSpec {
-  def spec: ZSpec[TestConfig with Random with Sized with Annotations, Any] = suite("RemoteEitherSpec")(
-    testM("handleEither") {
-      check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
+object RemoteEitherSpec extends ZIOSpecDefault {
+  def spec = suite("RemoteEitherSpec")(
+    test("handleEither") {
+      check(Gen.either(Gen.int, Gen.boolean)) { either =>
         val expected = either.fold(_ * 2, if (_) 10 else 20)
         val result   = Remote(either).handleEither(_ * 2, _.ifThenElse(10, 20))
         result <-> expected
       }
     },
-    testM("flatMap") {
-      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.either(Gen.anyInt, Gen.anyLong))) { (either, f) =>
+    test("flatMap") {
+      check(Gen.either(Gen.int, Gen.int), Gen.function(Gen.either(Gen.int, Gen.long))) { (either, f) =>
         Remote(either).flatMap(partialLift(f)) <-> either.flatMap(f)
       }
     },
-    testM("map") {
-      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.anyLong)) { (either, f) =>
+    test("map") {
+      check(Gen.either(Gen.int, Gen.int), Gen.function(Gen.long)) { (either, f) =>
         Remote(either).map(partialLift(f)) <-> either.map(f)
       }
     },
-    testM("flatten") {
-      check(Gen.either(Gen.anyInt, Gen.either(Gen.anyInt, Gen.anyLong))) { either =>
+    test("flatten") {
+      check(Gen.either(Gen.int, Gen.either(Gen.int, Gen.long))) { either =>
         Remote(either).flatten <-> either.fold(a => Left(a), b => b)
       }
     },
-    testM("merge") {
-      check(Gen.either(Gen.anyInt, Gen.anyInt)) { either =>
+    test("merge") {
+      check(Gen.either(Gen.int, Gen.int)) { either =>
         Remote(either).merge <-> either.fold(identity, identity)
       }
     },
-    testM("isRight") {
-      check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
+    test("isRight") {
+      check(Gen.either(Gen.int, Gen.boolean)) { either =>
         Remote(either).isRight <-> either.isRight
       }
     },
-    testM("handleEither") {
-      check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
+    test("handleEither") {
+      check(Gen.either(Gen.int, Gen.boolean)) { either =>
         Remote(either).isLeft <-> either.isLeft
       }
     },
-    testM("getOrElse") {
-      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.anyInt) { (either, int) =>
+    test("getOrElse") {
+      check(Gen.either(Gen.boolean, Gen.int), Gen.int) { (either, int) =>
         Remote(either).getOrElse(int) <-> either.getOrElse(int)
       }
     },
-    testM("orElse") {
-      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.either(Gen.boolean, Gen.anyLong)) { (eitherInt, eitherLong) =>
+    test("orElse") {
+      check(Gen.either(Gen.boolean, Gen.int), Gen.either(Gen.boolean, Gen.long)) { (eitherInt, eitherLong) =>
         Remote(eitherInt).orElse(eitherLong) <-> eitherInt.fold(_ => eitherLong, b => Right(b))
       }
     },
-    testM("filterOrElse") {
-      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.function(Gen.boolean), Gen.boolean) { (either, f, zero) =>
+    test("filterOrElse") {
+      check(Gen.either(Gen.boolean, Gen.int), Gen.function(Gen.boolean), Gen.boolean) { (either, f, zero) =>
         Remote(either).filterOrElse(partialLift(f), Remote(zero)) <-> either.filterOrElse(f, zero)
       }
     },
-    testM("swap") {
-      check(Gen.either(Gen.anyInt, Gen.boolean)) { either =>
+    test("swap") {
+      check(Gen.either(Gen.int, Gen.boolean)) { either =>
         Remote(either).swap <-> either.swap
       }
     },
-    testM("joinRight") {
-      check(Gen.either(Gen.anyInt, Gen.either(Gen.anyInt, Gen.anyLong))) { either =>
+    test("joinRight") {
+      check(Gen.either(Gen.int, Gen.either(Gen.int, Gen.long))) { either =>
         Remote(either).joinRight <-> either.joinRight
       }
     },
-    testM("joinLeft") {
-      check(Gen.either(Gen.either(Gen.anyInt, Gen.anyLong), Gen.anyLong)) { either =>
+    test("joinLeft") {
+      check(Gen.either(Gen.either(Gen.int, Gen.long), Gen.long)) { either =>
         Remote(either).joinLeft <-> either.joinLeft
       }
     },
-    testM("contains") {
-      check(Gen.either(Gen.boolean, Gen.anyInt), Gen.anyInt) { (either, int) =>
+    test("contains") {
+      check(Gen.either(Gen.boolean, Gen.int), Gen.int) { (either, int) =>
         Remote(either).contains(Remote(int)) <-> either.contains(int)
       }
     },
-    testM("forall") {
-      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.boolean)) { (either, f) =>
+    test("forall") {
+      check(Gen.either(Gen.int, Gen.int), Gen.function(Gen.boolean)) { (either, f) =>
         Remote(either).forall(partialLift(f)) <-> either.forall(f)
       }
     },
-    testM("exists") {
-      check(Gen.either(Gen.anyInt, Gen.anyInt), Gen.function(Gen.boolean)) { (either, f) =>
+    test("exists") {
+      check(Gen.either(Gen.int, Gen.int), Gen.function(Gen.boolean)) { (either, f) =>
         Remote(either).exists(partialLift(f)) <-> either.exists(f)
       }
     },
-    testM("toSeq") {
-      check(Gen.either(Gen.boolean, Gen.anyInt)) { either =>
+    test("toSeq") {
+      check(Gen.either(Gen.boolean, Gen.int)) { either =>
         Remote(either).toSeq <-> either.toSeq
       }
     },
-    testM("toOption") {
-      check(Gen.either(Gen.boolean, Gen.anyInt)) { either =>
+    test("toOption") {
+      check(Gen.either(Gen.boolean, Gen.int)) { either =>
         Remote(either).toOption <-> either.toOption
       }
     },
     suite("collectAll")(
-      testM("return the list of all right results") {
-        check(Gen.listOf(Gen.anyInt)) { list =>
+      test("return the list of all right results") {
+        check(Gen.listOf(Gen.int)) { list =>
           remote.RemoteEitherSyntax.collectAll(Remote(list.map(Right(_)): List[Either[Short, Int]])) <-> Right(list)
         }
       },
@@ -111,8 +110,8 @@ object RemoteEitherSpec extends DefaultRunnableSpec {
         )
       }
     ),
-    testM("toTry") {
-      check(Gen.either(Gen.throwable, Gen.anyInt)) { either =>
+    test("toTry") {
+      check(Gen.either(Gen.throwable, Gen.int)) { either =>
         Remote(either).toTry <-> either.toTry
       }
     }

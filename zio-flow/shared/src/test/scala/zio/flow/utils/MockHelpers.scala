@@ -1,8 +1,6 @@
 package zio.flow.utils
 
-import zio.clock.Clock
-import zio.{Chunk, Has, IO, ZIO, console}
-import zio.console.{Console, putStrLn}
+import zio._
 import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
 import zio.flow.internal.{DurableLog, KeyValueStore}
 import zio.schema.Schema
@@ -29,12 +27,12 @@ object MockHelpers {
 
   object mockOpExec extends OperationExecutor[Console with Clock] {
     override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
-      console.putStrLn("Activity processing") *> ZIO.succeed(input.asInstanceOf[A])
+      Console.printLine("Activity processing") *> ZIO.succeed(input.asInstanceOf[A])
   }
 
   val doesNothingDurableLog: DurableLog = new DurableLog {
     override def append(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
-      putStrLn("Append Does Nothing").provide(Has(console.Console.Service.live)).as(12L)
+      Console.printLine("Append Does Nothing").provideLayer(Console.live).as(12L)
 
     override def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
       ZStream.fromChunk(Chunk.empty)

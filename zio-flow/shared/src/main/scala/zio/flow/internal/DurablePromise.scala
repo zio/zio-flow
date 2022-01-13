@@ -23,13 +23,13 @@ import zio.schema._
 
 final case class DurablePromise[E, A](promiseId: String) {
 
-  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[Has[DurableLog], IOException, Either[E, A]] =
+  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog, IOException, Either[E, A]] =
     DurableLog.subscribe(topic(promiseId), 0L).runHead.map(value => deserialize[E, A](value.get))
 
-  def fail(error: E)(implicit schemaE: Schema[E]): ZIO[Has[DurableLog], IOException, Boolean] =
+  def fail(error: E)(implicit schemaE: Schema[E]): ZIO[DurableLog, IOException, Boolean] =
     DurableLog.append(topic(promiseId), serialize(Left(error))).map(_ == 0L)
 
-  def succeed(value: A)(implicit schemaA: Schema[A]): ZIO[Has[DurableLog], IOException, Boolean] =
+  def succeed(value: A)(implicit schemaA: Schema[A]): ZIO[DurableLog, IOException, Boolean] =
     DurableLog.append(topic(promiseId), serialize(Right(value))).map(_ == 0L)
 
   private def deserialize[E, A](value: Chunk[Byte])(implicit schemaE: Schema[E], schemaA: Schema[A]): Either[E, A] = {

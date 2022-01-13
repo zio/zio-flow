@@ -20,7 +20,7 @@ import java.io.IOException
 
 import org.rocksdb.ColumnFamilyHandle
 import zio.rocksdb._
-import zio.{Chunk, Has, IO, UIO, ZLayer, ZIO}
+import zio.{Chunk, IO, UIO, ZLayer, ZIO}
 import zio.stream.ZStream
 
 trait KeyValueStore {
@@ -34,36 +34,40 @@ trait KeyValueStore {
 
 object KeyValueStore {
 
-  val live: ZLayer[RocksDB, IOException, Has[KeyValueStore]] = {
-    for {
-      rocksDB    <- ZIO.service[service.RocksDB]
-      namespaces <- getNamespaces(rocksDB)
-    } yield {
-      KeyValueStoreLive(rocksDB, namespaces)
+  val live: ZLayer[RocksDB, IOException, KeyValueStore] = {
+    ZLayer {
+      for {
+        rocksDB    <- ZIO.service[RocksDB]
+        namespaces <- getNamespaces(rocksDB)
+      } yield {
+        KeyValueStoreLive(rocksDB, namespaces)
+      }
     }
-  }.toLayer
+  }
 
   def put(
     namespace: String,
     key: Chunk[Byte],
     value: Chunk[Byte]
-  ): ZIO[Has[KeyValueStore], IOException, Boolean] =
-    ZIO.accessM(
+  ): ZIO[KeyValueStore, IOException, Boolean] =
+    ZIO.environmentWithZIO(
       _.get.put(namespace, key, value)
     )
 
-  def get(namespace: String, key: Chunk[Byte]): ZIO[Has[KeyValueStore], IOException, Option[Chunk[Byte]]] =
-    ZIO.accessM(
+  def get(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Option[Chunk[Byte]]] =
+    ZIO.environmentWithZIO(
       _.get.get(namespace, key)
     )
 
-  def scanAll(namespace: String): ZStream[Has[KeyValueStore], IOException, (Chunk[Byte], Chunk[Byte])] =
-    ZStream.accessStream(
+  def scanAll(namespace: String): ZStream[KeyValueStore, IOException, (Chunk[Byte], Chunk[Byte])] =
+    ZStream.environmentWithStream(
       _.get.scanAll(namespace)
     )
 
-  private final case class KeyValueStoreLive(rocksDB: service.RocksDB, namespaces: Map[Chunk[Byte], ColumnFamilyHandle])
-      extends KeyValueStore {
+  private final case class KeyValueStoreLive(
+    rocksDB: RocksDB,
+    namespaces: Map[Chunk[Byte], ColumnFamilyHandle]
+  ) extends KeyValueStore {
 
     def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
       for {
@@ -91,8 +95,10 @@ object KeyValueStore {
       ZIO.succeed(namespaces(Chunk.fromArray(namespace.getBytes)))
   }
 
-  private def getNamespaces(rocksDB: service.RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+  private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
     rocksDB.initialHandles
-      .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
+      .map(_.map { namespace =>
+        Chunk.fromArray(namespace.getName) -> namespace
+      }.toMap)
       .refineToOrDie[IOException]
 }

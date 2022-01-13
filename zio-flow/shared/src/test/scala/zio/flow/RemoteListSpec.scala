@@ -3,7 +3,7 @@ package zio.flow
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
-object RemoteListSpec extends DefaultRunnableSpec {
+object RemoteListSpec extends ZIOSpecDefault {
   val suite1: Spec[Any, TestFailure[Nothing], TestSuccess] = suite("RemoteListSpec")(
     test("Reverse") {
       val remoteList   = Remote(1 :: 2 :: 3 :: 4 :: Nil)
@@ -38,5 +38,5 @@ object RemoteListSpec extends DefaultRunnableSpec {
     }
   )
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("RemoteListSpec")(suite1)
+  override def spec = suite("RemoteListSpec")(suite1)
 }

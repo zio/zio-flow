@@ -12,7 +12,7 @@ import zio.test.TestAspect.ignore
 import zio.test._
 import zio.{Promise, Ref}
 
-object ZFlowExecutorSpec extends DefaultRunnableSpec {
+object ZFlowExecutorSpec extends ZIOSpecDefault {
 
   implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing does not need to be serialised.")
 
@@ -42,27 +42,27 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
     )
 
   val suite1: Spec[Environment, TestFailure[Any], TestSuccess] = suite("Basic test for all  ZFlow types")(
-    testM("Test Return") {
+    test("Test Return") {
       val compileResult = (ZFlow.Return(12): ZFlow[Any, ActivityError, Int]).evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test Now") {
+    test("Test Now") {
       val compileResult = ZFlow.now.evaluateTestInMem(implicitly[Schema[Instant]], nothingSchema)
       assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now().getEpochSecond))
     } @@ ignore,
-    testM("Test Unwrap") {
+    test("Test Unwrap") {
       val compileResult = ZFlow
         .Unwrap[Any, Nothing, Int](Remote(ZFlow.succeed(12)))
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test ForEach") {
+    test("Test ForEach") {
       val compileResult = ZFlow
         .foreach(Remote(List(10, 20, 30)))(_ + 5)
         .evaluateTestInMem(implicitly[Schema[List[Int]]], nothingSchema)
       assertM(compileResult)(equalTo(List(15, 25, 35)))
     } @@ ignore,
-    testM("Test Ensuring") {
+    test("Test Ensuring") {
       val compileResult = ZFlow
         .succeed(12)
         .ensuring(ZFlow.input[String])
@@ -70,18 +70,18 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test Transaction") {
+    test("Test Transaction") {
       val compileResult = ZFlow
         .Transaction[Any, Nothing, Int](ZFlow.succeed(12))
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test Input and Provide") {
+    test("Test Input and Provide") {
       val compileResult =
         ZFlow.input[String].provide("Some input").evaluateTestInMem(implicitly[Schema[String]], nothingSchema)
       assertM(compileResult)(equalTo("Some input"))
     },
-    testM("Test Fork") {
+    test("Test Fork") {
       def executingFlowSchema[E, A]: Schema[ExecutingFlow[E, A]] = Schema.fail("Executing flow schema")
 
       ZFlow
@@ -89,40 +89,40 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         .evaluateTestInMem(executingFlowSchema, nothingSchema)
         .map(r => assert(r.isInstanceOf[ExecutingFlow[Nothing, Int]])(equalTo(true)))
     },
-    testM("Test Die")(
-      assertM(ZFlow.Die.evaluateTestInMem(nothingSchema, nothingSchema).run)(
+    test("Test Die")(
+      assertM(ZFlow.Die.evaluateTestInMem(nothingSchema, nothingSchema).exit)(
         dies(hasMessage(equalTo("Could not evaluate ZFlow")))
       )
     ),
-    testM("Test RunActivity") {
+    test("Test RunActivity") {
       val compileResult = ZFlow.RunActivity(12, testActivity).evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test NewVar")(
+    test("Test NewVar")(
       ZFlow
         .NewVar("var1", Remote(20))
         .evaluateTestInMem(variableSchema[Int], nothingSchema)
         .map(r => assert(r.isInstanceOf[Variable[Int]])(equalTo(true)))
     ),
-    testM("Retry Until - No Transaction") {
-      assertM(ZFlow.RetryUntil.evaluateTestInMem(nothingSchema, nothingSchema).run)(
+    test("Retry Until - No Transaction") {
+      assertM(ZFlow.RetryUntil.evaluateTestInMem(nothingSchema, nothingSchema).exit)(
         dies(hasMessage(equalTo("There is no transaction to retry.")))
       )
     },
-    testM("Test OrTry - right succeeds") {
+    test("Test OrTry - right succeeds") {
       val compileResult = ZFlow
         .OrTry[Any, Nothing, Int](ZFlow.transaction(_ => ZFlow.RetryUntil), ZFlow.succeed(12))
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test OrTry - left succeeds") {
+    test("Test OrTry - left succeeds") {
       val compileResult = ZFlow
         .OrTry[Any, Nothing, Int](ZFlow.succeed(12), ZFlow.transaction(_ => ZFlow.RetryUntil))
         .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
       assertM(compileResult)(equalTo(12))
     },
-    testM("Test Fold") {
-      checkM(Gen.anyString, Gen.anyInt) { case (s, v) =>
+    test("Test Fold") {
+      check(Gen.string, Gen.int) { case (s, v) =>
         val compileResult1 =
           ZFlow.succeed(s).foldM(ifError, ifSuccess).evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
         assertM(compileResult1)(equalTo(s.length))
@@ -131,15 +131,15 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         assertM(compileResult2)(equalTo(v + 5))
       }
     },
-    testM("Test Fail") {
+    test("Test Fail") {
       implicit val schema: Schema[IllegalStateException] =
         Schema.primitive[String].transform(s => new IllegalStateException(s), exp => exp.getMessage)
-      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateTestInMem(nothingSchema, schema).run)(
+      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateTestInMem(nothingSchema, schema).exit)(
         fails(hasMessage(equalTo("Illegal")))
       )
     },
-    testM("Test Modify : Int => Bool") {
-      checkM(Gen.anyInt) { case v =>
+    test("Test Modify : Int => Bool") {
+      check(Gen.int) { case v =>
         val compileResult = (for {
           variable         <- ZFlow.newVar[Int]("variable1", v)
           modifiedVariable <- variable.modify(isOdd)
@@ -147,8 +147,8 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         assertM(compileResult)(equalTo(false))
       }
     },
-    testM("Test Modify : String => Int") {
-      checkM(Gen.anyString) { case s =>
+    test("Test Modify : String => Int") {
+      check(Gen.string) { case s =>
         val compileResult = (for {
           variable         <- ZFlow.newVar[String]("variable1", s)
           modifiedVariable <- variable.modify(length)
@@ -156,7 +156,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
         assertM(compileResult)(equalTo(s.length))
       }
     },
-    testM("Test Iterate") {
+    test("Test Iterate") {
       val compileResult: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(
         Remote(12),
         (r: Remote[Int]) => ZFlow.succeed(r + 1),
@@ -167,7 +167,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
   )
 
   val suite2: Spec[Environment, TestFailure[Nothing], TestSuccess] =
-    suite("Test RetryUntil")(testM("Test compile status of RetryUntil") {
+    suite("Test RetryUntil")(test("Test compile status of RetryUntil") {
       val result = for {
         inMemory <- mockInMemoryTestClock
         promise  <- Promise.make[Nothing, String]
@@ -190,7 +190,7 @@ object ZFlowExecutorSpec extends DefaultRunnableSpec {
   //      assertM(result)(equalTo(Done))
   //    })
 
-  override def spec: ZSpec[Environment, Failure] = suite("Test ZFlow combinators")(
+  override def spec = suite("Test ZFlow combinators")(
     suite1,
     suite2
   )

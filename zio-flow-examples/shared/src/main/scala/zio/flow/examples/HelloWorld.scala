@@ -1,24 +1,18 @@
 package zio.flow.examples
 
-import java.io.IOException
+import zio._
 
-import zio.console.{Console, getStrLn, putStrLn}
-import zio.{App, ExitCode, URIO, ZIO}
-
-object HelloWorld extends App {
+object HelloWorld extends ZIOAppDefault {
 
   case class Person(name: String, age: Int)
 
   val person: Person = Person("Ash", 12)
   person.copy(age = 32)
 
-  override def run(args: List[String]): URIO[Console, ExitCode] =
-    myAppLogic.exitCode
-
-  val myAppLogic: ZIO[Console, IOException, Unit] =
+  val run =
     for {
-      _    <- putStrLn("Hello! What is your name?")
-      name <- getStrLn
-      _    <- putStrLn(s"Hello, $name, welcome to ZIO!")
+      _    <- Console.printLine("Hello! What is your name?")
+      name <- Console.readLine
+      _    <- Console.printLine(s"Hello, $name, welcome to ZIO!")
     } yield ()
 }

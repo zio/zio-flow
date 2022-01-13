@@ -1,12 +1,10 @@
 package zio.flow.utils
 
-import zio.clock.Clock
-import zio.console.Console
+import zio._
 import zio.flow.OperationExecutor
 import zio.flow.internal.{DurableLog, PersistentExecutor}
 import zio.flow.internal.ZFlowExecutor.InMemory
 import zio.flow.utils.MockHelpers._
-import zio.{Has, Ref, ZIO}
 
 object MockExecutors {
 
@@ -18,17 +16,17 @@ object MockExecutors {
         .map(ref => InMemory[String, Clock with Console](testClock, mockOpExec, ref))
     )
 
-  val mockInMemoryLiveClock: ZIO[Any, Nothing, InMemory[String, Has[Clock.Service] with Has[Console.Service]]] =
+  val mockInMemoryLiveClock: ZIO[Any, Nothing, InMemory[String, Clock with Console]] =
     Ref
       .make[Map[String, Ref[InMemory.State]]](Map.empty)
-      .map(ref => InMemory(Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live), mockOpExec, ref))
+      .map(ref => InMemory(ZEnvironment(Clock.ClockLive) ++ ZEnvironment(Console.ConsoleLive), mockOpExec, ref))
 
-  val mockPersistentLiveClock: ZIO[Has[DurableLog], Nothing, PersistentExecutor] =
+  val mockPersistentLiveClock: ZIO[DurableLog, Nothing, PersistentExecutor] =
     for {
       durableLog <- ZIO.service[DurableLog]
       ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
     } yield PersistentExecutor(
-      Clock.Service.live,
+      Clock.ClockLive,
       durableLog,
       doesNothingKVStore,
       mockOpExec.asInstanceOf[OperationExecutor[Any]],
@@ -38,7 +36,7 @@ object MockExecutors {
   val mockPersistentTestClock =
     for {
       durableLog <- ZIO.service[DurableLog]
-      clock      <- ZIO.service[Clock.Service]
+      clock      <- ZIO.service[Clock]
       ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
     } yield PersistentExecutor(
       clock,

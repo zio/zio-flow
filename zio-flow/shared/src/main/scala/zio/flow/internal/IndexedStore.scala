@@ -29,21 +29,20 @@ trait IndexedStore {
 
 object IndexedStore {
 
-  def position(topic: String): ZIO[Has[IndexedStore], IOException, Long] =
-    ZIO.serviceWith(_.position(topic))
+  def position(topic: String): ZIO[IndexedStore, IOException, Long] =
+    ZIO.serviceWithZIO(_.position(topic))
 
-  def put(topic: String, value: Chunk[Byte]): ZIO[Has[IndexedStore], IOException, Long] =
-    ZIO.serviceWith(_.put(topic, value))
+  def put(topic: String, value: Chunk[Byte]): ZIO[IndexedStore, IOException, Long] =
+    ZIO.serviceWithZIO(_.put(topic, value))
 
-  def scan(topic: String, position: Long, until: Long): ZStream[Has[IndexedStore], IOException, Chunk[Byte]] =
+  def scan(topic: String, position: Long, until: Long): ZStream[IndexedStore, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scan(topic, position, until))
 
-  val live: ZLayer[Any, Nothing, Has[IndexedStore]] =
-    ZLayer.fromManaged {
+  val live: ZLayer[Any, Nothing, IndexedStore] =
+    ZLayer {
       for {
-        topics      <- Ref.makeManaged[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
-        indexedStore = IndexedStoreLive(topics)
-      } yield indexedStore
+        topics <- Ref.makeManaged[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
+      } yield IndexedStoreLive(topics)
     }
 
   private final case class IndexedStoreLive(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {

@@ -1,11 +1,11 @@
 package zio.flow
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.random._
+import zio._
 import zio.schema._
 import zio.test._
 
-object RemoteOpticsSpec extends DefaultRunnableSpec {
+object RemoteOpticsSpec extends ZIOSpecDefault {
 
   final case class Person(name: String, age: Int)
 
@@ -16,8 +16,8 @@ object RemoteOpticsSpec extends DefaultRunnableSpec {
 
   val genPerson: Gen[Random with Sized, Person] =
     for {
-      name <- Gen.anyString
-      age  <- Gen.anyInt
+      name <- Gen.string
+      age  <- Gen.int
     } yield Person(name, age)
 
   sealed trait Color { self =>
@@ -43,19 +43,19 @@ object RemoteOpticsSpec extends DefaultRunnableSpec {
 
   def spec = suite("RemoteOpticsSpec")(
     suite("RemoteLens")(
-      testM("get") {
+      test("get") {
         check(genPerson) { person =>
           Person.age.get(Remote(person)) <-> person.age
         }
       },
-      testM("set") {
-        check(genPerson, Gen.anyInt) { (person, age) =>
+      test("set") {
+        check(genPerson, Gen.int) { (person, age) =>
           Person.age.set(person)(age) <-> person.copy(age = age)
         }
       }
     ),
     suite("RemotePrism")(
-      testM("get") {
+      test("get") {
         check(genColor) { color =>
           Color.blue.get(Remote(color)) <-> color.blue
         }
