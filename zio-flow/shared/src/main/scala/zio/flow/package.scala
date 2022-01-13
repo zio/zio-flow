@@ -18,7 +18,7 @@ package zio
 
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.time.{Duration, Instant}
+import java.time.Instant
 
 import scala.language.implicitConversions
 

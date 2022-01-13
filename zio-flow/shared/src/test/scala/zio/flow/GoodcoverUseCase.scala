@@ -9,7 +9,7 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.equalTo
 import zio.test._
 
-object GoodcoverUseCase extends DefaultRunnableSpec {
+object GoodcoverUseCase extends ZIOSpecDefault {
 
   case class Policy(id: String)
   implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
@@ -127,7 +127,7 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
 
   val suite1: Spec[Any, TestFailure[ActivityError], TestSuccess] =
-    suite("PolicyClaimStatus")(testM("PolicyClaimStatus") {
+    suite("PolicyClaimStatus")(test("PolicyClaimStatus") {
       val result = (for {
         manualEvalDone    <- ZFlow.newVar("manualEvalDone", false)
         paymentSuccessful <- ZFlow.newVar("paymentSuccessful", false)
@@ -141,6 +141,6 @@ object GoodcoverUseCase extends DefaultRunnableSpec {
       assertM(result)(equalTo(()))
     })
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
+  override def spec =
     suite("End to end goodcover use-case performed by in-memory executor")(suite1)
 }

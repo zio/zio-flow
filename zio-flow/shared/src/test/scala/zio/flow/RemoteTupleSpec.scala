@@ -3,7 +3,7 @@ package zio.flow
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
-object RemoteTupleSpec extends DefaultRunnableSpec {
+object RemoteTupleSpec extends ZIOSpecDefault {
 
   override def spec: Spec[Annotations, TestFailure[Any], TestSuccess] =
     suite("RemoteTupleSpec")(

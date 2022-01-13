@@ -3,8 +3,8 @@ package zio.flow
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
-object RemoteBooleanSpec extends DefaultRunnableSpec {
-  override def spec: ZSpec[Environment, Failure] = suite("RemoteBooleanSpec")(
+object RemoteBooleanSpec extends ZIOSpecDefault {
+  override def spec = suite("RemoteBooleanSpec")(
     test("And") {
       BoolAlgebra.all(
         (Remote(true) && Remote(false)) <-> false,

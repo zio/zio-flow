@@ -3,16 +3,17 @@ package zio.flow
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.schema.Schema
 import zio.test._
+import zio.test.{Gen, TestConfig, ZIOSpecDefault}
 
-object NumericSpec extends DefaultRunnableSpec {
+object NumericSpec extends ZIOSpecDefault {
 
-  override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
+  override def spec =
     suite("NumericSpec")(
-      numericTests("Int", Gen.anyInt)(Operations.intOperations),
-      numericTests("Long", Gen.anyLong)(Operations.longOperations),
-      numericTests("Short", Gen.anyShort)(Operations.shortOperations),
-      numericTests("Float", Gen.anyFloat)(Operations.floatOperations),
-      numericTests("Double", Gen.anyDouble)(Operations.doubleOperations),
+      numericTests("Int", Gen.int)(Operations.intOperations),
+      numericTests("Long", Gen.long)(Operations.longOperations),
+      numericTests("Short", Gen.short)(Operations.shortOperations),
+      numericTests("Float", Gen.float)(Operations.floatOperations),
+      numericTests("Double", Gen.double)(Operations.doubleOperations),
       numericTests("BigInt", Gen.bigInt(BigInt(Int.MinValue), BigInt(Int.MaxValue)))(Operations.bigIntOperations),
       numericTestsWithoutLogOrRoot(
         "BigDecimal",
@@ -65,7 +66,7 @@ object NumericSpec extends DefaultRunnableSpec {
   private def testOp[R, A: Schema: remote.Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
   )(op: (A, A) => A): ZSpec[R with TestConfig, Nothing] =
-    testM(name) {
+    test(name) {
       check(genX, genY) { case (x, y) =>
         numericOp(x, y) <-> op(x, y)
       }
@@ -74,7 +75,7 @@ object NumericSpec extends DefaultRunnableSpec {
   private def testOp[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
     numericOp: Remote[A] => Remote[A]
   )(op: A => A): ZSpec[R with TestConfig, Nothing] =
-    testM(name) {
+    test(name) {
       check(gen) { x =>
         numericOp(x) <-> op(x)
       }

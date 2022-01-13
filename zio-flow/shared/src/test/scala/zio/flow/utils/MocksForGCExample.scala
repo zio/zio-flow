@@ -2,12 +2,10 @@ package zio.flow.utils
 
 import java.net.URI
 
-import zio.clock.Clock
-import zio.console.Console
+import zio._
 import zio.flow.GoodcoverUseCase.Policy
 import zio.flow.internal.ZFlowExecutor.InMemory
 import zio.flow.{ActivityError, Operation, OperationExecutor}
-import zio.{Has, Ref, ZIO, console}
 
 object MocksForGCExample {
 
@@ -16,17 +14,17 @@ object MocksForGCExample {
       override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
         operation match {
           case Operation.Http(url, _, _, _, _) =>
-            console.putStrLn(s"Request to : ${url.toString}") *> ZIO.succeed(map.get(url).get.asInstanceOf[A])
+            Console.printLine(s"Request to : ${url.toString}") *> ZIO.succeed(map.get(url).get.asInstanceOf[A])
           case Operation.SendEmail(_, _) =>
-            console.putStrLn("Sending email") *> ZIO.succeed(().asInstanceOf[A])
+            Console.printLine("Sending email") *> ZIO.succeed(().asInstanceOf[A])
         }
     }
 
-  val mockInMemoryForGCExample: ZIO[Any, Nothing, InMemory[String, Has[Clock.Service] with Has[Console.Service]]] = Ref
+  val mockInMemoryForGCExample: ZIO[Any, Nothing, InMemory[String, Clock with Console]] = Ref
     .make[Map[String, Ref[InMemory.State]]](Map.empty)
     .map(ref =>
       InMemory(
-        Has(zio.clock.Clock.Service.live) ++ Has(zio.console.Console.Service.live),
+        ZEnvironment(Clock.ClockLive) ++ ZEnvironment(Console.ConsoleLive),
         mockOpExec2(mockResponseMap),
         ref
       )
