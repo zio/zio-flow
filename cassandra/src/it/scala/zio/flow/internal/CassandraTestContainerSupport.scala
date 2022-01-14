@@ -7,13 +7,12 @@ import com.dimafeng.testcontainers.CassandraContainer
 
 import java.net.InetSocketAddress
 import org.testcontainers.utility.DockerImageName
-import zio.{&, Has, URLayer, ZIO, ZManaged}
-import zio.blocking.{Blocking, effectBlocking}
-import zio.ZIO.{fromCompletionStage => execAsync}
+import zio.{ULayer, URLayer, ZIO, ZManaged}
+import zio.ZIO.{attemptBlocking, fromCompletionStage => execAsync}
 
 object CassandraTestContainerSupport {
 
-  type CassandraSessionLayer = URLayer[Blocking, Has[CqlSession]]
+  type SessionLayer = ULayer[CqlSession]
 
   private val cassandra        = "cassandra"
   private val testKeyspaceName = "CassandraKeyValueStoreSpec_Keyspace"
@@ -47,28 +46,28 @@ object CassandraTestContainerSupport {
   val createKeyspaceScript: String =
     s"CREATE KEYSPACE $testKeyspaceName WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
 
-  lazy val cassandraV3: CassandraSessionLayer =
-    (cassandraContainer(DockerImageTag.cassandraV3) ++ Blocking.any) >>> cassandraSession
+  lazy val cassandraV3: SessionLayer =
+    cassandraContainer(DockerImageTag.cassandraV3) >>> cassandraSession
 
-  lazy val cassandraV4: CassandraSessionLayer =
-    (cassandraContainer(DockerImageTag.cassandraV4) ++ Blocking.any) >>> cassandraSession
+  lazy val cassandraV4: SessionLayer =
+    cassandraContainer(DockerImageTag.cassandraV4) >>> cassandraSession
 
-  lazy val scyllaDb: CassandraSessionLayer =
-    (cassandraContainer(DockerImageTag.scyllaDb) ++ Blocking.any) >>> cassandraSession
+  lazy val scyllaDb: SessionLayer =
+    cassandraContainer(DockerImageTag.scyllaDb) >>> cassandraSession
 
-  lazy val cassandraSession: URLayer[Blocking & Has[CassandraContainer], Has[CqlSession]] = {
+  lazy val cassandraSession: URLayer[CassandraContainer, CqlSession] = {
     for {
-      container <- ZIO.service[CassandraContainer].toManaged_
+      container <- ZIO.service[CassandraContainer].toManaged
       ipAddress <-
-        ZIO.effect {
+        ZIO.attempt {
           new InetSocketAddress(
             container.containerIpAddress,
             container.cassandraContainer.getFirstMappedPort
           )
-        }.toManaged_
+        }.toManaged
       _ <- createKeyspace(ipAddress)
       session <-
-        ZManaged.make {
+        ZManaged.acquireReleaseWith {
           execAsync(
             CqlSession.builder
               .addContactPoint(ipAddress)
@@ -79,16 +78,16 @@ object CassandraTestContainerSupport {
               .buildAsync()
           )
         } { session =>
-          effectBlocking {
+          attemptBlocking {
             session.close()
           }.orDie
         }
     } yield session
   }.orDie.toLayer
 
-  def cassandraContainer(imageTag: String): URLayer[Blocking, Has[CassandraContainer]] =
-    ZManaged.make {
-      effectBlocking {
+  def cassandraContainer(imageTag: String): ULayer[CassandraContainer] =
+    ZManaged.acquireReleaseWith {
+      attemptBlocking {
         val container =
           CassandraContainer(
             DockerImageName
@@ -99,12 +98,12 @@ object CassandraTestContainerSupport {
         container
       }.orDie
     } { container =>
-      effectBlocking(
+      attemptBlocking(
         container.stop()
       ).orDie
     }.toLayer
 
-  private def createKeyspace(ipAddress: InetSocketAddress) = ZManaged.make {
+  private def createKeyspace(ipAddress: InetSocketAddress) = ZManaged.acquireReleaseWith {
     for {
       session <-
         execAsync(
@@ -123,7 +122,7 @@ object CassandraTestContainerSupport {
         )
     } yield session
   } { session =>
-    effectBlocking(
+    attemptBlocking(
       session.close()
     ).orDie
   }

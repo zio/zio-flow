@@ -8,7 +8,7 @@ import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
 
 import java.io.IOException
 import java.nio.ByteBuffer
-import zio.{Chunk, Has, IO, Task, URLayer, ZIO}
+import zio.{Chunk, IO, Task, URLayer, ZIO}
 import zio.stream.ZStream
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
@@ -90,7 +90,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       s"Error scanning all key-value pairs for <$namespace> namespace"
 
     ZStream
-      .paginateM(
+      .paginateZIO(
         executeAsync(query, session)
       )(_.map { result =>
         val pairs =
@@ -98,7 +98,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
             .fromJavaIterator(
               result.currentPage.iterator
             )
-            .mapM { row =>
+            .mapZIO { row =>
               Task {
                 blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
               }
@@ -126,7 +126,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
 object CassandraKeyValueStore {
 
-  val live: URLayer[Has[CqlSession], Has[KeyValueStore]] =
+  val live: URLayer[CqlSession, KeyValueStore] =
     ZIO
       .service[CqlSession]
       .map(new CassandraKeyValueStore(_))

@@ -71,6 +71,7 @@ lazy val cassandraKvStore = project
   .dependsOn(zioFlowJVM)
   .configs(IntegrationTest)
   .settings(
+    stdSettings("zio-flow-cassandra-kv-store"),
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "com.scylladb"  % "java-driver-core-shaded"   % Version.cassandraJavaDriver,

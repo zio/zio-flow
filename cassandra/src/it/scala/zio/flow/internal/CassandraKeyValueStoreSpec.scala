@@ -1,10 +1,10 @@
 package zio.flow.internal
 
-import zio.{Chunk, Has, URLayer, ZIO}
-import zio.blocking.Blocking
+import CassandraTestContainerSupport.{cassandraV3, cassandraV4, scyllaDb, SessionLayer}
+import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
-import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkNM}
+import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
 
 object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
 
@@ -15,19 +15,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
     )
 
   private val nonEmptyByteChunkGen =
-    Gen.chunkOf1(Gen.anyByte)
+    Gen.chunkOf1(Gen.byte)
 
   private val byteChunkGen =
-    Gen.chunkOf(Gen.anyByte)
-
-  private val cassandraV3 =
-    CassandraTestContainerSupport.cassandraV3 >>> CassandraKeyValueStore.live
-
-  private val cassandraV4 =
-    CassandraTestContainerSupport.cassandraV4 >>> CassandraKeyValueStore.live
-
-  private val scyllaDb =
-    CassandraTestContainerSupport.scyllaDb >>> CassandraKeyValueStore.live
+    Gen.chunkOf(Gen.byte)
 
   override def spec: ZSpec[Environment, Failure] =
     suite("CassandraKeyValueStoreSpec")(
@@ -36,10 +27,10 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
       testUsing(scyllaDb, "ScyllaDB")
     )
 
-  private def testUsing(keyValueStore: URLayer[Blocking, Has[KeyValueStore]], label: String) =
+  private def testUsing(database: SessionLayer, label: String) =
     suite(label)(
-      testM("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
-        checkNM(10)(
+      test("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
+        checkN(10)(
           cqlNameGen,
           nonEmptyByteChunkGen,
           byteChunkGen,
@@ -58,8 +49,8 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           )
         }
       },
-      testM("should return empty result for a `get` call when the namespace does not exist.") {
-        checkNM(10)(
+      test("should return empty result for a `get` call when the namespace does not exist.") {
+        checkN(10)(
           nonEmptyByteChunkGen
         ) { key =>
           val nonExistentNamespace = newTimeBasedName()
@@ -73,8 +64,8 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
             }
         }
       },
-      testM("should return empty result for a `get` call when the key does not exist.") {
-        checkNM(10)(
+      test("should return empty result for a `get` call when the key does not exist.") {
+        checkN(10)(
           cqlNameGen,
           nonEmptyByteChunkGen,
           byteChunkGen
@@ -91,7 +82,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           )
         }
       },
-      testM("should return empty result for a `scanAll` call when the namespace does not exist.") {
+      test("should return empty result for a `scanAll` call when the namespace does not exist.") {
         val nonExistentNamespace = newTimeBasedName()
 
         KeyValueStore
@@ -103,7 +94,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
             )
           }
       },
-      testM("should return all key-value pairs for a `scanAll` call.") {
+      test("should return all key-value pairs for a `scanAll` call.") {
         val uniqueNamespace = newTimeBasedName()
         val keyValuePairs =
           Chunk
@@ -134,7 +125,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           )
         }
       }
-    ).provideCustomLayerShared(keyValueStore) @@ nondeterministic @@ sequential
+    ).provideCustomLayerShared(database >>> CassandraKeyValueStore.live) @@ nondeterministic @@ sequential
 
   private def newTimeBasedName() =
     s"${java.time.Instant.now}"
