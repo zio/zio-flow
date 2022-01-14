@@ -34,7 +34,7 @@ trait KeyValueStore {
 
 object KeyValueStore {
 
-  val live: ZLayer[RocksDB, IOException, KeyValueStore] = {
+  val live: ZLayer[RocksDB, IOException, KeyValueStore] =
     ZLayer {
       for {
         rocksDB    <- ZIO.service[RocksDB]
@@ -43,7 +43,6 @@ object KeyValueStore {
         KeyValueStoreLive(rocksDB, namespaces)
       }
     }
-  }
 
   def put(
     namespace: String,

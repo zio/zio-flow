@@ -1,11 +1,15 @@
 
+# Example Project
+
+An example project or sample code will be provided in the future to demonstrate how to use this module in a `zio-flow` app. In the meantime, our integration test suite (under `it` subdirectory) provides some good examples. Mainly, a `CqlSession` needs to be provided. See `CassandraTestContainerSupport.scala` in the test suite on how to construct a `CqlSession`. 
+
 # Supported Versions
 
-The Cassandra module supports Cassandra 3.x, Cassandra 4.x and ScyllaDB 4.x. Specifically, we test against Cassandra 3.11, Cassandra 4.1, and ScyllaDB 4.5. See `CassandraKeyValueStoreSpec.scala` under the project's `it` (Integration Test) subdirectory for more details. 
+The Cassandra module supports Cassandra 3.x, Cassandra 4.x and ScyllaDB 4.x. Specifically, we test against Cassandra 3.11, Cassandra 4.1, and ScyllaDB 4.5. See `CassandraKeyValueStoreSpec.scala` in the test suite for more details. 
 
 # Database Setup
 
-The Cassandra module requires a table (column family) for persistence. To create such a table, run the following CQL statement:
+The Cassandra module requires a table (column family) for persistence. To create this table, run the following CQL statement:
 
 ```cql
 CREATE TABLE _zflow_key_value_store (

@@ -10,6 +10,11 @@ import org.testcontainers.utility.DockerImageName
 import zio.{ULayer, URLayer, ZIO, ZManaged}
 import zio.ZIO.{attemptBlocking, fromCompletionStage => execAsync}
 
+/**
+ * A helper module for test-containers integration. Mostly this facilitates
+ * spinning up Cassandra/Scylla containers, then obtaining the container's IP &
+ * port, and finally creating the keyspace and the table for testing.
+ */
 object CassandraTestContainerSupport {
 
   type SessionLayer = ULayer[CqlSession]

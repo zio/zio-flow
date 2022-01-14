@@ -107,7 +107,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
         for {
           putSuccesses <-
             ZIO
-              .foreach(keyValuePairs) { case (key, value) =>
+              .foreachPar(keyValuePairs) { case (key, value) =>
                 KeyValueStore.put(uniqueNamespace, key, value)
               }
           retrieved <-
