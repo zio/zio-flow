@@ -35,7 +35,7 @@ object RemoteInstantSpec extends ZIOSpecDefault {
       }
     },
     test("plusDuration") {
-      check(Gen.anyInstant, Gen.finiteDuration) { case (i, d2) =>
+      check(Gen.instant, Gen.finiteDuration) { case (i, d2) =>
         (Remote(i) plusDuration Remote(d2)) <-> (i plus d2)
       }
     },

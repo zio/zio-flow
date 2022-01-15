@@ -17,7 +17,7 @@
 package zio.flow
 
 import java.math.BigDecimal
-import java.time.temporal.{ChronoUnit, Temporal, TemporalAmount, TemporalField, TemporalUnit}
+import java.time.temporal.{ChronoUnit, Temporal, TemporalAmount, TemporalUnit}
 import java.time.{Clock, Duration, Instant}
 import scala.language.implicitConversions
 import zio.Chunk
@@ -905,7 +905,7 @@ object Remote {
   }
 
   final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
-    private val oneBillion = new BigDecimal(1000_000_000L)
+    private val oneBillion = new BigDecimal(1000000000L)
 
     override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
       unaryEval(seconds)(

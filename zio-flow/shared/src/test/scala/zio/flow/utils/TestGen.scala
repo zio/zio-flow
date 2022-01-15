@@ -1,6 +1,6 @@
 package zio.flow.utils
 
-import zio.random.Random
+import zio.Random
 import zio.test.Gen
 
 import java.time.Instant

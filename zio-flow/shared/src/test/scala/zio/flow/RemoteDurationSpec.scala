@@ -49,7 +49,7 @@ object RemoteDurationSpec extends ZIOSpecDefault {
       }
     },
     test("minus") {
-      check(Gen.finiteDuration, Gen.anyFiniteDuration) { case (d1, d2) =>
+      check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
         (Remote(d1) minus Remote(d2)) <-> (d1 minus d2)
       }
     },
