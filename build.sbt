@@ -22,17 +22,21 @@ inThisBuild(
 addCommandAlias("fmt", "all scalafmtSbt scalafmtAll")
 addCommandAlias("fmtCheck", "all scalafmtSbtCheck scalafmtCheckAll")
 
-val zioVersion        = "2.0.0-RC1"
-val zioRocksDbVersion = "0.4.0-RC1-1"
-val zioSchemaVersion  = "0.2.0-RC1-1"
+lazy val commonTestDependencies =
+  Seq(
+    "dev.zio" %% "zio-test"     % Version.zio,
+    "dev.zio" %% "zio-test-sbt" % Version.zio
+  )
+
+lazy val zioTest = new TestFramework("zio.test.sbt.ZTestFramework")
 
 lazy val root = project
   .in(file("."))
   .settings(
-    skip in publish := true,
-    unusedCompileDependenciesFilter -= moduleFilter("org.scala-js", "scalajs-library")
+    publish / skip := true
   )
   .aggregate(
+    cassandraKvStore,
     docs,
     examplesJVM,
     examplesJS,
@@ -47,38 +51,57 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(buildInfoSettings("zio.flow"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio"                   % zioVersion,
-      "dev.zio" %% "zio-rocksdb"           % zioRocksDbVersion,
-      "dev.zio" %% "zio-test"              % zioVersion % "test",
-      "dev.zio" %% "zio-test-sbt"          % zioVersion % "test",
-      "dev.zio" %% "zio-schema"            % zioSchemaVersion,
-      "dev.zio" %% "zio-schema-derivation" % zioSchemaVersion,
-      "dev.zio" %% "zio-schema-optics"     % zioSchemaVersion
-    )
+      "dev.zio" %% "zio"                   % Version.zio,
+      "dev.zio" %% "zio-rocksdb"           % Version.zioRocksDb,
+      "dev.zio" %% "zio-schema"            % Version.zioSchema,
+      "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
+      "dev.zio" %% "zio-schema-optics"     % Version.zioSchema
+    ) ++
+      commonTestDependencies.map(_ % Test)
   )
-  .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
+  .settings(testFrameworks += zioTest)
 
 lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
 
 lazy val zioFlowJVM = zioFlow.jvm
 
+lazy val cassandraKvStore = project
+  .in(file("cassandra"))
+  .dependsOn(zioFlowJVM)
+  .configs(IntegrationTest)
+  .settings(
+    stdSettings("zio-flow-cassandra-kv-store"),
+    Defaults.itSettings,
+    libraryDependencies ++= Seq(
+      "com.scylladb"  % "java-driver-core-shaded"   % Version.cassandraJavaDriver,
+      ("com.scylladb" % "java-driver-query-builder" % Version.cassandraJavaDriver)
+        .exclude("com.scylladb", "java-driver-core")
+    ) ++ (
+      commonTestDependencies ++
+        Seq(
+          "com.dimafeng" %% "testcontainers-scala-cassandra" % Version.testContainers
+        )
+    ).map(_ % IntegrationTest),
+    testFrameworks += zioTest
+  )
+
 lazy val docs = project
   .in(file("zio-flow-docs"))
   .settings(
-    skip.in(publish) := true,
-    moduleName       := "zio-flow-docs",
+    publish / skip := true,
+    moduleName     := "zio-flow-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     scalacOptions += "-Xlog-implicits",
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % zioVersion
+      "dev.zio" %% "zio" % Version.zio
     ),
-    unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(zioFlowJVM),
-    target in (ScalaUnidoc, unidoc)              := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",
-    cleanFiles += (target in (ScalaUnidoc, unidoc)).value,
-    docusaurusCreateSite     := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
-    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(unidoc in Compile).value
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioFlowJVM),
+    ScalaUnidoc / unidoc / target              := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
+    cleanFiles += (ScalaUnidoc / unidoc / target).value,
+    docusaurusCreateSite     := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
+    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value
   )
   .dependsOn(zioFlowJVM)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
@@ -88,7 +111,7 @@ lazy val examples = crossProject(JSPlatform, JVMPlatform)
   .settings(stdSettings("zio-flow-examples"))
   .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
-  .settings(skip.in(publish) := true)
+  .settings((publish / skip) := true)
   .dependsOn(zioFlow)
 
 lazy val examplesJS = examples.js

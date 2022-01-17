@@ -7,12 +7,6 @@ import sbtbuildinfo._
 import BuildInfoKeys._
 
 object BuildHelper {
-  val Scala211 = "2.11.12"
-  val Scala212 = "2.12.15"
-  val Scala213 = "2.13.7"
-  val Scala3   = "3.1.0"
-
-  val SilencerVersion = "1.7.7"
 
   private val stdOptions = Seq(
     "-deprecation",
@@ -53,18 +47,18 @@ object BuildHelper {
     )
 
   val dottySettings = Seq(
-    crossScalaVersions += Scala3,
-    sources in (Compile, doc) := {
+    crossScalaVersions += Version.Scala3,
+    Compile / doc / sources := {
       val old = (Compile / doc / sources).value
-      if (scalaVersion.value == Scala3) {
+      if (scalaVersion.value == Version.Scala3) {
         Nil
       } else {
         old
       }
     },
-    parallelExecution in Test := {
+    Test / parallelExecution := {
       val old = (Test / parallelExecution).value
-      if (scalaVersion.value == Scala3) {
+      if (scalaVersion.value == Version.Scala3) {
         false
       } else {
         old
@@ -104,7 +98,7 @@ object BuildHelper {
     // One of -Ydelambdafy:inline or -Yrepl-class-based must be given to
     // avoid deadlocking on parallel operations, see
     //   https://issues.scala-lang.org/browse/SI-9076
-    scalacOptions in Compile in console := Seq(
+    Compile / console / scalacOptions := Seq(
       "-Ypartial-unification",
       "-language:higherKinds",
       "-language:existentials",
@@ -112,7 +106,7 @@ object BuildHelper {
       "-Xsource:2.13",
       "-Yrepl-class-based"
     ),
-    initialCommands in Compile in console := initialCommandsStr
+    Compile / console / initialCommands := initialCommandsStr
   )
 
   def extraOptions(scalaVersion: String, optimize: Boolean) =
@@ -206,21 +200,21 @@ object BuildHelper {
 
   def stdSettings(prjName: String) = Seq(
     name                     := s"$prjName",
-    crossScalaVersions       := Seq(Scala212, Scala213),
-    ThisBuild / scalaVersion := Scala213,
+    crossScalaVersions       := Seq(Version.Scala212, Version.Scala213),
+    ThisBuild / scalaVersion := Version.Scala213,
     scalacOptions            := stdOptions ++ extraOptions(scalaVersion.value, optimize = !isSnapshot.value),
     libraryDependencies ++= {
-      if (scalaVersion.value == Scala3)
+      if (scalaVersion.value == Version.Scala3)
         Seq(
-          "com.github.ghik" % s"silencer-lib_$Scala213" % SilencerVersion % Provided
+          "com.github.ghik" % s"silencer-lib_$Version.Scala213" % Version.Silencer % Provided
         )
       else
         Seq(
-          "com.github.ghik" % "silencer-lib" % SilencerVersion % Provided cross CrossVersion.full,
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % SilencerVersion cross CrossVersion.full)
+          "com.github.ghik" % "silencer-lib" % Version.Silencer % Provided cross CrossVersion.full,
+          compilerPlugin("com.github.ghik" % "silencer-plugin" % Version.Silencer cross CrossVersion.full)
         )
     },
-    parallelExecution in Test := true,
+    Test / parallelExecution := true,
     incOptions ~= (_.withLogRecompileOnMacro(false)),
     autoAPIMappings := true,
     unusedCompileDependenciesFilter -= moduleFilter("org.scala-js", "scalajs-library")
@@ -245,7 +239,7 @@ object BuildHelper {
   def macroDefinitionSettings = Seq(
     scalacOptions += "-language:experimental.macros",
     libraryDependencies ++= {
-      if (scalaVersion.value == Scala3) Seq()
+      if (scalaVersion.value == Version.Scala3) Seq()
       else
         Seq(
           "org.scala-lang" % "scala-reflect"  % scalaVersion.value % "provided",

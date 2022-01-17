@@ -19,13 +19,16 @@ package zio.flow.internal
 import java.io.IOException
 
 import org.rocksdb.ColumnFamilyHandle
-import zio._
 import zio.rocksdb._
-import zio.stream._
+import zio.{Chunk, IO, UIO, ZLayer, ZIO}
+import zio.stream.ZStream
 
 trait KeyValueStore {
+
   def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean]
+
   def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]]
+
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
 }
 
@@ -36,11 +39,34 @@ object KeyValueStore {
       for {
         rocksDB    <- ZIO.service[RocksDB]
         namespaces <- getNamespaces(rocksDB)
-      } yield KeyValueStoreLive(rocksDB, namespaces)
+      } yield {
+        KeyValueStoreLive(rocksDB, namespaces)
+      }
     }
 
-  private final case class KeyValueStoreLive(rocksDB: RocksDB, namespaces: Map[Chunk[Byte], ColumnFamilyHandle])
-      extends KeyValueStore {
+  def put(
+    namespace: String,
+    key: Chunk[Byte],
+    value: Chunk[Byte]
+  ): ZIO[KeyValueStore, IOException, Boolean] =
+    ZIO.serviceWithZIO(
+      _.put(namespace, key, value)
+    )
+
+  def get(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Option[Chunk[Byte]]] =
+    ZIO.serviceWithZIO(
+      _.get(namespace, key)
+    )
+
+  def scanAll(namespace: String): ZStream[KeyValueStore, IOException, (Chunk[Byte], Chunk[Byte])] =
+    ZStream.serviceWithStream(
+      _.scanAll(namespace)
+    )
+
+  private final case class KeyValueStoreLive(
+    rocksDB: RocksDB,
+    namespaces: Map[Chunk[Byte], ColumnFamilyHandle]
+  ) extends KeyValueStore {
 
     def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
       for {
@@ -70,6 +96,8 @@ object KeyValueStore {
 
   private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
     rocksDB.initialHandles
-      .map(_.map(namespace => Chunk.fromArray(namespace.getName) -> namespace).toMap)
+      .map(_.map { namespace =>
+        Chunk.fromArray(namespace.getName) -> namespace
+      }.toMap)
       .refineToOrDie[IOException]
 }
