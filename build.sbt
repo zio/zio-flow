@@ -96,14 +96,14 @@ lazy val dynamoDbKvStore = project
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-aws-dynamodb" % Version.zioAws,
-      "dev.zio" %% "zio-aws-netty" % Version.zioAws
+      "dev.zio" %% "zio-aws-netty"    % Version.zioAws
     ) ++ (
       commonTestDependencies ++
         Seq(
-          "com.amazonaws" % "aws-java-sdk-core" % Version.awsSdkV1,
+          "com.amazonaws" % "aws-java-sdk-core"                  % Version.awsSdkV1,
           "com.dimafeng" %% "testcontainers-scala-localstack-v2" % Version.testContainers
         )
-      ).map(_ % IntegrationTest),
+    ).map(_ % IntegrationTest),
     testFrameworks += zioTest
   )
 
