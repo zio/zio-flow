@@ -49,18 +49,18 @@ object KeyValueStore {
     key: Chunk[Byte],
     value: Chunk[Byte]
   ): ZIO[KeyValueStore, IOException, Boolean] =
-    ZIO.environmentWithZIO(
-      _.get.put(namespace, key, value)
+    ZIO.serviceWithZIO(
+      _.put(namespace, key, value)
     )
 
   def get(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Option[Chunk[Byte]]] =
-    ZIO.environmentWithZIO(
-      _.get.get(namespace, key)
+    ZIO.serviceWithZIO(
+      _.get(namespace, key)
     )
 
   def scanAll(namespace: String): ZStream[KeyValueStore, IOException, (Chunk[Byte], Chunk[Byte])] =
-    ZStream.environmentWithStream(
-      _.get.scanAll(namespace)
+    ZStream.serviceWithStream(
+      _.scanAll(namespace)
     )
 
   private final case class KeyValueStoreLive(
