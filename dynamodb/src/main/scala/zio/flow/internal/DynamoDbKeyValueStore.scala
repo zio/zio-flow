@@ -67,16 +67,6 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
   override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] = {
 
-    def byteChunkPairFrom(item: Map[AttributeName, AttributeValue.ReadOnly]) =
-      for {
-        key            <- item.get(AttributeName(keyColumnName))
-        keyByteChunk   <- key.b
-        value          <- item.get(AttributeName(valueColumnName))
-        valueByteChunk <- value.b
-      } yield {
-        (keyByteChunk, valueByteChunk)
-      }
-
     val request = scanRequest.copy(
       expressionAttributeValues = Option(
         Map(
@@ -87,10 +77,21 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
     dynamoDB
       .scan(request)
-      .collect((byteChunkPairFrom _).unlift)
-      .mapError(
-        ioExceptionOf(s"Error scanning all key-value pairs for <$namespace> namespace", _)
+      .mapBoth(
+        ioExceptionOf(s"Error scanning all key-value pairs for <$namespace> namespace", _),
+        item =>
+          for {
+            key            <- item.get(AttributeName(keyColumnName))
+            keyByteChunk   <- key.b
+            value          <- item.get(AttributeName(valueColumnName))
+            valueByteChunk <- value.b
+          } yield {
+            keyByteChunk -> valueByteChunk
+          }
       )
+      .collect { case Some(byteChunkPair) =>
+        byteChunkPair
+      }
   }
 }
 
