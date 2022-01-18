@@ -11,6 +11,10 @@ import zio.aws.dynamodb.model.primitives.{KeySchemaAttributeName, PositiveLongOb
 import zio.aws.netty.NettyHttpClient
 import zio.{&, RLayer, RManaged, ULayer, ZIO, ZManaged}
 
+/**
+ * A helper module for LocalStack DynamoDB integration. It contains helper
+ * methods to create/delete a DynamoDB table, construct ZLayers, etc.
+ */
 object DynamoDbSupport {
 
   type DynamoDB = ULayer[DynamoDb]
