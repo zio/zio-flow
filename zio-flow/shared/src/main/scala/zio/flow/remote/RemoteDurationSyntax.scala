@@ -19,46 +19,51 @@ package zio.flow.remote
 import zio.flow._
 
 import java.time.Duration
-import java.time.temporal.{Temporal, TemporalAmount}
+import java.time.temporal.{Temporal, TemporalAmount, TemporalUnit}
 
 class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
-  def plusDuration2(that: Remote[Duration]): Remote[Duration] =
-    Remote.ofSeconds(self.toSeconds + that.toSeconds)
+  def isZero: Remote[Boolean]     = self.getSeconds === 0L && self.getNano === 0L
+  def isNegative: Remote[Boolean] = self.getSeconds < 0L
+  def getSeconds: Remote[Long]    = Remote.DurationToLongs(self.widen[Duration])._1
+  def getNano: Remote[Long]       = Remote.DurationToLongs(self.widen[Duration])._2
 
-  def minusDuration(that: Remote[Duration]): Remote[Duration] =
-    Remote.ofSeconds(self.toSeconds - that.toSeconds)
+  def plus(that: Remote[Duration]): Remote[Duration] =
+    Remote.DurationPlusDuration(self, that)
 
-  def durationToLong: Remote[Long] =
-    Remote.DurationToLong(self.widen[Duration])
+  def plus(amountToAdd: Remote[Long], temporalUnit: Remote[TemporalUnit]): Remote[Duration] =
+    plus(Remote.DurationFromAmount(amountToAdd, temporalUnit))
 
-  def toSeconds: Remote[Long] = self.durationToLong
+  def plusDays(daysToAdd: Remote[Long]): Remote[Duration]       = plus(Remote.ofDays(daysToAdd))
+  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration]     = plus(Remote.ofHours(hoursToAdd))
+  def plusMinutes(minutesToAdd: Remote[Long]): Remote[Duration] = plus(Remote.ofMinutes(minutesToAdd))
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plus(Remote.ofSeconds(secondsToAdd))
+  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration]      = plus(Remote.ofNanos(nanoToAdd))
 
-  def isZero: Remote[Boolean] = self.toSeconds === 0L && self.getNano === 0L
+  def minus(that: Remote[Duration]): Remote[Duration] =
+    Remote.DurationMinusDuration(self, that)
 
-  def isNegative: Remote[Boolean] = self.toSeconds < 0L
-  def getSeconds: Remote[Long]    = Remote.DurationToSecsNanos(self.widen[Duration])._1
-  def getNano: Remote[Long]       = Remote.DurationToSecsNanos(self.widen[Duration])._2
+  def minus(amountToSubtract: Remote[Long], temporalUnit: Remote[TemporalUnit]): Remote[Duration] =
+    minus(Remote.DurationFromAmount(amountToSubtract, temporalUnit))
 
-  def plusDays(daysToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofDays(daysToAdd))
-
-  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofHours(hoursToAdd))
-
-  def plusMinutes(minsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofMinutes(minsToAdd))
-
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofSeconds(secondsToAdd))
-
-  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration] = plusDuration2(Remote.ofNanos(nanoToAdd))
-
+  def minusDays(daysToSubtract: Remote[Long]): Remote[Duration]       = minus(Remote.ofDays(daysToSubtract))
+  def minusHours(hoursToSubtract: Remote[Long]): Remote[Duration]     = minus(Remote.ofHours(hoursToSubtract))
+  def minusMinutes(minutesToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofMinutes(minutesToSubtract))
+  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofSeconds(secondsToSubtract))
+  def minusNanos(nanosToSubtract: Remote[Long]): Remote[Duration]     = minus(Remote.ofNanos(nanosToSubtract))
 }
 
 object RemoteDuration {
 
-  def from(amount: Remote[TemporalAmount]): Remote[Duration] = ???
+  def from(amount: Remote[TemporalAmount]): Remote[Duration] =
+    Remote.DurationFromTemporalAmount(amount)
 
-  def parse(charSequence: Remote[String]): Remote[Duration] = ???
+  def parse(charSequence: Remote[String]): Remote[Duration] =
+    Remote.DurationFromString(charSequence)
 
-  def create(seconds: Remote[BigDecimal]): Remote[Duration] = ???
+  def create(seconds: Remote[java.math.BigDecimal]): Remote[Duration] =
+    Remote.DurationFromBigDecimal(seconds)
 
-  def between(startInclusive: Remote[Temporal], endExclusive: Remote[Temporal]): Remote[Duration] = ???
+  def between(startInclusive: Remote[Temporal], endExclusive: Remote[Temporal]): Remote[Duration] =
+    Remote.DurationFromTemporals(startInclusive, endExclusive)
 }
