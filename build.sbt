@@ -56,7 +56,9 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-rocksdb"           % Version.zioRocksDb,
       "dev.zio" %% "zio-schema"            % Version.zioSchema,
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
-      "dev.zio" %% "zio-schema-optics"     % Version.zioSchema
+      "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
+      "dev.zio" %% "zio-schema-json"       % Version.zioSchema,
+      "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema
     ) ++
       commonTestDependencies.map(_ % Test)
   )

@@ -1,11 +1,11 @@
 package zio.flow.utils
 
 import java.net.URI
-
 import zio._
 import zio.flow.GoodcoverUseCase.Policy
 import zio.flow.internal.ZFlowExecutor.InMemory
-import zio.flow.{ActivityError, Operation, OperationExecutor}
+import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.{ActivityError, ExecutionEnvironment, Operation, OperationExecutor}
 
 object MocksForGCExample {
 
@@ -25,6 +25,7 @@ object MocksForGCExample {
     .map(ref =>
       InMemory(
         ZEnvironment(Clock.ClockLive) ++ ZEnvironment(Console.ConsoleLive),
+        ExecutionEnvironment(Serializer.protobuf, Deserializer.protobuf),
         mockOpExec2(mockResponseMap),
         ref
       )
