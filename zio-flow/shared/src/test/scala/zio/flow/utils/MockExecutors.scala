@@ -2,7 +2,7 @@ package zio.flow.utils
 
 import zio._
 import zio.flow.{ExecutionEnvironment, OperationExecutor}
-import zio.flow.internal.{DurableLog, PersistentExecutor}
+import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor, ZFlowExecutor}
 import zio.flow.internal.ZFlowExecutor.InMemory
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.utils.MockHelpers._
@@ -49,17 +49,14 @@ object MockExecutors {
       ref
     )
 
-  val mockPersistentTestClock =
-    for {
-      durableLog <- ZIO.service[DurableLog]
-      clock      <- ZIO.service[Clock]
-      ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
-    } yield PersistentExecutor(
-      clock,
-      ExecutionEnvironment(Serializer.json, Deserializer.json),
-      durableLog,
-      doesNothingKVStore,
-      mockOpExec.asInstanceOf[OperationExecutor[Any]],
-      ref
-    )
+  val mockPersistentTestClock: ZManaged[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
+    PersistentExecutor
+      .make(
+        mockOpExec.asInstanceOf[OperationExecutor[Any]],
+        Serializer.json,
+        Deserializer.json
+      )
+      .build
+      .map(_.get[ZFlowExecutor[String]])
+  }
 }

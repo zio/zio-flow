@@ -2,115 +2,125 @@ package zio.flow
 
 import zio._
 import zio.flow.ZFlowExecutorSpec.testActivity
-import zio.flow.internal.{DurableLog, IndexedStore}
+import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.flow.serialization._
 import zio.schema.Schema
-import zio.test.Assertion._
 import zio.test._
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
-
-  def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
-    if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
-
-  val suite1 = suite("Test the easy operators")(
-    test("Test Return") {
-
-      val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
-      assertM(flow.evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema))(equalTo(12))
+  val suite1 = suite("Operators")(
+    testFlow("Return")(ZFlow.Return(12)) { result =>
+      assertTrue(result == 12)
     },
-    test("Test NewVar") {
-      val compileResult = (for {
+    testFlow("NewVar") {
+      for {
         variable         <- ZFlow.newVar("variable1", 10)
         modifiedVariable <- variable.modify(isOdd)
         v                <- modifiedVariable
-      } yield v).evaluateTestPersistent(implicitly[Schema[Boolean]], nothingSchema)
-      assertM(compileResult)(equalTo(false))
+      } yield v
+    } { result =>
+      assertTrue(result == false)
+
     },
-    test("Test Fold - success side") {
-      val compileResult = ZFlow
+    testFlow("Fold - success side") {
+      ZFlow
         .succeed(15)
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
-        .evaluateTestPersistent(implicitly[Schema[Unit]], implicitly[Schema[Int]])
-      assertM(compileResult)(equalTo(()))
+    } { result =>
+      assertTrue(result == ())
     },
-    test("Test Fold - error side") {
-      val compileResult = ZFlow
+    testFlow("Fold - error side") {
+      ZFlow
         .fail(15)
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
-        .evaluateTestPersistent(implicitly[Schema[Unit]], nothingSchema)
-      assertM(compileResult)(equalTo(()))
+    } { result =>
+      assertTrue(result == ())
     },
-    test("Test Fold") {
-      val compileResult =
-        ZFlow
-          .succeed(12)
-          .flatMap(rA => rA + Remote(1))
-          .evaluateTestPersistent(implicitly[Schema[Int]], implicitly[Schema[Int]])
-      assertM(compileResult)(equalTo(13))
+    testFlow("Fold") {
+      ZFlow
+        .succeed(12)
+        .flatMap(rA => rA + Remote(1))
+    } { result =>
+      assertTrue(result == 13)
     },
-    test("Test input") {
-      val compileResult = ZFlow.input[Int].provide(12).evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema)
-      assertM(compileResult)(equalTo(12))
+    testFlow("input") {
+      ZFlow.input[Int].provide(12)
+    } { result =>
+      assertTrue(result == 12)
     },
-    test("Test flatmap") {
-      val compileResult = (for {
+    testFlow("flatmap") {
+      for {
         a <- ZFlow.succeed(12)
-        //b <- ZFlow.succeed(10)
-      } yield a).evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema)
-      assertM(compileResult)(equalTo(12))
+        b <- ZFlow.succeed(a + 10)
+      } yield b
+    } { result =>
+      assertTrue(result == 22)
     },
-    test("Test Provide") {
-      val compileResult = ZFlow.succeed(12).provide(15).evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema)
-      assertM(compileResult)(equalTo(12))
-    },
-    test("Test Ensuring") {
-      val compileResult =
-        ZFlow.succeed(12).ensuring(ZFlow.succeed(15)).evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema)
-      assertM(compileResult)(equalTo(12))
-    },
-    test("Test Provide - advanced") {
-      val zflow1 = for {
-        a <- ZFlow.succeed(15)
-        b <- ZFlow.input[Int]
+    testFlow("Ensuring") {
+      for {
+        res <- ZFlow.newVar[Int]("res", 0)
+        a   <- ZFlow.succeed(12).ensuring(res.set(15))
+        b   <- res.get
       } yield a + b
-      val compileResult = zflow1.provide(11).evaluateTestPersistent(Schema[Int], nothingSchema)
-      assertM(compileResult)(equalTo(26))
+    } { result =>
+      assertTrue(result == 27)
     },
-    test("Test Now") {
-      val compileResult = ZFlow.now.evaluateTestPersistent(Schema[Instant], nothingSchema)
-      assertM(compileResult.map(i => i.getEpochSecond))(equalTo(0L))
+    testFlow("Provide") {
+      {
+        for {
+          a <- ZFlow.succeed(15)
+          b <- ZFlow.input[Int]
+        } yield a + b
+      }.provide(11)
+    } { result =>
+      assertTrue(result == 26)
     },
-    test("Test WaitTill") {
+    test("Now") {
+      TestClock.adjust(5.seconds) *> {
+        val flow = ZFlow.now
+        flow.evaluateTestPersistent.map { result =>
+          assertTrue(result.getEpochSecond == 5L)
+        }
+      }
+    },
+    test("WaitTill") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
-        _    <- TestClock.adjust(3.seconds)
-        compileResult <-
-          ZFlow.waitTill(Remote(Instant.ofEpochSecond(curr + 2L))).evaluateTestPersistent(Schema[Unit], nothingSchema)
-      } yield assert(compileResult)(equalTo(()))
+        flow = for {
+                 _   <- ZFlow.waitTill(Remote(Instant.ofEpochSecond(curr + 2L)))
+                 now <- ZFlow.now
+               } yield now
+        fiber  <- flow.evaluateTestPersistent.fork
+        _      <- TestClock.adjust(3.seconds)
+        result <- fiber.join
+      } yield assertTrue(result.getEpochSecond == 2L)
     },
-    test("Test Activity") {
-      val compileResult = ZFlow.RunActivity(12, testActivity).evaluateTestPersistent(Schema[Int], Schema[ActivityError])
-      assertM(compileResult)(equalTo(12))
+    testFlow("Activity") {
+      ZFlow.RunActivity(12, testActivity)
+    } { result =>
+      assertTrue(result == 12)
     },
-    test("Test Iterate") {
-      val flow          = ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
-      val compileResult = flow.evaluateTestPersistent(Schema[Int], nothingSchema)
-      assertM(compileResult)(equalTo(10))
+    testFlow("Iterate") {
+      ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
+    } { result =>
+      assertTrue(result == 10)
     }
   )
 
-  val suite2 = suite("Test the easy operators")(test("Test Return") {
+  override def spec =
+    suite("All tests")(suite1)
+      .provideCustom(
+        IndexedStore.inMemory,
+        DurableLog.live,
+        KeyValueStore.inMemory
+      )
 
-    val flow: ZFlow[Any, Nothing, Int] = ZFlow.Return(12)
-    assertM(flow.evaluateTestPersistent(implicitly[Schema[Int]], nothingSchema))(equalTo(12))
-  })
+  private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
+    if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  val durableLogLayer = IndexedStore.live >>> DurableLog.live
-
-  override def spec = suite("All tests")(suite1).provideCustomLayer(durableLogLayer)
+  private def testFlow[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(assert: A => Assert) =
+    test(label)(flow.evaluateTestPersistent.map(assert))
 }

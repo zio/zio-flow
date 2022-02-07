@@ -16,17 +16,13 @@
 
 package zio
 
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
-import java.time.Instant
+import zio.flow.remote._
+import zio.schema.Schema
 
+import java.time.Instant
 import scala.language.implicitConversions
 
-import zio.flow.remote._
-import zio.schema.Schema.Primitive
-import zio.schema.{Schema, StandardType}
-
-package object flow {
+package object flow extends Schemas {
   type ActivityError = Throwable
 
   type Variable[A]
@@ -37,65 +33,6 @@ package object flow {
   type RemoteVariable[A] = Remote[Variable[A]]
   type SchemaOption[A]   = Schema.Optional[A]
   type SchemaList[A]     = Schema[List[A]]
-
-  implicit val schemaDuration: Schema[Duration] = Primitive(StandardType.Duration(ChronoUnit.SECONDS))
-  implicit val schemaInstant: Schema[Instant]   = Primitive(StandardType.Instant(DateTimeFormatter.BASIC_ISO_DATE))
-
-  implicit lazy val schemaThrowable: Schema[Throwable] =
-    Schema.CaseClass4(
-      field1 = Schema.Field("cause", Schema.defer(Schema[Throwable])),
-      field2 = Schema.Field("message", Schema[String]),
-      field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
-      field4 = Schema.Field("suppressed", Schema.defer(Schema[Chunk[Throwable]])),
-      construct =
-        (cause: Throwable, message: String, stackTrace: Chunk[StackTraceElement], suppressed: Chunk[Throwable]) => {
-          val throwable = new Throwable(message, cause)
-          throwable.setStackTrace(stackTrace.toArray)
-          suppressed.foreach(throwable.addSuppressed)
-          throwable
-        },
-      extractField1 = throwable => throwable.getCause,
-      extractField2 = throwable => throwable.getMessage,
-      extractField3 = throwable => Chunk.fromArray(throwable.getStackTrace),
-      extractField4 = throwable => Chunk.fromArray(throwable.getSuppressed)
-    )
-
-  implicit lazy val schemaStackTraceElement: Schema[StackTraceElement] =
-    Schema.CaseClass4(
-      field1 = Schema.Field("declaringClass", Schema[String]),
-      field2 = Schema.Field("methodName", Schema[String]),
-      field3 = Schema.Field("fileName", Schema[String]),
-      field4 = Schema.Field("lineNumber", Schema[Int]),
-      construct = (declaringClass: String, methodName: String, fileName: String, lineNumber: Int) =>
-        new StackTraceElement(declaringClass, methodName, fileName, lineNumber),
-      extractField1 = stackTraceElement => stackTraceElement.getClassName,
-      extractField2 = stackTraceElement => stackTraceElement.getMethodName,
-      extractField3 = stackTraceElement => stackTraceElement.getFileName,
-      extractField4 = stackTraceElement => stackTraceElement.getLineNumber
-    )
-
-  implicit def schemaTry[A](implicit schema: Schema[A]): Schema[scala.util.Try[A]] =
-    Schema.Enum2[scala.util.Failure[A], scala.util.Success[A], scala.util.Try[A]](
-      case1 = Schema.Case("Failure", schemaFailure, _.asInstanceOf[scala.util.Failure[A]]),
-      case2 = Schema.Case("Success", schemaSuccess, _.asInstanceOf[scala.util.Success[A]])
-    )
-
-  implicit def schemaFailure[A]: Schema[scala.util.Failure[A]] =
-    Schema.CaseClass1(
-      field = Schema.Field("exception", Schema[Throwable]),
-      construct = (throwable: Throwable) => scala.util.Failure(throwable),
-      extractField = _.exception
-    )
-
-  implicit def schemaSuccess[A](implicit schema: Schema[A]): Schema[scala.util.Success[A]] =
-    Schema.CaseClass1(
-      field = Schema.Field("value", schema),
-      construct = (value: A) => scala.util.Success(value),
-      extractField = _.value
-    )
-
-  implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
-    Schema.EitherSchema(aSchema, bSchema)
 
   implicit def RemoteVariable[A](remote: Remote[Variable[A]]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
     remote

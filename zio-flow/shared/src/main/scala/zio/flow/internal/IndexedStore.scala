@@ -38,14 +38,14 @@ object IndexedStore {
   def scan(topic: String, position: Long, until: Long): ZStream[IndexedStore, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scan(topic, position, until))
 
-  val live: ZLayer[Any, Nothing, IndexedStore] =
+  val inMemory: ZLayer[Any, Nothing, IndexedStore] =
     ZLayer {
       for {
         topics <- Ref.makeManaged[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
-      } yield IndexedStoreLive(topics)
+      } yield InMemoryIndexedStore(topics)
     }
 
-  private final case class IndexedStoreLive(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {
+  private final case class InMemoryIndexedStore(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {
 
     def position(topic: String): IO[IOException, Long] =
       topics.get.map { topics =>
