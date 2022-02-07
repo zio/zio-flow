@@ -17,10 +17,9 @@
 package zio.flow.internal
 
 import java.time.Duration
-
 import zio._
-import zio.flow.Remote
-import zio.flow.{ActivityError, ExecutingFlow, OperationExecutor, ZFlow}
+import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, ZFlow}
 import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
@@ -70,6 +69,7 @@ object ZFlowExecutor {
 
   final case class InMemory[U, R <: Clock: Tag](
     env: ZEnvironment[R],
+    execEnv: ExecutionEnvironment,
     opExec: OperationExecutor[R],
     workflows: Ref[Map[U, Ref[InMemory.State]]]
   ) extends ZFlowExecutor[U] {
@@ -344,6 +344,10 @@ object ZFlowExecutor {
 
         case Apply(lambda) =>
           compile(promise, ref, (), lambda(lit(input)))
+
+        case GetExecutionEnvironment =>
+          promise.succeed(execEnv).as(CompileStatus.Done)
+
       }
   }
 
@@ -359,10 +363,16 @@ object ZFlowExecutor {
 
     }
 
-    def make[U, R <: Clock: Tag](env: ZEnvironment[R], opEx: OperationExecutor[R]): UIO[InMemory[U, R]] =
+    def make[U, R <: Clock: Tag](
+      env: ZEnvironment[R],
+      opEx: OperationExecutor[R],
+      serializer: Serializer,
+      deserializer: Deserializer
+    ): UIO[InMemory[U, R]] =
       (for {
-        ref <- Ref.make[Map[U, Ref[InMemory.State]]](Map.empty)
-      } yield InMemory[U, R](env, opEx, ref))
+        ref    <- Ref.make[Map[U, Ref[InMemory.State]]](Map.empty)
+        execEnv = ExecutionEnvironment(serializer, deserializer)
+      } yield InMemory[U, R](env, execEnv, opEx, ref))
 
     final case class State(
       tstate: TState,

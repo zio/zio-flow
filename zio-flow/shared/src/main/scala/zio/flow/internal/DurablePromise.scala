@@ -17,33 +17,43 @@
 package zio.flow.internal
 
 import java.io._
-
 import zio._
+import zio.flow.ExecutionEnvironment
 import zio.schema._
 
 final case class DurablePromise[E, A](promiseId: String) {
 
-  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog, IOException, Either[E, A]] =
-    DurableLog.subscribe(topic(promiseId), 0L).runHead.map(value => deserialize[E, A](value.get))
+  def awaitEither(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog & ExecutionEnvironment, IOException, Either[E, A]] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      DurableLog
+        .subscribe(topic(promiseId), 0L)
+        .runHead
+        .flatMap {
+          case Some(data) =>
+            ZIO
+              .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
+              .mapError(msg => new IOException(s"Could not deserialize durable promise [$promiseId]: $msg"))
+          case None =>
+            ZIO.fail(new IOException(s"Could not find get durable promise result [$promiseId]"))
+        }
+    }
 
-  def fail(error: E)(implicit schemaE: Schema[E]): ZIO[DurableLog, IOException, Boolean] =
-    DurableLog.append(topic(promiseId), serialize(Left(error))).map(_ == 0L)
+  def fail(
+    error: E
+  )(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error))).map(_ == 0L)
+    }
 
-  def succeed(value: A)(implicit schemaA: Schema[A]): ZIO[DurableLog, IOException, Boolean] =
-    DurableLog.append(topic(promiseId), serialize(Right(value))).map(_ == 0L)
-
-  private def deserialize[E, A](value: Chunk[Byte])(implicit schemaE: Schema[E], schemaA: Schema[A]): Either[E, A] = {
-    val ios = new ObjectInputStream(new ByteArrayInputStream(value.toArray))
-    ios.readObject().asInstanceOf[Either[E, A]]
-  }
-
-  private def serialize[A](a: A)(implicit schema: Schema[A]): Chunk[Byte] = {
-    val bf  = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bf)
-    oos.writeObject(a)
-    oos.close()
-    Chunk.fromArray(bf.toByteArray)
-  }
+  def succeed(
+    value: A
+  )(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value))).map(_ == 0L)
+    }
 
   private def topic(promiseId: String): String =
     s"_zflow_durable_promise_$promiseId"

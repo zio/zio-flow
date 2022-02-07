@@ -4,6 +4,7 @@ import zio._
 import zio.flow.ZFlowExecutorSpec.testActivity
 import zio.flow.internal.{DurableLog, IndexedStore}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio.flow.serialization._
 import zio.schema.Schema
 import zio.test.Assertion._
 import zio.test._
@@ -12,8 +13,6 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
-
-  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
 
   def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)

@@ -193,11 +193,13 @@ object ZFlow {
 
   final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Variable[A]]
 
-  case class Iterate[R, E, A](
+  final case class Iterate[R, E, A](
     initial: Remote[A],
     step: Remote[A] => ZFlow[R, E, A],
     predicate: Remote[A] => Remote[Boolean]
   ) extends ZFlow[R, E, A]
+
+  case object GetExecutionEnvironment extends ZFlow[Any, Nothing, ExecutionEnvironment]
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
 
@@ -267,4 +269,6 @@ object ZFlow {
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): Log = ZFlow.Log(message)
+
+  val executionEnvironment: ZFlow[Any, Nothing, ExecutionEnvironment] = ZFlow.GetExecutionEnvironment
 }
