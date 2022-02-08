@@ -307,9 +307,8 @@ object ZFlowExecutor {
           } yield vref.asInstanceOf[A]).intoPromise(promise) as CompileStatus.Done
 
         case Log(message) =>
-          Console
-            .printLine(message)
-            .provideLayer(Console.live)
+          ZIO
+            .log(message)
             .intoPromise(promise.asInstanceOf[Promise[java.io.IOException, Unit]]) as CompileStatus.Done
 
         case iterate0 @ Iterate(_, _, _) =>

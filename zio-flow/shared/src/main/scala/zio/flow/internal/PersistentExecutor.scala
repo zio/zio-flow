@@ -407,9 +407,7 @@ final case class PersistentExecutor(
             }.flatten
 
           case Log(message) =>
-            val log = Console.printLine(message).provideLayer(Console.live)
-
-            log *> onSuccess(())
+            ZIO.log(message) *> onSuccess(())
 
           case GetExecutionEnvironment =>
             onSuccess(lit(execEnv))

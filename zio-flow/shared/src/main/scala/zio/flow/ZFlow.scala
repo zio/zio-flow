@@ -81,7 +81,8 @@ sealed trait ZFlow[-R, +E, +A] {
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap(a => ZFlow(f(a)))
 
-  final def orDie: ZFlow[R, Nothing, A] = ZFlow.Die
+  final def orDie[R1 <: R, E2, A1 >: A](implicit A1: Schema[A1]): ZFlow[R1, Nothing, A1] =
+    (self: ZFlow[R, E, A1]).catchAll(_ => ZFlow.Die)
 
   final def orElse[R1 <: R, E2, A1 >: A](that: ZFlow[R1, E2, A1])(implicit A1: Schema[A1]): ZFlow[R1, E2, A1] =
     (self: ZFlow[R, E, A1]).catchAll(_ => that)
