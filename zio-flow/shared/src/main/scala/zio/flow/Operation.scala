@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.schema.Schema
+import zio.schema.{DeriveSchema, Schema}
 
 sealed trait Operation[-R, +A]
 object Operation {
@@ -41,3 +41,7 @@ final case class EmailRequest(
   bcc: List[String],
   body: String
 )
+
+object EmailRequest {
+  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+}

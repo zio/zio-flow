@@ -84,7 +84,7 @@ final case class PersistentExecutor(
       // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
     } yield true).catchAll(_ => UIO(false))
 
-  def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
+  def start[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): UIO[DurablePromise[E, A]] = {
     import zio.flow.ZFlow._
     def step(ref: Ref[State[E, A]]): IO[IOException, Unit] = {
 
@@ -248,13 +248,19 @@ final case class PersistentExecutor(
               _             <- ref.update(_.copy(current = evaluatedFlow.value))
             } yield ()) *> step(ref)
 
-          case Fork(workflow) =>
-            val fiber = for {
-              _ <- ref.update(_.copy(current = workflow))
-              f <- step(ref).fork
-            } yield f
-
-            fiber.flatMap(f => onSuccess(f.asInstanceOf))
+          case fork @ Fork(workflow) =>
+            for {
+              forkId <- ref.modify { state =>
+                          val forkId       = uniqueId + s"_fork_${state.forkCounter}"
+                          val updatedState = state.copy(forkCounter = state.forkCounter + 1)
+                          (forkId, updatedState)
+                        }
+              resultPromise <- start[fork.ValueE, fork.ValueA](
+                                 forkId,
+                                 workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
+                               )(fork.schemaE, fork.schemaA)
+              _ <- onSuccess(ExecutingFlow(forkId, resultPromise))
+            } yield ()
 
           case Timeout(flow, duration) =>
             ref.get.flatMap { state =>
@@ -290,10 +296,13 @@ final case class PersistentExecutor(
             ): IO[IOException, Unit] = {
               def namespace(readVar: String): String =
                 s"_zflow_suspended_workflows_readVar_$readVar"
+
               def key(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
                 Chunk.fromArray(durablePromise.promiseId.getBytes)
+
               def value(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
                 ??? // TODO : Implement serialization of DurablePromise
+
               ZIO.foreachDiscard(readVars)(readVar =>
                 kvStore.put(namespace(readVar), key(durablePromise), value(durablePromise))
               )
@@ -335,15 +344,18 @@ final case class PersistentExecutor(
             } yield ()
 
           case Await(execFlow) =>
-            val joined = for {
-              execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-              result   <- execflow.join
-            } yield result
-
-            joined.foldZIO(
-              error => onError(lit(error)),
-              success => onSuccess(success)
-            )
+            for {
+              executingFlow <- eval(execFlow).map(_.value)
+              _ <- ZIO.log("Waiting for result")
+              result <-
+                executingFlow.result.asInstanceOf[DurablePromise[E, A]].awaitEither.provideEnvironment(promiseEnv)
+                  .tapErrorCause(c => ZIO.log(s"Failed: $c"))
+              _ <- ZIO.log(s"Await got result: $result")
+              _ <- result.fold(
+                     error => onError(lit(error)),
+                     success => onSuccess(success)
+                   )
+            } yield ()
 
           case Interrupt(execFlow) =>
             val interrupt = for {
@@ -418,14 +430,33 @@ final case class PersistentExecutor(
     val durablePromise =
       DurablePromise.make[E, A](uniqueId + "_result")
     val state =
-      State(uniqueId, flow, TState.Empty, Nil, Map(), durablePromise, Nil, 0, 0, Nil, PersistentCompileStatus.Running)
+      State(
+        workflowId = uniqueId,
+        current = flow,
+        tstate = TState.Empty,
+        stack = Nil,
+        variables = Map(),
+        result = durablePromise,
+        envStack = Nil,
+        tempVarCounter = 0,
+        promiseIdCounter = 0,
+        forkCounter = 0,
+        retry = Nil,
+        compileStatus = PersistentCompileStatus.Running
+      )
 
-    (for {
-      ref    <- Ref.make[State[E, A]](state)
-      _      <- step(ref)
-      result <- state.result.awaitEither.provideEnvironment(promiseEnv)
-    } yield result).orDie.absolve
+    for {
+      ref <- Ref.make[State[E, A]](state)
+      _   <- step(ref).fork
+      // TODO: store running workflow and it's fiber
+    } yield state.result
   }
+
+  def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] =
+    (for {
+      resultPromise <- start(uniqueId, flow)
+      result        <- resultPromise.awaitEither.provideEnvironment(promiseEnv)
+    } yield result).orDie.absolve
 }
 
 object PersistentExecutor {
@@ -471,6 +502,7 @@ object PersistentExecutor {
     envStack: List[SchemaAndValue[_]],
     tempVarCounter: Int,
     promiseIdCounter: Int,
+    forkCounter: Int,
     retry: List[FlowDurablePromise[_, _]],
     compileStatus: PersistentCompileStatus
   ) {

@@ -12,8 +12,9 @@ import zio.test._
 object GoodcoverUseCase extends ZIOSpecDefault {
 
   case class Policy(id: String)
-  implicit val policySchema: Schema[Policy]             = DeriveSchema.gen[Policy]
-  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+  object Policy {
+    implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
+  }
 
   val emailRequest: Remote[EmailRequest] = Remote(
     EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")

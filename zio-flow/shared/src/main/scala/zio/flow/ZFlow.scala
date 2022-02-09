@@ -66,7 +66,7 @@ sealed trait ZFlow[-R, +E, +A] {
     ZFlow.Apply(r1 => ZFlow.Fold(self.provide(r1), ifError(r1), ifSuccess(r1)))
   }
 
-  final def fork: ZFlow[R, Nothing, ExecutingFlow[E, A]] = ZFlow.Fork(self)
+  final def fork[E1 >: E : Schema, A1 >: A : Schema]: ZFlow[R, Nothing, ExecutingFlow[E1, A1]] = ZFlow.Fork[R, E1, A1](self)
 
   final def ifThenElse[R1 <: R, E1 >: E, B](ifTrue: ZFlow[R1, E1, B], ifFalse: ZFlow[R1, E1, B])(implicit
     ev: A <:< Boolean
@@ -165,9 +165,12 @@ object ZFlow {
 
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A]
 
-  final case class Fork[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
+  final case class Fork[R, E: Schema, A: Schema](workflow: ZFlow[R, E, A])
+      extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
     type ValueE = E
     type ValueA = A
+    val schemaE: Schema[E] = implicitly[Schema[E]]
+    val schemaA: Schema[A] = implicitly[Schema[A]]
   }
 
   final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
@@ -206,10 +209,10 @@ object ZFlow {
 
   def apply[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = Return(remote)
 
-  def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
+  def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
 
-  def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Any] =
+  def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
   def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
@@ -222,7 +225,7 @@ object ZFlow {
       }
     }.map(_.reverse)
 
-  def foreachPar[R, A, B](
+  def foreachPar[R, A, B : Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
     for {

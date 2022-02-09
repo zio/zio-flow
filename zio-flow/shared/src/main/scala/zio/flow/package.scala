@@ -26,7 +26,6 @@ package object flow extends Schemas {
   type ActivityError = Throwable
 
   type Variable[A]
-  type ExecutingFlow[+E, +A]
 
   type RemoteDuration    = Remote[Duration]
   type RemoteInstant     = Remote[Instant]

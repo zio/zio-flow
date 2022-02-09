@@ -173,7 +173,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { (result: Exit[String, Nothing]) =>
       assert(result)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
     }
-    // TODO: retryUntil, orTry, interrupt, getExecutionEnvironment
+    // TODO: retryUntil, orTry, interrupt
   )
 
   // TODO: restart suite

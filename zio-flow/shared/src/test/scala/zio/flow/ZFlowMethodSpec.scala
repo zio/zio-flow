@@ -9,8 +9,6 @@ import zio.test._
 
 object ZFlowMethodSpec extends ZIOSpecDefault {
 
-  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing schema")
-  implicit val anySchema: Schema[Any]         = Schema.fail("Schema for Any")
   def setBoolVarAfterSleep(
     remoteBoolVar: RemoteVariable[Boolean],
     sleepDuration: Long,
@@ -159,7 +157,7 @@ object ZFlowMethodSpec extends ZIOSpecDefault {
 
   val suite4: Spec[TestClock with Clock with Console, TestFailure[ActivityError], TestSuccess] =
     suite("More test on waitUntil")(test("waitUntil and do-while") {
-      def doWhileOnWaitUntil(boolVar: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Any] = ZFlow.doWhile({
+      def doWhileOnWaitUntil(boolVar: RemoteVariable[Boolean]): ZFlow[Any, ActivityError, Boolean] = ZFlow.doWhile({
         for {
           _    <- boolVar.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
           loop <- boolVar.get
