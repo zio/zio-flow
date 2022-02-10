@@ -66,7 +66,8 @@ sealed trait ZFlow[-R, +E, +A] {
     ZFlow.Apply(r1 => ZFlow.Fold(self.provide(r1), ifError(r1), ifSuccess(r1)))
   }
 
-  final def fork[E1 >: E : Schema, A1 >: A : Schema]: ZFlow[R, Nothing, ExecutingFlow[E1, A1]] = ZFlow.Fork[R, E1, A1](self)
+  final def fork[E1 >: E: Schema, A1 >: A: Schema]: ZFlow[R, Nothing, ExecutingFlow[E1, A1]] =
+    ZFlow.Fork[R, E1, A1](self)
 
   final def ifThenElse[R1 <: R, E1 >: E, B](ifTrue: ZFlow[R1, E1, B], ifFalse: ZFlow[R1, E1, B])(implicit
     ev: A <:< Boolean
@@ -189,7 +190,14 @@ object ZFlow {
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A]
 
-  final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Either[E, A]]
+  final case class Await[E: Schema, A: Schema](exFlow: Remote[ExecutingFlow[E, A]])
+      extends ZFlow[Any, ActivityError, Either[E, A]] {
+    type ValueE = E
+    type ValueA = A
+    val schemaE: Schema[E]                          = implicitly[Schema[E]]
+    val schemaEitherE: Schema[Either[Throwable, E]] = implicitly[Schema[Either[Throwable, E]]]
+    val schemaA: Schema[A]                          = implicitly[Schema[A]]
+  }
 
   final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Any]
 
@@ -225,12 +233,12 @@ object ZFlow {
       }
     }.map(_.reverse)
 
-  def foreachPar[R, A, B : Schema](
+  def foreachPar[R, A, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
     for {
       executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
-      eithers        <- ZFlow.foreach(executingFlows)(_.await)
+      eithers        <- ZFlow.foreach(executingFlows)(remote => ZFlow.Await(remote))
       bs             <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers)(???, ???))
     } yield bs
 

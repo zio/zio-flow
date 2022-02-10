@@ -40,9 +40,9 @@ lazy val root = project
     dynamoDbKvStore,
     docs,
     examplesJVM,
-    examplesJS,
+//    examplesJS,
     zioFlowJVM,
-    zioFlowJS
+//    zioFlowJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)

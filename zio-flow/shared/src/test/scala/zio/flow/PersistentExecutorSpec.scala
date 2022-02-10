@@ -82,7 +82,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     test("now") {
       TestClock.adjust(5.seconds) *> {
         val flow = ZFlow.now
-        flow.evaluateTestPersistent.map { result =>
+        flow.evaluateTestPersistent("now").map { result =>
           assertTrue(result.getEpochSecond == 5L)
         }
       }
@@ -94,7 +94,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  _   <- ZFlow.waitTill(Remote(Instant.ofEpochSecond(curr + 2L)))
                  now <- ZFlow.now
                } yield now
-        fiber  <- flow.evaluateTestPersistent.fork
+        fiber  <- flow.evaluateTestPersistent("waitTill").fork
         _      <- TestClock.adjust(3.seconds)
         result <- fiber.join
       } yield assertTrue(result.getEpochSecond == 2L)
@@ -119,9 +119,13 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testFlowAndLogs("log") {
       ZFlow.log("first message") *> ZFlow.log("second message").as(100)
     } { (result, logs) =>
+      val i1 = logs.indexOf("first message")
+      val i2 = logs.indexOf("second message")
       assertTrue(
         result == 100,
-        logs == Chunk("first message", "second message")
+        i1 >= 0,
+        i2 >= 0,
+        i1 < i2
       )
     },
     testFlow("transaction") {
@@ -148,10 +152,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         flow = for {
                  flow1 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L)).as(1).fork
                  flow2 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L)).as(2).fork
-                 r1    <- flow1.await
-                 r2    <- flow2.await
+                 r1 <- flow1.await[Nothing, Int] // TODO: avoid this explicit type annotation
+                 r2 <- flow2.await[Nothing, Int]
+                 _  <- ZFlow.log(r1.toString)
                } yield (r1.toOption, r2.toOption)
-        fiber  <- flow.evaluateTestPersistent.fork
+        fiber  <- flow.evaluateTestPersistent("fork").fork
         _      <- TestClock.adjust(3.seconds)
         result <- fiber.join
       } yield assertTrue(result == (Some(1), Some(2)))
@@ -163,7 +168,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  .waitTill(Remote.ofEpochSecond(curr + 2L))
                  .as(1)
                  .timeout(Remote.ofSeconds(1L))
-        fiber  <- flow.evaluateTestPersistent.fork
+        fiber  <- flow.evaluateTestPersistent("timeout").fork
         _      <- TestClock.adjust(3.seconds)
         result <- fiber.join
       } yield assertTrue(result == None)
@@ -211,9 +216,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      msg
                    }
                  }
-        rc         <- ZIO.runtimeConfig
-        flowResult <- flow.evaluateTestPersistent.withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger)).exit
-        logLines   <- logQueue.takeAll
+        rc <- ZIO.runtimeConfig
+        flowResult <-
+          flow.evaluateTestPersistent(label).withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger)).exit
+        logLines <- logQueue.takeAll
       } yield assert(flowResult, logLines)
     }
 

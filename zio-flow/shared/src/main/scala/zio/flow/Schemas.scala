@@ -17,18 +17,25 @@ trait LowerPrioritySchemas {
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(
-      field1 = Schema.Field("cause", Schema.defer(Schema[Throwable])),
+      field1 = Schema.Field("cause", Schema.defer(Schema[Option[Throwable]])),
       field2 = Schema.Field("message", Schema[String]),
       field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
       field4 = Schema.Field("suppressed", Schema.defer(Schema[Chunk[Throwable]])),
-      construct =
-        (cause: Throwable, message: String, stackTrace: Chunk[StackTraceElement], suppressed: Chunk[Throwable]) => {
-          val throwable = new Throwable(message, cause)
-          throwable.setStackTrace(stackTrace.toArray)
-          suppressed.foreach(throwable.addSuppressed)
-          throwable
-        },
-      extractField1 = throwable => throwable.getCause,
+      construct = (
+        cause: Option[Throwable],
+        message: String,
+        stackTrace: Chunk[StackTraceElement],
+        suppressed: Chunk[Throwable]
+      ) => {
+        val throwable = new Throwable(message, cause.orNull)
+        throwable.setStackTrace(stackTrace.toArray)
+        suppressed.foreach(throwable.addSuppressed)
+        throwable
+      },
+      extractField1 = throwable => {
+        val cause = throwable.getCause
+        if (cause == null || cause == throwable) None else Some(cause)
+      },
       extractField2 = throwable => throwable.getMessage,
       extractField3 = throwable => Chunk.fromArray(throwable.getStackTrace),
       extractField4 = throwable => Chunk.fromArray(throwable.getSuppressed)

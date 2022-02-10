@@ -42,12 +42,12 @@ object ZFlowAssertionSyntax {
         result         <- persistentEval.submit("1234", zflow)
       } yield result
 
-    def evaluateTestPersistent(implicit
+    def evaluateTestPersistent(id: String)(implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
     ): ZIO[Clock with DurableLog with KeyValueStore, E, A] =
       mockPersistentTestClock.use { executor =>
-        executor.submit("1234", zflow)
+        executor.submit(id.toString, zflow)
       }
   }
 }

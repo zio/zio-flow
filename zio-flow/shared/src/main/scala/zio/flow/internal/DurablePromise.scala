@@ -29,34 +29,38 @@ final case class DurablePromise[E, A](promiseId: String) {
   ): ZIO[DurableLog & ExecutionEnvironment, IOException, Either[E, A]] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
       ZIO.log(s"Waiting for durable promise $promiseId") *>
-      DurableLog
-        .subscribe(topic(promiseId), 0L)
-        .runHead
-        .flatMap {
-          case Some(data) =>
-            ZIO.log(s"Got durable promise result for $promiseId") *>
-            ZIO
-              .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
-              .mapError(msg => new IOException(s"Could not deserialize durable promise [$promiseId]: $msg"))
-          case None =>
-            ZIO.fail(new IOException(s"Could not find get durable promise result [$promiseId]"))
-        }
+        DurableLog
+          .subscribe(topic(promiseId), 0L)
+          .runHead
+          .flatMap {
+            case Some(data) =>
+              ZIO.log(s"Got durable promise result for $promiseId") *>
+                ZIO
+                  .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
+                  .mapError(msg =>
+                    new IOException(
+                      s"Could not deserialize durable promise [$promiseId]: $msg (from ${new String(data.toArray)})"
+                    )
+                  )
+            case None =>
+              ZIO.fail(new IOException(s"Could not find get durable promise result [$promiseId]"))
+          }
     }
 
   def fail(
     error: E
   )(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Setting $promiseId to failure") *>
-      DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error))).map(_ == 0L)
+      ZIO.log(s"Setting $promiseId to failure $error") *>
+        DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error))).map(_ == 0L)
     }
 
   def succeed(
     value: A
   )(implicit schemaE: Schema[E], schemaA: Schema[A]): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Setting $promiseId to success") *>
-      DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value))).map(_ == 0L)
+      ZIO.log(s"Setting $promiseId to success: $value") *>
+        DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value))).map(_ == 0L)
     }
 
   private def topic(promiseId: String): String =
