@@ -2,7 +2,8 @@ package zio.flow
 
 import zio._
 import zio.flow.ZFlowExecutorSpec.testActivity
-import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
+import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore, PersistentExecutor}
+import zio.flow.utils.MockExecutors.mockPersistentTestClock
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion.{dies, equalTo, hasMessage}
@@ -173,6 +174,23 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         result <- fiber.join
       } yield assertTrue(result == None)
     },
+    test("timeout interrupts") {
+      for {
+        curr <- Clock.currentTime(TimeUnit.SECONDS)
+        flow = for {
+                 v <- ZFlow.newVar[Boolean]("result", false)
+                 _ <- (for {
+                        _ <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L))
+                        _ <- v.set(true)
+                      } yield ()).timeout(Remote.ofSeconds(1L))
+                 _ <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L))
+                 r <- v.get
+               } yield r
+        fiber  <- flow.evaluateTestPersistent("timeout-interrupts").fork
+        _      <- TestClock.adjust(4.seconds)
+        result <- fiber.join
+      } yield assertTrue(result == false)
+    },
     testFlowExit[String, Nothing]("die") {
       ZFlow.fail("test").orDie
     } { (result: Exit[String, Nothing]) =>
@@ -182,9 +200,24 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )
 
   // TODO: restart suite
+  val suite2 = suite("Restarted flows")(
+    testRestartFlowAndLogs("log-|-log") { break =>
+      for {
+        _ <- ZFlow.log("first")
+        _ <- break
+        _ <- ZFlow.log("second")
+      } yield 1
+    } { (result, logs1, logs2) =>
+      assertTrue(
+        result == 1,
+        logs1 == Chunk("first"),
+        logs2 == Chunk("second")
+      )
+    }
+  )
 
   override def spec =
-    suite("All tests")(suite1)
+    suite("All tests")(suite1, suite2)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,
@@ -237,4 +270,49 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     assert: Exit[E, A] => TestResult
   ) =
     testFlowAndLogsExit(label)(flow) { case (result, _) => assert(result) }
+
+  private def testRestartFlowAndLogs[E: Schema, A: Schema](
+    label: String
+  )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Chunk[String], Chunk[String]) => TestResult) =
+    test(label) {
+      for {
+        logQueue <- ZQueue.unbounded[String]
+        runtime  <- ZIO.runtime[Any]
+        logger = new ZLogger[String, String] {
+                   override def apply(
+                     trace: ZTraceElement,
+                     fiberId: FiberId,
+                     logLevel: LogLevel,
+                     message: () => String,
+                     context: Map[ZFiberRef.Runtime[_], AnyRef],
+                     spans: List[LogSpan],
+                     location: ZTraceElement
+                   ): String = {
+                     val msg = message()
+                     runtime.unsafeRun(logQueue.offer(message()).unit)
+                     msg
+                   }
+                 }
+        rc <- ZIO.runtimeConfig
+        results <- {
+          val break     = ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))) // TODO: needs a better sync point, test activity?
+          val finalFlow = flow(break)
+          for {
+            fiber1 <- mockPersistentTestClock.use { executor =>
+                        val pExecutor = executor.asInstanceOf[PersistentExecutor] // TODO: get rid of this
+                        pExecutor
+                          .start(label, finalFlow)
+                          .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
+                      }.fork
+            _         <- TestClock.adjust(50.seconds)
+            _         <- fiber1.interrupt
+            logLines1 <- logQueue.takeAll
+            fiber2    <- finalFlow.evaluateTestPersistent(label).fork
+            _         <- TestClock.adjust(200.seconds)
+            result    <- fiber2.join
+            logLines2 <- logQueue.takeAll
+          } yield (result, logLines1, logLines2)
+        }
+      } yield assert.tupled(results)
+    }
 }
