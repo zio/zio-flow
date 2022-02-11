@@ -3,7 +3,7 @@ package zio.flow.examples
 import java.time.Period
 
 import zio.flow._
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema._
 
 /**
  *   1. Get all policies that will expire in the next 60 days. 2. For each of
@@ -42,16 +42,18 @@ object PolicyRenewalExample {
 
     case object PolicyRenewEmail extends EmailContent
 
+    implicit def emailContentSchema: Schema[EmailContent] = DeriveSchema.gen[EmailContent]
   }
 
-  implicit def emailContentSchema: Schema[EmailContent] = DeriveSchema.gen[EmailContent]
-
   case class Policy(id: PolicyId, address: PropertyAddress, userEmail: Email, evaluatorEmail: Email)
+  object Policy {
+    implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
+  }
 
   case class Buyer(id: String, address: PropertyAddress, email: Email)
-
-  implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
-  implicit val buyerSchema: Schema[Buyer]   = DeriveSchema.gen[Buyer]
+  object Buyet {
+    implicit val buyerSchema: Schema[Buyer] = DeriveSchema.gen[Buyer]
+  }
 
   def policyClaimStatus: Activity[Policy, Boolean] =
     Activity[Policy, Boolean](
@@ -140,7 +142,7 @@ object PolicyRenewalExample {
   ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
-        option <- evaluationDone.waitUntil(_ === true).timeout(Remote.ofDays(1L))
+        option <- evaluationDone.waitUntil(_ === true).timeout[Nothing, Unit](Remote.ofDays(1L))
         loop   <- option.isNone.toFlow
         _      <- ZFlow.when(loop)(sendReminderEmailToEvaluator(policy))
       } yield loop
@@ -152,7 +154,7 @@ object PolicyRenewalExample {
   ): ZFlow[Any, ActivityError, Any] =
     ZFlow.doWhile {
       for {
-        option <- buyerResponded.waitUntil(_.isSome).timeout(Remote.ofDays(2L))
+        option <- buyerResponded.waitUntil(_.isSome).timeout[Nothing, Unit](Remote.ofDays(2L))
         loop   <- option.isNone.toFlow
         _      <- ZFlow.when(loop)(sendReminderEmailToInsured(policy))
       } yield loop
@@ -163,7 +165,7 @@ object PolicyRenewalExample {
       ZFlow.doWhile {
         for {
           user   <- ZFlow.input[Buyer]
-          option <- paymentSuccessful.waitUntil(_ === true).timeout(Remote.ofDays(1L))
+          option <- paymentSuccessful.waitUntil(_ === true).timeout[Nothing, Unit](Remote.ofDays(1L))
           loop   <- option.isNone.toFlow
           _      <- ZFlow.when(loop)(attemptPayment(user))
         } yield loop

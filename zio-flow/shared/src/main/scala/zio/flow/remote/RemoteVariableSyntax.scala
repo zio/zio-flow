@@ -35,7 +35,7 @@ class RemoteVariableSyntax[A](val self: Remote[Variable[A]]) extends AnyVal {
 
   def update(f: Remote[A] => Remote[A]): ZFlow[Any, Nothing, Unit] = updateAndGet(f).unit
 
-  def waitUntil(predicate: Remote[A] => Remote[Boolean]): ZFlow[Any, Nothing, Any] = ZFlow.transaction { txn =>
+  def waitUntil(predicate: Remote[A] => Remote[Boolean]): ZFlow[Any, Nothing, Unit] = ZFlow.transaction { txn =>
     for {
       v <- self.get
       _ <- txn.retryUntil(predicate(v))

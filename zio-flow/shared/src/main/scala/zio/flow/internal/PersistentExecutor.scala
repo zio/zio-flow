@@ -265,16 +265,75 @@ final case class PersistentExecutor(
               _ <- onSuccess(ExecutingFlow(forkId, resultPromise))
             } yield ()
 
-          case Timeout(flow, duration) =>
+          case await @ Await(execFlow) =>
+            implicit val schemaEE: Schema[Either[Throwable, await.ValueE]] = await.schemaEitherE
+            implicit val schemaE: Schema[await.ValueE]                     = await.schemaE
+            implicit val schemaA: Schema[await.ValueA]                     = await.schemaA
+            for {
+              executingFlow <- eval(execFlow).map(_.value)
+              _             <- ZIO.log("Waiting for result")
+              result <-
+                executingFlow.result
+                  .asInstanceOf[DurablePromise[Either[Throwable, await.ValueE], await.ValueA]]
+                  .awaitEither(schemaEE, schemaA)
+                  .provideEnvironment(promiseEnv)
+                  .tapErrorCause(c => ZIO.log(s"Failed: $c"))
+              _ <- ZIO.log(s"Await got result: $result")
+              _ <-
+                result.fold(
+                  error =>
+                    error.fold(
+                      die => ZIO.die(new IOException("Awaited flow died", die)),
+                      error =>
+                        onSuccess(
+                          Remote[Either[await.ValueE, await.ValueA]](Left(error))(schemaEither(schemaE, schemaA))
+                        )
+                    ),
+                  success =>
+                    onSuccess(
+                      Remote[Either[await.ValueE, await.ValueA]](Right(success))(schemaEither(schemaE, schemaA))
+                    )
+                )
+            } yield ()
+
+          case timeout @ Timeout(flow, duration) =>
             ref.get.flatMap { state =>
               for {
-                d <- eval(duration).map(_.value)
-                output <-
-                  ref.update(_.copy(current = flow)) *> step(ref).timeout(d).provideEnvironment(ZEnvironment(clock))
-                _ <- output match {
-                       case Some(value) =>
-                         state.result.succeed(value.asInstanceOf).provideEnvironment(promiseEnv)
-                       case None => state.result.succeed(().asInstanceOf).provideEnvironment(promiseEnv)
+                d           <- eval(duration).map(_.value)
+                forkId       = uniqueId + s"_timeout_${state.forkCounter}"
+                updatedState = state.copy(forkCounter = state.forkCounter + 1)
+                _           <- ref.set(updatedState)
+                resultPromise <- start[timeout.ValueE, timeout.ValueA](
+                                   forkId,
+                                   flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
+                                 )(timeout.schemaE, timeout.schemaA)
+                result <- resultPromise
+                            .awaitEither(timeout.schemaEitherE, timeout.schemaA)
+                            .provideEnvironment(promiseEnv)
+                            .tapErrorCause(c => ZIO.log(s"Failed: $c"))
+                            .timeout(d)
+                            .provideEnvironment(ZEnvironment(clock))
+                _ <- result match {
+                       case Some(Right(success)) =>
+                         // succeeded
+                         onSuccess(
+                           Remote[Option[timeout.ValueA]](Some(success))(
+                             Schema.option(timeout.schemaA)
+                           )
+                         )
+                       case Some(Left(Left(fatal))) =>
+                         // failed with fatal error
+                         ZIO.die(new IOException("Awaited flow died", fatal))
+                       case Some(Left(Right(error))) =>
+                         // failed with typed error
+                         onError(Remote[timeout.ValueE](error)(timeout.schemaE))
+                       case None =>
+                         // timed out
+                         onSuccess(
+                           Remote[Option[timeout.ValueA]](None)(
+                             Schema.option(timeout.schemaA)
+                           )
+                         )
                      }
               } yield ()
             }
@@ -344,37 +403,6 @@ final case class PersistentExecutor(
                          state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)
                        ) *> step(ref)
                    }
-            } yield ()
-
-          case await @ Await(execFlow) =>
-            implicit val schemaEE: Schema[Either[Throwable, await.ValueE]] = await.schemaEitherE
-            implicit val schemaE: Schema[await.ValueE]                     = await.schemaE
-            implicit val schemaA: Schema[await.ValueA]                     = await.schemaA
-            for {
-              executingFlow <- eval(execFlow).map(_.value)
-              _             <- ZIO.log("Waiting for result")
-              result <-
-                executingFlow.result
-                  .asInstanceOf[DurablePromise[Either[Throwable, await.ValueE], await.ValueA]]
-                  .awaitEither(schemaEE, schemaA)
-                  .provideEnvironment(promiseEnv)
-                  .tapErrorCause(c => ZIO.log(s"Failed: $c"))
-              _ <- ZIO.log(s"Await got result: $result")
-              _ <-
-                result.fold(
-                  error =>
-                    error.fold(
-                      die => ZIO.die(new IOException("Awaited flow died", die)),
-                      error =>
-                        onSuccess(
-                          Remote[Either[await.ValueE, await.ValueA]](Left(error))(schemaEither(schemaE, schemaA))
-                        )
-                    ),
-                  success =>
-                    onSuccess(
-                      Remote[Either[await.ValueE, await.ValueA]](Right(success))(schemaEither(schemaE, schemaA))
-                    )
-                )
             } yield ()
 
           case Interrupt(execFlow) =>

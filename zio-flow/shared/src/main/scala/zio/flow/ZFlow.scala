@@ -109,8 +109,8 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
-  final def timeout(duration: Remote[Duration]): ZFlow[R, E, Option[A]] =
-    ZFlow.Timeout(self, duration)
+  final def timeout[E1 >: E: Schema, A1 >: A: Schema](duration: Remote[Duration]): ZFlow[R, E1, Option[A1]] =
+    ZFlow.Timeout[R, E1, A1](self, duration)
 
   final def unit: ZFlow[R, E, Unit] = as(())
 
@@ -174,9 +174,13 @@ object ZFlow {
     val schemaA: Schema[A] = implicitly[Schema[A]]
   }
 
-  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
+  final case class Timeout[R, E: Schema, A: Schema](flow: ZFlow[R, E, A], duration: Remote[Duration])
+      extends ZFlow[R, E, Option[A]] {
     type ValueA = A
     type ValueE = E
+    val schemaEitherE: Schema[Either[Throwable, E]] = implicitly[Schema[Either[Throwable, E]]]
+    val schemaE: Schema[E]                          = implicitly[Schema[E]]
+    val schemaA: Schema[A]                          = implicitly[Schema[A]]
   }
 
   final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A] {

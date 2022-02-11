@@ -41,7 +41,7 @@ lazy val root = project
     docs,
     examplesJVM,
 //    examplesJS,
-    zioFlowJVM,
+    zioFlowJVM
 //    zioFlowJS
   )
 
