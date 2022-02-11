@@ -158,7 +158,9 @@ object ZFlow {
 
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A]
 
-  final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A]
+  final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A] {
+    type ValueR = R
+  }
 
   final case class Input[R]() extends ZFlow[R, Nothing, R]
 

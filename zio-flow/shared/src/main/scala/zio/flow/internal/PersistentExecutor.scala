@@ -226,12 +226,12 @@ final case class PersistentExecutor(
               success => onSuccess(lit(success))
             )
 
-          case Transaction(flow) =>
-            val env = state.currentEnvironment.value
+          case tx @ Transaction(flow) =>
+            val env = state.currentEnvironment.asInstanceOf[SchemaAndValue[tx.ValueR]].value
             for {
               _ <- ref.update(
-                     _.enterTransaction(flow.provide(lit(env.asInstanceOf)))
-                   ) // TODO : Casting to Nothing will fail
+                     _.enterTransaction(flow.provide(lit(env)))
+                   )
               _ <- ref.update(_.copy(current = flow))
               _ <- step(ref)
             } yield ()
