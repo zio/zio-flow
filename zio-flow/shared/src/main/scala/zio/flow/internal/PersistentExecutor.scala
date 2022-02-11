@@ -19,6 +19,7 @@ package zio.flow.internal
 import java.io.IOException
 import java.time.Duration
 import zio._
+import zio.flow.ExecutingFlow.PersistentExecutingFlow
 import zio.flow._
 import zio.flow.serialization._
 import zio.schema.Schema
@@ -262,7 +263,7 @@ final case class PersistentExecutor(
                                  forkId,
                                  workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
                                )(fork.schemaE, fork.schemaA)
-              _ <- onSuccess(ExecutingFlow(forkId, resultPromise))
+              _ <- onSuccess(PersistentExecutingFlow(forkId, resultPromise))
             } yield ()
 
           case await @ Await(execFlow) =>
@@ -273,7 +274,9 @@ final case class PersistentExecutor(
               executingFlow <- eval(execFlow).map(_.value)
               _             <- ZIO.log("Waiting for result")
               result <-
-                executingFlow.result
+                executingFlow
+                  .asInstanceOf[PersistentExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
+                  .result
                   .asInstanceOf[DurablePromise[Either[Throwable, await.ValueE], await.ValueA]]
                   .awaitEither(schemaEE, schemaA)
                   .provideEnvironment(promiseEnv)
@@ -329,6 +332,7 @@ final case class PersistentExecutor(
                          onError(Remote[timeout.ValueE](error)(timeout.schemaE))
                        case None =>
                          // timed out
+                         // TODO: interrupt
                          onSuccess(
                            Remote[Option[timeout.ValueA]](None)(
                              Schema.option(timeout.schemaA)

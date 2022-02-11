@@ -1,14 +1,20 @@
 package zio.flow
 
+import zio.Fiber
 import zio.flow.internal.DurablePromise
 import zio.schema.Schema
 
-final case class ExecutingFlow[+E, +A](id: String, result: DurablePromise[_, _])
+sealed trait ExecutingFlow[+E, +A]
 
 object ExecutingFlow {
-  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    (Schema[String] zip Schema[DurablePromise[Either[Throwable, E], A]]).transform(
-      { case (id, promise) => ExecutingFlow(id, promise) },
-      (ef: ExecutingFlow[E, A]) => (ef.id, ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])
-    )
+  final case class InMemoryExecutingFlow[+E, +A](fiber: Fiber[E, A])                         extends ExecutingFlow[E, A]
+  final case class PersistentExecutingFlow[+E, +A](id: String, result: DurablePromise[_, _]) extends ExecutingFlow[E, A]
+
+  object PersistentExecutingFlow {
+    implicit def schema[E, A]: Schema[PersistentExecutingFlow[E, A]] =
+      (Schema[String] zip Schema[DurablePromise[Either[Throwable, E], A]]).transform(
+        { case (id, promise) => PersistentExecutingFlow(id, promise) },
+        (ef: PersistentExecutingFlow[E, A]) => (ef.id, ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])
+      )
+  }
 }

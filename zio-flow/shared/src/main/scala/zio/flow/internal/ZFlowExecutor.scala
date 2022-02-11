@@ -18,6 +18,7 @@ package zio.flow.internal
 
 import java.time.Duration
 import zio._
+import zio.flow.ExecutingFlow.InMemoryExecutingFlow
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, ZFlow}
 import zio.schema.Schema
@@ -235,7 +236,7 @@ object ZFlowExecutor {
             fiber        <- compile(innerPromise, ref, input, workflow).fork
             _ <- promise
                    .asInstanceOf[Promise[Nothing, ExecutingFlow[fork.ValueE, fork.ValueA]]]
-                   .succeed(fiber.asInstanceOf[ExecutingFlow[fork.ValueE, fork.ValueA]])
+                   .succeed(InMemoryExecutingFlow(fiber))
           } yield CompileStatus.Done
 
         case timeout @ Timeout(flow, duration) =>
@@ -287,14 +288,14 @@ object ZFlowExecutor {
 
         case Await(execFlow) =>
           for {
-            execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-            _        <- execflow.join.intoPromise(promise).forkDaemon
+            execflow <- eval(execFlow).map(_.asInstanceOf[InMemoryExecutingFlow[E, A]])
+            _        <- execflow.fiber.join.intoPromise(promise).forkDaemon
           } yield CompileStatus.Done
 
         case Interrupt(execFlow) =>
           for {
-            execflow <- eval(execFlow).map(_.asInstanceOf[Fiber[E, A]])
-            _        <- execflow.interrupt.flatMap(e => promise.done(e)).forkDaemon
+            execflow <- eval(execFlow).map(_.asInstanceOf[InMemoryExecutingFlow[E, A]])
+            _        <- execflow.fiber.interrupt.flatMap(e => promise.done(e)).forkDaemon
           } yield CompileStatus.Done
 
         case Fail(error) => eval(error).flatMap(promise.fail) as CompileStatus.Done
