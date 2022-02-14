@@ -199,7 +199,6 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     // TODO: retryUntil, orTry, interrupt
   )
 
-  // TODO: restart suite
   val suite2 = suite("Restarted flows")(
     testRestartFlowAndLogs("log-|-log") { break =>
       for {
@@ -210,8 +209,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { (result, logs1, logs2) =>
       assertTrue(
         result == 1,
-        logs1 == Chunk("first"),
-        logs2 == Chunk("second")
+        logs1.contains("first"),
+        !logs1.contains("second"),
+        logs2.contains("second"),
+        !logs2.contains("first")
       )
     }
   )
@@ -276,8 +277,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Chunk[String], Chunk[String]) => TestResult) =
     test(label) {
       for {
-        logQueue <- ZQueue.unbounded[String]
-        runtime  <- ZIO.runtime[Any]
+        logQueue     <- ZQueue.unbounded[String]
+        runtime      <- ZIO.runtime[Any]
+        breakPromise <- Promise.make[Nothing, Unit]
         logger = new ZLogger[String, String] {
                    override def apply(
                      trace: ZTraceElement,
@@ -289,25 +291,34 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      location: ZTraceElement
                    ): String = {
                      val msg = message()
-                     runtime.unsafeRun(logQueue.offer(message()).unit)
+                     runtime.unsafeRun {
+                       msg match {
+                         case "!!!BREAK!!!" => breakPromise.succeed(())
+                         case _             => logQueue.offer(msg).unit
+                       }
+                     }
                      msg
                    }
                  }
         rc <- ZIO.runtimeConfig
         results <- {
-          val break     = ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))) // TODO: needs a better sync point, test activity?
+          val break =
+            ZFlow.log("!!!BREAK!!!") *>
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100)))
           val finalFlow = flow(break)
           for {
-            fiber1 <- mockPersistentTestClock.use { executor =>
-                        val pExecutor = executor.asInstanceOf[PersistentExecutor] // TODO: get rid of this
-                        pExecutor
-                          .start(label, finalFlow)
-                          .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
-                      }.fork
+            fiber1 <- finalFlow
+                        .evaluateTestPersistent(label)
+                        .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
+                        .fork
             _         <- TestClock.adjust(50.seconds)
+            _         <- breakPromise.await
             _         <- fiber1.interrupt
             logLines1 <- logQueue.takeAll
-            fiber2    <- finalFlow.evaluateTestPersistent(label).fork
+            fiber2 <- finalFlow
+                        .evaluateTestPersistent(label)
+                        .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
+                        .fork
             _         <- TestClock.adjust(200.seconds)
             result    <- fiber2.join
             logLines2 <- logQueue.takeAll

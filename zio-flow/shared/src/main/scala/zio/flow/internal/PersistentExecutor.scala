@@ -146,7 +146,7 @@ final case class PersistentExecutor(
           }
         }
 
-      ref.get.flatMap(state =>
+      ref.get.flatMap { state =>
         state.current match {
           case Return(value) =>
             onSuccess(value)
@@ -476,7 +476,7 @@ final case class PersistentExecutor(
           case GetExecutionEnvironment =>
             onSuccess(lit(execEnv))
         }
-      )
+      }
     }
 
     val durablePromise =
