@@ -21,9 +21,8 @@ object SchemaAndValue {
 
       override def schema: Schema[Subtype] = schema0
 
-      override def value: Subtype =
-        value0
-        //TODO : Equals and Hashcode required
+      override def value: Subtype = value0
+      //TODO : Equals and Hashcode required
     }
 
   def unapply[A](schemaAndValue: SchemaAndValue[A]): Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
