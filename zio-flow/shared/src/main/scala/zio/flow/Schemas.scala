@@ -8,10 +8,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 trait Schemas extends LowerPrioritySchemas {
-  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing")
-}
 
-trait LowerPrioritySchemas {
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.Duration(ChronoUnit.SECONDS))
   implicit val schemaInstant: Schema[Instant]   = Schema.Primitive(StandardType.Instant(DateTimeFormatter.BASIC_ISO_DATE))
 
@@ -77,5 +74,8 @@ trait LowerPrioritySchemas {
 
   implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
     Schema.EitherSchema(aSchema, bSchema)
+}
 
+trait LowerPrioritySchemas {
+  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing")
 }

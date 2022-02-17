@@ -11,7 +11,8 @@ object Example {
   lazy val refundOrder: Activity[OrderId, Unit] =
     Activity[OrderId, Unit]("refund-order", "Refunds an order with the specified orderId", ???, ???, ???)
 
-  val stateConstructor: ZFlow[Any, Nothing, (Variable[Int], Variable[Boolean], Variable[List[String]])] =
+  val stateConstructor
+    : ZFlow[Any, Nothing, (Remote.Variable[Int], Remote.Variable[Boolean], Remote.Variable[List[String]])] =
     for {
       intVar  <- ZFlow.newVar[Int]("intVar", 0)
       boolVar <- ZFlow.newVar[Boolean]("boolVar", false)
@@ -20,9 +21,9 @@ object Example {
 
   val orderProcess: ZFlow[OrderId, ActivityError, Unit] =
     stateConstructor.flatMap { tuple =>
-      val intVar: Remote[Variable[OrderId]] = tuple._1
-      val boolVar                           = tuple._2
-      val listVar                           = tuple._3
+      val intVar: Remote[Remote.Variable[OrderId]] = tuple._1
+      val boolVar                                  = tuple._2
+      val listVar                                  = tuple._3
 
       ZFlow
         .input[OrderId]

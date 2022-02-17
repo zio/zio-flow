@@ -19,9 +19,10 @@ package zio.flow.internal
 import java.time.Duration
 import zio._
 import zio.flow.ExecutingFlow.InMemoryExecutingFlow
+import zio.flow.Remote.RemoteFunction
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, RemoteContext, ZFlow}
-import zio.schema.Schema
+import zio.schema._
 
 trait ZFlowExecutor[-U] {
   def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -162,16 +163,34 @@ object ZFlowExecutor {
                          innerPromise.await.foldZIO(
                            error =>
                              Promise
-                               .make[E, A]
+                               .make[fold.ValueE2, fold.ValueB]
                                .flatMap(p1 =>
-                                 compile(p1, ref, input, fold.ifError.provide(lit(error))) <* p1.await
+                                 compile(
+                                   p1,
+                                   ref,
+                                   input,
+                                   ZFlow.unwrap(
+                                     fold.ifError.asInstanceOf[
+                                       RemoteFunction[fold.ValueE, ZFlow[fold.ValueR, fold.ValueE2, fold.ValueB]]
+                                     ](lit(error))
+                                   )(fold.errorSchema, fold.resultSchema)
+                                 ) <* p1.await
                                    .intoPromise(promise)
                                ),
                            success =>
                              Promise
-                               .make[E, A]
+                               .make[fold.ValueE2, fold.ValueB]
                                .flatMap(p2 =>
-                                 compile(p2, ref, input, fold.ifSuccess.provide(lit(success))) <* p2.await
+                                 compile(
+                                   p2,
+                                   ref,
+                                   input,
+                                   ZFlow.unwrap(
+                                     fold.ifSuccess.asInstanceOf[
+                                       RemoteFunction[fold.ValueA, ZFlow[fold.ValueR, fold.ValueE2, fold.ValueB]]
+                                     ](lit(success))
+                                   )(fold.errorSchema, fold.resultSchema)
+                                 ) <* p2.await
                                    .intoPromise(promise)
                                    .forkDaemon
                                )
@@ -181,16 +200,34 @@ object ZFlowExecutor {
                            .foldZIO(
                              error =>
                                Promise
-                                 .make[E, A]
+                                 .make[fold.ValueE2, fold.ValueB]
                                  .flatMap(p1 =>
-                                   compile(p1, ref, input, fold.ifError.provide(lit(error))) <* p1.await
+                                   compile(
+                                     p1,
+                                     ref,
+                                     input,
+                                     ZFlow.unwrap(
+                                       fold.ifError.asInstanceOf[
+                                         RemoteFunction[fold.ValueE, ZFlow[fold.ValueR, fold.ValueE2, fold.ValueB]]
+                                       ](lit(error))
+                                     )(fold.errorSchema, fold.resultSchema)
+                                   ) <* p1.await
                                      .intoPromise(promise)
                                  ),
                              success =>
                                Promise
-                                 .make[E, A]
+                                 .make[fold.ValueE2, fold.ValueB]
                                  .flatMap(p2 =>
-                                   compile(p2, ref, input, fold.ifSuccess.provide(lit(success))) <* p2.await
+                                   compile(
+                                     p2,
+                                     ref,
+                                     input,
+                                     ZFlow.unwrap(
+                                       fold.ifSuccess.asInstanceOf[
+                                         RemoteFunction[fold.ValueA, ZFlow[fold.ValueR, fold.ValueE2, fold.ValueB]]
+                                       ](lit(success))
+                                     )(fold.errorSchema, fold.resultSchema)
+                                   ) <* p2.await
                                      .intoPromise(promise)
                                  )
                            )
@@ -202,7 +239,7 @@ object ZFlowExecutor {
           (for {
             input  <- eval(input)
             output <- opExec.execute(input, activity.operation)
-            _      <- ref.update(_.addCompensation(activity.compensate.provide(lit(output))))
+            _      <- ref.update(_.addCompensation(activity.compensate.unit.provide(lit(output))))
           } yield output).intoPromise(promise.asInstanceOf[Promise[ActivityError, A]]) as CompileStatus.Done
 
         case Transaction(flow) =>
@@ -233,6 +270,13 @@ object ZFlowExecutor {
             evaluatedFlow <- eval(remote)
             status        <- compile(promise, ref, input, evaluatedFlow)
           } yield status
+
+        case UnwrapRemote(remote) =>
+          for {
+            evaluatedRemote <- eval(remote)
+            evaluated       <- eval(evaluatedRemote)
+            _               <- promise.succeed(evaluated)
+          } yield CompileStatus.Done
 
         case fork @ Fork(workflow) =>
           for {
@@ -396,7 +440,7 @@ object ZFlowExecutor {
     ) {
       self =>
 
-      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): State =
+      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]): State =
         copy(tstate = tstate.addCompensation(newCompensation))
 
       def addReadVar(ref: Ref[_]): State =
@@ -424,9 +468,10 @@ object ZFlowExecutor {
 
     sealed trait TState {
       self =>
-      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
+      def addCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]): TState = self match {
         case TState.Empty => TState.Empty
         case TState.Transaction(flowPromise, readVars, compensation) =>
+          import zio.flow.schemaThrowable
           TState.Transaction(flowPromise, readVars, newCompensation *> compensation)
         //TODO : Compensation Failure semantics
       }
@@ -456,7 +501,7 @@ object ZFlowExecutor {
       final case class Transaction(
         flowPromise: FlowPromise[_, _],
         readVars: Set[String],
-        compensation: ZFlow[Any, ActivityError, Any]
+        compensation: ZFlow[Any, ActivityError, Unit]
       ) extends TState
 
     }

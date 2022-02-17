@@ -32,9 +32,10 @@ package object flow extends Schemas {
   type SchemaOption[A]   = Schema.Optional[A]
   type SchemaList[A]     = Schema[List[A]]
 
-  implicit def RemoteVariable[A](remote: Remote.Variable[A]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
-    remote
-  )
+  implicit def RemoteVariable[A](remote: Remote[Remote.Variable[A]]): RemoteVariableSyntax[A] =
+    new RemoteVariableSyntax(
+      remote
+    )
   implicit def RemoteInstant(remote: Remote[Instant]): RemoteInstantSyntax = new RemoteInstantSyntax(
     remote
   )

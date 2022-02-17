@@ -16,18 +16,21 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.RemoteFunction
 import zio.flow._
 import zio.schema.Schema
 
-class RemoteVariableSyntax[A](val self: Remote[Variable[A]]) extends AnyVal {
+class RemoteVariableSyntax[A](val self: Remote[Remote.Variable[A]]) extends AnyVal {
   def get(implicit schema: Schema[A]): ZFlow[Any, Nothing, A] = self.modify((a: Remote[A]) => (a, a))
 
   def set(a: Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] =
     self.modify((_: Remote[A]) => ((), a))
 
-  def modify[B](f: Remote[A] => (Remote[B], Remote[A]))(implicit schema: Schema[A]): ZFlow[Any, Nothing, B] =
-    ZFlow.Modify(self, RemoteFunction((a: Remote[A]) => Remote.tuple2(f(a))))
+  def modify[B](
+    f: Remote[A] => (Remote[B], Remote[A])
+  )(implicit schemaA: Schema[A], schemaB: Schema[B]): ZFlow[Any, Nothing, B] =
+    ZFlow.unwrapRemote(self).flatMap[Any, Nothing, B] { v =>
+      ZFlow.Modify(v.asInstanceOf[Remote.Variable[A]], (a: Remote[A]) => Remote.tuple2(f(a)))
+    }
 
   def updateAndGet(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, A] =
     self.modify { (a: Remote[A]) =>
@@ -35,13 +38,13 @@ class RemoteVariableSyntax[A](val self: Remote[Variable[A]]) extends AnyVal {
       (a2, a2)
     }
 
-  def update(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] = updateAndGet(f).unit
+  def update(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] =
+    updateAndGet(f).unit
 
   def waitUntil(predicate: Remote[A] => Remote[Boolean])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] =
-    ZFlow.transaction { txn =>
-      for {
-        v <- self.get
-        _ <- txn.retryUntil(predicate(v))
-      } yield ()
+    ZFlow.transaction[Any, Nothing, Unit] { txn =>
+      self.get.flatMap[Any, Nothing, Unit] { v =>
+        txn.retryUntil(predicate(v))
+      }
     }
 }

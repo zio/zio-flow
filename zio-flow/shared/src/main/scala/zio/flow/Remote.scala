@@ -18,7 +18,6 @@ package zio.flow
 
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
-import zio.schema.Diff.SchemaMigration
 import zio.schema.Schema
 import zio.{Chunk, ZIO}
 
@@ -42,7 +41,9 @@ sealed trait Remote[+A] {
 
   def self: Remote[A] = this
 
-  final def iterate[A1 >: A](step: Remote[A1] => Remote[A1])(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
+  final def iterate[A1 >: A: Schema](
+    step: Remote[A1] => Remote[A1]
+  )(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
     predicate(self).ifThenElse(
       step(self).iterate(step)(predicate),
       self
@@ -282,7 +283,7 @@ object Remote {
 
   final case class Either0[A, B](either: Either[(Remote[A], Schema[B]), (Schema[A], Remote[B])])
       extends Remote[Either[A, B]] {
-    val schema =
+    val schema: Schema[_ <: Either[A, B]] =
       either match {
         case Left((r, s))  => Schema.either(r.schema, s)
         case Right((s, r)) => Schema.either(s, r.schema)
@@ -418,7 +419,7 @@ object Remote {
   }
 
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
-    val schema =
+    val schema: Schema[_ <: (A, B)] =
       Schema.tuple2(left.schema, right.schema)
 
     override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[(A, B)], SchemaAndValue[(A, B)]]] =
@@ -440,7 +441,8 @@ object Remote {
   }
 
   final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
-    val schema = Schema.tuple3(_1.schema, _2.schema, _3.schema)
+    val schema: Schema[_ <: (A, B, C)] =
+      Schema.tuple3(_1.schema, _2.schema, _3.schema)
 
     override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]]] =
       for {
@@ -466,7 +468,8 @@ object Remote {
 
   final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
       extends Remote[(A, B, C, D)] {
-    val schema = Schema.tuple4(_1.schema, _2.schema, _3.schema, _4.schema)
+    val schema: Schema[_ <: (A, B, C, D)] =
+      Schema.tuple4(_1.schema, _2.schema, _3.schema, _4.schema)
 
     override def evalWithSchema
       : ZIO[RemoteContext, Nothing, Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]]] =
@@ -1582,6 +1585,12 @@ object Remote {
   def suspend[A: Schema](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
+
+  implicit def capturedRemoteToRemote[A: Schema, B](f: Remote[A] => Remote[B]): RemoteFunction[A, B] =
+    RemoteFunction((a: Remote[A]) => f(a))
+
+//  implicit def capturedRemoteToFlow[A: Schema, R, E, B](f: Remote[A] => ZFlow[R, E, B]): RemoteFunction[A, ZFlow[R, E, B]] =
+//    RemoteFunction((a: Remote[A]) => Remote(f(a)))
 
   val unit: Remote[Unit] = Remote(())
 

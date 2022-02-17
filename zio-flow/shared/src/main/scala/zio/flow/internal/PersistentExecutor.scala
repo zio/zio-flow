@@ -18,7 +18,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.ExecutingFlow.PersistentExecutingFlow
-import zio.flow.Remote.===>
+import zio.flow.Remote.{===>, RemoteFunction}
 import zio.flow._
 import zio.flow.serialization._
 import zio.schema.Schema
@@ -157,7 +157,11 @@ final case class PersistentExecutor(
           )
 
         case fold @ Fold(_, _, _) =>
-          val cont = Instruction.Continuation(fold.ifError, fold.ifSuccess)
+          val cont =
+            Instruction.Continuation[fold.ValueR, fold.ValueA, fold.ValueE, fold.ValueE2, fold.ValueB](
+              fold.ifError,
+              fold.ifSuccess
+            )
           ZIO.succeed(
             StepResult(
               StateChange.setCurrent(fold.value) ++
@@ -187,10 +191,22 @@ final case class PersistentExecutor(
             )
           )
 
-        case Ensuring(flow, finalizer) =>
-          val cont = Instruction.Continuation[Any, Any, Any](
-            ZFlow.input[Any].flatMap(e => finalizer *> ZFlow.fail(e)),
-            ZFlow.input[Any].flatMap(a => finalizer *> ZFlow.succeed(a))
+        case ensuring @ Ensuring(flow, finalizer) =>
+          val schemaE: Schema[ensuring.ValueE] =
+            ensuring.errorSchema.asInstanceOf[Schema[ensuring.ValueE]]
+          val schemaA: Schema[ensuring.ValueA] =
+            ensuring.resultSchema.asInstanceOf[Schema[ensuring.ValueA]]
+          val cont = Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
+            RemoteFunction { (e: Remote[ensuring.ValueE]) =>
+              (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, Nothing, ensuring.ValueA]])(
+                schemaE,
+                Schema[Unit],
+                schemaA
+              )
+            }(schemaE),
+            RemoteFunction { (a: Remote[ensuring.ValueA]) =>
+              (finalizer *> ZFlow.succeed(a))(schemaE, Schema[Unit], schemaA)
+            }(schemaA)
           )
 
           ZIO.succeed(
@@ -201,6 +217,11 @@ final case class PersistentExecutor(
           for {
             evaluatedFlow <- eval(remote)
           } yield StepResult(StateChange.setCurrent(evaluatedFlow.value), None)
+
+        case UnwrapRemote(remote) =>
+          for {
+            evaluated <- eval(remote)
+          } yield StepResult(StateChange.none, Some(Right(evaluated.value)))
 
         case fork @ Fork(workflow) =>
           val forkId = uniqueId + s"_fork_${state.forkCounter}"
@@ -378,30 +399,33 @@ final case class PersistentExecutor(
           )
 
         case i @ Iterate(initial, step0, predicate) =>
+          implicit val schemaE: Schema[i.ValueE] = i.errorSchema
+          implicit val schemaA: Schema[i.ValueA] = i.resultSchema
+
           val tempVarCounter = state.tempVarCounter
           val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
 
           def iterate(
             step: i.ValueA ===> ZFlow[Any, i.ValueE, i.ValueA],
             predicate: i.ValueA ===> Boolean,
-            stateVar: Remote.Variable[i.ValueA],
+            stateVar: Remote[Remote.Variable[i.ValueA]],
             boolRemote: Remote[Boolean]
           ): ZFlow[Any, i.ValueE, i.ValueA] =
             ZFlow.ifThenElse(boolRemote)(
               for {
-                a0       <- stateVar.get(i.schemaA)
+                a0       <- stateVar.get
                 nextFlow <- step(a0)
-                a1       <- nextFlow.flatten
-                _        <- stateVar.set(a1)(i.schemaA)
+                a1       <- ZFlow.unwrap(nextFlow)
+                _        <- stateVar.set(a1)(i.resultSchema)
                 continue <- predicate(a1)
                 result   <- iterate(step, predicate, stateVar, continue)
               } yield result,
-              stateVar.get(i.schemaA)
+              stateVar.get
             )
 
           val zFlow = for {
             stateVar   <- ZFlow.newVar[i.ValueA](tempVarName, initial)
-            stateValue <- stateVar.get(i.schemaA)
+            stateValue <- stateVar.get
             boolRemote <- ZFlow(predicate(stateValue))
             _          <- ZFlow.log(s"stateValue = $stateValue")
             _          <- ZFlow.log(s"boolRemote = $boolRemote")
@@ -563,7 +587,10 @@ object PersistentExecutor {
 
     final case class PushEnv(env: Remote[_]) extends Instruction
 
-    final case class Continuation[A, E, B](onError: ZFlow[E, E, B], onSuccess: ZFlow[A, E, B]) extends Instruction
+    final case class Continuation[R, A, E, E2, B](
+      onError: RemoteFunction[E, ZFlow[R, E2, B]],
+      onSuccess: RemoteFunction[A, ZFlow[R, E2, B]]
+    ) extends Instruction
 
     case object PopFallback extends Instruction
 
@@ -620,7 +647,7 @@ object PersistentExecutor {
     }
     private final case class AddCompensation(newCompensation: ZFlow[Any, ActivityError, Any]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
-        state.copy(tstate = state.tstate.addCompensation(newCompensation))
+        state.copy(tstate = state.tstate.addCompensation(newCompensation.unit))
     }
     private final case class AddReadVar(name: String) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -701,7 +728,7 @@ object PersistentExecutor {
 
 sealed trait TState {
   self =>
-  def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): TState = self match {
+  def addCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]): TState = self match {
     case TState.Empty => TState.Empty
     case TState.Transaction(flow, readVars, compensation, fallBacks) =>
       TState.Transaction(flow, readVars, newCompensation *> compensation, fallBacks)
@@ -745,7 +772,7 @@ object TState {
   final case class Transaction(
     flow: ZFlow[Any, _, _],
     readVars: Set[String],
-    compensation: ZFlow[Any, ActivityError, Any],
+    compensation: ZFlow[Any, ActivityError, Unit],
     fallbacks: List[ZFlow[Any, _, _]]
   ) extends TState
 
