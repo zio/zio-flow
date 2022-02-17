@@ -7,7 +7,7 @@ import zio.test._
 
 import java.time.temporal.{ChronoField, ChronoUnit}
 
-object RemoteInstantSpec extends ZIOSpecDefault {
+object RemoteInstantSpec extends RemoteSpecBase {
   override def spec = suite("RemoteInstantSpec")(
     test("isAfter") {
       check(Gen.instant, Gen.instant) { case (i1, i2) =>
@@ -74,7 +74,7 @@ object RemoteInstantSpec extends ZIOSpecDefault {
         Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
-  )
+  ).provideCustom(RemoteContext.inMemory)
 
   implicit val chronoFieldSchema: Schema[ChronoField] =
     Schema[String].transform(ChronoField.valueOf, _.name())

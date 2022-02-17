@@ -16,9 +16,9 @@
 
 package zio.flow
 
-import java.time.{Duration, Instant}
-
 import zio.schema.Schema
+
+import java.time.{Duration, Instant}
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -229,7 +229,9 @@ object ZFlow {
   def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
-  def foreach[R, E, A, B](values: Remote[List[A]])(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
+  def foreach[R, E, A: Schema, B: Schema](
+    values: Remote[List[A]]
+  )(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     ZFlow.unwrap {
       values.fold[ZFlow[R, E, List[B]]](ZFlow.succeed(Remote(Nil))) { (bs, a) =>
         for {
@@ -239,13 +241,13 @@ object ZFlow {
       }
     }.map(_.reverse)
 
-  def foreachPar[R, A, B: Schema](
+  def foreachPar[R, A: Schema, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
     for {
       executingFlows <- ZFlow.foreach(values)((remoteA: Remote[A]) => body(remoteA).fork)
       eithers        <- ZFlow.foreach(executingFlows)(remote => ZFlow.Await(remote))
-      bs             <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers)(???, ???))
+      bs             <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers))
     } yield bs
 
   def ifThenElse[R, E, A](p: Remote[Boolean])(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
@@ -274,8 +276,6 @@ object ZFlow {
 
   def waitTill(instant: Remote[Instant]): ZFlow[Any, Nothing, Unit] = WaitTill(instant)
 
-  implicit def schemaZFlow[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("Schema ZFlow is not available.")
-
   def when[R, E](predicate: Remote[Boolean])(flow: ZFlow[R, E, Any]): ZFlow[R, E, Any] =
     ZFlow.ifThenElse(predicate)(flow, ZFlow.unit)
 
@@ -283,10 +283,30 @@ object ZFlow {
 
   def succeed[A](value: Remote[A]): ZFlow[Any, Nothing, A] = ZFlow.Return(value)
 
-  def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
+  def fromEither[E: Schema, A: Schema](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): Log = ZFlow.Log(message)
 
   val executionEnvironment: ZFlow[Any, Nothing, ExecutionEnvironment] = ZFlow.GetExecutionEnvironment
+
+//  object Schemas {
+//    implicit val returnSchema: Schema[Return[_]] = Schema.CaseClass1()
+//    implicit val nowSchema: Schema[Now.type] = DeriveSchema.gen
+//  }
+//  val erasedSchema: Schema[ZFlow[_, _, _]] = {
+//    import Schemas._
+//    Schema.enumeration(
+//      caseOf[Return[_], ZFlow[_, _, _]](id = "Return")((flow: ZFlow[_, _, _]) => flow.asInstanceOf[Return[_]]) ++
+//      caseOf[Now.type, ZFlow[_, _, _]](id = "Now")((flow: ZFlow[_, _, _]) => flow.asInstanceOf[Now.type])
+//    )
+//  }
+//
+//  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] =
+//    erasedSchema.transform(
+//      _.asInstanceOf[ZFlow[R, E, A]],
+//      _.asInstanceOf[ZFlow[_, _, _]]
+//    )
+
+  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("TODO")
 }

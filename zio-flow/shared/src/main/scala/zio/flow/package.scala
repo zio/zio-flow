@@ -17,6 +17,7 @@
 package zio
 
 import zio.flow.remote._
+import zio.prelude.Newtype
 import zio.schema.Schema
 
 import java.time.Instant
@@ -72,4 +73,7 @@ package object flow extends Schemas {
   implicit def RemoteRelational[A](remote: Remote[A]): RemoteRelationalSyntax[A] = new RemoteRelationalSyntax[A](remote)
 
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
+
+  object RemoteVariableName extends Newtype[String]
+  type RemoteVariableName = RemoteVariableName.Type
 }

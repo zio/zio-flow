@@ -1,36 +1,58 @@
 package zio.flow
 
+import zio.ZIO
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test._
 
-object RemoteBooleanSpec extends ZIOSpecDefault {
-  override def spec = suite("RemoteBooleanSpec")(
-    test("And") {
-      BoolAlgebra.all(
-        (Remote(true) && Remote(false)) <-> false,
-        (Remote(true) && Remote(true)) <-> true,
-        (Remote(false) && Remote(false)) <-> false
-      )
-    },
-    test("Or") {
-      BoolAlgebra.all(
-        (Remote(true) || Remote(false)) <-> true,
-        (Remote(true) || Remote(true)) <-> true,
-        (Remote(false) || Remote(false)) <-> false
-      )
-    },
-    test("Not") {
-      BoolAlgebra.all(
-        !Remote(true) <-> false,
-        !Remote(false) <-> true
-      )
-    },
-    test("IfThenElse") {
-      BoolAlgebra.all(
-        Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12,
-        Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
-      )
-    }
-  )
+object RemoteBooleanSpec extends RemoteSpecBase {
+  override def spec =
+    suite("RemoteBooleanSpec")(
+      test("And") {
+        ZIO
+          .collectAll(
+            List(
+              (Remote(true) && Remote(false)) <-> false,
+              (Remote(true) && Remote(true)) <-> true,
+              (Remote(false) && Remote(false)) <-> false
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
+      },
+      test("Or") {
+        ZIO
+          .collectAll(
+            List(
+              (Remote(true) || Remote(false)) <-> true,
+              (Remote(true) || Remote(true)) <-> true,
+              (Remote(false) || Remote(false)) <-> false
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
+      },
+      test("Not") {
+        ZIO
+          .collectAll(
+            List(
+              !Remote(true) <-> false,
+              !Remote(false) <-> true
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
+      },
+      test("IfThenElse") {
+        ZIO
+          .collectAll(
+            List(
+              Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12,
+              Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
+      }
+    ).provideCustom(RemoteContext.inMemory)
 
 }

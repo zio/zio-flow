@@ -5,7 +5,7 @@ import zio._
 import zio.schema._
 import zio.test._
 
-object RemoteOpticsSpec extends ZIOSpecDefault {
+object RemoteOpticsSpec extends RemoteSpecBase {
 
   final case class Person(name: String, age: Int)
 
@@ -64,5 +64,5 @@ object RemoteOpticsSpec extends ZIOSpecDefault {
         Color.blue.set(Remote(Blue)) <-> Blue
       }
     )
-  )
+  ).provideCustom(RemoteContext.inMemory)
 }

@@ -16,13 +16,15 @@
 
 package zio.flow.internal
 
-import java.io.IOException
-import java.time.Duration
 import zio._
 import zio.flow.ExecutingFlow.PersistentExecutingFlow
 import zio.flow._
 import zio.flow.serialization._
 import zio.schema.Schema
+
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.time.Duration
 
 final case class PersistentExecutor(
   clock: Clock,
@@ -45,9 +47,8 @@ final case class PersistentExecutor(
   def eraseCont(cont: Remote[_] => ZFlow[_, _, _]): ErasedCont =
     cont.asInstanceOf[ErasedCont]
 
-  def eval[A](r: Remote[A]): UIO[SchemaAndValue[A]] = UIO(
-    r.evalWithSchema.getOrElse(throw new IllegalStateException("Eval could not be reduced to Right of Either."))
-  )
+  def eval[A](r: Remote[A]): ZIO[RemoteContext, Nothing, SchemaAndValue[A]] =
+    r.evalWithSchema.map(_.getOrElse(throw new IllegalStateException("Eval could not be reduced to Right of Either.")))
 
   def lit[A](a: A): Remote[A] =
     Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
@@ -90,7 +91,8 @@ final case class PersistentExecutor(
     flow: ZFlow[Any, E, A]
   ): UIO[DurablePromise[Either[Throwable, E], A]] = {
     import zio.flow.ZFlow._
-    def step(state: State[E, A]): IO[IOException, StepResult] = {
+
+    def step(state: State[E, A]): ZIO[RemoteContext, IOException, StepResult] = {
       def onSuccess(value: Remote[_], stateChange: StateChange = StateChange.none): UIO[StepResult] =
         ZIO.succeed(StepResult(stateChange, Some(Right(value))))
       def onError(value: Remote[_], stateChange: StateChange = StateChange.none): UIO[StepResult] =
@@ -136,7 +138,7 @@ final case class PersistentExecutor(
                 .orDie // TODO: handle errors looking up from key value store
 
           val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
-          val a: ZIO[Any, Nothing, (A, String)] = for {
+          val a: ZIO[RemoteContext, Nothing, (A, String)] = for {
             vRefTuple         <- eval(svar).map(_.value.asInstanceOf[(String, Ref[Any])])
             (vName, vRef)      = vRefTuple
             value             <- vRef.get
@@ -419,7 +421,7 @@ final case class PersistentExecutor(
       }
     }
 
-    def onSuccess(ref: Ref[State[E, A]], value: Remote[_]): IO[IOException, Boolean] =
+    def onSuccess(ref: Ref[State[E, A]], value: Remote[_]): ZIO[RemoteContext, IOException, Boolean] =
       ref.get.flatMap { state =>
         state.stack match {
           case Nil =>
@@ -445,7 +447,7 @@ final case class PersistentExecutor(
         }
       }
 
-    def onError(ref: Ref[State[E, A]], value: Remote[_]): IO[IOException, Boolean] =
+    def onError(ref: Ref[State[E, A]], value: Remote[_]): ZIO[RemoteContext, IOException, Boolean] =
       ref.get.flatMap { state =>
         state.stack match {
           case Nil =>
@@ -471,12 +473,13 @@ final case class PersistentExecutor(
         }
       }
 
-    def runSteps(stateRef: Ref[State[E, A]]): IO[IOException, Unit] =
+    def runSteps(stateRef: Ref[State[E, A]]): ZIO[RemoteContext, IOException, Unit] =
       for {
         state0     <- stateRef.get
         stepResult <- step(state0)
         state1      = stepResult.stateChange(state0)
         _          <- stateRef.set(state1)
+        _          <- persistState(uniqueId, state0, stepResult.stateChange, state1)
         continue <- stepResult.result match {
                       case Some(Left(error)) =>
                         onError(stateRef, error)
@@ -508,18 +511,22 @@ final case class PersistentExecutor(
 
     for {
       ref <- Ref.make[State[E, A]](state)
-      _ <- runSteps(ref).absorb.catchAll { error =>
-             ZIO.logError(s"Persistent executor ${uniqueId} failed") *>
-               ZIO.logErrorCause(Cause.die(error)) *>
-               durablePromise
-                 .fail(Left(error))
-                 .provideEnvironment(promiseEnv)
-                 .absorb
-                 .catchAll { error2 =>
-                   ZIO.logFatal(s"Failed to serialize execution failure: $error2")
-                 }
-                 .unit
-           }.fork
+      _ <- runSteps(ref)
+             .provide(RemoteContext.inMemory)
+             .absorb
+             .catchAll { error =>
+               ZIO.logError(s"Persistent executor ${uniqueId} failed") *>
+                 ZIO.logErrorCause(Cause.die(error)) *>
+                 durablePromise
+                   .fail(Left(error))
+                   .provideEnvironment(promiseEnv)
+                   .absorb
+                   .catchAll { error2 =>
+                     ZIO.logFatal(s"Failed to serialize execution failure: $error2")
+                   }
+                   .unit
+             }
+             .fork
       // TODO: store running workflow and it's fiber
     } yield state.result
   }
@@ -535,6 +542,17 @@ final case class PersistentExecutor(
                   case Right(value)       => ZIO.succeed(value)
                 }
     } yield result
+
+  private def persistState(
+    id: String,
+    state0: PersistentExecutor.State[_, _],
+    stateChange: PersistentExecutor.StateChange,
+    state1: PersistentExecutor.State[_, _]
+  ): IO[IOException, Unit] = {
+    val key            = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
+    val persistedState = execEnv.serializer.serialize(state1)
+    kvStore.put("_zflow_workflow_states", key, persistedState).unit
+  }
 }
 
 object PersistentExecutor {
@@ -675,6 +693,10 @@ object PersistentExecutor {
     //TODO scala map function
     // private lazy val lookupName: Map[Any, String] =
     //   variables.map((t: (String, _)) => t._2 -> t._1)
+  }
+
+  object State {
+    implicit def schema[E, A]: Schema[State[E, A]] = Schema.fail("TODO")
   }
 
 }

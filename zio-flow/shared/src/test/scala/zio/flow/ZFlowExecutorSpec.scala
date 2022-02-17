@@ -173,7 +173,9 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
         promise  <- Promise.make[Nothing, String]
         ref      <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
         compileResult <-
-          inMemory.compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))
+          inMemory
+            .compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))
+            .provideCustom(RemoteContext.inMemory)
       } yield compileResult
 
       assertM(result)(equalTo(CompileStatus.Suspended))

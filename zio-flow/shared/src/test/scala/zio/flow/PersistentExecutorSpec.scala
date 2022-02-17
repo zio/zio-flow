@@ -2,8 +2,7 @@ package zio.flow
 
 import zio._
 import zio.flow.ZFlowExecutorSpec.testActivity
-import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore, PersistentExecutor}
-import zio.flow.utils.MockExecutors.mockPersistentTestClock
+import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion.{dies, equalTo, hasMessage}

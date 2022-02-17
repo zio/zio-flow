@@ -17,4 +17,18 @@ object ExecutingFlow {
         (ef: PersistentExecutingFlow[E, A]) => (ef.id, ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])
       )
   }
+
+  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
+    Schema.Enum2[InMemoryExecutingFlow[E, A], PersistentExecutingFlow[E, A], ExecutingFlow[E, A]](
+      Schema.Case[InMemoryExecutingFlow[E, A], ExecutingFlow[E, A]](
+        "InMemoryExecutingFlow",
+        Schema.fail[InMemoryExecutingFlow[E, A]]("Serialization not supported"),
+        _.asInstanceOf[InMemoryExecutingFlow[E, A]]
+      ),
+      Schema.Case[PersistentExecutingFlow[E, A], ExecutingFlow[E, A]](
+        "PersistentExecutingFlow",
+        PersistentExecutingFlow.schema[E, A],
+        _.asInstanceOf[PersistentExecutingFlow[E, A]]
+      )
+    )
 }

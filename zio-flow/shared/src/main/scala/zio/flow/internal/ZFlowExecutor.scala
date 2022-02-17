@@ -20,7 +20,7 @@ import java.time.Duration
 import zio._
 import zio.flow.ExecutingFlow.InMemoryExecutingFlow
 import zio.flow.serialization.{Deserializer, Serializer}
-import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, ZFlow}
+import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, RemoteContext, ZFlow}
 import zio.schema.Schema
 
 trait ZFlowExecutor[-U] {
@@ -84,9 +84,8 @@ object ZFlowExecutor {
 
     val clock: Clock = env.get[Clock]
 
-    def eval[A](r: Remote[A]): UIO[A] = UIO(
-      r.eval.getOrElse(throw new IllegalStateException("Could not be reduced to a value."))
-    )
+    def eval[A](r: Remote[A]): ZIO[RemoteContext, Nothing, A] =
+      r.eval.map(_.getOrElse(throw new IllegalStateException("Could not be reduced to a value.")))
 
     def lit[A](a: A): Remote[A] =
       Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
@@ -117,15 +116,20 @@ object ZFlowExecutor {
         acquire  = workflows.update(_ + ((uniqueId, ref)))
         release  = workflows.update(_ - uniqueId)
         promise <- Promise.make[E, A]
-        _       <- acquire.acquireRelease(release)(compile(promise, ref, (), flow)).provideEnvironment(env)
-        result  <- promise.await
+        _ <- acquire
+               .acquireRelease(release)(
+                 compile(promise, ref, (), flow).provideSomeLayer[R](RemoteContext.inMemory)
+               )
+               .provideEnvironment(env)
+        result <- promise.await
       } yield result
+
     def compile[I, E, A](
       promise: Promise[E, A],
       ref: Ref[State],
       input: I,
       flow: ZFlow[I, E, A]
-    ): ZIO[R, Nothing, CompileStatus] =
+    ): ZIO[R with RemoteContext, Nothing, CompileStatus] =
       flow match {
         case Return(value) => eval(value).intoPromise(promise) as CompileStatus.Done
 
@@ -271,7 +275,13 @@ object ZFlowExecutor {
             state <- ref.get
             _ <- state.getTransactionFlow match {
                    case Some(FlowPromise(flow, promise)) =>
-                     ref.update(_.addRetry(compile(promise, ref, (), flow).provideEnvironment(env)))
+                     ZIO.environment[R with RemoteContext].flatMap { currentEnv =>
+                       ref.update(
+                         _.addRetry(
+                           compile(promise, ref, (), flow).provideEnvironment(currentEnv)
+                         )
+                       )
+                     }
                    case None => ZIO.dieMessage("There is no transaction to retry.")
                  }
           } yield CompileStatus.Suspended
@@ -317,7 +327,7 @@ object ZFlowExecutor {
 
           val Iterate(initial, step, predicate) = iterate
 
-          def loop(remoteA: Remote[A]): ZIO[R, Nothing, CompileStatus] =
+          def loop(remoteA: Remote[A]): ZIO[R with RemoteContext, Nothing, CompileStatus] =
             Promise
               .make[E, A]
               .flatMap(p1 =>
