@@ -18,6 +18,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.ExecutingFlow.PersistentExecutingFlow
+import zio.flow.Remote.===>
 import zio.flow._
 import zio.flow.serialization._
 import zio.schema.Schema
@@ -54,9 +55,6 @@ final case class PersistentExecutor(
     Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
 
   def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
-
-  def applyFunction[R, E, A, B](f: Remote[A] => ZFlow[R, E, B], env: SchemaAndValue[R]): ZFlow[A, E, B] =
-    ZFlow.Apply(remoteA => f(remoteA).provide(env.toRemote))
 
   //
   //    // 1. Read the environment `A` => ZFlow.Input (peek the environment)
@@ -155,7 +153,7 @@ final case class PersistentExecutor(
         case apply @ Apply(_) =>
           val env = state.currentEnvironment
           ZIO.succeed(
-            StepResult(StateChange.setCurrent(apply.lambda(env.toRemote.asInstanceOf[Remote[apply.ValueA]])), None)
+            StepResult(StateChange.setCurrent(apply.lambda(env.toRemote)), None)
           )
 
         case fold @ Fold(_, _, _) =>
@@ -379,32 +377,32 @@ final case class PersistentExecutor(
             Some(Right(lit((name, vref))))
           )
 
-        case Iterate(initial, step0, predicate) =>
+        case i @ Iterate(initial, step0, predicate) =>
           val tempVarCounter = state.tempVarCounter
           val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
 
-          def iterate[R, E, A](
-            step: Remote[A] => ZFlow[R, E, A],
-            predicate: Remote[A] => Remote[Boolean],
-            stateVar: Remote[Variable[A]],
+          def iterate(
+            step: i.ValueA ===> ZFlow[Any, i.ValueE, i.ValueA],
+            predicate: i.ValueA ===> Boolean,
+            stateVar: Remote[Variable[i.ValueA]],
             boolRemote: Remote[Boolean]
-          ): ZFlow[R, E, A] =
+          ): ZFlow[Any, i.ValueE, i.ValueA] =
             ZFlow.ifThenElse(boolRemote)(
-              stateVar.get.flatMap { a =>
-                step(a).flatMap { a =>
-                  stateVar.set(a).flatMap { _ =>
-                    val boolRemote = predicate(a)
-                    iterate(step, predicate, stateVar, boolRemote)
-                  }
-                }
-              },
-              stateVar.get
+              for {
+                a0       <- stateVar.get(i.schemaA)
+                nextFlow <- step(a0)
+                a1       <- nextFlow.flatten
+                _        <- stateVar.set(a1)(i.schemaA)
+                continue <- predicate(a1)
+                result   <- iterate(step, predicate, stateVar, continue)
+              } yield result,
+              stateVar.get(i.schemaA)
             )
 
           val zFlow = for {
-            stateVar   <- ZFlow.newVar(tempVarName, initial)
-            stateValue <- stateVar.get
-            boolRemote <- predicate(stateValue)
+            stateVar   <- ZFlow.newVar[i.ValueA](tempVarName, initial)
+            stateValue <- stateVar.get(i.schemaA)
+            boolRemote <- ZFlow(predicate(stateValue))
             _          <- ZFlow.log(s"stateValue = $stateValue")
             _          <- ZFlow.log(s"boolRemote = $boolRemote")
             _          <- ZFlow.log(s"boolRemote = $boolRemote")

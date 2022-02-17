@@ -334,7 +334,8 @@ object ZFlowExecutor {
                 eval(predicate(remoteA)).flatMap { continue =>
                   if (continue)
                     for {
-                      status <- compile(p1, ref, input, step(remoteA))
+                      nextFlow <- eval(step(remoteA))
+                      status   <- compile[I, E, A](p1, ref, input, nextFlow)
                       status <-
                         if (status == CompileStatus.Done)
                           p1.await.exit
@@ -353,7 +354,10 @@ object ZFlowExecutor {
           loop(initial)
 
         case Apply(lambda) =>
-          compile(promise, ref, (), lambda(lit(input)))
+          for {
+            next   <- eval(lambda(lit(input)))
+            result <- compile(promise, ref, (), next)
+          } yield result
 
         case GetExecutionEnvironment =>
           promise.succeed(execEnv).as(CompileStatus.Done)

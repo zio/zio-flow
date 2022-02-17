@@ -132,7 +132,7 @@ object Remote {
 
   object RemoteFunction {
     def apply[A: Schema, B](fn: Remote[A] => Remote[B]): RemoteFunction[A, B] = {
-      val input = Variable(RemoteContext.generateFreshVariableName, implicitly[Schema[A]])
+      val input = Variable(RemoteContext.generateFreshVariableName, Schema[A])
       new RemoteFunction(
         input,
         fn(input)
