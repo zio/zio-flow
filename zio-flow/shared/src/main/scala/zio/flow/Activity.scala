@@ -16,6 +16,8 @@
 
 package zio.flow
 
+import zio.schema.Schema
+
 final case class Activity[-R, A](
   name: String,
   description: String,
@@ -23,22 +25,27 @@ final case class Activity[-R, A](
   check: ZFlow[R, ActivityError, A],
   compensate: ZFlow[A, ActivityError, Any]
 ) { self =>
-  def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] = ZFlow.RunActivity(input, self)
+  def apply(input: Remote[R])(implicit schema: Schema[A]): ZFlow[Any, ActivityError, A] = ZFlow.RunActivity(input, self)
 
-  def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit ev: (R1, R2) <:< R): ZFlow[Any, ActivityError, A] =
+  def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit
+    ev: (R1, R2) <:< R,
+    schema: Schema[A]
+  ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2)].apply(Remote.tuple2((R1, R2)))
 
   def apply[R1, R2, I3](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3])(implicit
-    ev: (R1, R2, I3) <:< R
+    ev: (R1, R2, I3) <:< R,
+    schema: Schema[A]
   ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2, I3)].apply(Remote.tuple3((R1, R2, i3)))
 
   def apply[R1, R2, I3, I4](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3], i4: Remote[I4])(implicit
-    ev: (R1, R2, I3, I4) <:< R
+    ev: (R1, R2, I3, I4) <:< R,
+    schema: Schema[A]
   ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2, I3, I4)].apply(Remote.tuple4((R1, R2, i3, i4)))
 
-  final def narrow[R0](implicit ev: R0 <:< R): Activity[R0, A] = {
+  def narrow[R0](implicit ev: R0 <:< R): Activity[R0, A] = {
     val _ = ev
 
     self.asInstanceOf[Activity[R0, A]]

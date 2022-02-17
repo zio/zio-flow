@@ -384,7 +384,7 @@ final case class PersistentExecutor(
           def iterate(
             step: i.ValueA ===> ZFlow[Any, i.ValueE, i.ValueA],
             predicate: i.ValueA ===> Boolean,
-            stateVar: Remote[Variable[i.ValueA]],
+            stateVar: Remote.Variable[i.ValueA],
             boolRemote: Remote[Boolean]
           ): ZFlow[Any, i.ValueE, i.ValueA] =
             ZFlow.ifThenElse(boolRemote)(

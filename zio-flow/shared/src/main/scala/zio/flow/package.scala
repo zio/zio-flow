@@ -26,15 +26,13 @@ import scala.language.implicitConversions
 package object flow extends Schemas {
   type ActivityError = Throwable
 
-  type Variable[A]
-
   type RemoteDuration    = Remote[Duration]
   type RemoteInstant     = Remote[Instant]
-  type RemoteVariable[A] = Remote[Variable[A]]
+  type RemoteVariable[A] = Remote.Variable[A]
   type SchemaOption[A]   = Schema.Optional[A]
   type SchemaList[A]     = Schema[List[A]]
 
-  implicit def RemoteVariable[A](remote: Remote[Variable[A]]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
+  implicit def RemoteVariable[A](remote: Remote.Variable[A]): RemoteVariableSyntax[A] = new RemoteVariableSyntax(
     remote
   )
   implicit def RemoteInstant(remote: Remote[Instant]): RemoteInstantSyntax = new RemoteInstantSyntax(
