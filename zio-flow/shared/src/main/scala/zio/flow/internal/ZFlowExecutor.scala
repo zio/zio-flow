@@ -21,11 +21,20 @@ import zio._
 import zio.flow.ExecutingFlow.InMemoryExecutingFlow
 import zio.flow.Remote.RemoteFunction
 import zio.flow.serialization.{Deserializer, Serializer}
-import zio.flow.{ActivityError, ExecutingFlow, ExecutionEnvironment, OperationExecutor, Remote, RemoteContext, ZFlow}
+import zio.flow.{
+  ActivityError,
+  ExecutingFlow,
+  ExecutionEnvironment,
+  OperationExecutor,
+  Remote,
+  RemoteContext,
+  SchemaOrNothing,
+  ZFlow
+}
 import zio.schema._
 
 trait ZFlowExecutor[-U] {
-  def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
+  def submit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
 }
 
 object ZFlowExecutor {
@@ -89,7 +98,7 @@ object ZFlowExecutor {
       r.eval.map(_.getOrElse(throw new IllegalStateException("Could not be reduced to a value.")))
 
     def lit[A](a: A): Remote[A] =
-      Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
+      Remote.Literal(a, SchemaOrNothing.fromSchema(Schema.fail("It is not expected to serialize this value")))
 
     def getVariable(workflowId: U, variableName: String): UIO[Option[Any]] =
       (for {
@@ -110,7 +119,7 @@ object ZFlowExecutor {
         _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
       } yield true).catchAll(_ => UIO(false))
 
-    def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
+    def submit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
       for {
         ref     <- Ref.make(State(TState.Empty, Map()))
@@ -144,6 +153,7 @@ object ZFlowExecutor {
           } yield ()).intoPromise(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
 
         case Modify(svar, f0) =>
+          // TODO: implement with Remote.Variable instead of casting to Ref
           val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
           (for {
             vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])

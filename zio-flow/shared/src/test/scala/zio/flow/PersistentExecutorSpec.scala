@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   val suite1 = suite("Operators in single run")(
-    testFlow("Return")(ZFlow.Return(12)) { result =>
+    testFlow("succeed")(ZFlow.succeed(12)) { result =>
       assertTrue(result == 12)
     },
     testFlow("newVar") {
@@ -65,6 +65,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         res <- ZFlow.newVar[Int]("res", 0)
         a   <- ZFlow.succeed(12).ensuring(res.set(15))
         b   <- res.get
+
       } yield a + b
     } { result =>
       assertTrue(result == 27)
@@ -227,7 +228,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  private def testFlowAndLogsExit[E: Schema, A: Schema](
+  private def testFlowAndLogsExit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
     label: String
   )(flow: ZFlow[Any, E, A])(assert: (Exit[E, A], Chunk[String]) => TestResult) =
     test(label) {
@@ -256,22 +257,24 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield assert(flowResult, logLines)
     }
 
-  private def testFlowAndLogs[E: Schema, A: Schema](
+  private def testFlowAndLogs[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
     label: String
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult) =
     testFlowAndLogsExit(label)(flow) { case (exit, logs) =>
       exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
     }
 
-  private def testFlow[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(assert: A => TestResult) =
+  private def testFlow[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](label: String)(flow: ZFlow[Any, E, A])(
+    assert: A => TestResult
+  ) =
     testFlowAndLogs(label)(flow) { case (result, _) => assert(result) }
 
-  private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
+  private def testFlowExit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](label: String)(flow: ZFlow[Any, E, A])(
     assert: Exit[E, A] => TestResult
   ) =
     testFlowAndLogsExit(label)(flow) { case (result, _) => assert(result) }
 
-  private def testRestartFlowAndLogs[E: Schema, A: Schema](
+  private def testRestartFlowAndLogs[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
     label: String
   )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Chunk[String], Chunk[String]) => TestResult) =
     test(label) {
@@ -301,9 +304,13 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  }
         rc <- ZIO.runtimeConfig
         results <- {
-          val break =
-            ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100)))
+          val break: ZFlow[Any, Nothing, Unit] =
+            (ZFlow.log("!!!BREAK!!!") *>
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))(
+              SchemaOrNothing.nothing,
+              SchemaOrNothing[Unit],
+              SchemaOrNothing[Unit]
+            ) // TODO: ambigous implicit :(
           val finalFlow = flow(break)
           for {
             fiber1 <- finalFlow

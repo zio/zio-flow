@@ -14,10 +14,6 @@ import zio.{Promise, Ref}
 
 object ZFlowExecutorSpec extends ZIOSpecDefault {
 
-  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing does not need to be serialised.")
-
-  implicit def variableSchema[A]: Schema[Variable[A]] = Schema.fail("Variable schema")
-
   val ifError: Remote[Int] => ZFlow[Any, Nothing, Int]      = r => ZFlow.succeed(r + 5)
   val ifSuccess: Remote[String] => ZFlow[Any, Nothing, Int] = r => ZFlow.succeed(r.length)
 
@@ -47,19 +43,19 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
       assertM(compileResult)(equalTo(12))
     },
     test("Test Now") {
-      val compileResult = ZFlow.now.evaluateTestInMem(implicitly[Schema[Instant]], nothingSchema)
+      val compileResult = ZFlow.now.evaluateTestInMem
       assertM(compileResult.map(i => i.getEpochSecond))(equalTo(Instant.now().getEpochSecond))
     } @@ ignore,
     test("Test Unwrap") {
       val compileResult = ZFlow
         .Unwrap[Any, Nothing, Int](Remote(ZFlow.succeed(12)))
-        .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
     test("Test ForEach") {
       val compileResult = ZFlow
         .foreach(Remote(List(10, 20, 30)))(_ + 5)
-        .evaluateTestInMem(implicitly[Schema[List[Int]]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(List(15, 25, 35)))
     } @@ ignore,
     test("Test Ensuring") {
@@ -67,18 +63,18 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
         .succeed(12)
         .ensuring(ZFlow.input[String])
         .provide("Some input")
-        .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
     test("Test Transaction") {
       val compileResult = ZFlow
         .Transaction[Any, Nothing, Int](ZFlow.succeed(12))
-        .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
     test("Test Input and Provide") {
       val compileResult =
-        ZFlow.input[String].provide("Some input").evaluateTestInMem(implicitly[Schema[String]], nothingSchema)
+        ZFlow.input[String].provide("Some input").evaluateTestInMem
       assertM(compileResult)(equalTo("Some input"))
     },
     test("Test Fork") {
@@ -86,11 +82,11 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
 
       ZFlow
         .Fork[Any, Nothing, Int](ZFlow.succeed(12))
-        .evaluateTestInMem(executingFlowSchema, nothingSchema)
+        .evaluateTestInMem
         .map(r => assert(r.isInstanceOf[ExecutingFlow[Nothing, Int]])(equalTo(true)))
     },
     test("Test Die")(
-      assertM(ZFlow.Die.evaluateTestInMem(nothingSchema, nothingSchema).exit)(
+      assertM(ZFlow.Die.evaluateTestInMem.exit)(
         dies(hasMessage(equalTo("Could not evaluate ZFlow")))
       )
     ),
@@ -101,40 +97,40 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
     test("Test NewVar")(
       ZFlow
         .NewVar("var1", Remote(20))
-        .evaluateTestInMem(variableSchema[Int], nothingSchema)
-        .map(r => assert(r.isInstanceOf[Variable[Int]])(equalTo(true)))
+        .evaluateTestInMem
+        .map(r => assert(r.isInstanceOf[Remote.Variable[Int]])(equalTo(true)))
     ),
     test("Retry Until - No Transaction") {
-      assertM(ZFlow.RetryUntil.evaluateTestInMem(nothingSchema, nothingSchema).exit)(
+      assertM(ZFlow.RetryUntil.evaluateTestInMem.exit)(
         dies(hasMessage(equalTo("There is no transaction to retry.")))
       )
     },
     test("Test OrTry - right succeeds") {
       val compileResult = ZFlow
         .OrTry[Any, Nothing, Int](ZFlow.transaction(_ => ZFlow.RetryUntil), ZFlow.succeed(12))
-        .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
     test("Test OrTry - left succeeds") {
       val compileResult = ZFlow
         .OrTry[Any, Nothing, Int](ZFlow.succeed(12), ZFlow.transaction(_ => ZFlow.RetryUntil))
-        .evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        .evaluateTestInMem
       assertM(compileResult)(equalTo(12))
     },
     test("Test Fold") {
       check(Gen.string, Gen.int) { case (s, v) =>
         val compileResult1 =
-          ZFlow.succeed(s).foldM(ifError, ifSuccess).evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+          ZFlow.succeed(s).foldM(ifError, ifSuccess).evaluateTestInMem
         assertM(compileResult1)(equalTo(s.length))
         val compileResult2 =
-          ZFlow.fail(v).foldM(ifError, ifSuccess).evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+          ZFlow.fail(v).foldM(ifError, ifSuccess).evaluateTestInMem
         assertM(compileResult2)(equalTo(v + 5))
       }
     },
     test("Test Fail") {
       implicit val schema: Schema[IllegalStateException] =
         Schema.primitive[String].transform(s => new IllegalStateException(s), exp => exp.getMessage)
-      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateTestInMem(nothingSchema, schema).exit)(
+      assertM(ZFlow.Fail(Remote(new IllegalStateException("Illegal"))).evaluateTestInMem.exit)(
         fails(hasMessage(equalTo("Illegal")))
       )
     },
@@ -143,7 +139,7 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
         val compileResult = (for {
           variable         <- ZFlow.newVar[Int]("variable1", v)
           modifiedVariable <- variable.modify(isOdd)
-        } yield modifiedVariable).evaluateTestInMem(implicitly[Schema[Boolean]], nothingSchema)
+        } yield modifiedVariable).evaluateTestInMem
         assertM(compileResult)(equalTo(false))
       }
     },
@@ -152,17 +148,17 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
         val compileResult = (for {
           variable         <- ZFlow.newVar[String]("variable1", s)
           modifiedVariable <- variable.modify(length)
-        } yield modifiedVariable).evaluateTestInMem(implicitly[Schema[Int]], nothingSchema)
+        } yield modifiedVariable).evaluateTestInMem
         assertM(compileResult)(equalTo(s.length))
       }
     },
     test("Test Iterate") {
-      val compileResult: ZFlow[Any, Nothing, Int] = ZFlow.Iterate(
+      val compileResult: ZFlow[Any, Nothing, Int] = ZFlow.Iterate[Any, Nothing, Int](
         Remote(12),
-        (r: Remote[Int]) => ZFlow.succeed(r + 1),
+        (r: Remote[Int]) => Remote[ZFlow[Any, Nothing, Int]](ZFlow.succeed(r + 1)),
         (r: Remote[Int]) => r === Remote(15)
       )
-      assertM(compileResult.evaluateTestInMem(implicitly[Schema[Int]], implicitly[Schema[ActivityError]]))(equalTo(12))
+      assertM(compileResult.evaluateTestInMem)(equalTo(12))
     }
   )
 

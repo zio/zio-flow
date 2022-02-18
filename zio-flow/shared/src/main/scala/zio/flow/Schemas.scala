@@ -7,6 +7,29 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
+trait SchemaOrNothing {
+  type A
+  val schema: Schema[A]
+}
+
+object SchemaOrNothing {
+  type Aux[_A] = SchemaOrNothing {
+    type A = _A
+  }
+
+  implicit def fromSchema[_A: Schema]: SchemaOrNothing.Aux[_A] = new SchemaOrNothing {
+    override type A = _A
+    override val schema: Schema[_A] = Schema[_A]
+  }
+
+  implicit def nothing: SchemaOrNothing.Aux[Nothing] = new SchemaOrNothing {
+    override type A = Nothing
+    override val schema: Schema[Nothing] = Schema.fail("nothing")
+  }
+
+  def apply[A: SchemaOrNothing.Aux]: SchemaOrNothing.Aux[A] = implicitly[SchemaOrNothing.Aux[A]]
+}
+
 trait Schemas extends LowerPrioritySchemas {
 
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.Duration(ChronoUnit.SECONDS))
@@ -76,6 +99,4 @@ trait Schemas extends LowerPrioritySchemas {
     Schema.EitherSchema(aSchema, bSchema)
 }
 
-trait LowerPrioritySchemas {
-  implicit val nothingSchema: Schema[Nothing] = Schema.fail("Nothing")
-}
+trait LowerPrioritySchemas {}

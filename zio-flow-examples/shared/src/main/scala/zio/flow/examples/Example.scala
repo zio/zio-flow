@@ -108,6 +108,7 @@ object UberEatsExample {
 
     case object Cancelled extends OrderConfirmationStatus
 
+    implicit def schema: Schema[OrderConfirmationStatus] = DeriveSchema.gen
   }
 
   sealed trait OrderState
@@ -158,7 +159,7 @@ object UberEatsExample {
     for {
       orderConfStatus <- getOrderConfirmationStatus(restaurant, order)
       _ <- ZFlow.ifThenElse(orderConfStatus === OrderConfirmationStatus.Confirmed)(
-             processOrderWorkflow,
+             processOrderWorkflow.unit,
              cancelOrderWorkflow(restaurant, order)
            )
     } yield ()
@@ -194,7 +195,7 @@ object UberEatsExample {
     } yield (tuple4._1, tuple4._2)
   }
 
-  def riderWorkflow(tuple2: Remote[(User, Address)]): ZFlow[Any, ActivityError, Any] = {
+  def riderWorkflow(tuple2: Remote[(User, Address)]): ZFlow[Any, ActivityError, Unit] = {
     implicit def schemaRiderState: Schema[RiderState] = DeriveSchema.gen[RiderState]
 
     def updateRiderState(rider: Remote[Rider], address: Remote[Address]): ZFlow[Any, ActivityError, RiderState] =
@@ -213,5 +214,5 @@ object UberEatsExample {
   }
 
   processOrderWorkflow.flatMap(riderWorkflow)
-  lazy val cancelOrderWorkflow: Activity[(Restaurant, Order), Any] = ???
+  lazy val cancelOrderWorkflow: Activity[(Restaurant, Order), Unit] = ???
 }

@@ -26,6 +26,7 @@ import zio.schema.Schema
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import scala.annotation.nowarn
 
 final case class PersistentExecutor(
   clock: Clock,
@@ -52,7 +53,7 @@ final case class PersistentExecutor(
     r.evalWithSchema.map(_.getOrElse(throw new IllegalStateException("Eval could not be reduced to Right of Either.")))
 
   def lit[A](a: A): Remote[A] =
-    Remote.Literal(a, Schema.fail("It is not expected to serialize this value"))
+    Remote.Literal(a, SchemaOrNothing.fromSchema(Schema.fail("It is not expected to serialize this value")))
 
   def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
@@ -84,11 +85,13 @@ final case class PersistentExecutor(
       // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
     } yield true).catchAll(_ => UIO(false))
 
-  def start[E: Schema, A: Schema](
+  def start[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
     uniqueId: String,
     flow: ZFlow[Any, E, A]
   ): UIO[DurablePromise[Either[Throwable, E], A]] = {
     import zio.flow.ZFlow._
+    implicit val se: Schema[E] = SchemaOrNothing[E].schema
+    implicit val sa: Schema[A] = SchemaOrNothing[A].schema
 
     def step(state: State[E, A]): ZIO[RemoteContext, IOException, StepResult] = {
       def onSuccess(value: Remote[_], stateChange: StateChange = StateChange.none): UIO[StepResult] =
@@ -192,20 +195,20 @@ final case class PersistentExecutor(
           )
 
         case ensuring @ Ensuring(flow, finalizer) =>
-          val schemaE: Schema[ensuring.ValueE] =
-            ensuring.errorSchema.asInstanceOf[Schema[ensuring.ValueE]]
-          val schemaA: Schema[ensuring.ValueA] =
-            ensuring.resultSchema.asInstanceOf[Schema[ensuring.ValueA]]
+          val schemaE: SchemaOrNothing.Aux[ensuring.ValueE] =
+            ensuring.errorSchema.asInstanceOf[SchemaOrNothing.Aux[ensuring.ValueE]]
+          val schemaA: SchemaOrNothing.Aux[ensuring.ValueA] =
+            ensuring.resultSchema.asInstanceOf[SchemaOrNothing.Aux[ensuring.ValueA]]
           val cont = Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
             RemoteFunction { (e: Remote[ensuring.ValueE]) =>
-              (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, Nothing, ensuring.ValueA]])(
+              (finalizer *> ZFlow.fail(e)(schemaE).asInstanceOf[ZFlow[Any, Nothing, ensuring.ValueA]])(
                 schemaE,
-                Schema[Unit],
+                SchemaOrNothing.fromSchema[Unit],
                 schemaA
               )
             }(schemaE),
             RemoteFunction { (a: Remote[ensuring.ValueA]) =>
-              (finalizer *> ZFlow.succeed(a))(schemaE, Schema[Unit], schemaA)
+              (finalizer *> ZFlow.succeed(a))(schemaE, SchemaOrNothing[Unit], schemaA)
             }(schemaA)
           )
 
@@ -229,7 +232,10 @@ final case class PersistentExecutor(
             resultPromise <- start[fork.ValueE, fork.ValueA](
                                forkId,
                                workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
-                             )(fork.schemaE, fork.schemaA)
+                             )(
+                               fork.errorSchema.asInstanceOf[SchemaOrNothing.Aux[fork.ValueE]],
+                               fork.resultSchema.asInstanceOf[SchemaOrNothing.Aux[fork.ValueA]]
+                             )
           } yield StepResult(
             StateChange.increaseForkCounter,
             Some(Right(PersistentExecutingFlow(forkId, resultPromise)))
@@ -237,8 +243,10 @@ final case class PersistentExecutor(
 
         case await @ Await(execFlow) =>
           implicit val schemaEE: Schema[Either[Throwable, await.ValueE]] = await.schemaEitherE
-          implicit val schemaE: Schema[await.ValueE]                     = await.schemaE
-          implicit val schemaA: Schema[await.ValueA]                     = await.schemaA
+          implicit val schemaE: SchemaOrNothing.Aux[await.ValueE] =
+            await.errorSchema.asInstanceOf[SchemaOrNothing.Aux[await.ValueE]]
+          implicit val schemaA: SchemaOrNothing.Aux[await.ValueA] =
+            await.resultSchema.asInstanceOf[SchemaOrNothing.Aux[await.ValueA]]
           for {
             executingFlow <- eval(execFlow).map(_.value)
             _             <- ZIO.log("Waiting for result")
@@ -247,7 +255,7 @@ final case class PersistentExecutor(
                 .asInstanceOf[PersistentExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
                 .result
                 .asInstanceOf[DurablePromise[Either[Throwable, await.ValueE], await.ValueA]]
-                .awaitEither(schemaEE, schemaA)
+                .awaitEither(SchemaOrNothing.fromSchema(schemaEE), schemaA.schema)
                 .provideEnvironment(promiseEnv)
                 .tapErrorCause(c => ZIO.log(s"Failed: $c"))
             _ <- ZIO.log(s"Await got result: $result")
@@ -258,12 +266,16 @@ final case class PersistentExecutor(
                     die => ZIO.die(new IOException("Awaited flow died", die)),
                     error =>
                       ZIO.succeed(
-                        Remote[Either[await.ValueE, await.ValueA]](Left(error))(schemaEither(schemaE, schemaA))
+                        Remote[Either[await.ValueE, await.ValueA]](Left(error))(
+                          schemaEither(schemaE.schema, schemaA.schema)
+                        )
                       )
                   ),
                 success =>
                   ZIO.succeed(
-                    Remote[Either[await.ValueE, await.ValueA]](Right(success))(schemaEither(schemaE, schemaA))
+                    Remote[Either[await.ValueE, await.ValueA]](Right(success))(
+                      schemaEither(schemaE.schema, schemaA.schema)
+                    )
                   )
               )
           } yield StepResult(StateChange.none, Some(Right(finishWith)))
@@ -272,12 +284,13 @@ final case class PersistentExecutor(
           for {
             d     <- eval(duration).map(_.value)
             forkId = uniqueId + s"_timeout_${state.forkCounter}"
-            resultPromise <- start[timeout.ValueE, timeout.ValueA](
-                               forkId,
-                               flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
-                             )(timeout.schemaE, timeout.schemaA)
+            resultPromise <-
+              start[timeout.ValueE, timeout.ValueA](
+                forkId,
+                flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
+              )(timeout.errorSchema, timeout.resultSchema.asInstanceOf[SchemaOrNothing.Aux[timeout.ValueA]])
             result <- resultPromise
-                        .awaitEither(timeout.schemaEitherE, timeout.schemaA)
+                        .awaitEither(SchemaOrNothing.fromSchema(timeout.schemaEitherE), timeout.schemaA)
                         .provideEnvironment(promiseEnv)
                         .tapErrorCause(c => ZIO.log(s"Failed: $c"))
                         .timeout(d)
@@ -399,8 +412,8 @@ final case class PersistentExecutor(
           )
 
         case i @ Iterate(initial, step0, predicate) =>
-          implicit val schemaE: Schema[i.ValueE] = i.errorSchema
-          implicit val schemaA: Schema[i.ValueA] = i.resultSchema
+          implicit val schemaE: Schema[i.ValueE] = i.errorSchema.schema
+          implicit val schemaA: Schema[i.ValueA] = i.resultSchema.schema
 
           val tempVarCounter = state.tempVarCounter
           val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
@@ -413,10 +426,10 @@ final case class PersistentExecutor(
           ): ZFlow[Any, i.ValueE, i.ValueA] =
             ZFlow.ifThenElse(boolRemote)(
               for {
-                a0       <- stateVar.get
+                a0       <- stateVar.get(schemaA)
                 nextFlow <- step(a0)
-                a1       <- ZFlow.unwrap(nextFlow)
-                _        <- stateVar.set(a1)(i.resultSchema)
+                a1       <- ZFlow.unwrap(nextFlow)(i.errorSchema, i.resultSchema)
+                _        <- stateVar.set(a1)(schemaA)
                 continue <- predicate(a1)
                 result   <- iterate(step, predicate, stateVar, continue)
               } yield result,
@@ -553,7 +566,9 @@ final case class PersistentExecutor(
     } yield state.result
   }
 
-  def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] =
+  def submit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] = {
+    implicit val schemaE: Schema[E] = SchemaOrNothing[E].schema
+    implicit val schemaA: Schema[A] = SchemaOrNothing[A].schema
     for {
       resultPromise <- start(uniqueId, flow)
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
@@ -564,17 +579,19 @@ final case class PersistentExecutor(
                   case Right(value)       => ZIO.succeed(value)
                 }
     } yield result
+  }
 
-  private def persistState(
+  @nowarn private def persistState(
     id: String,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
     state1: PersistentExecutor.State[_, _]
-  ): IO[IOException, Unit] = {
-    val key            = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
-    val persistedState = execEnv.serializer.serialize(state1)
-    kvStore.put("_zflow_workflow_states", key, persistedState).unit
-  }
+  ): IO[IOException, Unit] =
+    // TODO
+//    val key            = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
+//    val persistedState = execEnv.serializer.serialize(state1)
+//    kvStore.put("_zflow_workflow_states", key, persistedState).unit
+    ZIO.unit
 }
 
 object PersistentExecutor {

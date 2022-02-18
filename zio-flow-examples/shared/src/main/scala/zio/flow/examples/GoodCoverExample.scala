@@ -51,7 +51,7 @@ object PolicyRenewalExample {
   }
 
   case class Buyer(id: String, address: PropertyAddress, email: Email)
-  object Buyet {
+  object Buyer {
     implicit val buyerSchema: Schema[Buyer] = DeriveSchema.gen[Buyer]
   }
 
@@ -138,27 +138,27 @@ object PolicyRenewalExample {
 
   def manualEvalReminderFlow(
     policy: Remote[Policy],
-    evaluationDone: RemoteVariable[Boolean]
-  ): ZFlow[Any, ActivityError, Any] =
+    evaluationDone: Remote[RemoteVariable[Boolean]]
+  ): ZFlow[Any, ActivityError, Unit] =
     ZFlow.doWhile {
       for {
         option <- evaluationDone.waitUntil(_ === true).timeout[Nothing, Unit](Remote.ofDays(1L))
         loop   <- option.isNone.toFlow
         _      <- ZFlow.when(loop)(sendReminderEmailToEvaluator(policy))
       } yield loop
-    }
+    }.unit
 
   def policyRenewalReminderFlow(
     policy: Remote[Policy],
-    buyerResponded: RemoteVariable[Option[Boolean]]
-  ): ZFlow[Any, ActivityError, Any] =
+    buyerResponded: Remote[RemoteVariable[Option[Boolean]]]
+  ): ZFlow[Any, ActivityError, Unit] =
     ZFlow.doWhile {
       for {
         option <- buyerResponded.waitUntil(_.isSome).timeout[Nothing, Unit](Remote.ofDays(2L))
         loop   <- option.isNone.toFlow
         _      <- ZFlow.when(loop)(sendReminderEmailToInsured(policy))
       } yield loop
-    }
+    }.unit
 
   lazy val paymentFlow: ZFlow[Buyer, ActivityError, Boolean] =
     ZFlow.newVar("payment-successful", false).flatMap { paymentSuccessful =>
@@ -181,7 +181,7 @@ object PolicyRenewalExample {
       ???
     )
 
-  val stateConstructor: ZFlow[Any, Nothing, (Variable[Boolean], Variable[Option[Boolean]])] =
+  val stateConstructor: ZFlow[Any, Nothing, (Remote.Variable[Boolean], Remote.Variable[Option[Boolean]])] =
     for {
       evaluationDone <- ZFlow.newVar[Boolean]("evaluationDone", false)
       renewPolicy    <- ZFlow.newVar[Option[Boolean]]("renewPolicy", None)
@@ -194,8 +194,8 @@ object PolicyRenewalExample {
 
       def performPolicyRenewal(
         policy: Remote[Policy],
-        manualEvalDone: RemoteVariable[Boolean],
-        renewPolicy: RemoteVariable[Option[Boolean]]
+        manualEvalDone: Remote[RemoteVariable[Boolean]],
+        renewPolicy: Remote[RemoteVariable[Option[Boolean]]]
       ): ZFlow[PaymentMethod, ActivityError, Unit] =
         for {
           claimStatus     <- policyClaimStatus(policy)

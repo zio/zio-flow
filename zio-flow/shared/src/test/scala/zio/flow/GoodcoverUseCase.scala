@@ -1,8 +1,8 @@
 package zio.flow
 
 import java.net.URI
-
 import zio.flow
+import zio.flow.Remote.RemoteFunction
 import zio.flow.ZFlowMethodSpec.setBoolVarAfterSleep
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
@@ -70,7 +70,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     ZFlow.unit
   )
 
-  def waitAndSetEvalDoneToTrue(evaluationDone: RemoteVariable[Boolean]): ZFlow[Any, Nothing, Unit] =
+  def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariable[Boolean]]): ZFlow[Any, Nothing, Unit] =
     for {
       boolVar <- evaluationDone
       _       <- ZFlow.sleep(Remote.ofSeconds(3L))
@@ -78,27 +78,29 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     } yield ()
 
   def manualEvalReminderFlow(
-    manualEvalDone: RemoteVariable[Boolean]
+    manualEvalDone: Remote[RemoteVariable[Boolean]]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     Remote(true),
-    (_: Remote[Boolean]) =>
-      for {
-        bool <- manualEvalDone
-        _    <- setBoolVarAfterSleep(bool, 5, true).fork
-        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
-        loop <- bool.get
-        _    <- ZFlow.log("Send reminder email to evaluator")
-        _    <- reminderEmailForManualEvaluation(emailRequest)
-      } yield !loop,
+    (_: Remote[Boolean]) => // TODO: could be eliminated by reenabling implicit R=>F conversion
+      Remote[ZFlow[Any, ActivityError, Boolean]](
+        for {
+          bool <- manualEvalDone
+          _    <- setBoolVarAfterSleep(bool, 5, true).fork
+          _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+          loop <- bool.get
+          _    <- ZFlow.log("Send reminder email to evaluator")
+          _    <- reminderEmailForManualEvaluation(emailRequest)
+        } yield !loop
+      ),
     (b: Remote[Boolean]) => b
   )
 
   def policyPaymentReminderFlow(
-    renewPolicy: RemoteVariable[Boolean]
+    renewPolicy: Remote[RemoteVariable[Boolean]]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.Iterate(
     Remote(true),
     (_: Remote[Boolean]) =>
-      for {
+      Remote[ZFlow[Any, ActivityError, Boolean]](for {
         _    <- ZFlow.log("Inside policy renewal reminder flow.")
         bool <- renewPolicy
         _    <- setBoolVarAfterSleep(bool, 5, true).fork
@@ -106,7 +108,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
         loop <- bool.get
         _    <- ZFlow.log("Send reminder email to customer for payment")
         _    <- reminderEmailForManualEvaluation(emailRequest)
-      } yield !loop,
+      } yield !loop),
     (b: Remote[Boolean]) => b
   )
 

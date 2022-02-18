@@ -9,7 +9,7 @@ trait SchemaAndValue[+A] { self =>
 
   def value: Subtype
 
-  def toRemote: Remote[A] = Remote.Literal(value, schema)
+  def toRemote: Remote[A] = Remote.Literal(value, SchemaOrNothing.fromSchema(schema))
 
   def unsafeCoerce[B]: SchemaAndValue[B] = self.asInstanceOf[SchemaAndValue[B]]
 }
@@ -24,6 +24,9 @@ object SchemaAndValue {
       override def value: Subtype = value0
       //TODO : Equals and Hashcode required
     }
+
+  def apply[A](schema0: SchemaOrNothing.Aux[A], value0: A): SchemaAndValue[A] =
+    apply(schema0.schema, value0)
 
   def unapply[A](schemaAndValue: SchemaAndValue[A]): Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
     Some((schemaAndValue.schema, schemaAndValue.value))

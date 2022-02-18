@@ -13,12 +13,12 @@ object RemoteOptionSpec extends RemoteSpecBase {
         optionHandled <-> 24
       },
       test("HandleOption for None") {
-        val option        = Remote(None)
+        val option        = Remote[Option[Int]](None)
         val optionHandled = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
         optionHandled <-> 0
       },
       test("isSome") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -31,7 +31,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("isNone") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None) // TODO: otherwise diverging implicits. Should Remote be invariant?
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -44,7 +44,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("isEmpty") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -57,7 +57,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("isDefined") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -70,7 +70,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("knownSize") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -83,7 +83,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("knownSize") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -97,7 +97,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("orElse") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -110,7 +110,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(_.get)
       },
       test("OptionSpec") {
-        val op1 = Remote(None)
+        val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         val op3 = Remote(Option(10))
         ZIO
