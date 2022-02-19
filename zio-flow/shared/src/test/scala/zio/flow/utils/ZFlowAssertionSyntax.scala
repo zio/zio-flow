@@ -57,7 +57,7 @@ object ZFlowAssertionSyntax {
     def evaluateTestPersistent(id: String)(implicit
       schemaA: SchemaOrNothing.Aux[A],
       schemaE: SchemaOrNothing.Aux[E]
-    ): ZIO[Clock with DurableLog with KeyValueStore, E, A] =
+    ): ZIO[Console with Clock with DurableLog with KeyValueStore, E, A] =
       mockPersistentTestClock.use { executor =>
         executor.submit(id, zflow)
       }

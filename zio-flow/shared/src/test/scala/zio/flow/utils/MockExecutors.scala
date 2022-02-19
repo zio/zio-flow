@@ -49,14 +49,17 @@ object MockExecutors {
       ref
     )
 
-  val mockPersistentTestClock: ZManaged[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
-    PersistentExecutor
-      .make(
-        mockOpExec.asInstanceOf[OperationExecutor[Any]],
-        Serializer.json,
-        Deserializer.json
-      )
-      .build
-      .map(_.get[ZFlowExecutor[String]])
+  val mockPersistentTestClock
+    : ZManaged[Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
+    ZManaged.environment[Console with Clock].flatMap { env =>
+      PersistentExecutor
+        .make(
+          mockOpExec.provideEnvironment(env),
+          Serializer.json,
+          Deserializer.json
+        )
+        .build
+        .map(_.get[ZFlowExecutor[String]])
+    }
   }
 }

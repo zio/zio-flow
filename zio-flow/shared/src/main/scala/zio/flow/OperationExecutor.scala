@@ -16,13 +16,19 @@
 
 package zio.flow
 
-import zio.ZIO
+import zio.{ZEnvironment, ZIO}
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
  *
  * TODO: Delete R from operation executor
  */
-trait OperationExecutor[-R] {
+trait OperationExecutor[-R] { self =>
   def execute[I, A](input: I, operation: Operation[I, A]): ZIO[R, ActivityError, A]
+
+  def provideEnvironment(env: ZEnvironment[R]): OperationExecutor[Any] =
+    new OperationExecutor[Any] {
+      override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
+        self.execute(input, operation).provideEnvironment(env)
+    }
 }
