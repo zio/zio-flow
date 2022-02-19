@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio._
+import zio.flow.ZFlowExecutorSpec.test
 import zio.flow.utils.MockHelpers.mockActivity
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
@@ -182,6 +183,20 @@ object ZFlowMethodSpec extends ZIOSpecDefault {
       assertM(result)(equalTo(()))
     })
 
+  val suite6 = suite("Stack safety")(
+    test("flatMap + ifThenElse is stack safe") {
+      def flow(v: Remote[Remote.Variable[Int]]): ZFlow[Any, Nothing, Unit] =
+        for {
+          current <- v.get
+          result <-
+            ZFlow.ifThenElse(current === 100000)(ZFlow.unit, v.update(_ + 1) *> flow(v))
+        } yield result
+
+      val testFlow = ZFlow.newVar("counter", 0).flatMap(flow)
+      assertCompletes
+    }
+  )
+
   override def spec =
-    suite("Testing interactions between ZFlows")(suite1, suite2, suite3, suite4, suite5)
+    suite("Testing interactions between ZFlows")(suite1, suite2, suite3, suite4, suite5, suite6)
 }

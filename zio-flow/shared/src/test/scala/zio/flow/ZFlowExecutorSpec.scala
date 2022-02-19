@@ -7,7 +7,7 @@ import zio.flow.internal.ZFlowExecutor.InMemory.{CompileStatus, State, TState}
 import zio.flow.utils.MockExecutors.mockInMemoryTestClock
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
-import zio.test.Assertion.{dies, equalTo, fails, hasMessage}
+import zio.test.Assertion.{anything, dies, equalTo, fails, hasMessage}
 import zio.test.TestAspect.ignore
 import zio.test._
 import zio.{Promise, Ref}
@@ -167,7 +167,7 @@ object ZFlowExecutorSpec extends ZIOSpecDefault {
       val result = for {
         inMemory <- mockInMemoryTestClock
         promise  <- Promise.make[Nothing, String]
-        ref      <- Ref.make[State](State(TState.Empty, Map.empty[String, Ref[_]]))
+        ref      <- Ref.make[State](State(TState.Empty, Set.empty[String]))
         compileResult <-
           inMemory
             .compile[Any, Nothing, String](promise, ref, 12, ZFlow.transaction(_ => ZFlow.RetryUntil))

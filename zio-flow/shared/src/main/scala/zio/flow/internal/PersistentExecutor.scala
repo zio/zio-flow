@@ -438,8 +438,8 @@ final case class PersistentExecutor(
                 a1       <- ZFlow.unwrap(nextFlow)(i.errorSchema, i.resultSchema)
                 _        <- stateVar.set(a1)(schemaA)
                 continue <- predicate(a1)
-//                result   <- iterate(step, predicate, stateVar, continue)// TODO: FIX SOE
-              } yield a0, //result,
+                result   <- iterate(step, predicate, stateVar, continue)
+              } yield result,
               stateVar.get
             )
 

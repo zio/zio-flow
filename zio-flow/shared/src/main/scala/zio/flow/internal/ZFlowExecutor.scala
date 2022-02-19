@@ -19,7 +19,7 @@ package zio.flow.internal
 import java.time.Duration
 import zio._
 import zio.flow.ExecutingFlow.InMemoryExecutingFlow
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.{===>, RemoteFunction}
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.{
   ActivityError,
@@ -28,10 +28,14 @@ import zio.flow.{
   OperationExecutor,
   Remote,
   RemoteContext,
+  RemoteVariableName,
+  SchemaAndValue,
   SchemaOrNothing,
   ZFlow
 }
 import zio.schema._
+
+import java.io.IOException
 
 trait ZFlowExecutor[-U] {
   def submit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
@@ -94,35 +98,16 @@ object ZFlowExecutor {
 
     val clock: Clock = env.get[Clock]
 
-    def eval[A](r: Remote[A]): ZIO[RemoteContext, Nothing, A] =
-      r.eval.map(_.getOrElse(throw new IllegalStateException("Could not be reduced to a value.")))
+    def eval[A](r: Remote[A]): ZIO[RemoteContext, Nothing, SchemaAndValue[A]] =
+      r.evalWithSchema.map(_.getOrElse(throw new IllegalStateException("Could not be reduced to a value.")))
 
     def lit[A](a: A): Remote[A] =
       Remote.Literal(a, SchemaOrNothing.fromSchema(Schema.fail("It is not expected to serialize this value")))
 
-    def getVariable(workflowId: U, variableName: String): UIO[Option[Any]] =
-      (for {
-        map      <- workflows.get
-        stateRef <- ZIO.fromOption(map.get(workflowId))
-        state    <- stateRef.get
-        vRef     <- ZIO.fromOption(state.getVariable(variableName))
-        v        <- vRef.get
-      } yield v).unsome
-
-    def setVariable(workflowId: U, variableName: String, value: Any): UIO[Boolean] =
-      (for {
-        map      <- workflows.get
-        stateRef <- ZIO.fromOption(map.get(workflowId))
-        state    <- stateRef.get
-        vRef     <- ZIO.fromOption(state.getVariable(variableName))
-        _        <- vRef.set(value.asInstanceOf)
-        _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
-      } yield true).catchAll(_ => UIO(false))
-
     def submit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A] =
       //def compile[I, E, A](ref: Ref[State], input: I, flow: ZFlow[I, E, A]): ZIO[R, Nothing, Promise[E, A]] =
       for {
-        ref     <- Ref.make(State(TState.Empty, Map()))
+        ref     <- Ref.make(State(TState.Empty, Set.empty))
         acquire  = workflows.update(_ + ((uniqueId, ref)))
         release  = workflows.update(_ - uniqueId)
         promise <- Promise.make[E, A]
@@ -141,28 +126,30 @@ object ZFlowExecutor {
       flow: ZFlow[I, E, A]
     ): ZIO[R with RemoteContext, Nothing, CompileStatus] =
       flow match {
-        case Return(value) => eval(value).intoPromise(promise) as CompileStatus.Done
+        case Return(value) => eval(value).map(_.value).intoPromise(promise) as CompileStatus.Done
 
         case Now => clock.instant.exit.flatMap(e => promise.done(e)) as CompileStatus.Done
 
         case WaitTill(instant) =>
           (for {
             start <- clock.instant
-            end   <- eval(instant)
+            end   <- eval(instant).map(_.value)
             _     <- clock.sleep(Duration.between(start, end))
           } yield ()).intoPromise(promise.asInstanceOf[Promise[Nothing, Unit]]) as CompileStatus.Done
 
         case Modify(svar, f0) =>
           // TODO: implement with Remote.Variable instead of casting to Ref
-          val f = f0.asInstanceOf[Remote[Any] => Remote[(A, Any)]]
+          val f = f0.asInstanceOf[Any ===> (A, Any)]
           (for {
-            vRef       <- eval(svar).map(_.asInstanceOf[Ref[Any]])
-            value      <- vRef.get
-            tuple      <- eval(f(lit(value)))
-            (a, value2) = tuple
-            _          <- vRef.set(value2)
-            _          <- ref.update(_.addReadVar(vRef))
-          } yield a).intoPromise(promise) as CompileStatus.Done
+            variable <- eval(svar).map(_.value)
+            optValue <- RemoteContext.getVariable[Any](variable.identifier)
+            value <- ZIO
+                       .fromOption(optValue)
+                       .orElse(ZIO.dieMessage(s"Undefined variable ${variable.identifier} in Modify"))
+            tuple             <- eval(f(lit(value))).map(_.value)
+            (result, newValue) = tuple
+            _                 <- RemoteContext.setVariable[Any](variable.identifier, newValue)
+          } yield result).intoPromise(promise) as CompileStatus.Done
 
         case fold @ Fold(_, _, _) =>
           //TODO : Clean up required, why not 2 forkDaemons - try and try to reason about this
@@ -247,7 +234,7 @@ object ZFlowExecutor {
 
         case RunActivity(input, activity) =>
           (for {
-            input  <- eval(input)
+            input  <- eval(input).map(_.value)
             output <- opExec.execute(input, activity.operation)
             _      <- ref.update(_.addCompensation(activity.compensate.unit.provide(lit(output))))
           } yield output).intoPromise(promise.asInstanceOf[Promise[ActivityError, A]]) as CompileStatus.Done
@@ -277,14 +264,14 @@ object ZFlowExecutor {
 
         case Unwrap(remote) =>
           for {
-            evaluatedFlow <- eval(remote)
+            evaluatedFlow <- eval(remote).map(_.value)
             status        <- compile(promise, ref, input, evaluatedFlow)
           } yield status
 
         case UnwrapRemote(remote) =>
           for {
-            evaluatedRemote <- eval(remote)
-            evaluated       <- eval(evaluatedRemote)
+            evaluatedRemote <- eval(remote).map(_.value)
+            evaluated       <- eval(evaluatedRemote).map(_.value)
             _               <- promise.succeed(evaluated)
           } yield CompileStatus.Done
 
@@ -301,7 +288,7 @@ object ZFlowExecutor {
           val p = promise.asInstanceOf[Promise[E, Option[timeout.ValueA]]]
           for {
             innerPromise <- Promise.make[E, timeout.ValueA]
-            duration     <- eval(duration)
+            duration     <- eval(duration).map(_.value)
 
             _ <- compile[I, E, timeout.ValueA](innerPromise, ref, input, flow)
             //TODO check other operations ensure done/to (promise) is called with await.
@@ -314,9 +301,11 @@ object ZFlowExecutor {
         case provide @ Provide(_, _) =>
           for {
             innerPromise <- Promise.make[provide.ValueE, provide.ValueA]
-            status <- eval(provide.value).flatMap(valueA =>
-                        compile(innerPromise, ref, valueA, provide.flow)
-                      ) //TODO : Input is provided in compile
+            status <- eval(provide.value)
+                        .map(_.value)
+                        .flatMap(valueA =>
+                          compile(innerPromise, ref, valueA, provide.flow)
+                        ) //TODO : Input is provided in compile
             flowStatus <- if (status == CompileStatus.Done)
                             innerPromise.await.intoPromise(promise) as CompileStatus.Done
                           else innerPromise.await.intoPromise(promise).forkDaemon as CompileStatus.Suspended
@@ -352,23 +341,24 @@ object ZFlowExecutor {
 
         case Await(execFlow) =>
           for {
-            execflow <- eval(execFlow).map(_.asInstanceOf[InMemoryExecutingFlow[E, A]])
+            execflow <- eval(execFlow).map(_.value.asInstanceOf[InMemoryExecutingFlow[E, A]])
             _        <- execflow.fiber.join.intoPromise(promise).forkDaemon
           } yield CompileStatus.Done
 
         case Interrupt(execFlow) =>
           for {
-            execflow <- eval(execFlow).map(_.asInstanceOf[InMemoryExecutingFlow[E, A]])
+            execflow <- eval(execFlow).map(_.value.asInstanceOf[InMemoryExecutingFlow[E, A]])
             _        <- execflow.fiber.interrupt.flatMap(e => promise.done(e)).forkDaemon
           } yield CompileStatus.Done
 
-        case Fail(error) => eval(error).flatMap(promise.fail) as CompileStatus.Done
+        case Fail(error) => eval(error).map(_.value).flatMap(promise.fail) as CompileStatus.Done
 
         case NewVar(name, initial) =>
           (for {
             value <- eval(initial)
-            vref  <- Ref.make(value)
-            _     <- ref.update(_.addVariable(name, vref))
+            vref   = Remote.Variable(RemoteVariableName(name), SchemaOrNothing.fromSchema(value.schema))
+            _     <- RemoteContext.setVariable(RemoteVariableName(name), value.value)
+            _     <- ref.update(_.addVariable(name))
           } yield vref.asInstanceOf[A]).intoPromise(promise) as CompileStatus.Done
 
         case Log(message) =>
@@ -385,10 +375,10 @@ object ZFlowExecutor {
             Promise
               .make[E, A]
               .flatMap(p1 =>
-                eval(predicate(remoteA)).flatMap { continue =>
+                eval(predicate(remoteA)).map(_.value).flatMap { continue =>
                   if (continue)
                     for {
-                      nextFlow <- eval(step(remoteA))
+                      nextFlow <- eval(step(remoteA)).map(_.value)
                       status   <- compile[I, E, A](p1, ref, input, nextFlow)
                       status <-
                         if (status == CompileStatus.Done)
@@ -402,14 +392,14 @@ object ZFlowExecutor {
                             .forkDaemon as CompileStatus.Suspended
                     } yield status
                   else
-                    eval(remoteA).flatMap(a => promise.succeed(a) as CompileStatus.Done)
+                    eval(remoteA).map(_.value).flatMap(a => promise.succeed(a) as CompileStatus.Done)
                 }
               )
           loop(initial)
 
         case Apply(lambda) =>
           for {
-            next   <- eval(lambda(lit(input)))
+            next   <- eval(lambda(lit(input))).map(_.value)
             result <- compile(promise, ref, (), next)
           } yield result
 
@@ -444,8 +434,8 @@ object ZFlowExecutor {
 
     final case class State(
       tstate: TState,
-      variables: Map[String, Ref[_]], // TODO : variable should be case class (TRef, TReEntrantLock), instead of Ref
-      retry: UIO[Any] = ZIO.unit      // TODO : Delete this, use zio STM's retry mechanism
+      variables: Set[String],    // TODO : variable should be case class (TRef, TReEntrantLock), instead of Ref
+      retry: UIO[Any] = ZIO.unit // TODO : Delete this, use zio STM's retry mechanism
       //TODO : Add a variable lock of type TReentrantLock
     ) {
       self =>
@@ -453,12 +443,12 @@ object ZFlowExecutor {
       def addCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]): State =
         copy(tstate = tstate.addCompensation(newCompensation))
 
-      def addReadVar(ref: Ref[_]): State =
-        copy(tstate = tstate.addReadVar(lookupName(ref)))
+      def addReadVar(name: String): State =
+        copy(tstate = tstate.addReadVar(name))
 
       def addRetry(retry: UIO[Any]): State = copy(retry = self.retry *> retry)
 
-      def addVariable(name: String, ref: Ref[_]): State = copy(variables = variables + (name -> ref))
+      def addVariable(name: String): State = copy(variables = variables + name)
 
       def enterTransaction[E, A](flow: ZFlow[Any, E, A], promise: Promise[E, A]): State =
         copy(tstate = tstate.enterTransaction(flow, promise))
@@ -467,13 +457,6 @@ object ZFlowExecutor {
         case TState.Empty                          => None
         case TState.Transaction(flowPromise, _, _) => Some(flowPromise)
       }
-
-      def getVariable(name: String): Option[Ref[_]] = variables.get(name)
-
-      //TODO scala map function
-      private lazy val lookupName: Map[Ref[_], String] = variables.map { case (l, r) =>
-        (r, l)
-      }.toMap
     }
 
     sealed trait TState {

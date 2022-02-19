@@ -34,7 +34,7 @@ import scala.language.implicitConversions
  */
 sealed trait Remote[+A] {
 
-  val schema: SchemaOrNothing.Aux[_ <: A]
+  def schema: SchemaOrNothing.Aux[_ <: A]
 
   def eval: ZIO[RemoteContext, Nothing, Either[Remote[A], A]] = evalWithSchema.map(_.map(_.value))
 
@@ -136,7 +136,7 @@ object Remote {
       )
   }
 
-  final case class RemoteFunction[A, B] private (
+  final case class EvaluatedRemoteFunction[A, B] private[flow] (
     input: Variable[A],
     result: Remote[B]
   ) extends Remote[B] {
@@ -149,19 +149,27 @@ object Remote {
       RemoteApply(this, a)
   }
 
-  object RemoteFunction {
-    def apply[A: SchemaOrNothing.Aux, B](fn: Remote[A] => Remote[B]): RemoteFunction[A, B] = {
+  final case class RemoteFunction[A: SchemaOrNothing.Aux, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
+    lazy val evaluated: EvaluatedRemoteFunction[A, B] = {
       val input = Variable(RemoteContext.generateFreshVariableName, SchemaOrNothing[A])
-      new RemoteFunction(
+      EvaluatedRemoteFunction(
         input,
         fn(input)
       )
     }
+
+    lazy val schema = evaluated.schema
+
+    def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
+      evaluated.result.evalWithSchema
+
+    def apply(a: Remote[A]): Remote[B] =
+      RemoteApply(evaluated, a)
   }
 
   type ===>[A, B] = RemoteFunction[A, B]
 
-  final case class RemoteApply[A, B](f: RemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+  final case class RemoteApply[A, B](f: EvaluatedRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
     val schema = f.schema
 
     override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
@@ -647,6 +655,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .left
           .asInstanceOf[Schema.Tuple[A, B]]
@@ -673,6 +683,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .left
           .asInstanceOf[Schema.Tuple[A, B]]
@@ -699,6 +711,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .right
       )
@@ -721,6 +735,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
           .asInstanceOf[Schema.Tuple[(A, B), C]]
@@ -753,6 +769,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
           .asInstanceOf[Schema.Tuple[(A, B), C]]
@@ -783,6 +801,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
           .asInstanceOf[Schema.Tuple[(A, B), C]]
@@ -809,6 +829,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[D] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .right
       )
@@ -831,6 +853,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
@@ -865,6 +889,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
@@ -899,6 +925,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
@@ -929,6 +957,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[D] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
@@ -955,6 +985,8 @@ object Remote {
     val schema: SchemaOrNothing.Aux[E] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .right
       )
@@ -1357,7 +1389,7 @@ object Remote {
   }
 
   object Lazy {
-    def apply[A: Schema](value: () => Remote[A]): Remote[A] = {
+    def apply[A: SchemaOrNothing.Aux](value: () => Remote[A]): Remote[A] = {
       lazy val remote             = value()
       val value2: () => Remote[A] = () => remote
       new Lazy(value2, SchemaOrNothing[A])
