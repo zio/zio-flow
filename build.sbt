@@ -62,6 +62,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
     ) ++
       commonTestDependencies.map(_ % Test)
   )
+  .settings(fork := true)
   .settings(testFrameworks += zioTest)
 
 lazy val zioFlowJS = zioFlow.js

@@ -10,6 +10,8 @@ import java.time.temporal.ChronoUnit
 trait SchemaOrNothing {
   type A
   val schema: Schema[A]
+
+  override def toString: String = schema.toString
 }
 
 object SchemaOrNothing {

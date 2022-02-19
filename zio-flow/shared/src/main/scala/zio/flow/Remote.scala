@@ -19,6 +19,7 @@ package zio.flow
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
 import zio.schema.Schema
+import zio.schema.ast.SchemaAst
 import zio.{Chunk, ZIO}
 
 import java.math.BigDecimal
@@ -112,11 +113,16 @@ object Remote {
 
   object Variable {
     implicit def schema[A: Schema]: Schema[Variable[A]] =
-      Schema.CaseClass1[String, Variable[A]](
+      Schema.CaseClass2[String, Schema[_], Variable[A]](
         Schema.Field("identifier", Schema.primitive[String]),
-        construct =
-          (identifier: String) => Variable(RemoteVariableName(identifier), implicitly[SchemaOrNothing.Aux[A]]),
-        extractField = (variable: Variable[A]) => RemoteVariableName.unwrap(variable.identifier)
+        Schema.Field(
+          "schema",
+          Schema.Meta(SchemaAst.fromSchema(Schema[A]))
+        ), // TODO: we should not need to know the schema statically for Meta
+        construct = (identifier: String, s: Schema[_]) =>
+          Variable(RemoteVariableName(identifier), SchemaOrNothing.fromSchema(s.asInstanceOf[Schema[A]])),
+        extractField1 = (variable: Variable[A]) => RemoteVariableName.unwrap(variable.identifier),
+        extractField2 = (variable: Variable[A]) => variable.schema.schema
       )
   }
 
@@ -1737,6 +1743,6 @@ object Remote {
 
   val unit: Remote[Unit] = Remote(())
 
-  implicit def schemaRemote[A]: Schema[Remote[A]] = Schema.fail("TODO")
+  implicit def schemaRemote[A]: Schema[Remote[A]] = Schema.fail("TODO: remote serializer")
 
 }

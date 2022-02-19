@@ -23,10 +23,12 @@ object RemoteContext {
       TMap.empty[RemoteVariableName, Any].commit.map { store =>
         new RemoteContext {
           override def setVariable[A](name: RemoteVariableName, value: A): UIO[Unit] =
-            store.put(name, value).commit
+            ZIO.debug(s"*** STORED VARIABLE $name: $value") *>
+              store.put(name, value).commit
 
           override def getVariable[A](name: RemoteVariableName): UIO[Option[A]] =
-            store.get(name).commit.map(_.map(_.asInstanceOf[A]))
+            ZIO.debug(s"*** GETTING VARIABLE $name") *>
+              store.get(name).commit.map(_.map(_.asInstanceOf[A]))
         }
       }
     }

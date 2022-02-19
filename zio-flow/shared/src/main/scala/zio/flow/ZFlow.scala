@@ -464,5 +464,5 @@ object ZFlow {
 //      _.asInstanceOf[ZFlow[_, _, _]]
 //    )
 
-  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("TODO")
+  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("TODO: zflow serializer")
 }
