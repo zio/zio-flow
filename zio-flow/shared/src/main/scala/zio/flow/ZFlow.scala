@@ -188,7 +188,7 @@ object ZFlow {
     val resultSchema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
   }
 
-  final case class Modify[A, B](svar: Remote.Variable[A], f: A ===> (B, A))(implicit
+  final case class Modify[A, B](svar: Remote[Remote.Variable[A]], f: A ===> (B, A))(implicit
     val resultSchema: SchemaOrNothing.Aux[B]
   ) extends ZFlow[Any, Nothing, B] {
     val errorSchema = SchemaOrNothing.nothing

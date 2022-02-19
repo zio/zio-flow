@@ -27,8 +27,11 @@ object RemoteContext {
               store.put(name, value).commit
 
           override def getVariable[A](name: RemoteVariableName): UIO[Option[A]] =
-            ZIO.debug(s"*** GETTING VARIABLE $name") *>
-              store.get(name).commit.map(_.map(_.asInstanceOf[A]))
+            store
+              .get(name)
+              .commit
+              .map(_.map(_.asInstanceOf[A]))
+              .tap(v => ZIO.debug(s"*** GETTING VARIABLE $name => $v"))
         }
       }
     }

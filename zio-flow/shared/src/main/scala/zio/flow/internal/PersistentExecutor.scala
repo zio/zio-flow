@@ -143,14 +143,21 @@ final case class PersistentExecutor(
 
           val f = f0.asInstanceOf[Any ===> (A, Any)]
           for {
-            value             <- RemoteContext.getVariable[Any](svar.identifier)
+            variable <- eval(svar).map(_.value)
+            optValue <- RemoteContext.getVariable[Any](variable.identifier)
+            value <- ZIO
+                       .fromOption(optValue)
+                       .orElseFail(new IOException(s"Undefined variable ${variable.identifier} in Modify"))
+            _                 <- ZIO.debug(s"Modify: ${variable.identifier}'s previous value was $value")
             tuple             <- eval(f(lit(value))).map(_.value)
+            _                 <- ZIO.debug(s"Modify: result is $tuple")
             (result, newValue) = tuple
-            _                 <- RemoteContext.setVariable[Any](svar.identifier, newValue)
+            _                 <- RemoteContext.setVariable[Any](variable.identifier, newValue)
+            _                 <- ZIO.debug(s"Modify: changed value of ${variable.identifier} to $newValue")
 //            _                 <- resume(vName, value, newValue)
             stepResult <- onSuccess(
                             result,
-                            StateChange.addReadVar(svar.identifier)
+                            StateChange.addReadVar(variable.identifier)
                           ) // TODO: is it ok to add it only _after_ resume?
           } yield stepResult
 

@@ -28,9 +28,7 @@ class RemoteVariableSyntax[A](val self: Remote[Remote.Variable[A]]) extends AnyV
   def modify[B](
     f: Remote[A] => (Remote[B], Remote[A])
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): ZFlow[Any, Nothing, B] =
-    ZFlow.unwrapRemote(self).flatMap[Any, Nothing, B] { v =>
-      ZFlow.Modify(v.asInstanceOf[Remote.Variable[A]], (a: Remote[A]) => Remote.tuple2(f(a)))
-    }
+    ZFlow.Modify(self, (a: Remote[A]) => Remote.tuple2(f(a)))
 
   def updateAndGet(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, A] =
     self.modify { (a: Remote[A]) =>

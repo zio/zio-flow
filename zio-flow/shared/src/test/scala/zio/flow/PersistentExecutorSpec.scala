@@ -63,9 +63,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testFlow("ensuring") {
       for {
         res <- ZFlow.newVar[Int]("res", 0)
+        _   <- res.set(100)
         a   <- ZFlow.succeed(12).ensuring(res.set(15))
         b   <- res.get
-
       } yield a + b
     } { result =>
       assertTrue(result == 27)
