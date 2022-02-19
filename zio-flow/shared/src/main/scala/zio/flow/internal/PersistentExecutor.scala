@@ -241,8 +241,8 @@ final case class PersistentExecutor(
                                forkId,
                                workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
                              )(
-                               fork.errorSchema.asInstanceOf[SchemaOrNothing.Aux[fork.ValueE]],
-                               fork.resultSchema.asInstanceOf[SchemaOrNothing.Aux[fork.ValueA]]
+                               SchemaOrNothing.fromSchema(fork.schemaE),
+                               SchemaOrNothing.fromSchema(fork.schemaA)
                              )
           } yield StepResult(
             StateChange.increaseForkCounter,
@@ -251,10 +251,8 @@ final case class PersistentExecutor(
 
         case await @ Await(execFlow) =>
           implicit val schemaEE: Schema[Either[Throwable, await.ValueE]] = await.schemaEitherE
-          implicit val schemaE: SchemaOrNothing.Aux[await.ValueE] =
-            await.errorSchema.asInstanceOf[SchemaOrNothing.Aux[await.ValueE]]
-          implicit val schemaA: SchemaOrNothing.Aux[await.ValueA] =
-            await.resultSchema.asInstanceOf[SchemaOrNothing.Aux[await.ValueA]]
+          implicit val schemaE: Schema[await.ValueE]                     = await.schemaE
+          implicit val schemaA: Schema[await.ValueA]                     = await.schemaA
           for {
             executingFlow <- eval(execFlow).map(_.value)
             _             <- ZIO.log("Waiting for result")
@@ -263,7 +261,7 @@ final case class PersistentExecutor(
                 .asInstanceOf[PersistentExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
                 .result
                 .asInstanceOf[DurablePromise[Either[Throwable, await.ValueE], await.ValueA]]
-                .awaitEither(SchemaOrNothing.fromSchema(schemaEE), schemaA.schema)
+                .awaitEither(SchemaOrNothing.fromSchema(schemaEE), schemaA)
                 .provideEnvironment(promiseEnv)
                 .tapErrorCause(c => ZIO.log(s"Failed: $c"))
             _ <- ZIO.log(s"Await got result: $result")
@@ -275,14 +273,14 @@ final case class PersistentExecutor(
                     error =>
                       ZIO.succeed(
                         Remote[Either[await.ValueE, await.ValueA]](Left(error))(
-                          schemaEither(schemaE.schema, schemaA.schema)
+                          schemaEither(schemaE, schemaA)
                         )
                       )
                   ),
                 success =>
                   ZIO.succeed(
                     Remote[Either[await.ValueE, await.ValueA]](Right(success))(
-                      schemaEither(schemaE.schema, schemaA.schema)
+                      schemaEither(schemaE, schemaA)
                     )
                   )
               )
