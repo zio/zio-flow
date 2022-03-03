@@ -1,11 +1,10 @@
 package zio.flow
 
-import zio.{Chunk, Duration}
 import zio.schema._
+import zio.{Chunk, Duration}
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 trait SchemaOrNothing {
   type A
@@ -34,8 +33,8 @@ object SchemaOrNothing {
 
 trait Schemas extends LowerPrioritySchemas {
 
-  implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.Duration(ChronoUnit.SECONDS))
-  implicit val schemaInstant: Schema[Instant]   = Schema.Primitive(StandardType.Instant(DateTimeFormatter.BASIC_ISO_DATE))
+  implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.DurationType)
+  implicit val schemaInstant: Schema[Instant]   = Schema.Primitive(StandardType.InstantType(DateTimeFormatter.BASIC_ISO_DATE))
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(

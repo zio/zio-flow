@@ -18,7 +18,8 @@ package zio.flow
 
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
-import zio.schema.Schema
+import zio.schema.CaseSet.:+:
+import zio.schema.{CaseSet, Schema}
 import zio.schema.ast.SchemaAst
 import zio.{Chunk, ZIO}
 
@@ -81,16 +82,28 @@ object Remote {
   final case class Literal[A](value: A, schema: SchemaOrNothing.Aux[A]) extends Remote[A] {
     def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
       ZIO.right(SchemaAndValue(schema, value))
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Literal(otherValue, otherSchema) =>
+          value == otherValue && Schema.structureEquality.equal(schema.schema, otherSchema.schema)
+        case _ => false
+      }
   }
   object Literal {
     def apply[A](schemaAndValue: SchemaAndValue[A]): Remote[A] =
       schemaAndValue.toRemote
-//
-//    def schema[A: Schema]: Schema[Literal[A]] =
-//      implicitly[SchemaOrNothing.Aux[A]].transform(
-//        (a: A) => Literal(a, implicitly[SchemaOrNothing.Aux[A]]),
-//        (b: Literal[A]) => b.value
-//      )
+
+    def schema[A]: Schema[Literal[A]] =
+      Schema
+        .semiDynamic[A]()
+        .transform(
+          { case (value, schema) => Literal(value, SchemaOrNothing.fromSchema(schema)) },
+          (lit: Literal[A]) => (lit.value, lit.schema.schema)
+        )
+
+    def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
+      Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
   }
 
   final case class Ignore() extends Remote[Unit] {
@@ -100,7 +113,10 @@ object Remote {
       ZIO.right(SchemaAndValue(Schema[Unit], ()))
   }
   object Ignore {
-    val schema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
+    val schema: Schema[Ignore] = Schema[Unit].transform(_ => Ignore(), _ => ())
+
+    def schemaCase: Schema.Case[Ignore, Remote[Any]] =
+      Schema.Case("Ignore", schema, _.asInstanceOf[Ignore])
   }
 
   final case class Variable[A](identifier: RemoteVariableName, schema: SchemaOrNothing.Aux[A]) extends Remote[A] {
@@ -641,21 +657,21 @@ object Remote {
     schema.asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
 
   private def schemaOf3[A, B, C](schemaAndValue: SchemaAndValue[(A, B, C)]): Schema.Tuple[(A, B), C] =
-    asSchemaOf3(schemaAndValue.schema.asInstanceOf[Schema.Transform[((A, B), C), _]].codec)
+    asSchemaOf3(schemaAndValue.schema.asInstanceOf[Schema.Transform[((A, B), C), _, _]].codec)
 
   private def schemaOf4[A, B, C, D](schemaAndValue: SchemaAndValue[(A, B, C, D)]): Schema.Tuple[((A, B), C), D] =
-    asSchemaOf4(schemaAndValue.schema.asInstanceOf[Schema.Transform[(((A, B), C), D), _]].codec)
+    asSchemaOf4(schemaAndValue.schema.asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]].codec)
 
   private def schemaOf5[A, B, C, D, E](
     schemaAndValue: SchemaAndValue[(A, B, C, D, E)]
   ): Schema.Tuple[(((A, B), C), D), E] =
-    asSchemaOf5(schemaAndValue.schema.asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]].codec)
+    asSchemaOf5(schemaAndValue.schema.asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]].codec)
 
   final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .left
@@ -683,7 +699,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .left
@@ -711,7 +727,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((A, B), C), _]]
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(A, B), C]]
           .right
@@ -735,7 +751,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
@@ -769,7 +785,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
@@ -801,7 +817,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .left
@@ -829,7 +845,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[D] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[(((A, B), C), D), _]]
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[((A, B), C), D]]
           .right
@@ -853,7 +869,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[A] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
@@ -889,7 +905,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[B] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
@@ -925,7 +941,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[C] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
@@ -957,7 +973,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[D] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .left
@@ -985,7 +1001,7 @@ object Remote {
     val schema: SchemaOrNothing.Aux[E] =
       SchemaOrNothing.fromSchema(
         tuple.schema.schema
-          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]]
+          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
           .codec
           .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
           .right
@@ -1084,8 +1100,8 @@ object Remote {
         case Right(lst) =>
           // TODO: can we avoid this?
           val schemaA = lst.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-            case _                                 => Schema.fail[A]("Failure.")
+            case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+            case _                                    => Schema.fail[A]("Failure.")
           }
           initial.evalWithSchema.flatMap { initialValue =>
             ZIO.foldLeft[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]], A](
@@ -1121,7 +1137,7 @@ object Remote {
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
     val schema: SchemaOrNothing.Aux[Option[(A, List[A])]] = SchemaOrNothing.fromSchema {
-      val listSchema = list.schema.asInstanceOf[Schema.Sequence[List[A], A]]
+      val listSchema = list.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
       Schema.option(Schema.tuple2(listSchema.schemaA, listSchema))
     }
 
@@ -1141,7 +1157,7 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     (rightVal.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
                       case _ =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
@@ -1156,7 +1172,7 @@ object Remote {
                 toOptionSchema(
                   toTupleSchema(
                     schema match {
-                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
+                      case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
                       case _ =>
                         throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
                     },
@@ -1775,6 +1791,11 @@ object Remote {
 
   val unit: Remote[Unit] = Remote(())
 
-  implicit def schemaRemote[A]: Schema[Remote[A]] = Schema.fail("TODO: remote serializer")
+  implicit val schemaRemote: Schema[Remote[Any]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(Literal.schemaCase[Any], CaseSet.Empty[Remote[Any]]())
+        .:+:(Ignore.schemaCase)
+    )
 
 }

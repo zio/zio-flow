@@ -91,17 +91,17 @@ object RemoteTraversal {
 
     def unsafeGet(s: S): Chunk[A] =
       (collection.asInstanceOf[Schema.Collection[_, _]]) match {
-        case sequence @ Schema.Sequence(_, _, _, _) =>
-          sequence.asInstanceOf[Schema.Sequence[S, A]].toChunk(s)
+        case sequence @ Schema.Sequence(_, _, _, _, _) =>
+          sequence.asInstanceOf[Schema.Sequence[S, A, _]].toChunk(s)
         case Schema.MapSchema(_, _, _) =>
           Chunk.fromIterable(s.asInstanceOf[Map[_, _]]).asInstanceOf[Chunk[A]]
       }
 
     def unsafeSet(s: S)(as: Chunk[A]): S =
       (collection.asInstanceOf[Schema.Collection[_, _]]) match {
-        case sequence @ Schema.Sequence(_, _, _, _) =>
+        case sequence @ Schema.Sequence(_, _, _, _, _) =>
           val builder       = ChunkBuilder.make[A]()
-          val leftIterator  = sequence.asInstanceOf[Schema.Sequence[S, A]].toChunk(s).iterator
+          val leftIterator  = sequence.asInstanceOf[Schema.Sequence[S, A, _]].toChunk(s).iterator
           val rightIterator = as.iterator
           while (leftIterator.hasNext && rightIterator.hasNext) {
             val _ = leftIterator.next()
@@ -109,7 +109,7 @@ object RemoteTraversal {
           }
           while (leftIterator.hasNext)
             builder += leftIterator.next()
-          sequence.asInstanceOf[Schema.Sequence[S, A]].fromChunk(builder.result())
+          sequence.asInstanceOf[Schema.Sequence[S, A, _]].fromChunk(builder.result())
         case Schema.MapSchema(_, _, _) =>
           (s.asInstanceOf[Map[_, _]] ++ as).asInstanceOf[S]
       }
