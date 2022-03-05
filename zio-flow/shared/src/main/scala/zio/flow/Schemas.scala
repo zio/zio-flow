@@ -34,7 +34,8 @@ object SchemaOrNothing {
 trait Schemas extends LowerPrioritySchemas {
 
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.DurationType)
-  implicit val schemaInstant: Schema[Instant]   = Schema.Primitive(StandardType.InstantType(DateTimeFormatter.BASIC_ISO_DATE))
+  implicit val schemaInstant: Schema[Instant] =
+    Schema.Primitive(StandardType.InstantType(DateTimeFormatter.BASIC_ISO_DATE))
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(

@@ -333,9 +333,9 @@ object ZFlow {
     val resultSchema = SchemaOrNothing.nothing
   }
 
-  final case class NewVar[A: Schema](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Remote.Variable[A]] {
+  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Remote.Variable[A]] {
     val errorSchema  = SchemaOrNothing.nothing
-    val resultSchema = SchemaOrNothing.fromSchema[Remote.Variable[A]]
+    val resultSchema = SchemaOrNothing.fromSchema(Remote.Variable.schema[A])
   }
 
   final case class Iterate[R, E, A](
@@ -400,7 +400,7 @@ object ZFlow {
 
   def input[R: SchemaOrNothing.Aux]: ZFlow[R, Nothing, R] = Input[R]()
 
-  def newVar[A: Schema](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Remote.Variable[A]] =
+  def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, Nothing, Remote.Variable[A]] =
     NewVar(name, initial)
 
   def now: ZFlow[Any, Nothing, Instant] = Now

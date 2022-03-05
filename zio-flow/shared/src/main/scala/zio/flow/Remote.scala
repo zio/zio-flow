@@ -60,12 +60,6 @@ sealed trait Remote[+A] {
   }
 
   final def unit: Remote[Unit] = Remote.Ignore()
-
-  override def equals(that: Any): Boolean =
-    that match {
-      case that: Remote[a] => Remote.checkEquality(self, that)
-      case _               => false
-    }
 }
 
 object Remote {
@@ -115,7 +109,7 @@ object Remote {
   object Ignore {
     val schema: Schema[Ignore] = Schema[Unit].transform(_ => Ignore(), _ => ())
 
-    def schemaCase: Schema.Case[Ignore, Remote[Any]] =
+    def schemaCase[A]: Schema.Case[Ignore, Remote[A]] =
       Schema.Case("Ignore", schema, _.asInstanceOf[Ignore])
   }
 
@@ -125,21 +119,28 @@ object Remote {
         case None        => Left(self)
         case Some(value) => Right(SchemaAndValue(schema, value))
       }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Variable(otherIdentifier, otherSchema) =>
+          otherIdentifier == identifier && Schema.structureEquality.equal(otherSchema.schema, schema.schema)
+        case _ => false
+      }
   }
 
   object Variable {
-    implicit def schema[A: Schema]: Schema[Variable[A]] =
-      Schema.CaseClass2[String, Schema[_], Variable[A]](
+    implicit def schema[A]: Schema[Variable[A]] =
+      Schema.CaseClass2[String, SchemaAst, Variable[A]](
         Schema.Field("identifier", Schema.primitive[String]),
-        Schema.Field(
-          "schema",
-          Schema.Meta(SchemaAst.fromSchema(Schema[A]))
-        ), // TODO: we should not need to know the schema statically for Meta
-        construct = (identifier: String, s: Schema[_]) =>
-          Variable(RemoteVariableName(identifier), SchemaOrNothing.fromSchema(s.asInstanceOf[Schema[A]])),
+        Schema.Field("schema", SchemaAst.schema),
+        construct = (identifier: String, s: SchemaAst) =>
+          Variable(RemoteVariableName(identifier), SchemaOrNothing.fromSchema(s.toSchema.asInstanceOf[Schema[A]])),
         extractField1 = (variable: Variable[A]) => RemoteVariableName.unwrap(variable.identifier),
-        extractField2 = (variable: Variable[A]) => variable.schema.schema
+        extractField2 = (variable: Variable[A]) => SchemaAst.fromSchema(variable.schema.schema)
       )
+
+    def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
+      Schema.Case("Variable", schema, _.asInstanceOf[Variable[A]])
   }
 
   final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -150,6 +151,22 @@ object Remote {
         (l, r) => SchemaAndValue(numeric.schema, numeric.add(l, r)),
         AddNumeric(_, _, numeric)
       )
+  }
+
+  object AddNumeric {
+    def schema[A]: Schema[AddNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], AddNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        AddNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[AddNumeric[A], Remote[A]] =
+      Schema.Case("AddNumeric", schema, _.asInstanceOf[AddNumeric[A]])
   }
 
   final case class EvaluatedRemoteFunction[A, B] private[flow] (
@@ -1621,125 +1638,6 @@ object Remote {
   implicit def apply[A: Schema](value: A): Remote[A] =
     Literal(value, SchemaOrNothing[A])
 
-  def checkEquality[A](self: Remote[A], that: Remote[Any]): Boolean = {
-    def loop[A](self: Remote[A], that: Remote[Any]): Boolean =
-      (self, that) match {
-        case (Literal(value1, schema1), Literal(value2, schema2)) =>
-          // TODO: Ensure ZIO Schema supports `==` and `hashCode`.
-          (value1 == value2) && (schema1 == schema2)
-
-        case (Ignore(), Ignore()) =>
-          true
-
-        case (Variable(identifier1, schema1), Variable(identifier2, schema2)) =>
-          (identifier1 == identifier2) && (schema1 == schema2)
-
-        case (AddNumeric(left1, right1, numeric1), AddNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
-
-        case (DivNumeric(left1, right1, numeric1), DivNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
-
-        case (MulNumeric(left1, right1, numeric1), MulNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
-
-        case (PowNumeric(left1, right1, numeric1), PowNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
-
-        case (NegationNumeric(value1, numeric1), NegationNumeric(value2, numeric2)) =>
-          loop(value1, value2) && (numeric1 == numeric2)
-
-        case (l: Either0[l1, l2], Either0(either2)) =>
-          (l.either, either2) match {
-            case (Left((l, _)), Left((r, _)))   => loop(l, r)
-            case (Right((_, l)), Right((_, r))) => loop(l, r)
-            case _                              => false
-          }
-
-        case (
-              FoldEither(either1, left1, right1),
-              FoldEither(either2, left2, right2)
-            ) =>
-          loop(either1, either2) &&
-            loop(left1, left2) &&
-            loop(right1, right2)
-
-        case (l: Tuple2[l1, l2], Tuple2(left2, right2)) =>
-          loop(l.left, left2) && loop(l.right, right2)
-
-        case (l: Tuple3[l1, l2, l3], Tuple3(a2, b2, c2)) =>
-          loop(l._1, a2) &&
-            loop(l._2, b2) &&
-            loop(l._3, c2)
-
-        case (First(tuple1), First(tuple2)) =>
-          loop(tuple1, tuple2)
-
-        case (Second(tuple1), Second(tuple2)) =>
-          loop(tuple1, tuple2)
-
-        case (FirstOf3(tuple1), FirstOf3(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf3(tuple1), SecondOf3(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf3(tuple1), ThirdOf3(tuple2))   => loop(tuple1, tuple2)
-
-        case (FirstOf4(tuple1), FirstOf4(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf4(tuple1), SecondOf4(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf4(tuple1), ThirdOf4(tuple2))   => loop(tuple1, tuple2)
-        case (FourthOf4(tuple1), FourthOf4(tuple2)) => loop(tuple1, tuple2)
-
-        case (FirstOf5(tuple1), FirstOf5(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf5(tuple1), SecondOf5(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf5(tuple1), ThirdOf5(tuple2))   => loop(tuple1, tuple2)
-        case (FourthOf5(tuple1), FourthOf5(tuple2)) => loop(tuple1, tuple2)
-        case (FifthOf5(tuple1), FifthOf5(tuple2))   => loop(tuple1, tuple2)
-
-        case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
-          loop(predicate1, predicate2) &&
-            loop(ifTrue1, ifTrue2) &&
-            loop(ifFalse1, ifFalse2)
-
-        case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
-          // TODO: Support `==` and `hashCode` for `Sortable`.
-          loop(l.left, left2) &&
-            loop(l.right, right2)
-
-        case (l: Not, Not(value2)) =>
-          loop(l.value, value2)
-
-        case (l: And, And(left2, right2)) =>
-          loop(l.left, left2) && loop(l.right, right2)
-
-        case (Fold(list1, initial1, body1), Fold(list2, initial2, body2)) =>
-          // TODO: Need Schema[(B, A)]
-          // Fold can capture SchemaOrNothing.Aux[A] (???), and we already have SchemaOrNothing.Aux[B]
-          // We can use these to make Schema[(B, A)]
-          loop(list1, list2) &&
-            loop(initial1, initial2) &&
-            loop(body1, body2)
-
-        case (Iterate(initial1, iterate1, predicate1), Iterate(initial2, iterate2, predicate2)) =>
-          loop(initial1, initial2) &&
-            loop(iterate1, iterate2) &&
-            loop(predicate1, predicate2)
-
-        case (Lazy(value1, _), Lazy(value2, _)) =>
-          // TODO: Handle loops in the graph appropriately
-          loop(value1(), value2())
-
-        case _ => false
-      }
-
-    loop(self, that)
-  }
-
   def sequenceEither[A, B](
     either: Either[Remote[A], Remote[B]]
   )(implicit aSchema: SchemaOrNothing.Aux[A], bSchema: SchemaOrNothing.Aux[B]): Remote[Either[A, B]] =
@@ -1791,11 +1689,13 @@ object Remote {
 
   val unit: Remote[Unit] = Remote(())
 
-  implicit val schemaRemote: Schema[Remote[Any]] =
-    Schema.EnumN(
-      CaseSet
-        .Cons(Literal.schemaCase[Any], CaseSet.Empty[Remote[Any]]())
-        .:+:(Ignore.schemaCase)
-    )
+  def schema[A]: Schema[Remote[A]] = Schema.EnumN(
+    CaseSet
+      .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
+      .:+:(Ignore.schemaCase)
+      .:+:(Variable.schemaCase[A])
+      .:+:(AddNumeric.schemaCase[A])
+  )
 
+  implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]
 }
