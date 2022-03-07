@@ -493,4 +493,36 @@ object Fractional {
       Math.atan(a.doubleValue)
 
   }
+
+  private val floatCase: Schema.Case[FractionalFloat.type, Fractional[Any]] =
+    Schema.Case[FractionalFloat.type, Fractional[Any]](
+      "FractionalFloat",
+      Schema.singleton[FractionalFloat.type](FractionalFloat),
+      _.asInstanceOf[FractionalFloat.type]
+    )
+
+  private val doubleCase: Schema.Case[FractionalDouble.type, Fractional[Any]] =
+    Schema.Case[FractionalDouble.type, Fractional[Any]](
+      "FractionalDouble",
+      Schema.singleton[FractionalDouble.type](FractionalDouble),
+      _.asInstanceOf[FractionalDouble.type]
+    )
+
+  private val bigDecimalCase: Schema.Case[FractionalBigDecimal.type, Fractional[Any]] =
+    Schema.Case[FractionalBigDecimal.type, Fractional[Any]](
+      "FractionalBigDecimal",
+      Schema.singleton[FractionalBigDecimal.type](FractionalBigDecimal),
+      _.asInstanceOf[FractionalBigDecimal.type]
+    )
+
+  implicit val schema: Schema[Fractional[Any]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(
+          floatCase,
+          CaseSet.Empty[Fractional[Any]]
+        )
+        .:+:(doubleCase)
+        .:+:(bigDecimalCase)
+    )
 }

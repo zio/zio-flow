@@ -31,6 +31,96 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(genAddNumeric) { variable =>
           roundtrip(codec, variable)
         }
+      },
+      test("div numeric") {
+        check(genDivNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("mul numeric") {
+        check(genMulNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("pow numeric") {
+        check(genPowNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("negation numeric") {
+        check(genNegationNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("root numeric") {
+        check(genRootNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("log numeric") {
+        check(genLogNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("absolute numeric") {
+        check(genAbsoluteNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("mod numeric") {
+        check(genModNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("min numeric") {
+        check(genMinNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("max numeric") {
+        check(genMaxNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("floor numeric") {
+        check(genFloorNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("ceil numeric") {
+        check(genCeilNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("round numeric") {
+        check(genRoundNumeric) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("sin fractional") {
+        check(genSinFractional) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("sin inverse fractional") {
+        check(genSinInverseFractional) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("tan inverse fractional") {
+        check(genTanInverseFractional) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("evaluated remote function") {
+        check(genEvaluatedRemoteFunction) { variable =>
+          roundtrip(codec, variable)
+        }
+      },
+      test("remote apply") {
+        check(genRemoteApply) { variable =>
+          roundtrip(codec, variable)
+        }
       }
     )
 

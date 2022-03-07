@@ -21,7 +21,7 @@ import zio.flow.remote._
 import zio.schema.CaseSet.:+:
 import zio.schema.{CaseSet, Schema}
 import zio.schema.ast.SchemaAst
-import zio.{Chunk, ZIO}
+import zio.{Chunk, ZIO, schema}
 
 import java.math.BigDecimal
 import java.time.temporal.{ChronoUnit, Temporal, TemporalAmount, TemporalUnit}
@@ -182,6 +182,20 @@ object Remote {
       RemoteApply(this, a)
   }
 
+  object EvaluatedRemoteFunction {
+    def schema[A, B]: Schema[EvaluatedRemoteFunction[A, B]] =
+      Schema.CaseClass2[Variable[A], Remote[B], EvaluatedRemoteFunction[A, B]](
+        Schema.Field("variable", Variable.schema[A]),
+        Schema.Field("result", Schema.defer(Remote.schema[B])),
+        EvaluatedRemoteFunction.apply,
+        _.input,
+        _.result
+      )
+
+    def schemaCase[A, B]: Schema.Case[EvaluatedRemoteFunction[A, B], Remote[B]] =
+      Schema.Case("EvaluatedRemoteFunction", schema, _.asInstanceOf[EvaluatedRemoteFunction[A, B]])
+  }
+
   final case class RemoteFunction[A: SchemaOrNothing.Aux, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
     lazy val evaluated: EvaluatedRemoteFunction[A, B] = {
       val input = Variable(RemoteContext.generateFreshVariableName, SchemaOrNothing[A])
@@ -219,6 +233,24 @@ object Remote {
       }
   }
 
+  object RemoteApply {
+    def schema[A, B]: Schema[RemoteApply[A, B]] =
+      Schema.CaseClass2[EvaluatedRemoteFunction[A, B], Remote[A], RemoteApply[A, B]](
+        Schema.Field("f", EvaluatedRemoteFunction.schema[A, B]),
+        Schema.Field("a", Schema.defer(Remote.schema[A])),
+        RemoteApply.apply,
+        _.f,
+        _.a
+      )
+
+    def schemaCase[A, B]: Schema.Case[RemoteApply[A, B], Remote[B]] =
+      Schema.Case[RemoteApply[A, B], Remote[B]](
+        "RemoteApply",
+        schema[A, B],
+        _.asInstanceOf[RemoteApply[A, B]]
+      )
+  }
+
   final case class DivNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = left.schema
 
@@ -228,6 +260,22 @@ object Remote {
         DivNumeric(_, _, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object DivNumeric {
+    def schema[A]: Schema[DivNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], DivNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        DivNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[DivNumeric[A], Remote[A]] =
+      Schema.Case("DivNumeric", schema, _.asInstanceOf[DivNumeric[A]])
   }
 
   final case class MulNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -241,6 +289,22 @@ object Remote {
       )
   }
 
+  object MulNumeric {
+    def schema[A]: Schema[MulNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], MulNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        MulNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[MulNumeric[A], Remote[A]] =
+      Schema.Case("MulNumeric", schema, _.asInstanceOf[MulNumeric[A]])
+  }
+
   final case class PowNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = left.schema
 
@@ -250,6 +314,22 @@ object Remote {
         PowNumeric(_, _, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object PowNumeric {
+    def schema[A]: Schema[PowNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], PowNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        PowNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[PowNumeric[A], Remote[A]] =
+      Schema.Case("PowNumeric", schema, _.asInstanceOf[PowNumeric[A]])
   }
 
   final case class NegationNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -263,6 +343,20 @@ object Remote {
       )
   }
 
+  object NegationNumeric {
+    def schema[A]: Schema[NegationNumeric[A]] =
+      Schema.CaseClass2[Remote[A], Numeric[A], NegationNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        NegationNumeric.apply,
+        _.value,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[NegationNumeric[A], Remote[A]] =
+      Schema.Case("NegationNumeric", schema, _.asInstanceOf[NegationNumeric[A]])
+  }
+
   final case class RootNumeric[A](value: Remote[A], n: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = value.schema
 
@@ -272,6 +366,22 @@ object Remote {
         RootNumeric(_, _, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object RootNumeric {
+    def schema[A]: Schema[RootNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], RootNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("n", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        RootNumeric.apply,
+        _.value,
+        _.n,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[RootNumeric[A], Remote[A]] =
+      Schema.Case("RootNumeric", schema, _.asInstanceOf[RootNumeric[A]])
   }
 
   final case class LogNumeric[A](value: Remote[A], base: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -285,6 +395,22 @@ object Remote {
       )
   }
 
+  object LogNumeric {
+    def schema[A]: Schema[LogNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], LogNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("base", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        LogNumeric.apply,
+        _.value,
+        _.base,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[LogNumeric[A], Remote[A]] =
+      Schema.Case("LogNumeric", schema, _.asInstanceOf[LogNumeric[A]])
+  }
+
   final case class ModNumeric(left: Remote[Int], right: Remote[Int]) extends Remote[Int] {
     val schema: SchemaOrNothing.Aux[Int] = SchemaOrNothing[Int]
 
@@ -294,6 +420,20 @@ object Remote {
         ModNumeric(_, _),
         SchemaOrNothing.fromSchema(Schema.primitive[Int])
       )
+  }
+
+  object ModNumeric {
+    val schema: Schema[ModNumeric] =
+      Schema.CaseClass2[Remote[Int], Remote[Int], ModNumeric](
+        Schema.Field("left", Schema.defer(Remote.schema[Int])),
+        Schema.Field("right", Schema.defer(Remote.schema[Int])),
+        ModNumeric.apply,
+        _.left,
+        _.right
+      )
+
+    def schemaCase[A]: Schema.Case[ModNumeric, Remote[A]] =
+      Schema.Case("ModNumeric", schema, _.asInstanceOf[ModNumeric])
   }
 
   final case class AbsoluteNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -307,6 +447,20 @@ object Remote {
       )
   }
 
+  object AbsoluteNumeric {
+    def schema[A]: Schema[AbsoluteNumeric[A]] =
+      Schema.CaseClass2[Remote[A], Numeric[A], AbsoluteNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        AbsoluteNumeric.apply,
+        _.value,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[AbsoluteNumeric[A], Remote[A]] =
+      Schema.Case("AbsoluteNumeric", schema, _.asInstanceOf[AbsoluteNumeric[A]])
+  }
+
   final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = left.schema
 
@@ -316,6 +470,22 @@ object Remote {
         MinNumeric(_, _, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object MinNumeric {
+    def schema[A]: Schema[MinNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], MinNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        MinNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[MinNumeric[A], Remote[A]] =
+      Schema.Case("MinNumeric", schema, _.asInstanceOf[MinNumeric[A]])
   }
 
   final case class MaxNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -329,6 +499,22 @@ object Remote {
       )
   }
 
+  object MaxNumeric {
+    def schema[A]: Schema[MaxNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Remote[A], Numeric[A], MaxNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        MaxNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[MaxNumeric[A], Remote[A]] =
+      Schema.Case("MaxNumeric", schema, _.asInstanceOf[MaxNumeric[A]])
+  }
+
   final case class FloorNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = value.schema
 
@@ -338,6 +524,20 @@ object Remote {
         FloorNumeric(_, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object FloorNumeric {
+    def schema[A]: Schema[FloorNumeric[A]] =
+      Schema.CaseClass2[Remote[A], Numeric[A], FloorNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        FloorNumeric.apply,
+        _.value,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[FloorNumeric[A], Remote[A]] =
+      Schema.Case("FloorNumeric", schema, _.asInstanceOf[FloorNumeric[A]])
   }
 
   final case class CeilNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
@@ -351,6 +551,20 @@ object Remote {
       )
   }
 
+  object CeilNumeric {
+    def schema[A]: Schema[CeilNumeric[A]] =
+      Schema.CaseClass2[Remote[A], Numeric[A], CeilNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        CeilNumeric.apply,
+        _.value,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[CeilNumeric[A], Remote[A]] =
+      Schema.Case("CeilNumeric", schema, _.asInstanceOf[CeilNumeric[A]])
+  }
+
   final case class RoundNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
     val schema = value.schema
 
@@ -360,6 +574,20 @@ object Remote {
         RoundNumeric(_, numeric),
         SchemaOrNothing.fromSchema(numeric.schema)
       )
+  }
+
+  object RoundNumeric {
+    def schema[A]: Schema[RoundNumeric[A]] =
+      Schema.CaseClass2[Remote[A], Numeric[A], RoundNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        RoundNumeric.apply,
+        _.value,
+        _.numeric
+      )
+
+    def schemaCase[A]: Schema.Case[RoundNumeric[A], Remote[A]] =
+      Schema.Case("RoundNumeric", schema, _.asInstanceOf[RoundNumeric[A]])
   }
 
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
@@ -373,6 +601,20 @@ object Remote {
       )
   }
 
+  object SinFractional {
+    def schema[A]: Schema[SinFractional[A]] =
+      Schema.CaseClass2[Remote[A], Fractional[A], SinFractional[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
+        SinFractional.apply,
+        _.value,
+        _.fractional
+      )
+
+    def schemaCase[A]: Schema.Case[SinFractional[A], Remote[A]] =
+      Schema.Case("SinFractional", schema, _.asInstanceOf[SinFractional[A]])
+  }
+
   final case class SinInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
     val schema = value.schema
 
@@ -384,6 +626,20 @@ object Remote {
       )
   }
 
+  object SinInverseFractional {
+    def schema[A]: Schema[SinInverseFractional[A]] =
+      Schema.CaseClass2[Remote[A], Fractional[A], SinInverseFractional[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
+        SinInverseFractional.apply,
+        _.value,
+        _.fractional
+      )
+
+    def schemaCase[A]: Schema.Case[SinInverseFractional[A], Remote[A]] =
+      Schema.Case("SinInverseFractional", schema, _.asInstanceOf[SinInverseFractional[A]])
+  }
+
   final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
     val schema = value.schema
 
@@ -393,6 +649,20 @@ object Remote {
         TanInverseFractional(_, fractional),
         SchemaOrNothing.fromSchema(fractional.schema)
       )
+  }
+
+  object TanInverseFractional {
+    def schema[A]: Schema[TanInverseFractional[A]] =
+      Schema.CaseClass2[Remote[A], Fractional[A], TanInverseFractional[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
+        TanInverseFractional.apply,
+        _.value,
+        _.fractional
+      )
+
+    def schemaCase[A]: Schema.Case[TanInverseFractional[A], Remote[A]] =
+      Schema.Case("TanInverseFractional", schema, _.asInstanceOf[TanInverseFractional[A]])
   }
 
   final case class Either0[A, B](
@@ -422,6 +692,28 @@ object Remote {
             )
           )
       }
+  }
+
+  object Either0 {
+    private def leftSchema[A, B]: Schema[(Remote[A], SchemaOrNothing.Aux[B])] =
+      Schema
+        .tuple2(
+          Schema.defer(Remote.schema[A]),
+          SchemaAst.schema
+        )
+        .transform(
+          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[B]])) },
+          { case (v, s) => (v, s.schema.ast) }
+        )
+//
+//    def schema[A, B]: Schema[Either0[A, B]] =
+//      Schema.Enum2[](
+//        Schema.Case(
+//          "Left",
+//          ,
+//
+//        )
+//      )
   }
 
   final case class FlatMapEither[A, B, C](
@@ -1695,6 +1987,24 @@ object Remote {
       .:+:(Ignore.schemaCase)
       .:+:(Variable.schemaCase[A])
       .:+:(AddNumeric.schemaCase[A])
+      .:+:(EvaluatedRemoteFunction.schemaCase[Any, A])
+      .:+:(RemoteApply.schemaCase[Any, A])
+      .:+:(DivNumeric.schemaCase[A])
+      .:+:(MulNumeric.schemaCase[A])
+      .:+:(PowNumeric.schemaCase[A])
+      .:+:(NegationNumeric.schemaCase[A])
+      .:+:(RootNumeric.schemaCase[A])
+      .:+:(LogNumeric.schemaCase[A])
+      .:+:(ModNumeric.schemaCase[A])
+      .:+:(AbsoluteNumeric.schemaCase[A])
+      .:+:(MinNumeric.schemaCase[A])
+      .:+:(MaxNumeric.schemaCase[A])
+      .:+:(FloorNumeric.schemaCase[A])
+      .:+:(CeilNumeric.schemaCase[A])
+      .:+:(RoundNumeric.schemaCase[A])
+      .:+:(SinFractional.schemaCase[A])
+      .:+:(SinInverseFractional.schemaCase[A])
+      .:+:(TanInverseFractional.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]
