@@ -6,6 +6,7 @@ import zio.{Chunk, Duration}
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
+// TODO: get rid of the whole thing
 trait SchemaOrNothing {
   type A
   val schema: Schema[A]
@@ -17,6 +18,8 @@ object SchemaOrNothing {
   type Aux[_A] = SchemaOrNothing {
     type A = _A
   }
+
+  // TODO: fromAst?
 
   implicit def fromSchema[_A: Schema]: SchemaOrNothing.Aux[_A] = new SchemaOrNothing {
     override type A = _A
@@ -40,16 +43,16 @@ trait Schemas extends LowerPrioritySchemas {
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(
       field1 = Schema.Field("cause", Schema.defer(Schema[Option[Throwable]])),
-      field2 = Schema.Field("message", Schema[String]),
+      field2 = Schema.Field("message", Schema[Option[String]]),
       field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
       field4 = Schema.Field("suppressed", Schema.defer(Schema[Chunk[Throwable]])),
       construct = (
         cause: Option[Throwable],
-        message: String,
+        message: Option[String],
         stackTrace: Chunk[StackTraceElement],
         suppressed: Chunk[Throwable]
       ) => {
-        val throwable = new Throwable(message, cause.orNull)
+        val throwable = new Throwable(message.orNull, cause.orNull)
         throwable.setStackTrace(stackTrace.toArray)
         suppressed.foreach(throwable.addSuppressed)
         throwable
@@ -58,7 +61,7 @@ trait Schemas extends LowerPrioritySchemas {
         val cause = throwable.getCause
         if (cause == null || cause == throwable) None else Some(cause)
       },
-      extractField2 = throwable => throwable.getMessage,
+      extractField2 = throwable => Option(throwable.getMessage),
       extractField3 = throwable => Chunk.fromArray(throwable.getStackTrace),
       extractField4 = throwable => Chunk.fromArray(throwable.getSuppressed)
     )

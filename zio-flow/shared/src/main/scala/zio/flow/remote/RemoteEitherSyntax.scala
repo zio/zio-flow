@@ -28,7 +28,7 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     schemaA: SchemaOrNothing.Aux[A],
     schemaB: SchemaOrNothing.Aux[B]
   ): Remote[C] =
-    Remote.FoldEither[A, B, C](self, RemoteFunction(left), RemoteFunction(right))
+    Remote.FoldEither[A, B, C](self, RemoteFunction(left).evaluated, RemoteFunction(right).evaluated)
 
   final def handleEitherM[R, E: Schema, C: Schema](
     left: Remote[A] => ZFlow[R, E, C],
@@ -43,7 +43,7 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     schemaB: SchemaOrNothing.Aux[B],
     schemaB1: SchemaOrNothing.Aux[B1]
   ): Remote[Either[A1, B1]] =
-    Remote.FlatMapEither(self, f, schemaA, schemaB1)
+    Remote.FlatMapEither(self, f.evaluated, schemaA, schemaB1)
 
   final def map[B1](
     f: Remote[B] => Remote[B1]
@@ -52,7 +52,7 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     schemaB: SchemaOrNothing.Aux[B],
     schemaB1: SchemaOrNothing.Aux[B1]
   ): Remote[Either[A, B1]] =
-    Remote.FlatMapEither(self, (b: Remote[B]) => Remote.Either0(Right((schemaA, f(b)))), schemaA, schemaB1)
+    Remote.FlatMapEither(self, ((b: Remote[B]) => Remote.Either0(Right((schemaA, f(b))))).evaluated, schemaA, schemaB1)
 
   final def flatten[A1 >: A, B1](implicit
     ev: B <:< Either[A1, B1],
@@ -63,7 +63,11 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
 
   final def merge(implicit ev: Either[A, B] <:< Either[B, B], schemaB: SchemaOrNothing.Aux[B]): Remote[B] =
-    Remote.FoldEither[B, B, B](self.widen[Either[B, B]], RemoteFunction(identity(_)), RemoteFunction(identity(_)))
+    Remote.FoldEither[B, B, B](
+      self.widen[Either[B, B]],
+      RemoteFunction(identity[Remote[B]]).evaluated,
+      RemoteFunction(identity[Remote[B]]).evaluated
+    )
 
   final def isLeft(implicit schemaA: SchemaOrNothing.Aux[A], schemaB: SchemaOrNothing.Aux[B]): Remote[Boolean] =
     handleEither(_ => Remote(true), _ => Remote(false))

@@ -1,8 +1,10 @@
 package zio.flow.serialization
 
+import zio.flow.Remote.FlatMapEither
 import zio.{Random, flow}
 import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
 import zio.flow.remote.{Fractional, Numeric}
+import zio.flow.serialization.Generators.TestException
 import zio.schema.{DefaultJavaTimeSchemas, Schema}
 import zio.test.{Gen, Sized}
 
@@ -113,7 +115,14 @@ trait Generators extends DefaultJavaTimeSchemas {
         )
     )
 
-  val genLiteral: Gen[Random with Sized, Remote[Any]] = genPrimitiveSchemaAndValue.map(Remote.Literal(_))
+  val genThrowableSchemaAndValue: Gen[Random with Sized, SchemaAndValue[Throwable]] =
+    Gen.alphaNumericString.map(msg =>
+      SchemaAndValue(SchemaOrNothing.fromSchema(zio.flow.schemaThrowable), new TestException(msg))
+    )
+
+  val genLiteral: Gen[Random with Sized, Remote[Any]] =
+    Gen.oneOf(genPrimitiveSchemaAndValue).map(Remote.Literal(_))
+
   val genRemoteVariable: Gen[Random with Sized, Remote[Any]] =
     for {
       name           <- genRemoteVariableName
@@ -257,4 +266,69 @@ trait Generators extends DefaultJavaTimeSchemas {
       f <- genEvaluatedRemoteFunction
       a <- genLiteral
     } yield Remote.RemoteApply(f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Any]], a)
+
+  val genEither0: Gen[Random with Sized, Remote[Any]] =
+    for {
+      left  <- genPrimitiveSchemaAndValue
+      right <- genPrimitiveSchemaAndValue
+      either <- Gen.oneOf(
+                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
+                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                )
+    } yield Remote.Either0(either)
+
+  val genFlatMapEither: Gen[Random with Sized, Remote[Any]] =
+    for {
+      left  <- genPrimitiveSchemaAndValue
+      right <- genPrimitiveSchemaAndValue
+      either <- Gen.oneOf(
+                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
+                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                )
+      f      <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
+      aSchema = SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]])
+      cSchema = f.schema.asInstanceOf[SchemaOrNothing.Aux[Any]]
+    } yield Remote.FlatMapEither[Any, Any, Any](Remote.Either0(either), f, aSchema, cSchema)
+
+  val genFoldEither: Gen[Random with Sized, Remote[Any]] =
+    for {
+      left  <- genPrimitiveSchemaAndValue
+      right <- genPrimitiveSchemaAndValue
+      either <- Gen.oneOf(
+                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
+                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                )
+      // TODO: generate functions compatible with the generated either
+      leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
+      rightF <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
+    } yield Remote.FoldEither(Remote.Either0(either), leftF, rightF)
+
+  val genSwapEither: Gen[Random with Sized, Remote[Any]] =
+    genEither0.map(r => Remote.SwapEither(r.asInstanceOf[Remote[Either[Any, Any]]]))
+
+  val genTry: Gen[Random with Sized, Remote[Any]] =
+    for {
+      value <- genPrimitiveSchemaAndValue
+      error <- genThrowableSchemaAndValue
+      either <- Gen.either(
+                  Gen.const(
+                    (
+                      error.toRemote,
+                      SchemaOrNothing.fromSchema(value.schema.asInstanceOf[Schema[Any]])
+                    )
+                  ),
+                  Gen.const(value.toRemote)
+                )
+    } yield Remote.Try(either)
+}
+
+object Generators {
+  final class TestException(message: String) extends RuntimeException(message) {
+    // Weak equality test for roundtrip exception serialization
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case t: Throwable => t.getMessage == message
+        case _            => false
+      }
+  }
 }

@@ -2,6 +2,7 @@ package zio.flow.serialization
 
 import zio.Random
 import zio.flow.Remote
+import zio.schema.Schema
 import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
 
@@ -28,98 +29,123 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         }
       },
       test("add numeric") {
-        check(genAddNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genAddNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("div numeric") {
-        check(genDivNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genDivNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("mul numeric") {
-        check(genMulNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genMulNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("pow numeric") {
-        check(genPowNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genPowNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("negation numeric") {
-        check(genNegationNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genNegationNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("root numeric") {
-        check(genRootNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genRootNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("log numeric") {
-        check(genLogNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genLogNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("absolute numeric") {
-        check(genAbsoluteNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genAbsoluteNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("mod numeric") {
-        check(genModNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genModNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("min numeric") {
-        check(genMinNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genMinNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("max numeric") {
-        check(genMaxNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genMaxNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("floor numeric") {
-        check(genFloorNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genFloorNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("ceil numeric") {
-        check(genCeilNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genCeilNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("round numeric") {
-        check(genRoundNumeric) { variable =>
-          roundtrip(codec, variable)
+        check(genRoundNumeric) { num =>
+          roundtrip(codec, num)
         }
       },
       test("sin fractional") {
-        check(genSinFractional) { variable =>
-          roundtrip(codec, variable)
+        check(genSinFractional) { frac =>
+          roundtrip(codec, frac)
         }
       },
       test("sin inverse fractional") {
-        check(genSinInverseFractional) { variable =>
-          roundtrip(codec, variable)
+        check(genSinInverseFractional) { frac =>
+          roundtrip(codec, frac)
         }
       },
       test("tan inverse fractional") {
-        check(genTanInverseFractional) { variable =>
-          roundtrip(codec, variable)
+        check(genTanInverseFractional) { frac =>
+          roundtrip(codec, frac)
         }
       },
       test("evaluated remote function") {
-        check(genEvaluatedRemoteFunction) { variable =>
-          roundtrip(codec, variable)
+        check(genEvaluatedRemoteFunction) { f =>
+          roundtrip(codec, f)
         }
       },
       test("remote apply") {
-        check(genRemoteApply) { variable =>
-          roundtrip(codec, variable)
+        check(genRemoteApply) { remoteApply =>
+          roundtrip(codec, remoteApply)
+        }
+      },
+      test("either0") {
+        check(genEither0) { either0 =>
+          roundtrip(codec, either0)
+        }
+      },
+      test("flatMapEither") {
+        check(genFlatMapEither) { flatMapEither =>
+          roundtrip(codec, flatMapEither)
+        }
+      },
+      test("foldEither") {
+        check(genFoldEither) { foldEither =>
+          roundtrip(codec, foldEither)
+        }
+      },
+      test("swapEither") {
+        check(genSwapEither) { swapEither =>
+          roundtrip(codec, swapEither)
+        }
+      },
+      test("try") {
+        check(genTry) { t =>
+          roundtrip(codec, t)
         }
       }
     )

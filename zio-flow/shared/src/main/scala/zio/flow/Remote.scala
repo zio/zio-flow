@@ -28,6 +28,8 @@ import java.time.temporal.{ChronoUnit, Temporal, TemporalAmount, TemporalUnit}
 import java.time.{Clock, Duration, Instant}
 import scala.language.implicitConversions
 
+// TODO: do we need schema/evalWithSchema at all? if no, can we remove some schema args?
+
 /**
  * A `Remote[A]` is a blueprint for constructing a value of type `A` on a remote
  * machine. Remote values can always be serialized, because they are mere
@@ -74,6 +76,9 @@ object Remote {
     schema.schema.makeAccessors(RemoteAccessorBuilder)
 
   final case class Literal[A](value: A, schema: SchemaOrNothing.Aux[A]) extends Remote[A] {
+
+    // TODO: !!! Fundamental issue: the deserialized value is not guaranteed to be A
+
     def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
       ZIO.right(SchemaAndValue(schema, value))
 
@@ -665,6 +670,7 @@ object Remote {
       Schema.Case("TanInverseFractional", schema, _.asInstanceOf[TanInverseFractional[A]])
   }
 
+  // TODO: better name
   final case class Either0[A, B](
     either: Either[(Remote[A], SchemaOrNothing.Aux[B]), (SchemaOrNothing.Aux[A], Remote[B])]
   ) extends Remote[Either[A, B]] {
@@ -692,6 +698,19 @@ object Remote {
             )
           )
       }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Either0(otherEither) =>
+          (either, otherEither) match {
+            case (Left((value, schema)), Left((otherValue, otherSchema))) =>
+              value == otherValue && Schema.structureEquality.equal(schema.schema, otherSchema.schema)
+            case (Right((schema, value)), Right((otherSchema, otherValue))) =>
+              value == otherValue && Schema.structureEquality.equal(schema.schema, otherSchema.schema)
+            case _ => false
+          }
+        case _ => false
+      }
   }
 
   object Either0 {
@@ -705,20 +724,35 @@ object Remote {
           { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[B]])) },
           { case (v, s) => (v, s.schema.ast) }
         )
-//
-//    def schema[A, B]: Schema[Either0[A, B]] =
-//      Schema.Enum2[](
-//        Schema.Case(
-//          "Left",
-//          ,
-//
-//        )
-//      )
+
+    private def rightSchema[A, B]: Schema[(SchemaOrNothing.Aux[A], Remote[B])] =
+      Schema
+        .tuple2(
+          SchemaAst.schema,
+          Schema.defer(Remote.schema[B])
+        )
+        .transform(
+          { case (ast, v) => (SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[A]]), v) },
+          { case (s, v) => (s.schema.ast, v) }
+        )
+
+    private def eitherSchema[A, B]
+      : Schema[Either[(Remote[A], SchemaOrNothing.Aux[B]), (SchemaOrNothing.Aux[A], Remote[B])]] =
+      Schema.either(leftSchema[A, B], rightSchema[A, B])
+
+    def schema[A, B]: Schema[Either0[A, B]] =
+      eitherSchema[A, B].transform(
+        Either0.apply,
+        _.either
+      )
+
+    def schemaCase[A]: Schema.Case[Either0[Any, Any], Remote[A]] =
+      Schema.Case("Either0", schema[Any, Any], _.asInstanceOf[Either0[Any, Any]])
   }
 
   final case class FlatMapEither[A, B, C](
     either: Remote[Either[A, B]],
-    f: B ===> Either[A, C],
+    f: EvaluatedRemoteFunction[B, Either[A, C]],
     aSchema: SchemaOrNothing.Aux[A],
     cSchema: SchemaOrNothing.Aux[C]
   ) extends Remote[Either[A, C]] {
@@ -738,12 +772,50 @@ object Remote {
               throw new IllegalStateException("Every remote FlatMapEither must be constructed using Remote[Either].")
           }
       }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case FlatMapEither(otherEither, otherF, otherASchema, otherCSchema) =>
+          either == otherEither &&
+            f == otherF &&
+            Schema.structureEquality.equal(aSchema.schema, otherASchema.schema) &&
+            Schema.structureEquality.equal(cSchema.schema, otherCSchema.schema)
+        case _ => false
+      }
+  }
+
+  object FlatMapEither {
+    def schema[A, B, C]: Schema[FlatMapEither[A, B, C]] =
+      Schema.CaseClass4[Remote[Either[A, B]], EvaluatedRemoteFunction[
+        B,
+        Either[A, C]
+      ], SchemaAst, SchemaAst, FlatMapEither[A, B, C]](
+        Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
+        Schema.Field("f", EvaluatedRemoteFunction.schema[B, Either[A, C]]),
+        Schema.Field("aSchema", SchemaAst.schema),
+        Schema.Field("cSchema", SchemaAst.schema),
+        { case (either, ef, aAst, cAst) =>
+          FlatMapEither(
+            either,
+            ef,
+            SchemaOrNothing.fromSchema(aAst.toSchema.asInstanceOf[Schema[A]]),
+            SchemaOrNothing.fromSchema(cAst.toSchema.asInstanceOf[Schema[C]])
+          )
+        },
+        _.either,
+        _.f,
+        _.aSchema.schema.ast,
+        _.cSchema.schema.ast
+      )
+
+    def schemaCase[A]: Schema.Case[FlatMapEither[Any, Any, Any], Remote[A]] =
+      Schema.Case("FlatMapEither", schema[Any, Any, Any], _.asInstanceOf[FlatMapEither[Any, Any, Any]])
   }
 
   final case class FoldEither[A, B, C](
     either: Remote[Either[A, B]],
-    left: A ===> C,
-    right: B ===> C
+    left: EvaluatedRemoteFunction[A, C],
+    right: EvaluatedRemoteFunction[B, C]
   ) extends Remote[C] {
     val schema = left.schema
 
@@ -759,6 +831,33 @@ object Remote {
               throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
           }
       }
+  }
+
+  object FoldEither {
+    def schema[A, B, C]: Schema[FoldEither[A, B, C]] =
+      Schema.CaseClass3[
+        Remote[Either[A, B]],
+        EvaluatedRemoteFunction[A, C],
+        EvaluatedRemoteFunction[B, C],
+        FoldEither[A, B, C]
+      ](
+        Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
+        Schema.Field("left", EvaluatedRemoteFunction.schema[A, C]),
+        Schema.Field("right", EvaluatedRemoteFunction.schema[B, C]),
+        { case (either, left, right) =>
+          FoldEither(
+            either,
+            left,
+            right
+          )
+        },
+        _.either,
+        _.left,
+        _.right
+      )
+
+    def schemaCase[A, B, C]: Schema.Case[FoldEither[A, B, C], Remote[C]] =
+      Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
   }
 
   final case class SwapEither[A, B](
@@ -785,6 +884,22 @@ object Remote {
             )
           )
       }
+  }
+
+  object SwapEither {
+    def schema[A, B]: Schema[SwapEither[A, B]] =
+      Schema
+        .defer(
+          Remote
+            .schema[Either[A, B]]
+            .transform(
+              SwapEither(_),
+              _.either
+            )
+        )
+
+    def schemaCase[A]: Schema.Case[SwapEither[Any, Any], Remote[A]] =
+      Schema.Case("SwapEither", schema[Any, Any], _.asInstanceOf[SwapEither[Any, Any]])
   }
 
   final case class Try[A](either: Either[(Remote[Throwable], SchemaOrNothing.Aux[A]), Remote[A]])
@@ -827,6 +942,33 @@ object Remote {
             )
           )
       }
+  }
+
+  object Try {
+    private def leftSchema[A]: Schema[(Remote[Throwable], SchemaOrNothing.Aux[A])] =
+      Schema
+        .tuple2(
+          Schema.defer(Remote.schema[Throwable]),
+          SchemaAst.schema
+        )
+        .transform(
+          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[A]])) },
+          { case (v, s) => (v, s.schema.ast) }
+        )
+
+    private def eitherSchema[A]: Schema[Either[(Remote[Throwable], SchemaOrNothing.Aux[A]), Remote[A]]] =
+      Schema.either(leftSchema[A], Remote.schema[A])
+
+    def schema[A]: Schema[Try[A]] =
+      Schema.defer(
+        eitherSchema[A].transform(
+          Try.apply,
+          _.either
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Try[Any], Remote[A]] =
+      Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]])
   }
 
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
@@ -2005,6 +2147,11 @@ object Remote {
       .:+:(SinFractional.schemaCase[A])
       .:+:(SinInverseFractional.schemaCase[A])
       .:+:(TanInverseFractional.schemaCase[A])
+      .:+:(Either0.schemaCase[A])
+      .:+:(FlatMapEither.schemaCase[A])
+      .:+:(FoldEither.schemaCase[Any, Any, A])
+      .:+:(SwapEither.schemaCase[A])
+      .:+:(Try.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]
