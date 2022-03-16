@@ -1,23 +1,51 @@
 package zio.flow.serialization
 
-import zio.Random
-import zio.flow.Remote
-import zio.schema.Schema
+import zio.{Random, ZIO}
+import zio.flow.{Remote, RemoteContext, SchemaOrNothing}
+import zio.flow._
+import zio.schema.{DeriveSchema, Schema}
 import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
+
+import scala.util.{Failure, Success, Try}
 
 object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
   override def spec: ZSpec[TestEnvironment, Any] =
     suite("Remote serialization")(
-      withCodec(JsonCodec)
-//      withCodec(ProtobufCodec) // TODO: fix
+      suite("roundtrip equality")(
+        equalityWithCodec(JsonCodec)
+//      equalityWithCodec(ProtobufCodec) // TODO: fix
+      ),
+      suite("roundtrip evaluation")(
+        evalWithCodec(JsonCodec)
+        //      evalWithCodec(ProtobufCodec) // TODO: fix
+      )
     )
 
-  private def withCodec(codec: Codec): Spec[Random with Sized with TestConfig, TestFailure[Nothing], TestSuccess] =
+  case class TestCaseClass(a: String, b: Int)
+  object TestCaseClass {
+    val gen: Gen[Random with Sized, TestCaseClass] =
+      for {
+        a <- Gen.string
+        b <- Gen.int
+      } yield TestCaseClass(a, b)
+
+    implicit val schema: Schema[TestCaseClass] = DeriveSchema.gen
+  }
+
+  private def equalityWithCodec(
+    codec: Codec
+  ): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
     suite(codec.getClass.getSimpleName)(
       test("literal") {
         check(genLiteral) { literal =>
           roundtrip(codec, literal)
+        }
+      },
+      test("literal user type") {
+        check(TestCaseClass.gen) { data =>
+          val literal = Remote(data)
+          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
         }
       },
       test("ignore") {
@@ -150,6 +178,38 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       }
     )
 
+  private def evalWithCodec(codec: Codec): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
+    suite(codec.getClass.getSimpleName)(
+      test("literal user type") {
+        check(TestCaseClass.gen) { data =>
+          val literal = Remote(data)
+          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+        }
+      },
+      test("try") {
+        check(Gen.either(Gen.string, Gen.int)) { either =>
+          val remote: Remote.Try[Int] = Remote.Try(
+            either.fold(
+              msg => {
+                val throwable: Throwable = new Generators.TestException(msg)
+                Left((Remote(throwable), SchemaOrNothing.fromSchema[Int]))
+              },
+              value => Right(value)
+            )
+          )
+
+          def compare(a: Try[Int], b: Try[Int]): Boolean =
+            (a, b) match {
+              case (Success(x), Success(y)) => x == y
+              case (Failure(x), Failure(y)) => x.getMessage == y.getMessage
+              case _                        => false
+            }
+
+          roundtripEval(codec, remote, compare)(schemaTry[Int]).provide(RemoteContext.inMemory)
+        }
+      }
+    )
+
   private def roundtrip[A](codec: Codec, value: Remote[Any]): Assert = {
     val encoded = codec.encode(Remote.schemaRemoteAny)(value)
     val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
@@ -157,6 +217,23 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     assertTrue(decoded == Right(value))
+  }
+
+  private def roundtripEval[A: Schema](
+    codec: Codec,
+    value: Remote[A],
+    test: (A, A) => Boolean = (a: A, b: A) => a == b
+  ): ZIO[RemoteContext, String, Assert] = {
+    val encoded = codec.encode(Remote.schemaRemoteAny)(value)
+    val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
+
+//    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+
+    for {
+      originalEvaluated <- value.eval[A]
+      newRemote         <- ZIO.fromEither(decoded)
+      newEvaluated      <- newRemote.asInstanceOf[Remote[A]].eval[A]
+    } yield assertTrue(test(originalEvaluated, newEvaluated))
   }
 
 }

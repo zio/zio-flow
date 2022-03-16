@@ -1,6 +1,5 @@
 package zio.flow.serialization
 
-import zio.flow.Remote.FlatMapEither
 import zio.{Random, flow}
 import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
 import zio.flow.remote.{Fractional, Numeric}
@@ -12,10 +11,10 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   val genPrimitiveSchemaAndValue: Gen[Random with Sized, SchemaAndValue[Any]] =
     Gen.oneOf(
-      Gen.string.map(value => SchemaAndValue(Schema.primitive[String], value)),
-      Gen.int.map(value => SchemaAndValue(Schema.primitive[Int], value)),
-      Gen.double.map(value => SchemaAndValue(Schema.primitive[Double], value)),
-      Gen.instant.map(value => SchemaAndValue(instantSchema, value))
+      Gen.string.map(value => SchemaAndValue.fromSchemaAndValue(Schema.primitive[String], value)),
+      Gen.int.map(value => SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)),
+      Gen.double.map(value => SchemaAndValue.fromSchemaAndValue(Schema.primitive[Double], value)),
+      Gen.instant.map(value => SchemaAndValue.fromSchemaAndValue(instantSchema, value))
     )
 
   val genRemoteVariableName: Gen[Random with Sized, flow.RemoteVariableName.Type] =
@@ -28,7 +27,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Numeric[Any]],
-            Gen.short.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Short], value)))
+            Gen.short.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Short], value)))
           )
         ),
       Gen
@@ -36,7 +35,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Numeric[Any]],
-            Gen.int.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Int], value)))
+            Gen.int.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)))
           )
         ),
       Gen
@@ -44,7 +43,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Numeric[Any]],
-            Gen.long.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Long], value)))
+            Gen.long.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Long], value)))
           )
         ),
       Gen
@@ -52,7 +51,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Numeric[Any]],
-            Gen.float.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Float], value)))
+            Gen.float.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Float], value)))
           )
         ),
       Gen
@@ -60,7 +59,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Numeric[Any]],
-            Gen.double.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Double], value)))
+            Gen.double.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Double], value)))
           )
         ),
       Gen
@@ -70,7 +69,10 @@ trait Generators extends DefaultJavaTimeSchemas {
             n.asInstanceOf[Numeric[Any]],
             Gen
               .bigInt(BigInt(-1000), BigInt(1000))
-              .map(value => Remote.Literal(SchemaAndValue(Schema.primitive[java.math.BigInteger], value.bigInteger)))
+              .map(value =>
+                Remote
+                  .Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[java.math.BigInteger], value.bigInteger))
+              )
           )
         ),
       Gen
@@ -80,7 +82,10 @@ trait Generators extends DefaultJavaTimeSchemas {
             n.asInstanceOf[Numeric[Any]],
             Gen
               .bigDecimal(BigDecimal(-1000), BigDecimal(1000))
-              .map(value => Remote.Literal(SchemaAndValue(Schema.primitive[java.math.BigDecimal], value.bigDecimal)))
+              .map(value =>
+                Remote
+                  .Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[java.math.BigDecimal], value.bigDecimal))
+              )
           )
         )
     )
@@ -92,7 +97,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Fractional[Any]],
-            Gen.float.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Float], value)))
+            Gen.float.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Float], value)))
           )
         ),
       Gen
@@ -100,7 +105,7 @@ trait Generators extends DefaultJavaTimeSchemas {
         .map(n =>
           (
             n.asInstanceOf[Fractional[Any]],
-            Gen.double.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Double], value)))
+            Gen.double.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Double], value)))
           )
         ),
       Gen
@@ -110,14 +115,20 @@ trait Generators extends DefaultJavaTimeSchemas {
             n.asInstanceOf[Fractional[Any]],
             Gen
               .bigDecimal(BigDecimal(-1000), BigDecimal(1000))
-              .map(value => Remote.Literal(SchemaAndValue(Schema.primitive[java.math.BigDecimal], value.bigDecimal)))
+              .map(value =>
+                Remote
+                  .Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[java.math.BigDecimal], value.bigDecimal))
+              )
           )
         )
     )
 
   val genThrowableSchemaAndValue: Gen[Random with Sized, SchemaAndValue[Throwable]] =
     Gen.alphaNumericString.map(msg =>
-      SchemaAndValue(SchemaOrNothing.fromSchema(zio.flow.schemaThrowable), new TestException(msg))
+      SchemaAndValue.fromSchemaAndValue(
+        SchemaOrNothing.fromSchema(zio.flow.schemaThrowable).schema,
+        new TestException(msg)
+      )
     )
 
   val genLiteral: Gen[Random with Sized, Remote[Any]] =
@@ -127,7 +138,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       name           <- genRemoteVariableName
       schemaAndValue <- genPrimitiveSchemaAndValue
-    } yield Remote.Variable(name, SchemaOrNothing.fromSchema(schemaAndValue.schema))
+    } yield Remote.Variable(name, schemaAndValue.schema)
 
   val genAddNumeric: Gen[Random with Sized, Remote[Any]] =
     for {
@@ -186,8 +197,8 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   val genModNumeric: Gen[Random with Sized, Remote[Any]] =
     for {
-      left  <- Gen.int.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Int], value)))
-      right <- Gen.int.map(value => Remote.Literal(SchemaAndValue(Schema.primitive[Int], value)))
+      left  <- Gen.int.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)))
+      right <- Gen.int.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)))
     } yield Remote.ModNumeric(left, right)
 
   val genAbsoluteNumeric: Gen[Random with Sized, Remote[Any]] =
@@ -261,6 +272,16 @@ trait Generators extends DefaultJavaTimeSchemas {
       r <- Gen.oneOf(genLiteral, genRemoteVariable, genAddNumeric)
     } yield Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Variable[Any]], r)
 
+  val genEvaluatedRemoteFunctionWithResultSchema: Gen[Random with Sized, (Remote[Any], Schema[Any])] =
+    for {
+      v <- genRemoteVariable
+      (r, s) <- Gen.oneOf(
+                  genLiteral.map(l => (l, l.asInstanceOf[Remote.Literal[Any]].schema)),
+                  genRemoteVariable.map(l => (l, l.asInstanceOf[Remote.Variable[Any]].schema)),
+                  genAddNumeric.map(l => (l, l.asInstanceOf[Remote.AddNumeric[Any]].numeric.schema))
+                )
+    } yield (Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Variable[Any]], r), s)
+
   val genRemoteApply: Gen[Random with Sized, Remote[Any]] =
     for {
       f <- genEvaluatedRemoteFunction
@@ -285,10 +306,14 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
                   Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
                 )
-      f      <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
-      aSchema = SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]])
-      cSchema = f.schema.asInstanceOf[SchemaOrNothing.Aux[Any]]
-    } yield Remote.FlatMapEither[Any, Any, Any](Remote.Either0(either), f, aSchema, cSchema)
+      (f, cSchema) <- genEvaluatedRemoteFunctionWithResultSchema
+      aSchema       = SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]])
+    } yield Remote.FlatMapEither[Any, Any, Any](
+      Remote.Either0(either),
+      f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]],
+      aSchema,
+      SchemaOrNothing.fromSchema(cSchema)
+    )
 
   val genFoldEither: Gen[Random with Sized, Remote[Any]] =
     for {
