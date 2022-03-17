@@ -3,6 +3,7 @@ package zio.flow.serialization
 import zio.{Random, ZIO}
 import zio.flow.{Remote, RemoteContext, SchemaOrNothing}
 import zio.flow._
+import zio.flow.serialization.RemoteSerializationSpec.test
 import zio.schema.{DeriveSchema, Schema}
 import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
@@ -175,6 +176,81 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(genTry) { t =>
           roundtrip(codec, t)
         }
+      },
+      test("tuple2") {
+        check(genTuple2) { t =>
+          roundtrip(codec, t)
+        }
+      },
+      test("tuple3") {
+        check(genTuple3) { t =>
+          roundtrip(codec, t)
+        }
+      },
+      test("tuple4") {
+        check(genTuple4) { t =>
+          roundtrip(codec, t)
+        }
+      },
+      test("first") {
+        check(genFirst) { first =>
+          roundtrip(codec, first)
+        }
+      },
+      test("second") {
+        check(genSecond) { second =>
+          roundtrip(codec, second)
+        }
+      },
+      test("first of tuple3") {
+        check(genFirstOf3) { first =>
+          roundtrip(codec, first)
+        }
+      },
+      test("second of tuple3") {
+        check(genSecondOf3) { second =>
+          roundtrip(codec, second)
+        }
+      },
+      test("third of tuple3") {
+        check(genThirdOf3) { third =>
+          roundtrip(codec, third)
+        }
+      },
+      test("first of tuple4") {
+        check(genFirstOf4) { first =>
+          roundtrip(codec, first)
+        }
+      },
+      test("second of tuple4") {
+        check(genSecondOf4) { second =>
+          roundtrip(codec, second)
+        }
+      },
+      test("third of tuple4") {
+        check(genThirdOf4) { third =>
+          roundtrip(codec, third)
+        }
+      },
+      test("fourth of tuple4") {
+        check(genFourthOf4) { fourth =>
+          roundtrip(codec, fourth)
+        }
+      },
+      test("branch") {
+        check(genBranch) { fourth =>
+          roundtrip(codec, fourth)
+        }
+      },
+      test("length") {
+        check(genLength) { length =>
+          roundtrip(codec, length)
+        }
+      },
+      test("less than equal") {
+        check(genLessThanEqual) { lte =>
+          roundtrip(codec, lte)
+        }
       }
     )
 
@@ -206,6 +282,18 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
             }
 
           roundtripEval(codec, remote, compare)(schemaTry[Int]).provide(RemoteContext.inMemory)
+        }
+      },
+      test("first") {
+        check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
+          val first = Remote.First(Remote.Tuple2(Remote(a), Remote(b)))
+          roundtripEval(codec, first).provide(RemoteContext.inMemory)
+        }
+      },
+      test("second") {
+        check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
+          val first = Remote.Second(Remote.Tuple2(Remote(b), Remote(a)))
+          roundtripEval(codec, first).provide(RemoteContext.inMemory)
         }
       }
     )

@@ -345,6 +345,110 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(value.toRemote)
                 )
     } yield Remote.Try(either)
+
+  val genTuple2: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genAddNumeric
+    } yield Remote.Tuple2(a, b)
+
+  val genTuple3: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genAddNumeric
+      c <- genRemoteVariable
+    } yield Remote.Tuple3(a, b, c)
+
+  val genTuple4: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genEvaluatedRemoteFunction
+      c <- genPowNumeric
+      d <- genEither0
+    } yield Remote.Tuple4(a, b, c, d)
+
+  val genFirst: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+    } yield Remote.First(Remote.Tuple2(a, b))
+
+  val genSecond: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+    } yield Remote.Second(Remote.Tuple2(a, b))
+
+  val genFirstOf3: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+    } yield Remote.FirstOf3(Remote.Tuple3(a, b, c))
+
+  val genSecondOf3: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+    } yield Remote.SecondOf3(Remote.Tuple3(a, b, c))
+
+  val genThirdOf3: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+    } yield Remote.ThirdOf3(Remote.Tuple3(a, b, c))
+
+  val genFirstOf4: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+      d <- genLiteral
+    } yield Remote.FirstOf4(Remote.Tuple4(a, b, c, d))
+
+  val genSecondOf4: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+      d <- genLiteral
+    } yield Remote.SecondOf4(Remote.Tuple4(a, b, c, d))
+
+  val genThirdOf4: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+      d <- genLiteral
+    } yield Remote.ThirdOf4(Remote.Tuple4(a, b, c, d))
+
+  val genFourthOf4: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- genLiteral
+      b <- genLiteral
+      c <- genLiteral
+      d <- genLiteral
+    } yield Remote.ThirdOf4(Remote.Tuple4(a, b, c, d))
+
+  val genBranch: Gen[Random with Sized, Remote[Any]] =
+    for {
+      condition <- Gen.boolean.map(Remote(_))
+      ifTrue    <- Gen.int.map(Remote(_))
+      ifFalse   <- Gen.int.map(n => Remote.MulNumeric(Remote(10), Remote(n), Numeric.NumericInt))
+    } yield Remote.Branch(condition, ifTrue, ifFalse)
+
+  val genLength: Gen[Random with Sized, Remote[Any]] =
+    Gen.string.map(Remote(_)).map(Remote.Length(_))
+
+  val genLessThanEqual: Gen[Random with Sized, Remote[Any]] =
+    for {
+      lv  <- Gen.int
+      rv  <- Gen.int
+      lLit = Remote(lv)
+      rLit = Remote(rv)
+    } yield Remote.LessThanEqual(lLit, rLit)
 }
 
 object Generators {

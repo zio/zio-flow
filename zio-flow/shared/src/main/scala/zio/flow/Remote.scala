@@ -877,545 +877,446 @@ object Remote {
     def schemaCase[A]: Schema.Case[Try[Any], Remote[A]] =
       Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]])
   }
-//
-//  final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
-//    val schema: SchemaOrNothing.Aux[_ <: (A, B)] =
-//      SchemaOrNothing.fromSchema(
-//        Schema.tuple2(left.schema.schema, right.schema.schema)
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[(A, B)], SchemaAndValue[(A, B)]]] =
-//      for {
-//        evaluatedLeft  <- left.evalWithSchema
-//        evaluatedRight <- right.evalWithSchema
-//        result = (for {
-//                   l <- evaluatedLeft
-//                   r <- evaluatedRight
-//                 } yield (l, r)) match {
-//                   case Left(_) =>
-//                     val reducedLeft =
-//                       evaluatedLeft.fold(identity, a => Literal(a.value, SchemaOrNothing.fromSchema(a.schema)))
-//                     val reducedRight =
-//                       evaluatedRight.fold(identity, b => Literal(b.value, SchemaOrNothing.fromSchema(b.schema)))
-//                     Left(Remote.tuple2((reducedLeft, reducedRight)))
-//                   case Right((a, b)) =>
-//                     Right(SchemaAndValue(Schema.Tuple(a.schema, b.schema), (a.value, b.value)))
-//                 }
-//      } yield result
-//  }
-//
-//  final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
-//    val schema: SchemaOrNothing.Aux[_ <: (A, B, C)] =
-//      SchemaOrNothing.fromSchema(Schema.tuple3(_1.schema.schema, _2.schema.schema, _3.schema.schema))
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]]] =
-//      for {
-//        first  <- _1.evalWithSchema
-//        second <- _2.evalWithSchema
-//        third  <- _3.evalWithSchema
-//        result =
-//          (for {
-//            a <- first
-//            b <- second
-//            c <- third
-//          } yield (a, b, c)) match {
-//            case Left(_) =>
-//              val reducedFirst  = first.fold(identity, a => Literal(a.value, SchemaOrNothing.fromSchema(a.schema)))
-//              val reducedSecond = second.fold(identity, b => Literal(b.value, SchemaOrNothing.fromSchema(b.schema)))
-//              val reducedThird  = third.fold(identity, c => Literal(c.value, SchemaOrNothing.fromSchema(c.schema)))
-//              Left(Remote.tuple3((reducedFirst, reducedSecond, reducedThird)))
-//            case Right((a, b, c)) =>
-//              Right(SchemaAndValue(Schema.tuple3(a.schema, b.schema, c.schema), (a.value, b.value, c.value)))
-//          }
-//      } yield result
-//  }
-//
-//  final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
-//      extends Remote[(A, B, C, D)] {
-//    val schema: SchemaOrNothing.Aux[_ <: (A, B, C, D)] =
-//      SchemaOrNothing.fromSchema(
-//        Schema.tuple4(_1.schema.schema, _2.schema.schema, _3.schema.schema, _4.schema.schema)
-//      )
-//
-//    override def evalWithSchema
-//      : ZIO[RemoteContext, Nothing, Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]]] =
-//      for {
-//        first  <- _1.evalWithSchema
-//        second <- _2.evalWithSchema
-//        third  <- _3.evalWithSchema
-//        fourth <- _4.evalWithSchema
-//        result =
-//          (for {
-//            a <- first
-//            b <- second
-//            c <- third
-//            d <- fourth
-//          } yield (a, b, c, d)) match {
-//            case Left(_) =>
-//              val reducedFirst  = first.fold(identity, a => Literal(a.value, SchemaOrNothing.fromSchema(a.schema)))
-//              val reducedSecond = second.fold(identity, b => Literal(b.value, SchemaOrNothing.fromSchema(b.schema)))
-//              val reducedThird  = third.fold(identity, c => Literal(c.value, SchemaOrNothing.fromSchema(c.schema)))
-//              val reducedFourth = fourth.fold(identity, d => Literal(d.value, SchemaOrNothing.fromSchema(d.schema)))
-//              Left(Remote.tuple4((reducedFirst, reducedSecond, reducedThird, reducedFourth)))
-//            case Right((a, b, c, d)) =>
-//              Right(
-//                SchemaAndValue(
-//                  Schema.tuple4(a.schema, b.schema, c.schema, d.schema),
-//                  (a.value, b.value, c.value, d.value)
-//                )
-//              )
-//          }
-//      } yield result
-//  }
-//
-//  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
-//    val schema: SchemaOrNothing.Aux[A] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema.asInstanceOf[Schema.Tuple[A, B]].left
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._1,
-//            remoteT => First(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaAndValue.schema.asInstanceOf[Schema.Tuple[A, B]].left
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
-//    val schema = SchemaOrNothing.fromSchema(tuple.schema.schema.asInstanceOf[Schema.Tuple[A, B]].right)
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._2,
-//            remoteT => Second(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaAndValue.schema.asInstanceOf[Schema.Tuple[A, B]].right
-//            )
-//          )
-//      }
-//  }
-//
-//  private def asSchemaOf3[A, B, C](schema: Schema[((A, B), C)]): Schema.Tuple[(A, B), C] =
-//    schema.asInstanceOf[Schema.Tuple[(A, B), C]]
-//
-//  private def asSchemaOf4[A, B, C, D](schema: Schema[(((A, B), C), D)]): Schema.Tuple[((A, B), C), D] =
-//    schema.asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//
-//  private def asSchemaOf5[A, B, C, D, E](schema: Schema[((((A, B), C), D), E)]): Schema.Tuple[(((A, B), C), D), E] =
-//    schema.asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//
-//  private def schemaOf3[A, B, C](schemaAndValue: SchemaAndValue[(A, B, C)]): Schema.Tuple[(A, B), C] =
-//    asSchemaOf3(schemaAndValue.schema.asInstanceOf[Schema.Transform[((A, B), C), _, _]].codec)
-//
-//  private def schemaOf4[A, B, C, D](schemaAndValue: SchemaAndValue[(A, B, C, D)]): Schema.Tuple[((A, B), C), D] =
-//    asSchemaOf4(schemaAndValue.schema.asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]].codec)
-//
-//  private def schemaOf5[A, B, C, D, E](
-//    schemaAndValue: SchemaAndValue[(A, B, C, D, E)]
-//  ): Schema.Tuple[(((A, B), C), D), E] =
-//    asSchemaOf5(schemaAndValue.schema.asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]].codec)
-//
-//  final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
-//    val schema: SchemaOrNothing.Aux[A] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .left
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._1,
-//            remoteT => FirstOf3(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf3(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[A, B]]
-//                .left
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
-//    val schema: SchemaOrNothing.Aux[B] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._2,
-//            remoteT => SecondOf3(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf3(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[A, B]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
-//    val schema: SchemaOrNothing.Aux[C] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[C], SchemaAndValue[C]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._3,
-//            remoteT => ThirdOf3(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf3(schemaAndValue).right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
-//    val schema: SchemaOrNothing.Aux[A] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .left
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._1,
-//            remoteT => FirstOf4(remoteT), {
-//              println(schemaAndValue.schema)
-//              SchemaOrNothing.fromSchema(
-//                schemaOf4(schemaAndValue).left
-//                  .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                  .left
-//                  .asInstanceOf[Schema.Tuple[A, B]]
-//                  .left
-//              )
-//            }
-//          )
-//      }
-//  }
-//
-//  final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
-//    val schema: SchemaOrNothing.Aux[B] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._2,
-//            remoteT => SecondOf4(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf4(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[A, B]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
-//    val schema: SchemaOrNothing.Aux[C] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[C], SchemaAndValue[C]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._3,
-//            remoteT => ThirdOf4(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf4(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
-//    val schema: SchemaOrNothing.Aux[D] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[D], SchemaAndValue[D]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._4,
-//            remoteT => FourthOf4(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf4(schemaAndValue).right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class FirstOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[A] {
-//    val schema: SchemaOrNothing.Aux[A] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .left
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._1,
-//            remoteT => FirstOf5(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf5(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[A, B]]
-//                .left
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class SecondOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[B] {
-//    val schema: SchemaOrNothing.Aux[B] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[A, B]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._2,
-//            remoteT => SecondOf5(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf5(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[A, B]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class ThirdOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[C] {
-//    val schema: SchemaOrNothing.Aux[C] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[(A, B), C]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[C], SchemaAndValue[C]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._3,
-//            remoteT => ThirdOf5(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf5(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//                .left
-//                .asInstanceOf[Schema.Tuple[(A, B), C]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class FourthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[D] {
-//    val schema: SchemaOrNothing.Aux[D] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//          .left
-//          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[D], SchemaAndValue[D]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._4,
-//            remoteT => FourthOf5(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf5(schemaAndValue).left
-//                .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-//                .right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class FifthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[E] {
-//    val schema: SchemaOrNothing.Aux[E] =
-//      SchemaOrNothing.fromSchema(
-//        tuple.schema.schema
-//          .asInstanceOf[Schema.Transform[((((A, B), C), D), E), _, _]]
-//          .codec
-//          .asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-//          .right
-//      )
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[E], SchemaAndValue[E]]] =
-//      tuple.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          unaryEvalWithSchema(tuple)(
-//            t => t._5,
-//            remoteT => FifthOf5(remoteT),
-//            SchemaOrNothing.fromSchema(
-//              schemaOf5(schemaAndValue).right
-//            )
-//          )
-//      }
-//  }
-//
-//  final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
-//    val schema: SchemaOrNothing.Aux[A] =
-//      ifTrue.schema.asInstanceOf[SchemaOrNothing.Aux[A]] // TODO: capture merged schema
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      predicate.eval.flatMap {
-//        case Left(_)      => ZIO.left(self)
-//        case Right(value) => if (value) ifTrue.evalWithSchema else ifFalse.evalWithSchema
-//      }
-//  }
-//
-//  case class Length(remoteString: Remote[String]) extends Remote[Int] {
-//    val schema: SchemaOrNothing.Aux[Int] = SchemaOrNothing[Int]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Int], SchemaAndValue[Int]]] =
-//      unaryEvalWithSchema(remoteString)(str => str.length, remoteStr => Length(remoteStr), SchemaOrNothing[Int])
-//  }
-//
-//  final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
-//    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Boolean], SchemaAndValue[Boolean]]] = for {
-//      lEval <- left.evalWithSchema
-//      rEval <- right.evalWithSchema
-//      result = (lEval, rEval) match {
-//                 case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(_, rightA))) =>
-//                   Right(
-//                     SchemaAndValue(
-//                       Schema[Boolean],
-//                       leftSchemaA.ordering.asInstanceOf[Ordering[Any]].compare(leftA, rightA) <= 0
-//                     )
-//                   )
-//                 case _ => Left(self)
-//               }
-//    } yield result
-//  }
-//
+
+  // TODO: generate the tuple constructor / selector remotes?
+
+  final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B)]] =
+      for {
+        leftDyn  <- left.evalDynamic
+        rightDyn <- right.evalDynamic
+
+        a <- ZIO.fromEither(leftDyn.toTyped)
+        b <- ZIO.fromEither(rightDyn.toTyped)
+
+        result = SchemaAndValue.fromSchemaAndValue(
+                   Schema.tuple2(leftDyn.schema, rightDyn.schema),
+                   (a, b)
+                 )
+      } yield result
+  }
+
+  object Tuple2 {
+    def schema[A, B]: Schema[Tuple2[A, B]] =
+      Schema.defer(
+        Schema
+          .tuple2(Remote.schema[A], Remote.schema[B])
+          .transform(
+            { case (a, b) => Tuple2(a, b) },
+            (t: Tuple2[A, B]) => (t.left, t.right)
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Tuple2[Any, Any], Remote[A]] =
+      Schema.Case("Tuple2", schema[Any, Any], _.asInstanceOf[Tuple2[Any, Any]])
+
+  }
+
+  final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C)]] =
+      for {
+        dyn1 <- _1.evalDynamic
+        dyn2 <- _2.evalDynamic
+        dyn3 <- _3.evalDynamic
+
+        a <- ZIO.fromEither(dyn1.toTyped)
+        b <- ZIO.fromEither(dyn2.toTyped)
+        c <- ZIO.fromEither(dyn3.toTyped)
+
+        result = SchemaAndValue.fromSchemaAndValue(
+                   Schema.tuple3(dyn1.schema, dyn2.schema, dyn3.schema),
+                   (a, b, c)
+                 )
+      } yield result
+  }
+
+  object Tuple3 {
+    def schema[A, B, C]: Schema[Tuple3[A, B, C]] =
+      Schema.defer(
+        Schema
+          .tuple3(Remote.schema[A], Remote.schema[B], Remote.schema[C])
+          .transform(
+            { case (a, b, c) => Tuple3(a, b, c) },
+            (t: Tuple3[A, B, C]) => (t._1, t._2, t._3)
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Tuple3[Any, Any, Any], Remote[A]] =
+      Schema.Case("Tuple3", schema[Any, Any, Any], _.asInstanceOf[Tuple3[Any, Any, Any]])
+
+  }
+
+  final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
+      extends Remote[(A, B, C, D)] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C, D)]] =
+      for {
+        dyn1 <- _1.evalDynamic
+        dyn2 <- _2.evalDynamic
+        dyn3 <- _3.evalDynamic
+        dyn4 <- _4.evalDynamic
+
+        a <- ZIO.fromEither(dyn1.toTyped)
+        b <- ZIO.fromEither(dyn2.toTyped)
+        c <- ZIO.fromEither(dyn3.toTyped)
+        d <- ZIO.fromEither(dyn4.toTyped)
+
+        result = SchemaAndValue.fromSchemaAndValue(
+                   Schema.tuple4(dyn1.schema, dyn2.schema, dyn3.schema, dyn4.schema),
+                   (a, b, c, d)
+                 )
+      } yield result
+  }
+
+  object Tuple4 {
+    def schema[A, B, C, D]: Schema[Tuple4[A, B, C, D]] =
+      Schema.defer(
+        Schema
+          .tuple4(Remote.schema[A], Remote.schema[B], Remote.schema[C], Remote.schema[D])
+          .transform(
+            { case (a, b, c, d) => Tuple4(a, b, c, d) },
+            (t: Tuple4[A, B, C, D]) => (t._1, t._2, t._3, t._4)
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Tuple4[Any, Any, Any, Any], Remote[A]] =
+      Schema.Case("Tuple4", schema[Any, Any, Any, Any], _.asInstanceOf[Tuple4[Any, Any, Any, Any]])
+
+  }
+
+  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      for {
+        dyn        <- tuple.evalDynamic
+        tupleSchema = dyn.schema.asInstanceOf[Schema.Tuple[A, B]]
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(tupleSchema.left, tupleValue._1)
+  }
+
+  object First {
+    def schema[A, B]: Schema[First[A, B]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B)]
+          .transform(
+            First.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[First[A, Any], Remote[A]] =
+      Schema.Case("First", schema[A, Any], _.asInstanceOf[First[A, Any]])
+  }
+
+  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
+      for {
+        dyn        <- tuple.evalDynamic
+        tupleSchema = dyn.schema.asInstanceOf[Schema.Tuple[A, B]]
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(tupleSchema.right, tupleValue._2)
+  }
+
+  object Second {
+    def schema[A, B]: Schema[Second[A, B]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B)]
+          .transform(
+            Second.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Second[A, Any], Remote[A]] =
+      Schema.Case("Second", schema[A, Any], _.asInstanceOf[Second[A, Any]])
+  }
+
+  final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[A, B]]
+                   .left
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._1)
+  }
+
+  object FirstOf3 {
+    def schema[A, B, C]: Schema[FirstOf3[A, B, C]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C)]
+          .transform(
+            FirstOf3.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[FirstOf3[A, Any, Any], Remote[A]] =
+      Schema.Case("FirstOf3", schema[A, Any, Any], _.asInstanceOf[FirstOf3[A, Any, Any]])
+  }
+
+  final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[A, B]]
+                   .right
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._2)
+  }
+
+  object SecondOf3 {
+    def schema[A, B, C]: Schema[SecondOf3[A, B, C]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C)]
+          .transform(
+            SecondOf3.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[SecondOf3[Any, A, Any], Remote[A]] =
+      Schema.Case("SecondOf3", schema[Any, A, Any], _.asInstanceOf[SecondOf3[Any, A, Any]])
+  }
+
+  final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .right
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._3)
+  }
+
+  object ThirdOf3 {
+    def schema[A, B, C]: Schema[ThirdOf3[A, B, C]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C)]
+          .transform(
+            ThirdOf3.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[ThirdOf3[Any, Any, A], Remote[A]] =
+      Schema.Case("ThirdOf3", schema[Any, Any, A], _.asInstanceOf[ThirdOf3[Any, Any, A]])
+  }
+
+  final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[A, B]]
+                   .left
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._1)
+  }
+
+  object FirstOf4 {
+    def schema[A, B, C, D]: Schema[FirstOf4[A, B, C, D]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C, D)]
+          .transform(
+            FirstOf4.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[FirstOf4[A, Any, Any, Any], Remote[A]] =
+      Schema.Case("FirstOf4", schema[A, Any, Any, Any], _.asInstanceOf[FirstOf4[A, Any, Any, Any]])
+  }
+
+  final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[A, B]]
+                   .right
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._2)
+  }
+
+  object SecondOf4 {
+    def schema[A, B, C, D]: Schema[SecondOf4[A, B, C, D]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C, D)]
+          .transform(
+            SecondOf4.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[SecondOf4[Any, A, Any, Any], Remote[A]] =
+      Schema.Case("SecondOf4", schema[Any, A, Any, Any], _.asInstanceOf[SecondOf4[Any, A, Any, Any]])
+  }
+
+  final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+                   .left
+                   .asInstanceOf[Schema.Tuple[(A, B), C]]
+                   .right
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._3)
+  }
+
+  object ThirdOf4 {
+    def schema[A, B, C, D]: Schema[ThirdOf4[A, B, C, D]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C, D)]
+          .transform(
+            ThirdOf4.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[ThirdOf4[Any, Any, A, Any], Remote[A]] =
+      Schema.Case("ThirdOf4", schema[Any, Any, A, Any], _.asInstanceOf[ThirdOf4[Any, Any, A, Any]])
+  }
+
+  final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[D]] =
+      for {
+        dyn <- tuple.evalDynamic
+        schema = dyn.schema
+                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+                   .codec
+                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+                   .right
+        tupleValue <- ZIO.fromEither(dyn.toTyped)
+      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._4)
+  }
+
+  object FourthOf4 {
+    def schema[A, B, C, D]: Schema[FourthOf4[A, B, C, D]] =
+      Schema.defer(
+        Remote
+          .schema[(A, B, C, D)]
+          .transform(
+            FourthOf4.apply,
+            _.tuple
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[FourthOf4[Any, Any, Any, A], Remote[A]] =
+      Schema.Case("FourthOf4", schema[Any, Any, Any, A], _.asInstanceOf[FourthOf4[Any, Any, Any, A]])
+  }
+
+  final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      predicate.eval.flatMap {
+        case false => ifFalse.evalDynamic
+        case true  => ifTrue.evalDynamic
+      }
+  }
+
+  object Branch {
+    def schema[A]: Schema[Branch[A]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[Boolean], Remote[A], Remote[A], Branch[A]](
+          Schema.Field("predicate", Remote.schema[Boolean]),
+          Schema.Field("ifTrue", Remote.schema[A]),
+          Schema.Field("ifFalse", Remote.schema[A]),
+          { case (predicate, ifTrue, ifFalse) => Branch(predicate, ifTrue, ifFalse) },
+          _.predicate,
+          _.ifTrue,
+          _.ifFalse
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Branch[A], Remote[A]] =
+      Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]])
+  }
+
+  case class Length(remoteString: Remote[String]) extends Remote[Int] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
+      remoteString.eval.map { value =>
+        SchemaAndValue.fromSchemaAndValue(Schema[Int], value.length)
+      }
+  }
+
+  object Length {
+    val schema: Schema[Length] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          Length.apply,
+          _.remoteString
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[Length, Remote[A]] =
+      Schema.Case("Length", schema, _.asInstanceOf[Length])
+  }
+
+  final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+      for {
+        leftDyn      <- left.evalDynamic
+        rightDyn     <- right.evalDynamic
+        ordering      = leftDyn.schema.ordering
+        leftVal      <- ZIO.fromEither(leftDyn.toTyped)
+        rightVal     <- ZIO.fromEither(rightDyn.toTyped)
+        compareResult = ordering.compare(leftVal, rightVal.asInstanceOf[leftDyn.Subtype])
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], compareResult <= 0)
+  }
+
+  object LessThanEqual {
+    def schema[A]: Schema[LessThanEqual[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[A], Remote[A], LessThanEqual[A]](
+          Schema.Field("left", Remote.schema[A]),
+          Schema.Field("right", Remote.schema[A]),
+          { case (left, right) => LessThanEqual(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[LessThanEqual[Any], Remote[A]] =
+      Schema.Case("LessThanEqual", schema[Any], _.asInstanceOf[LessThanEqual[Any]])
+  }
+
 //  final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
 //    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
 //
@@ -1958,15 +1859,15 @@ object Remote {
 //  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
 //    Remote.DurationFromAmount(nanoseconds, Remote(ChronoUnit.NANOS))
 //
-//  implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
-//    Tuple2(t._1, t._2)
-//
-//  implicit def tuple3[A, B, C](t: (Remote[A], Remote[B], Remote[C])): Remote[(A, B, C)] =
-//    Tuple3(t._1, t._2, t._3)
-//
-//  implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
-//    Tuple4(t._1, t._2, t._3, t._4)
-//
+  implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
+    Tuple2(t._1, t._2)
+
+  implicit def tuple3[A, B, C](t: (Remote[A], Remote[B], Remote[C])): Remote[(A, B, C)] =
+    Tuple3(t._1, t._2, t._3)
+
+  implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
+    Tuple4(t._1, t._2, t._3, t._4)
+
 //  def suspend[A: Schema](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
 //  implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
@@ -2008,6 +1909,21 @@ object Remote {
       .:+:(FoldEither.schemaCase[Any, Any, A])
       .:+:(SwapEither.schemaCase[A])
       .:+:(Try.schemaCase[A])
+      .:+:(Tuple2.schemaCase[A])
+      .:+:(Tuple3.schemaCase[A])
+      .:+:(Tuple4.schemaCase[A])
+      .:+:(First.schemaCase[A])
+      .:+:(Second.schemaCase[A])
+      .:+:(FirstOf3.schemaCase[A])
+      .:+:(SecondOf3.schemaCase[A])
+      .:+:(ThirdOf3.schemaCase[A])
+      .:+:(FirstOf4.schemaCase[A])
+      .:+:(SecondOf4.schemaCase[A])
+      .:+:(ThirdOf4.schemaCase[A])
+      .:+:(FourthOf4.schemaCase[A])
+      .:+:(Branch.schemaCase[A])
+      .:+:(Length.schemaCase[A])
+      .:+:(LessThanEqual.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]

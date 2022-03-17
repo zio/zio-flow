@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
 import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
@@ -82,8 +83,13 @@ object RemoteSpec extends DefaultRunnableSpec {
         test("evaluates correctly when it is Left") {
           val remote = Remote.FlatMapEither(
             Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema[Int]))),
-            Remote.RemoteFunction((a: Remote[Int]) =>
-              Remote.Either0(Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))))).evaluated,
+            Remote
+              .RemoteFunction((a: Remote[Int]) =>
+                Remote.Either0(
+                  Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
+                )
+              )
+              .evaluated,
             SchemaOrNothing.fromSchema[String],
             SchemaOrNothing.fromSchema[Int]
           )
@@ -100,8 +106,13 @@ object RemoteSpec extends DefaultRunnableSpec {
         test("evaluates correctly when it is Right") {
           val remote = Remote.FlatMapEither(
             Remote.Either0(Right((SchemaOrNothing.fromSchema[String], Remote(10)))),
-            Remote.RemoteFunction((a: Remote[Int]) =>
-              Remote.Either0(Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))))).evaluated,
+            Remote
+              .RemoteFunction((a: Remote[Int]) =>
+                Remote.Either0(
+                  Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
+                )
+              )
+              .evaluated,
             SchemaOrNothing.fromSchema[String],
             SchemaOrNothing.fromSchema[Int]
           )
@@ -114,11 +125,12 @@ object RemoteSpec extends DefaultRunnableSpec {
               typ == Right(11)
             )
           test.provide(RemoteContext.inMemory)
-        },
+        }
       ),
       suite("SwapEither")(
         test("evaluates correctly when it is Left") {
-          val remote = Remote.SwapEither(Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema(Schema[Int])))))
+          val remote =
+            Remote.SwapEither(Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema(Schema[Int])))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -131,7 +143,8 @@ object RemoteSpec extends DefaultRunnableSpec {
           test.provide(RemoteContext.inMemory)
         },
         test("evaluates correctly when it is Right") {
-          val remote = Remote.SwapEither(Remote.Either0(Right((SchemaOrNothing.fromSchema(Schema[Int]), (Remote("test"))))))
+          val remote =
+            Remote.SwapEither(Remote.Either0(Right((SchemaOrNothing.fromSchema(Schema[Int]), (Remote("test"))))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -144,5 +157,55 @@ object RemoteSpec extends DefaultRunnableSpec {
           test.provide(RemoteContext.inMemory)
         }
       ),
+      suite("Tuple3")(
+        test("evaluates correctly") {
+          val remote = Remote.Tuple3(
+            Remote("hello"),
+            Remote(TestCaseClass("x", 2)),
+            Remote(1)
+          )
+          val expectedValue = ("hello", TestCaseClass("x", 2), 1)
+          val expectedDynamicValue =
+            SchemaAndValue.fromSchemaAndValue(Schema.tuple3[String, TestCaseClass, Int], expectedValue)
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[(String, TestCaseClass, Int)]
+            } yield assertTrue(
+              dyn == expectedDynamicValue,
+              typ == ("hello", TestCaseClass("x", 2), 1)
+            )
+
+          test.provide(RemoteContext.inMemory)
+        }
+      ),
+      suite("LessThanEqual")(
+        test("evaluates correctly when less") {
+          val remote = Remote.LessThanEqual(Remote(5), Remote(10))
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Boolean]
+            } yield assertTrue(
+              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Boolean], true),
+              typ == true
+            )
+
+          test.provide(RemoteContext.inMemory)
+        },
+        test("evaluates correctly when greater") {
+          val remote = Remote.LessThanEqual(Remote(50), Remote(10))
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Boolean]
+            } yield assertTrue(
+              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Boolean], false),
+              typ == false
+            )
+
+          test.provide(RemoteContext.inMemory)
+        }
+      )
     )
 }
