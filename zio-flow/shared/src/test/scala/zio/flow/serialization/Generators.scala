@@ -449,6 +449,25 @@ trait Generators extends DefaultJavaTimeSchemas {
       lLit = Remote(lv)
       rLit = Remote(rv)
     } yield Remote.LessThanEqual(lLit, rLit)
+
+  val genEqual: Gen[Random with Sized, Remote[Any]] =
+    for {
+      lv  <- Gen.string
+      rv  <- Gen.string
+      lLit = Remote(lv)
+      rLit = Remote(rv)
+    } yield Remote.Equal(lLit, rLit)
+
+  val genNot: Gen[Random with Sized, Remote[Any]] =
+    for {
+      value <- Gen.boolean.map(Remote(_))
+    } yield Remote.Not(value)
+
+  val genAnd: Gen[Random with Sized, Remote[Any]] =
+    for {
+      left <- Gen.boolean.map(Remote(_))
+      right = Remote.RemoteFunction((b: Remote[Boolean]) => Remote.Not(b)).evaluated
+    } yield Remote.And(left, right)
 }
 
 object Generators {

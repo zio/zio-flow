@@ -1317,39 +1317,76 @@ object Remote {
       Schema.Case("LessThanEqual", schema[Any], _.asInstanceOf[LessThanEqual[Any]])
   }
 
-//  final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
-//    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Boolean], SchemaAndValue[Boolean]]] = for {
-//      lEval <- left.evalWithSchema
-//      rEval <- right.evalWithSchema
-//      result = (lEval, rEval) match {
-//                 //FIXME : fix when zio schema can compare Schemas
-//                 case (Right(SchemaAndValue(_, leftA)), Right(SchemaAndValue(_, rightA))) =>
-//                   Right(
-//                     SchemaAndValue(Schema[Boolean], (leftA == rightA))
-//                   )
-//                 case _ => Left(self)
-//               }
-//    } yield result
-//  }
-//
-//  final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
-//    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Boolean], SchemaAndValue[Boolean]]] =
-//      unaryEval[Boolean, Boolean](value)(a => !a, remoteA => Not(remoteA))
-//        .map(_.map(SchemaAndValue(Schema[Boolean], _)))
-//  }
-//
-//  final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
-//    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Boolean], SchemaAndValue[Boolean]]] =
-//      binaryEval(left, right)((l, r) => l && r, (remoteL, remoteR) => And(remoteL, remoteR))
-//        .map(_.map(SchemaAndValue(Schema[Boolean], _)))
-//  }
-//
+  final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+      for {
+        leftDyn  <- left.evalDynamic
+        rightDyn <- right.evalDynamic
+        result    = leftDyn.value == rightDyn.value && Schema.structureEquality.equal(leftDyn.schema, rightDyn.schema)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], result)
+  }
+
+  object Equal {
+    def schema[A]: Schema[Equal[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[A], Remote[A], Equal[A]](
+          Schema.Field("left", Remote.schema[A]),
+          Schema.Field("right", Remote.schema[A]),
+          { case (left, right) => Equal(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Equal[Any], Remote[A]] =
+      Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]])
+  }
+
+  final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+      value.eval.map { boolValue =>
+        SchemaAndValue.fromSchemaAndValue(Schema[Boolean], !boolValue)
+      }
+  }
+
+  object Not {
+    val schema: Schema[Not] = Schema.defer(
+      Remote
+        .schema[Boolean]
+        .transform(
+          Not.apply,
+          _.value
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[Not, Remote[A]] =
+      Schema.Case("Not", schema, _.asInstanceOf[Not])
+  }
+
+  final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+      for {
+        lval <- left.eval
+        rval <- right.eval
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], lval && rval)
+  }
+
+  object And {
+    val schema: Schema[And] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Boolean], Remote[Boolean], And](
+          Schema.Field("left", Remote.schema[Boolean]),
+          Schema.Field("right", Remote.schema[Boolean]),
+          { case (left, right) => And(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[And, Remote[A]] =
+      Schema.Case("And", schema, _.asInstanceOf[And])
+  }
+
 //  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: (B, A) ===> B) extends Remote[B] {
 //    val schema = body.schema
 //
@@ -1924,6 +1961,9 @@ object Remote {
       .:+:(Branch.schemaCase[A])
       .:+:(Length.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
+      .:+:(Equal.schemaCase[A])
+      .:+:(Not.schemaCase[A])
+      .:+:(And.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]

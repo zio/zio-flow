@@ -251,6 +251,21 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(genLessThanEqual) { lte =>
           roundtrip(codec, lte)
         }
+      },
+      test("equal") {
+        check(genEqual) { eq =>
+          roundtrip(codec, eq)
+        }
+      },
+      test("not") {
+        check(genNot) { not =>
+          roundtrip(codec, not)
+        }
+      },
+      test("and") {
+        check(genAnd) { and =>
+          roundtrip(codec, and)
+        }
       }
     )
 
