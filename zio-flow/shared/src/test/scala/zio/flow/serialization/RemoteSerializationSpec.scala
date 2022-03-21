@@ -266,6 +266,11 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(genAnd) { and =>
           roundtrip(codec, and)
         }
+      },
+      test("fold") {
+        check(genFold) { fold =>
+          roundtrip(codec, fold)
+        }
       }
     )
 

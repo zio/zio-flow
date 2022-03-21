@@ -468,6 +468,15 @@ trait Generators extends DefaultJavaTimeSchemas {
       left <- Gen.boolean.map(Remote(_))
       right = Remote.RemoteFunction((b: Remote[Boolean]) => Remote.Not(b)).evaluated
     } yield Remote.And(left, right)
+
+  val genFold: Gen[Random with Sized, Remote[Any]] =
+    for {
+      list    <- Gen.listOf(Gen.double).map(Remote(_))
+      initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
+      fun = Remote.RemoteFunction((tuple: Remote[(Double, Double)]) =>
+              Remote.AddNumeric(Remote.First(tuple), Remote.Second(tuple), Numeric.NumericDouble)
+            )
+    } yield Remote.Fold(list, initial, fun.evaluated)
 }
 
 object Generators {

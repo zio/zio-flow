@@ -206,6 +206,46 @@ object RemoteSpec extends DefaultRunnableSpec {
 
           test.provide(RemoteContext.inMemory)
         }
+      ),
+      suite("Fold")(
+        test("evaluates correctly") {
+          val remote = Remote.Fold(
+            Remote(List(10, 20, 30)),
+            Remote(100),
+            Remote
+              .RemoteFunction((tuple: Remote[(Int, Int)]) =>
+                Remote.AddNumeric(Remote.First(tuple), Remote.Second(tuple), Numeric.NumericInt)
+              )
+              .evaluated
+          )
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Int]
+            } yield assertTrue(
+              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Int], 160),
+              typ == 160
+            )
+
+          test.provide(RemoteContext.inMemory)
+        },
+        test("evaluates correctly with custom types") {
+          val remote = Remote.Fold(
+            Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
+            Remote(TestCaseClass("d", 40)),
+            Remote.RemoteFunction((tuple: Remote[(TestCaseClass, TestCaseClass)]) => Remote.Second(tuple)).evaluated
+          )
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[TestCaseClass]
+            } yield assertTrue(
+              dyn == SchemaAndValue.fromSchemaAndValue(Schema[TestCaseClass], TestCaseClass("c", 30)),
+              typ == TestCaseClass("c", 30)
+            )
+
+          test.provide(RemoteContext.inMemory)
+        }
       )
     )
 }

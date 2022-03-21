@@ -1387,34 +1387,54 @@ object Remote {
       Schema.Case("And", schema, _.asInstanceOf[And])
   }
 
-//  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: (B, A) ===> B) extends Remote[B] {
-//    val schema = body.schema
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      list.evalWithSchema.flatMap {
-//        case Left(_)    => ZIO.left(self)
-//        case Right(lst) =>
-//          // TODO: can we avoid this?
-//          val schemaA = lst.schema.asInstanceOf[Schema[List[A]]] match {
-//            case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-//            case _                                    => Schema.fail[A]("Failure.")
-//          }
-//          initial.evalWithSchema.flatMap { initialValue =>
-//            ZIO.foldLeft[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]], A](
-//              lst.value
-//            )(initialValue) {
-//              case (Left(_), _) => ZIO.left(self)
-//              case (Right(schemaAndVal), a) =>
-//                body(
-//                  Literal(
-//                    (schemaAndVal.value, a),
-//                    SchemaOrNothing.fromSchema(Schema.Tuple(schemaAndVal.schema, schemaA))
-//                  )
-//                ).evalWithSchema
-//            }
-//          }
-//      }
-//  }
+  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: EvaluatedRemoteFunction[(B, A), B])
+      extends Remote[B] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
+      list.evalDynamic.flatMap { listDyn =>
+        for {
+          elemSchema <- listDyn.schema match {
+                          case Schema.Sequence(schema, _, _, _, _) => ZIO.succeed(schema)
+                          case _                                   => ZIO.fail(s"Fold's list did not evaluate into a sequence")
+                        }
+          initialDyn <- initial.evalDynamic
+          result <- listDyn.value match {
+                      case DynamicValue.Sequence(elemsDyn) =>
+                        ZIO.foldLeft(elemsDyn)(initialDyn.value) { case (b, a) =>
+                          body
+                            .apply(
+                              Remote
+                                .Tuple2(
+                                  Remote.Literal(b, initialDyn.schema),
+                                  Remote.Literal(a, elemSchema.asInstanceOf[Schema[A]])
+                                )
+                            )
+                            .evalDynamic
+                            .map(_.value)
+                        }
+                      case _ =>
+                        ZIO.fail(s"Fold's list did not evaluate into a sequence")
+                    }
+        } yield SchemaAndValue(initialDyn.schema, result)
+      }
+  }
+
+  object Fold {
+    def schema[A, B]: Schema[Fold[A, B]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[List[A]], Remote[B], EvaluatedRemoteFunction[(B, A), B], Fold[A, B]](
+          Schema.Field("list", Remote.schema[List[A]]),
+          Schema.Field("initial", Remote.schema[B]),
+          Schema.Field("body", EvaluatedRemoteFunction.schema[(B, A), B]),
+          { case (list, initial, body) => Fold(list, initial, body) },
+          _.list,
+          _.initial,
+          _.body
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Fold[Any, A], Remote[A]] =
+      Schema.Case("fold", schema[Any, A], _.asInstanceOf[Fold[Any, A]])
+  }
 //
 //  final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
 //    val schema: SchemaOrNothing.Aux[List[A]] = list.schema.asInstanceOf[SchemaOrNothing.Aux[List[A]]]
@@ -1964,6 +1984,7 @@ object Remote {
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])
       .:+:(And.schemaCase[A])
+      .:+:(Fold.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]
