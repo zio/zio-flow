@@ -1433,228 +1433,388 @@ object Remote {
       )
 
     def schemaCase[A]: Schema.Case[Fold[Any, A], Remote[A]] =
-      Schema.Case("fold", schema[Any, A], _.asInstanceOf[Fold[Any, A]])
+      Schema.Case("Fold", schema[Any, A], _.asInstanceOf[Fold[Any, A]])
   }
-//
-//  final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
-//    val schema: SchemaOrNothing.Aux[List[A]] = list.schema.asInstanceOf[SchemaOrNothing.Aux[List[A]]]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[List[A]], SchemaAndValue[List[A]]]] =
-//      list.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          binaryEvalWithSchema(list, head)(
-//            (l, h) => h :: l,
-//            (remoteL, remoteH) => Cons(remoteL, remoteH),
-//            SchemaOrNothing.fromSchema(schemaAndValue.schema.asInstanceOf[Schema[List[A]]])
-//          )
-//      }
-//  }
-//
-//  final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
-//    val schema: SchemaOrNothing.Aux[Option[(A, List[A])]] = SchemaOrNothing.fromSchema {
-//      val listSchema = list.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
-//      Schema.option(Schema.tuple2(listSchema.schemaA, listSchema))
-//    }
-//
-//    override def evalWithSchema
-//      : ZIO[RemoteContext, Nothing, Either[Remote[Option[(A, List[A])]], SchemaAndValue[Option[(A, List[A])]]]] = {
-//      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]] = Schema.option(schema)
-//
-//      implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] =
-//        Schema.tuple2(schemaS, schemaU)
-//
-//      list.evalWithSchema.map {
-//        case Left(remote) => Left(UnCons(remote))
-//        case Right(rightVal) =>
-//          Right(rightVal.value.headOption match {
-//            case Some(v) =>
-//              SchemaAndValue(
-//                toOptionSchema(
-//                  toTupleSchema(
-//                    (rightVal.schema.asInstanceOf[SchemaList[A]]) match {
-//                      case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-//                      case _ =>
-//                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-//                    },
-//                    rightVal.schema.asInstanceOf[SchemaList[A]]
-//                  )
-//                ),
-//                Some((v, rightVal.value.tail))
-//              )
-//            case None =>
-//              val schema = rightVal.schema.asInstanceOf[SchemaList[A]]
-//              SchemaAndValue(
-//                toOptionSchema(
-//                  toTupleSchema(
-//                    schema match {
-//                      case Schema.Sequence(schemaA, _, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-//                      case _ =>
-//                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-//                    },
-//                    rightVal.schema
-//                  )
-//                ),
-//                None
-//              )
-//            case _ => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-//          })
-//      }
-//    }
-//  }
-//
-//  final case class InstantFromLong(seconds: Remote[Long]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
-//        .map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      binaryEval(seconds, nanos)(
-//        (l1, l2) => Instant.ofEpochSecond(l1, l2),
-//        (remoteS, remoteN) => InstantFromLongs(remoteS, remoteN)
-//      ).map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantFromMilli(milliSecond: Remote[Long]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      unaryEval(milliSecond)(l => Instant.ofEpochMilli(l), remoteM => InstantFromMilli(remoteM))
-//        .map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantFromClock(clock: Remote[Clock]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      unaryEval(clock)(c => Instant.now(c), remoteC => InstantFromClock(remoteC))
-//        .map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantFromString(charSeq: Remote[String]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      unaryEval(charSeq)(chars => Instant.parse(chars), remoteC => InstantFromString(remoteC))
-//        .map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantToTuple(instant: Remote[Instant]) extends Remote[(Long, Int)] {
-//    val schema: SchemaOrNothing.Aux[(Long, Int)] = SchemaOrNothing[(Long, Int)]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[(Long, Int)], SchemaAndValue[(Long, Int)]]] =
-//      unaryEval(instant)(
-//        instant => (instant.getEpochSecond, instant.getNano),
-//        remoteT => InstantToTuple(remoteT)
-//      ).map(_.map(SchemaAndValue(Schema[(Long, Int)], _)))
-//  }
-//
-//  final case class InstantPlusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      binaryEval(instant, duration)(
-//        (i, d) => i.plusSeconds(d.getSeconds).plusNanos(d.getNano.toLong),
-//        (remoteI, remoteD) => InstantPlusDuration(remoteI, remoteD)
-//      ).map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantMinusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      binaryEval(instant, duration)(
-//        (i, d) => i.minusSeconds(d.getSeconds).minusNanos(d.getNano.toLong),
-//        (remoteI, remoteD) => InstantMinusDuration(remoteI, remoteD)
-//      ).map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class InstantTruncate(instant: Remote[Instant], tempUnit: Remote[TemporalUnit]) extends Remote[Instant] {
-//    val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Instant], SchemaAndValue[Instant]]] =
-//      binaryEval(instant, tempUnit)(
-//        (i, t) => i.truncatedTo(t),
-//        (remoteI, remoteU) => InstantTruncate(remoteI, remoteU)
-//      ).map(_.map(SchemaAndValue(Schema[Instant], _)))
-//  }
-//
-//  final case class DurationFromTemporalAmount(amount: Remote[TemporalAmount]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      unaryEval(amount)(a => Duration.from(a), remoteAmount => DurationFromTemporalAmount(remoteAmount))
-//        .map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationFromString(charSequence: Remote[String]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      unaryEval(charSequence)(str => Duration.parse(str), remoteCS => DurationFromString(remoteCS))
-//        .map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationFromTemporals(start: Remote[Temporal], end: Remote[Temporal]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      binaryEval(start, end)(
-//        (t1, t2) => Duration.between(t1, t2),
-//        (remoteT1, remoteT2) => DurationFromTemporals(remoteT1, remoteT2)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    private val oneBillion = new BigDecimal(1000000000L)
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      unaryEval(seconds)(
-//        bd => {
-//          val seconds = bd.longValue()
-//          val nanos   = bd.subtract(new BigDecimal(seconds)).multiply(oneBillion).intValue()
-//          Duration.ofSeconds(seconds, nanos.toLong)
-//        },
-//        remoteBD => DurationFromBigDecimal(remoteBD)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//
-//  }
-//
-//  final case class DurationFromLong(seconds: Remote[Long]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      unaryEval(seconds)(Duration.ofSeconds, remoteS => DurationFromLong(remoteS))
-//        .map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      binaryEval(seconds, nanos)(
-//        (seconds, nanos) => Duration.ofSeconds(seconds, nanos),
-//        (remoteS, remoteN) => DurationFromLongs(remoteS, remoteN)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationFromAmount(amount: Remote[Long], temporal: Remote[TemporalUnit]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      binaryEval(amount, temporal)(
-//        (amount, unit) => Duration.of(amount, unit),
-//        (remoteAmount, remoteUnit) => DurationFromAmount(remoteAmount, remoteUnit)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
+
+  final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[A]]] =
+      head.evalDynamic.flatMap { headDyn =>
+        val listSchema = Schema.list(headDyn.schema.asInstanceOf[Schema[A]])
+        list.eval(listSchema).flatMap { lst =>
+          ZIO.fromEither(headDyn.toTyped).map { hd =>
+            val updatedLst = hd :: lst
+            SchemaAndValue.fromSchemaAndValue(listSchema, updatedLst)
+          }
+        }
+      }
+  }
+
+  object Cons {
+    def schema[A]: Schema[Cons[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[List[A]], Remote[A], Cons[A]](
+          Schema.Field("list", Remote.schema[List[A]]),
+          Schema.Field("head", Remote.schema[A]),
+          Cons.apply,
+          _.list,
+          _.head
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Cons[A], Remote[A]] =
+      Schema.Case("Cons", schema[A], _.asInstanceOf[Cons[A]])
+  }
+
+  final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[(A, List[A])]]] =
+      list.evalDynamic.flatMap { listDyn =>
+        val listSchema = listDyn.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
+        val elemSchema = listSchema.schemaA
+        ZIO.fromEither(listDyn.toTyped).map { lst =>
+          val head  = lst.headOption
+          val tuple = head.map((_, lst))
+          SchemaAndValue.fromSchemaAndValue(Schema.option(Schema.tuple2(elemSchema, listDyn.schema)), tuple)
+        }
+      }
+  }
+
+  object UnCons {
+    def schema[A]: Schema[UnCons[A]] = Schema.defer(
+      Remote
+        .schema[List[A]]
+        .transform(
+          UnCons.apply,
+          _.list
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[UnCons[A], Remote[A]] =
+      Schema.Case("UnCons", schema[A], _.asInstanceOf[UnCons[A]])
+  }
+
+  final case class InstantFromLong(seconds: Remote[Long]) extends Remote[Instant] {
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      seconds.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochSecond(s)))
+  }
+
+  object InstantFromLong {
+    val schema: Schema[InstantFromLong] = Schema.defer(
+      Remote
+        .schema[Long]
+        .transform(
+          InstantFromLong.apply,
+          _.seconds
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[InstantFromLong, Remote[A]] =
+      Schema.Case("InstantFromLong", schema, _.asInstanceOf[InstantFromLong])
+  }
+
+  final case class InstantFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      for {
+        s <- seconds.eval[Long]
+        n <- nanos.eval[Long]
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochSecond(s, n))
+  }
+
+  object InstantFromLongs {
+
+    val schema: Schema[InstantFromLongs] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[Long], InstantFromLongs](
+          Schema.Field("seconds", Remote.schema[Long]),
+          Schema.Field("nanos", Remote.schema[Long]),
+          InstantFromLongs.apply,
+          _.seconds,
+          _.nanos
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[InstantFromLongs, Remote[A]] =
+      Schema.Case("InstantFromLongs", schema, _.asInstanceOf[InstantFromLongs])
+  }
+
+  final case class InstantFromMilli(millis: Remote[Long]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      millis.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochMilli(s)))
+  }
+
+  object InstantFromMilli {
+    val schema: Schema[InstantFromMilli] = Schema.defer(
+      Remote
+        .schema[Long]
+        .transform(
+          InstantFromMilli.apply,
+          _.millis
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[InstantFromMilli, Remote[A]] =
+      Schema.Case("InstantFromMilli", schema, _.asInstanceOf[InstantFromMilli])
+  }
+
+  final case class InstantFromString(charSeq: Remote[String]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.parse(s)))
+  }
+
+  object InstantFromString {
+    val schema: Schema[InstantFromString] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          InstantFromString.apply,
+          _.charSeq
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[InstantFromString, Remote[A]] =
+      Schema.Case("InstantFromString", schema, _.asInstanceOf[InstantFromString])
+  }
+
+  final case class InstantToTuple(instant: Remote[Instant]) extends Remote[(Long, Int)] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(Long, Int)]] =
+      instant.eval[Instant].map { instant =>
+        SchemaAndValue
+          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Int]), (instant.getEpochSecond, instant.getNano))
+      }
+  }
+
+  object InstantToTuple {
+    val schema: Schema[InstantToTuple] = Schema.defer(
+      Remote
+        .schema[Instant]
+        .transform(
+          InstantToTuple.apply,
+          _.instant
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[InstantToTuple, Remote[A]] =
+      Schema.Case("InstantToTuple", schema, _.asInstanceOf[InstantToTuple])
+  }
+
+  final case class InstantPlusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      for {
+        instant  <- instant.eval[Instant]
+        duration <- duration.eval[Duration]
+        result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+  }
+
+  object InstantPlusDuration {
+    val schema: Schema[InstantPlusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantPlusDuration](
+          Schema.Field("instant", Remote.schema[Instant]),
+          Schema.Field("duration", Remote.schema[Duration]),
+          InstantPlusDuration.apply,
+          _.instant,
+          _.duration
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[InstantPlusDuration, Remote[A]] =
+      Schema.Case("InstantPlusDuration", schema, _.asInstanceOf[InstantPlusDuration])
+  }
+
+  final case class InstantMinusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      for {
+        instant  <- instant.eval[Instant]
+        duration <- duration.eval[Duration]
+        result    = instant.minusSeconds(duration.getSeconds).minusNanos(duration.getNano.toLong)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+  }
+
+  object InstantMinusDuration {
+    val schema: Schema[InstantMinusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantMinusDuration](
+          Schema.Field("instant", Remote.schema[Instant]),
+          Schema.Field("duration", Remote.schema[Duration]),
+          InstantMinusDuration.apply,
+          _.instant,
+          _.duration
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[InstantMinusDuration, Remote[A]] =
+      Schema.Case("InstantMinusDuration", schema, _.asInstanceOf[InstantMinusDuration])
+  }
+
+  final case class InstantTruncate(instant: Remote[Instant], temporalUnit: Remote[ChronoUnit]) extends Remote[Instant] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
+      for {
+        instant      <- instant.eval[Instant]
+        _            <- ZIO.debug(s"temporal unit is $temporalUnit")
+        temporalUnit <- temporalUnit.eval[ChronoUnit].tapError(s => ZIO.debug(s"Failed to evaluate temporal unit: $s"))
+        result        = instant.truncatedTo(temporalUnit)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+  }
+
+  object InstantTruncate {
+    val schema: Schema[InstantTruncate] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[ChronoUnit], InstantTruncate](
+          Schema.Field("instant", Remote.schema[Instant]),
+          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
+          InstantTruncate.apply,
+          _.instant,
+          _.temporalUnit
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[InstantTruncate, Remote[A]] =
+      Schema.Case("InstantTruncate", schema, _.asInstanceOf[InstantTruncate])
+  }
+
+  final case class DurationFromString(charSeq: Remote[String]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Duration], Duration.parse(s)))
+  }
+
+  object DurationFromString {
+    val schema: Schema[DurationFromString] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          DurationFromString.apply,
+          _.charSeq
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationFromString, Remote[A]] =
+      Schema.Case("DurationFromString", schema, _.asInstanceOf[DurationFromString])
+  }
+
+  final case class DurationBetweenInstants(startInclusive: Remote[Instant], endExclusive: Remote[Instant])
+      extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        start <- startInclusive.eval[Instant]
+        end   <- endExclusive.eval[Instant]
+        result = Duration.between(start, end)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationBetweenInstants {
+    val schema: Schema[DurationBetweenInstants] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[Instant], DurationBetweenInstants](
+          Schema.Field("startInclusive", Remote.schema[Instant]),
+          Schema.Field("endExclusive", Remote.schema[Instant]),
+          DurationBetweenInstants.apply,
+          _.startInclusive,
+          _.endExclusive
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationBetweenInstants, Remote[A]] =
+      Schema.Case("DurationBetweenInstants", schema, _.asInstanceOf[DurationBetweenInstants])
+  }
+
+  final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
+    private val oneBillion = new BigDecimal(1000000000L)
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        bd     <- seconds.eval[BigDecimal]
+        seconds = bd.longValue()
+        nanos   = bd.subtract(new BigDecimal(seconds)).multiply(oneBillion).intValue()
+        result  = Duration.ofSeconds(seconds, nanos.toLong)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationFromBigDecimal {
+    val schema: Schema[DurationFromBigDecimal] = Schema.defer(
+      Remote
+        .schema[BigDecimal]
+        .transform(
+          DurationFromBigDecimal.apply,
+          _.seconds
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationFromBigDecimal, Remote[A]] =
+      Schema.Case("DurationFromBigDecimal", schema, _.asInstanceOf[DurationFromBigDecimal])
+  }
+
+  final case class DurationFromLong(seconds: Remote[Long]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      seconds
+        .eval[Long]
+        .map(seconds => SchemaAndValue.fromSchemaAndValue(Schema[Duration], Duration.ofSeconds(seconds)))
+  }
+
+  object DurationFromLong {
+    val schema: Schema[DurationFromLong] = Schema.defer(
+      Remote
+        .schema[Long]
+        .transform(
+          DurationFromLong.apply,
+          _.seconds
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationFromLong, Remote[A]] =
+      Schema.Case("DurationFromLong", schema, _.asInstanceOf[DurationFromLong])
+  }
+
+  final case class DurationFromLongs(seconds: Remote[Long], nanoAdjustment: Remote[Long]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        seconds        <- seconds.eval[Long]
+        nanoAdjustment <- nanoAdjustment.eval[Long]
+        result          = Duration.ofSeconds(seconds, nanoAdjustment)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationFromLongs {
+    val schema: Schema[DurationFromLongs] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
+          Schema.Field("seconds", Remote.schema[Long]),
+          Schema.Field("nanoAdjusment", Remote.schema[Long]),
+          DurationFromLongs.apply,
+          _.seconds,
+          _.nanoAdjustment
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationFromLongs, Remote[A]] =
+      Schema.Case("DurationFromLongs", schema, _.asInstanceOf[DurationFromLongs])
+  }
+
+  final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        amount       <- amount.eval[Long]
+        temporalUnit <- temporalUnit.eval[ChronoUnit]
+        result        = Duration.of(amount, temporalUnit)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationFromAmount {
+    val schema: Schema[DurationFromAmount] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[ChronoUnit], DurationFromAmount](
+          Schema.Field("amount", Remote.schema[Long]),
+          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
+          DurationFromAmount.apply,
+          _.amount,
+          _.temporalUnit
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationFromAmount, Remote[A]] =
+      Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
+  }
 //
 //  final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
 //    val schema: SchemaOrNothing.Aux[(Long, Long)] = SchemaOrNothing[(Long, Long)]
@@ -1985,6 +2145,22 @@ object Remote {
       .:+:(Not.schemaCase[A])
       .:+:(And.schemaCase[A])
       .:+:(Fold.schemaCase[A])
+      .:+:(Cons.schemaCase[A])
+      .:+:(UnCons.schemaCase[A])
+      .:+:(InstantFromLong.schemaCase[A])
+      .:+:(InstantFromLongs.schemaCase[A])
+      .:+:(InstantFromMilli.schemaCase[A])
+      .:+:(InstantFromString.schemaCase[A])
+      .:+:(InstantToTuple.schemaCase[A])
+      .:+:(InstantPlusDuration.schemaCase[A])
+      .:+:(InstantMinusDuration.schemaCase[A])
+      .:+:(InstantTruncate.schemaCase[A])
+      .:+:(DurationFromString.schemaCase[A])
+      .:+:(DurationBetweenInstants.schemaCase[A])
+      .:+:(DurationFromBigDecimal.schemaCase[A])
+      .:+:(DurationFromLong.schemaCase[A])
+      .:+:(DurationFromLongs.schemaCase[A])
+      .:+:(DurationFromAmount.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]

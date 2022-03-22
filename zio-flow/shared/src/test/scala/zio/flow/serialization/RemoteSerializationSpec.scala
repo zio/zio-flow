@@ -271,6 +271,71 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(genFold) { fold =>
           roundtrip(codec, fold)
         }
+      },
+      test("cons") {
+        check(genCons) { cons =>
+          roundtrip(codec, cons)
+        }
+      },
+      test("uncons") {
+        check(genUnCons) { uncons =>
+          roundtrip(codec, uncons)
+        }
+      },
+      test("instant from long") {
+        check(genInstantFromLong) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant from longs") {
+        check(genInstantFromLongs) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant from milli") {
+        check(genInstantFromMilli) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant from string") {
+        check(genInstantFromString) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant to tuple") {
+        check(genInstantToTuple) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant plus duration") {
+        check(genInstantPlusDuration) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("instant minus duration") {
+        check(genInstantMinusDuration) { i =>
+          roundtrip(codec, i)
+        }
+      },
+      test("duration from string") {
+        check(genDurationFromString) { d =>
+          roundtrip(codec, d)
+        }
+      },
+      test("duration from long") {
+        check(genDurationFromLong) { d =>
+          roundtrip(codec, d)
+        }
+      },
+      test("duration from longs") {
+        check(genDurationFromLongs) { d =>
+          roundtrip(codec, d)
+        }
+      },
+      test("duration from big decimal") {
+        check(genDurationFromBigDecimal) { d =>
+          roundtrip(codec, d)
+        }
       }
     )
 
@@ -314,6 +379,18 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
           val first = Remote.Second(Remote.Tuple2(Remote(b), Remote(a)))
           roundtripEval(codec, first).provide(RemoteContext.inMemory)
+        }
+      },
+      test("instant truncation") {
+        check(Gen.instant zip genSmallChronoUnit) { case (instant, chronoUnit) =>
+          val remote = Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
+          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
+        }
+      },
+      test("duration from amount") {
+        check(Gen.int zip genSmallChronoUnit) { case (amount, chronoUnit) =>
+          val remote = Remote.DurationFromAmount(Remote(amount.toLong), Remote(chronoUnit))
+          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
         }
       }
     )

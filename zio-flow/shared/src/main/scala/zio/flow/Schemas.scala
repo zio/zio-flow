@@ -5,6 +5,8 @@ import zio.{Chunk, Duration}
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import scala.util.Try
 
 // TODO: get rid of the whole thing
 trait SchemaOrNothing {
@@ -34,11 +36,9 @@ object SchemaOrNothing {
   def apply[A: SchemaOrNothing.Aux]: SchemaOrNothing.Aux[A] = implicitly[SchemaOrNothing.Aux[A]]
 }
 
-trait Schemas extends LowerPrioritySchemas {
+trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.DurationType)
-  implicit val schemaInstant: Schema[Instant] =
-    Schema.Primitive(StandardType.InstantType(DateTimeFormatter.BASIC_ISO_DATE))
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(
@@ -100,8 +100,11 @@ trait Schemas extends LowerPrioritySchemas {
       extractField = _.value
     )
 
-  implicit def schemaEither[A, B](implicit aSchema: Schema[A], bSchema: Schema[B]): Schema[Either[A, B]] =
-    Schema.EitherSchema(aSchema, bSchema)
+  implicit val chronoUnitSchema: Schema[ChronoUnit] =
+    Schema[String].transformOrFail(
+      s => Try(ChronoUnit.valueOf(s)).toEither.left.map(_.getMessage),
+      (unit: ChronoUnit) => Right(unit.name())
+    )
 }
 
 trait LowerPrioritySchemas {}

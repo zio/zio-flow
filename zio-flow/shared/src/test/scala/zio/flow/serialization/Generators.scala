@@ -1,11 +1,13 @@
 package zio.flow.serialization
 
-import zio.{Random, flow}
+import zio.{Duration, Random, flow}
 import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
 import zio.flow.remote.{Fractional, Numeric}
 import zio.flow.serialization.Generators.TestException
 import zio.schema.{DefaultJavaTimeSchemas, Schema}
 import zio.test.{Gen, Sized}
+
+import java.time.temporal.ChronoUnit
 
 trait Generators extends DefaultJavaTimeSchemas {
 
@@ -477,6 +479,98 @@ trait Generators extends DefaultJavaTimeSchemas {
               Remote.AddNumeric(Remote.First(tuple), Remote.Second(tuple), Numeric.NumericDouble)
             )
     } yield Remote.Fold(list, initial, fun.evaluated)
+
+  val genCons: Gen[Random with Sized, Remote[Any]] =
+    for {
+      list <- Gen.listOf(Gen.int).map(Remote(_))
+      head <- Gen.int.map(Remote(_))
+    } yield Remote.Cons(list, head)
+
+  val genUnCons: Gen[Random with Sized, Remote[Any]] =
+    for {
+      list <- Gen.listOf(Gen.int zip Gen.string).map(Remote(_))
+    } yield Remote.UnCons(list)
+
+  val genInstantFromLong: Gen[Random with Sized, Remote[Any]] =
+    Gen.long.map(l => Remote.InstantFromLong(Remote(l)))
+
+  val genInstantFromLongs: Gen[Random with Sized, Remote[Any]] =
+    for {
+      seconds <- Gen.long
+      nanos   <- Gen.long
+    } yield Remote.InstantFromLongs(Remote(seconds), Remote(nanos))
+
+  val genInstantFromMilli: Gen[Random with Sized, Remote[Any]] =
+    Gen.long.map(l => Remote.InstantFromMilli(Remote(l)))
+
+  val genInstantFromString: Gen[Random with Sized, Remote[Any]] =
+    Gen.instant.map(i => Remote.InstantFromString(Remote(i.toString)))
+
+  val genInstantToTuple: Gen[Random with Sized, Remote[Any]] =
+    Gen.instant.map(i => Remote.InstantToTuple(Remote(i)))
+
+  val genInstantPlusDuration: Gen[Random with Sized, Remote[Any]] =
+    for {
+      instant  <- Gen.instant
+      duration <- Gen.finiteDuration
+    } yield Remote.InstantPlusDuration(Remote(instant), Remote(duration))
+
+  val genInstantMinusDuration: Gen[Random with Sized, Remote[Any]] =
+    for {
+      instant  <- Gen.instant
+      duration <- Gen.finiteDuration
+    } yield Remote.InstantMinusDuration(Remote(instant), Remote(duration))
+
+  val genSmallChronoUnit: Gen[Random, ChronoUnit] = Gen.oneOf(
+    Seq(
+      ChronoUnit.NANOS,
+      ChronoUnit.MICROS,
+      ChronoUnit.MILLIS,
+      ChronoUnit.SECONDS,
+      ChronoUnit.MINUTES,
+      ChronoUnit.HOURS
+    ).map(Gen.const(_)): _*
+  )
+  val genChronoUnit: Gen[Random, ChronoUnit] = Gen.oneOf(ChronoUnit.values().map(Gen.const(_)): _*)
+
+  val genInstantTruncate: Gen[Random with Sized, Remote[Any]] =
+    for {
+      instant    <- Gen.instant
+      chronoUnit <- genChronoUnit
+    } yield Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
+
+  val genDurationFromString: Gen[Random, Remote[Any]] =
+    for {
+      duration <- Gen.finiteDuration
+    } yield Remote.DurationFromString(Remote(duration.toString))
+
+  val genDurationBetweenInstants: Gen[Random, Remote[Any]] =
+    for {
+      start <- Gen.instant.map(Remote(_))
+      end   <- Gen.instant.map(Remote(_))
+    } yield Remote.DurationBetweenInstants(start, end)
+
+  val genDurationFromBigDecimal: Gen[Random, Remote[Any]] =
+    for {
+      seconds <- Gen.bigDecimal(0, BigDecimal(1000000000))
+    } yield Remote.DurationFromBigDecimal(Remote(seconds.bigDecimal))
+
+  val genDurationFromLong: Gen[Random, Remote[Any]] =
+    for {
+      seconds <- Gen.long
+    } yield Remote.DurationFromLong(Remote(seconds))
+
+  val genDurationFromLongs: Gen[Random, Remote[Any]] =
+    for {
+      seconds        <- Gen.long
+      nanoAdjustment <- Gen.long
+    } yield Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment))
+
+  val genDurationFromAmount: Gen[Random, Remote[Any]] =
+    for {
+      amount <- Gen.long
+      unit   <- genChronoUnit
+    } yield Remote.DurationFromAmount(Remote(amount), Remote(unit))
 }
 
 object Generators {
