@@ -571,6 +571,12 @@ trait Generators extends DefaultJavaTimeSchemas {
       amount <- Gen.long
       unit   <- genChronoUnit
     } yield Remote.DurationFromAmount(Remote(amount), Remote(unit))
+
+  val genDurationToLongs: Gen[Random, Remote[Any]] =
+    Gen.finiteDuration.map(duration => Remote.DurationToLongs(Remote(duration)))
+
+  val genDurationToLong: Gen[Random, Remote[Any]] =
+    Gen.finiteDuration.map(duration => Remote.DurationToLong(Remote(duration)))
 }
 
 object Generators {

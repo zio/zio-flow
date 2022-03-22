@@ -1815,28 +1815,50 @@ object Remote {
     def schemaCase[A]: Schema.Case[DurationFromAmount, Remote[A]] =
       Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
   }
-//
-//  final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
-//    val schema: SchemaOrNothing.Aux[(Long, Long)] = SchemaOrNothing[(Long, Long)]
-//
-//    override def evalWithSchema
-//      : ZIO[RemoteContext, Nothing, Either[Remote[(Long, Long)], SchemaAndValue[(Long, Long)]]] =
-//      unaryEval(duration)(
-//        d => (d.getSeconds, d.getNano.toLong),
-//        remoteDuration => DurationToLongs(remoteDuration)
-//      ).map(_.map(SchemaAndValue(Schema[(Long, Long)], _)))
-//  }
-//
-//  final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
-//    val schema: SchemaOrNothing.Aux[Long] = SchemaOrNothing[Long]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Long], SchemaAndValue[Long]]] =
-//      unaryEval(duration)(
-//        _.getSeconds(),
-//        remoteDuration => DurationToLong(remoteDuration)
-//      ).map(_.map(SchemaAndValue(Schema[Long], _)))
-//  }
-//
+
+  final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(Long, Long)]] =
+      duration.eval[Duration].map { duration =>
+        SchemaAndValue
+          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Long]), (duration.getSeconds, duration.getNano.toLong))
+      }
+  }
+
+  object DurationToLongs {
+    val schema: Schema[DurationToLongs] = Schema.defer(
+      Remote
+        .schema[Duration]
+        .transform(
+          DurationToLongs.apply,
+          _.duration
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationToLongs, Remote[A]] =
+      Schema.Case("DurationToLongs", schema, _.asInstanceOf[DurationToLongs])
+  }
+
+  final case class DurationToLong(duration: Remote[Duration]) extends Remote[Long] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Long]] =
+      duration.eval[Duration].map { duration =>
+        SchemaAndValue.fromSchemaAndValue(Schema[Long], duration.getSeconds)
+      }
+  }
+
+  object DurationToLong {
+    val schema: Schema[DurationToLong] = Schema.defer(
+      Remote
+        .schema[Duration]
+        .transform(
+          DurationToLong.apply,
+          _.duration
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationToLong, Remote[A]] =
+      Schema.Case("DurationToLong", schema, _.asInstanceOf[DurationToLong])
+  }
+
 //  final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
 //    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
 //
@@ -2161,6 +2183,8 @@ object Remote {
       .:+:(DurationFromLong.schemaCase[A])
       .:+:(DurationFromLongs.schemaCase[A])
       .:+:(DurationFromAmount.schemaCase[A])
+      .:+:(DurationToLongs.schemaCase[A])
+      .:+:(DurationToLong.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]

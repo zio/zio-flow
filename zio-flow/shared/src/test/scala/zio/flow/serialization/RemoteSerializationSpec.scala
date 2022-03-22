@@ -52,291 +52,65 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("ignore") {
         roundtrip(codec, Remote.Ignore())
       },
-      test("variable") {
-        check(genRemoteVariable) { variable =>
-          roundtrip(codec, variable)
-        }
-      },
-      test("add numeric") {
-        check(genAddNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("div numeric") {
-        check(genDivNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("mul numeric") {
-        check(genMulNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("pow numeric") {
-        check(genPowNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("negation numeric") {
-        check(genNegationNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("root numeric") {
-        check(genRootNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("log numeric") {
-        check(genLogNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("absolute numeric") {
-        check(genAbsoluteNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("mod numeric") {
-        check(genModNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("min numeric") {
-        check(genMinNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("max numeric") {
-        check(genMaxNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("floor numeric") {
-        check(genFloorNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("ceil numeric") {
-        check(genCeilNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("round numeric") {
-        check(genRoundNumeric) { num =>
-          roundtrip(codec, num)
-        }
-      },
-      test("sin fractional") {
-        check(genSinFractional) { frac =>
-          roundtrip(codec, frac)
-        }
-      },
-      test("sin inverse fractional") {
-        check(genSinInverseFractional) { frac =>
-          roundtrip(codec, frac)
-        }
-      },
-      test("tan inverse fractional") {
-        check(genTanInverseFractional) { frac =>
-          roundtrip(codec, frac)
-        }
-      },
-      test("evaluated remote function") {
-        check(genEvaluatedRemoteFunction) { f =>
-          roundtrip(codec, f)
-        }
-      },
-      test("remote apply") {
-        check(genRemoteApply) { remoteApply =>
-          roundtrip(codec, remoteApply)
-        }
-      },
-      test("either0") {
-        check(genEither0) { either0 =>
-          roundtrip(codec, either0)
-        }
-      },
-      test("flatMapEither") {
-        check(genFlatMapEither) { flatMapEither =>
-          roundtrip(codec, flatMapEither)
-        }
-      },
-      test("foldEither") {
-        check(genFoldEither) { foldEither =>
-          roundtrip(codec, foldEither)
-        }
-      },
-      test("swapEither") {
-        check(genSwapEither) { swapEither =>
-          roundtrip(codec, swapEither)
-        }
-      },
-      test("try") {
-        check(genTry) { t =>
-          roundtrip(codec, t)
-        }
-      },
-      test("tuple2") {
-        check(genTuple2) { t =>
-          roundtrip(codec, t)
-        }
-      },
-      test("tuple3") {
-        check(genTuple3) { t =>
-          roundtrip(codec, t)
-        }
-      },
-      test("tuple4") {
-        check(genTuple4) { t =>
-          roundtrip(codec, t)
-        }
-      },
-      test("first") {
-        check(genFirst) { first =>
-          roundtrip(codec, first)
-        }
-      },
-      test("second") {
-        check(genSecond) { second =>
-          roundtrip(codec, second)
-        }
-      },
-      test("first of tuple3") {
-        check(genFirstOf3) { first =>
-          roundtrip(codec, first)
-        }
-      },
-      test("second of tuple3") {
-        check(genSecondOf3) { second =>
-          roundtrip(codec, second)
-        }
-      },
-      test("third of tuple3") {
-        check(genThirdOf3) { third =>
-          roundtrip(codec, third)
-        }
-      },
-      test("first of tuple4") {
-        check(genFirstOf4) { first =>
-          roundtrip(codec, first)
-        }
-      },
-      test("second of tuple4") {
-        check(genSecondOf4) { second =>
-          roundtrip(codec, second)
-        }
-      },
-      test("third of tuple4") {
-        check(genThirdOf4) { third =>
-          roundtrip(codec, third)
-        }
-      },
-      test("fourth of tuple4") {
-        check(genFourthOf4) { fourth =>
-          roundtrip(codec, fourth)
-        }
-      },
-      test("branch") {
-        check(genBranch) { fourth =>
-          roundtrip(codec, fourth)
-        }
-      },
-      test("length") {
-        check(genLength) { length =>
-          roundtrip(codec, length)
-        }
-      },
-      test("less than equal") {
-        check(genLessThanEqual) { lte =>
-          roundtrip(codec, lte)
-        }
-      },
-      test("equal") {
-        check(genEqual) { eq =>
-          roundtrip(codec, eq)
-        }
-      },
-      test("not") {
-        check(genNot) { not =>
-          roundtrip(codec, not)
-        }
-      },
-      test("and") {
-        check(genAnd) { and =>
-          roundtrip(codec, and)
-        }
-      },
-      test("fold") {
-        check(genFold) { fold =>
-          roundtrip(codec, fold)
-        }
-      },
-      test("cons") {
-        check(genCons) { cons =>
-          roundtrip(codec, cons)
-        }
-      },
-      test("uncons") {
-        check(genUnCons) { uncons =>
-          roundtrip(codec, uncons)
-        }
-      },
-      test("instant from long") {
-        check(genInstantFromLong) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant from longs") {
-        check(genInstantFromLongs) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant from milli") {
-        check(genInstantFromMilli) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant from string") {
-        check(genInstantFromString) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant to tuple") {
-        check(genInstantToTuple) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant plus duration") {
-        check(genInstantPlusDuration) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("instant minus duration") {
-        check(genInstantMinusDuration) { i =>
-          roundtrip(codec, i)
-        }
-      },
-      test("duration from string") {
-        check(genDurationFromString) { d =>
-          roundtrip(codec, d)
-        }
-      },
-      test("duration from long") {
-        check(genDurationFromLong) { d =>
-          roundtrip(codec, d)
-        }
-      },
-      test("duration from longs") {
-        check(genDurationFromLongs) { d =>
-          roundtrip(codec, d)
-        }
-      },
-      test("duration from big decimal") {
-        check(genDurationFromBigDecimal) { d =>
-          roundtrip(codec, d)
-        }
-      }
+      test("variable")(roundtripCheck(codec, genRemoteVariable)),
+      test("add numeric")(roundtripCheck(codec, genAddNumeric)),
+      test("div numeric")(roundtripCheck(codec, genDivNumeric)),
+      test("mul numeric")(roundtripCheck(codec, genMulNumeric)),
+      test("pow numeric")(roundtripCheck(codec, genPowNumeric)),
+      test("negation numeric")(roundtripCheck(codec, genNegationNumeric)),
+      test("root numeric")(roundtripCheck(codec, genRootNumeric)),
+      test("log numeric")(roundtripCheck(codec, genLogNumeric)),
+      test("absolute numeric")(roundtripCheck(codec, genAbsoluteNumeric)),
+      test("mod numeric")(roundtripCheck(codec, genModNumeric)),
+      test("min numeric")(roundtripCheck(codec, genMinNumeric)),
+      test("max numeric")(roundtripCheck(codec, genMaxNumeric)),
+      test("floor numeric")(roundtripCheck(codec, genFloorNumeric)),
+      test("ceil numeric")(roundtripCheck(codec, genCeilNumeric)),
+      test("round numeric")(roundtripCheck(codec, genRoundNumeric)),
+      test("sin fractional")(roundtripCheck(codec, genSinFractional)),
+      test("sin inverse fractional")(roundtripCheck(codec, genSinInverseFractional)),
+      test("tan inverse fractional")(roundtripCheck(codec, genTanInverseFractional)),
+      test("evaluated remote function")(roundtripCheck(codec, genEvaluatedRemoteFunction)),
+      test("remote apply")(roundtripCheck(codec, genRemoteApply)),
+      test("either0")(roundtripCheck(codec, genEither0)),
+      test("flatMapEither")(roundtripCheck(codec, genFlatMapEither)),
+      test("foldEither")(roundtripCheck(codec, genFoldEither)),
+      test("swapEither")(roundtripCheck(codec, genSwapEither)),
+      test("try")(roundtripCheck(codec, genTry)),
+      test("tuple2")(roundtripCheck(codec, genTuple2)),
+      test("tuple3")(roundtripCheck(codec, genTuple3)),
+      test("tuple4")(roundtripCheck(codec, genTuple4)),
+      test("first")(roundtripCheck(codec, genFirst)),
+      test("second")(roundtripCheck(codec, genSecond)),
+      test("first of tuple3")(roundtripCheck(codec, genFirstOf3)),
+      test("second of tuple3")(roundtripCheck(codec, genSecondOf3)),
+      test("third of tuple3")(roundtripCheck(codec, genThirdOf3)),
+      test("first of tuple4")(roundtripCheck(codec, genFirstOf4)),
+      test("second of tuple4")(roundtripCheck(codec, genSecondOf4)),
+      test("third of tuple4")(roundtripCheck(codec, genThirdOf4)),
+      test("fourth of tuple4")(roundtripCheck(codec, genFourthOf4)),
+      test("branch")(roundtripCheck(codec, genBranch)),
+      test("length")(roundtripCheck(codec, genLength)),
+      test("less than equal")(roundtripCheck(codec, genLessThanEqual)),
+      test("equal")(roundtripCheck(codec, genEqual)),
+      test("not")(roundtripCheck(codec, genNot)),
+      test("and")(roundtripCheck(codec, genAnd)),
+      test("fold")(roundtripCheck(codec, genFold)),
+      test("cons")(roundtripCheck(codec, genCons)),
+      test("uncons")(roundtripCheck(codec, genUnCons)),
+      test("instant from long")(roundtripCheck(codec, genInstantFromLong)),
+      test("instant from longs")(roundtripCheck(codec, genInstantFromLongs)),
+      test("instant from milli")(roundtripCheck(codec, genInstantFromMilli)),
+      test("instant from string")(roundtripCheck(codec, genInstantFromString)),
+      test("instant to tuple")(roundtripCheck(codec, genInstantToTuple)),
+      test("instant plus duration")(roundtripCheck(codec, genInstantPlusDuration)),
+      test("instant minus duration")(roundtripCheck(codec, genInstantMinusDuration)),
+      test("duration from string")(roundtripCheck(codec, genDurationFromString)),
+      test("duration from long")(roundtripCheck(codec, genDurationFromLong)),
+      test("duration from longs")(roundtripCheck(codec, genDurationFromLongs)),
+      test("duration from big decimal")(roundtripCheck(codec, genDurationFromBigDecimal)),
+      test("duration to longs")(roundtripCheck(codec, genDurationToLongs)),
+      test("duration to long")(roundtripCheck(codec, genDurationToLong))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
@@ -395,7 +169,15 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       }
     )
 
-  private def roundtrip[A](codec: Codec, value: Remote[Any]): Assert = {
+  private def roundtripCheck(
+    codec: Codec,
+    gen: Gen[Random with Sized, Remote[Any]]
+  ): ZIO[Random with Sized with TestConfig, Nothing, TestResult] =
+    check(gen) { value =>
+      roundtrip(codec, value)
+    }
+
+  private def roundtrip(codec: Codec, value: Remote[Any]): Assert = {
     val encoded = codec.encode(Remote.schemaRemoteAny)(value)
     val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
 
