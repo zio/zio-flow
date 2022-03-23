@@ -16,17 +16,15 @@
 
 package zio.flow
 
+import zio.ZIO
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
-import zio.schema.CaseSet.:+:
-import zio.schema.CaseSet.:+:
-import zio.schema.{CaseSet, DynamicValue, Schema, StandardType}
 import zio.schema.ast.SchemaAst
-import zio.{Chunk, ZIO, schema}
+import zio.schema.{CaseSet, DynamicValue, Schema, StandardType}
 
 import java.math.BigDecimal
-import java.time.temporal.{ChronoUnit, Temporal, TemporalAmount, TemporalUnit}
-import java.time.{Clock, Duration, Instant}
+import java.time.temporal.ChronoUnit
+import java.time.{Duration, Instant}
 import scala.language.implicitConversions
 
 /**
@@ -40,13 +38,13 @@ sealed trait Remote[+A] { self =>
   def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[RemoteContext, String, A1] =
     evalDynamic.flatMap(dyn => ZIO.fromEither(dyn.value.toTypedValue(schema)))
 
-//  final def iterate[A1 >: A: Schema](
-//    step: Remote[A1] => Remote[A1]
-//  )(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
-//    predicate(self).ifThenElse(
-//      step(self).iterate(step)(predicate),
-//      self
-//    )
+  final def iterate[A1 >: A: Schema](
+    step: Remote[A1] => Remote[A1]
+  )(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
+    predicate(self).ifThenElse(
+      step(self).iterate(step)(predicate),
+      self
+    )
 
 //  final def toFlow: ZFlow[Any, Nothing, A] = ZFlow(self)
 
@@ -848,6 +846,7 @@ object Remote {
               value == otherValue
             case _ => false
           }
+        case _ => false
       }
   }
 
@@ -1859,137 +1858,230 @@ object Remote {
       Schema.Case("DurationToLong", schema, _.asInstanceOf[DurationToLong])
   }
 
-//  final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      binaryEval(left, right)(
-//        (d1, d2) => d1.plus(d2),
-//        (remoteD1, remoteD2) => DurationPlusDuration(remoteD1, remoteD2)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class DurationMinusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
-//    val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Duration], SchemaAndValue[Duration]]] =
-//      binaryEval(left, right)(
-//        (d1, d2) => d1.minus(d2),
-//        (remoteD1, remoteD2) => DurationMinusDuration(remoteD1, remoteD2)
-//      ).map(_.map(SchemaAndValue(Schema[Duration], _)))
-//  }
-//
-//  final case class Iterate[A](
-//    initial: Remote[A],
-//    iterate: A ===> A,
-//    predicate: A ===> Boolean
-//  ) extends Remote[A] {
-//    val schema = iterate.schema
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] = {
-//      def loop(current: Remote[A]): ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//        predicate(current).evalWithSchema.flatMap {
-//          case Left(_)      => ZIO.left(self)
-//          case Right(value) => if (value.value) loop(iterate(current)) else current.evalWithSchema
-//        }
-//
-//      loop(initial)
-//    }
-//  }
-//
-//  final case class Lazy[A] private (value: () => Remote[A], schema: SchemaOrNothing.Aux[A]) extends Remote[A] {
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      value().evalWithSchema
-//  }
-//
-//  object Lazy {
-//    def apply[A: SchemaOrNothing.Aux](value: () => Remote[A]): Remote[A] = {
-//      lazy val remote             = value()
-//      val value2: () => Remote[A] = () => remote
-//      new Lazy(value2, SchemaOrNothing[A])
-//    }
-//  }
-//
-//  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-//    val schema = SchemaOrNothing.fromSchema(Schema.option(value.schema.schema))
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Option[A]], SchemaAndValue[Option[A]]]] =
-//      value.evalWithSchema.map {
-//        case Left(_) => Left(self)
-//        case Right(SchemaAndValue(schema, value)) =>
-//          val schemaA = schema.asInstanceOf[Schema[A]]
-//          val a       = value.asInstanceOf[A]
-//          Right(SchemaAndValue(Schema.Optional(schemaA), Some(a)))
-//        case Right(_) => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
-//      }
-//  }
-//
-//  final case class FoldOption[A, B](option: Remote[Option[A]], remoteB: Remote[B], f: A ===> B) extends Remote[B] {
-//    val schema = f.schema
-//
-//    def schemaFromOption[T](opSchema: Schema[Option[T]]): Schema[T] =
-//      opSchema.transform(op => op.getOrElse(().asInstanceOf[T]), (value: T) => Some(value))
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[B], SchemaAndValue[B]]] =
-//      option.evalWithSchema.flatMap {
-//        case Left(_) => ZIO.left(self)
-//        case Right(schemaAndValue) =>
-//          val schemaA = schemaFromOption(schemaAndValue.schema.asInstanceOf[Schema[Option[A]]])
-//          schemaAndValue.value.fold(remoteB.evalWithSchema)(v =>
-//            f(Literal(v, SchemaOrNothing.fromSchema(schemaA))).evalWithSchema
-//          )
-//      }
-//  }
-//
-//  final case class ZipOption[A, B](remoteA: Remote[Option[A]], remoteB: Remote[Option[B]])
-//      extends Remote[Option[(A, B)]] {
-//    val schema =
-//      SchemaOrNothing.fromSchema(
-//        Schema.option(
-//          Schema.tuple2(
-//            remoteA.schema.asInstanceOf[SchemaOrNothing.Aux[Option[A]]].schema.asInstanceOf[Schema.Optional[A]].codec,
-//            remoteB.schema.asInstanceOf[SchemaOrNothing.Aux[Option[B]]].schema.asInstanceOf[Schema.Optional[B]].codec
-//          )
-//        )
-//      )
-//
-//    override def evalWithSchema
-//      : ZIO[RemoteContext, Nothing, Either[Remote[Option[(A, B)]], SchemaAndValue[Option[(A, B)]]]] =
-//      for {
-//        lEval <- remoteA.evalWithSchema
-//        rEval <- remoteB.evalWithSchema
-//        result = (lEval, rEval) match {
-//                   case (Right(SchemaAndValue(schemaA, leftA)), Right(SchemaAndValue(schemaB, rightA))) =>
-//                     val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
-//                     val rightVal: Option[B]    = rightA.asInstanceOf[Option[B]]
-//                     val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
-//                     val schemaBInst: Schema[B] = schemaB.asInstanceOf[Schema[B]]
-//
-//                     val value = if (leftVal.isEmpty || rightVal.isEmpty) None else Some((leftVal.get, rightVal.get))
-//                     Right(
-//                       SchemaAndValue(Schema.Optional(Schema.Tuple(schemaAInst, schemaBInst)), value)
-//                     )
-//                   case _ => Left(Remote(None))
-//                 }
-//      } yield result
-//  }
-//
-//  final case class ContainsOption[A](left: Remote[Option[A]], right: A) extends Remote[Boolean] {
-//    val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
-//
-//    override def evalWithSchema: ZIO[RemoteContext, Nothing, Either[Remote[Boolean], SchemaAndValue[Boolean]]] =
-//      left.evalWithSchema.map {
-//        case (Right(SchemaAndValue(schemaA, leftA))) =>
-//          val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
-//          val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
-//          val value: Literal[A]      = Literal(right, SchemaOrNothing.fromSchema(schemaAInst))
-//          Right(
-//            SchemaAndValue(Schema[Boolean], leftVal.contains(value.value))
-//          )
-//        case _ => Left(Remote(false))
-//      }
-//  }
-//
+  final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        left  <- left.eval[Duration]
+        right <- right.eval[Duration]
+        result = left.plus(right)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationPlusDuration {
+    val schema: Schema[DurationPlusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationPlusDuration](
+          Schema.Field("left", Remote.schema[Duration]),
+          Schema.Field("right", Remote.schema[Duration]),
+          DurationPlusDuration.apply,
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationPlusDuration, Remote[A]] =
+      Schema.Case("DurationPlusDuration", schema, _.asInstanceOf[DurationPlusDuration])
+  }
+
+  final case class DurationMinusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
+      for {
+        left  <- left.eval[Duration]
+        right <- right.eval[Duration]
+        result = left.plus(right)
+      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+  }
+
+  object DurationMinusDuration {
+    val schema: Schema[DurationMinusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationMinusDuration](
+          Schema.Field("left", Remote.schema[Duration]),
+          Schema.Field("right", Remote.schema[Duration]),
+          DurationMinusDuration.apply,
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationMinusDuration, Remote[A]] =
+      Schema.Case("DurationMinusDuration", schema, _.asInstanceOf[DurationMinusDuration])
+  }
+
+  final case class Iterate[A](
+    initial: Remote[A],
+    iterate: EvaluatedRemoteFunction[A, A],
+    predicate: EvaluatedRemoteFunction[A, Boolean]
+  ) extends Remote[A] {
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] = {
+      def loop(current: Remote[A]): ZIO[RemoteContext, String, SchemaAndValue[A]] =
+        predicate(current).eval[Boolean].flatMap {
+          case false => current.evalDynamic
+          case true  => loop(iterate(current))
+        }
+
+      loop(initial)
+    }
+  }
+
+  object Iterate {
+    def schema[A]: Schema[Iterate[A]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[A], EvaluatedRemoteFunction[A, A], EvaluatedRemoteFunction[A, Boolean], Iterate[A]](
+          Schema.Field("initial", Remote.schema[A]),
+          Schema.Field("iterate", EvaluatedRemoteFunction.schema[A, A]),
+          Schema.Field("predicate", EvaluatedRemoteFunction.schema[A, Boolean]),
+          Iterate.apply,
+          _.initial,
+          _.iterate,
+          _.predicate
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Iterate[A], Remote[A]] =
+      Schema.Case("Iterate", schema, _.asInstanceOf[Iterate[A]])
+  }
+
+  final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      value().evalDynamic
+  }
+
+  object Lazy {
+    def schema[A]: Schema[Lazy[A]] =
+      Schema.defer(Remote.schema[A].transform((a: Remote[A]) => Lazy(() => a), _.value()))
+
+    def schemaCase[A]: Schema.Case[Lazy[A], Remote[A]] =
+      Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
+  }
+
+  // TODO: better name
+  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[A]]] =
+      for {
+        schemaAndValue <- value.evalDynamic
+      } yield SchemaAndValue(Schema.option(schemaAndValue.schema), DynamicValue.SomeValue(schemaAndValue.value))
+  }
+
+  object Some0 {
+    def schema[A]: Schema[Some0[A]] =
+      Schema.defer(Remote.schema[A].transform(Some0(_), _.value))
+
+    def schemaCase[A]: Schema.Case[Some0[A], Remote[A]] =
+      Schema.Case("Some0", schema, _.asInstanceOf[Some0[A]])
+  }
+
+  final case class FoldOption[A, B](
+    option: Remote[Option[A]],
+    ifEmpty: Remote[B],
+    ifNonEmpty: EvaluatedRemoteFunction[A, B]
+  ) extends Remote[B] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
+      option.evalDynamic.flatMap { optionDyn =>
+        ZIO.fromEither(optionDyn.toTyped).flatMap { optionTyped =>
+          optionTyped.fold(ifEmpty.evalDynamic)((a: A) =>
+            ifNonEmpty(Remote.Literal(SchemaAndValue.fromSchemaAndValue(ifNonEmpty.input.schema, a))).evalDynamic
+          )
+        }
+      }
+  }
+
+  object FoldOption {
+    def schema[A, B]: Schema[FoldOption[A, B]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[Option[A]], Remote[B], EvaluatedRemoteFunction[A, B], FoldOption[A, B]](
+          Schema.Field("option", Remote.schema[Option[A]]),
+          Schema.Field("ifEmpty", Remote.schema[B]),
+          Schema.Field("ifNonEmpty", EvaluatedRemoteFunction.schema[A, B]),
+          FoldOption.apply,
+          _.option,
+          _.ifEmpty,
+          _.ifNonEmpty
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[FoldOption[Any, A], Remote[A]] =
+      Schema.Case("FoldOption", schema, _.asInstanceOf[FoldOption[Any, A]])
+  }
+
+  final case class ZipOption[A, B](left: Remote[Option[A]], right: Remote[Option[B]]) extends Remote[Option[(A, B)]] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[(A, B)]]] =
+      for {
+        leftDyn  <- left.evalDynamic
+        rightDyn <- right.evalDynamic
+        leftSchema <- ZIO
+                        .attempt(leftDyn.schema.asInstanceOf[Schema.Optional[Any]].codec.asInstanceOf[Schema[A]])
+                        .orElseFail("ZipOption.left has unexpected schema")
+        rigthSchema <- ZIO
+                         .attempt(rightDyn.schema.asInstanceOf[Schema.Optional[Any]].codec.asInstanceOf[Schema[B]])
+                         .orElseFail("ZipOption.right has unexpected schema")
+        result =
+          (leftDyn.value, rightDyn.value) match {
+            case (DynamicValue.SomeValue(a), DynamicValue.SomeValue(b)) =>
+              SchemaAndValue(
+                Schema.option(Schema.tuple2(leftSchema, rigthSchema)),
+                DynamicValue.SomeValue(DynamicValue.Tuple(a, b))
+              )
+            case _ =>
+              SchemaAndValue(Schema.option(Schema.tuple2(leftSchema, rigthSchema)), DynamicValue.NoneValue)
+          }
+      } yield result
+  }
+
+  object ZipOption {
+    def schema[A, B]: Schema[ZipOption[A, B]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Option[A]], Remote[Option[B]], ZipOption[A, B]](
+          Schema.Field("left", Schema.defer(Remote.schema[Option[A]])),
+          Schema.Field("right", Schema.defer(Remote.schema[Option[B]])),
+          ZipOption.apply[A, B],
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[ZipOption[Any, Any], Remote[A]] =
+      Schema.Case("ZipOption", schema[Any, Any], _.asInstanceOf[ZipOption[Any, Any]])
+  }
+
+  final case class OptionContains[A](option: Remote[Option[A]], value: Remote[A]) extends Remote[Boolean] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+      option.evalDynamic.flatMap { optionDyn =>
+        ZIO
+          .attempt(optionDyn.schema.asInstanceOf[Schema.Optional[Any]].codec.asInstanceOf[Schema[A]])
+          .orElseFail("OptionContains.option has unexpected schema")
+          .flatMap { valueSchema =>
+            optionDyn.value match {
+              case DynamicValue.SomeValue(dynValue) =>
+                ZIO.fromEither(dynValue.toTypedValue(valueSchema)).flatMap { typedValue =>
+                  value.eval(valueSchema).map { expectedValue =>
+                    SchemaAndValue.fromSchemaAndValue(Schema[Boolean], typedValue == expectedValue)
+                  }
+                }
+              case _ =>
+                ZIO.succeed(SchemaAndValue.fromSchemaAndValue(Schema[Boolean], false))
+            }
+          }
+      }
+  }
+
+  object OptionContains {
+    def schema[A]: Schema[OptionContains[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Option[A]], Remote[A], OptionContains[A]](
+          Schema.Field("left", Schema.defer(Remote.schema[Option[A]])),
+          Schema.Field("right", Schema.defer(Remote.schema[A])),
+          OptionContains.apply[A],
+          _.option,
+          _.value
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[OptionContains[A], Remote[A]] =
+      Schema.Case("OptionContains", schema[A], _.asInstanceOf[OptionContains[A]])
+  }
+
 //  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
 //    val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
 //
@@ -2076,28 +2168,28 @@ object Remote {
       case Right(r) => Right((aSchema, r))
     })
 
-//  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLong(second)
-//
-//  def ofEpochSecond(second: Remote[Long], nanos: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, nanos)
-//
-//  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = Remote.InstantFromMilli(milliSecond)
-//
-//  def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.DurationFromLong(seconds)
-//
-//  def ofSeconds(seconds: Remote[Long], nanos: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, nanos)
-//
-//  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
-//
-//  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60L))
-//
-//  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
-//
-//  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
-//    Remote.DurationFromAmount(milliseconds, Remote(ChronoUnit.MILLIS))
-//
-//  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
-//    Remote.DurationFromAmount(nanoseconds, Remote(ChronoUnit.NANOS))
-//
+  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLong(second)
+
+  def ofEpochSecond(second: Remote[Long], nanos: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, nanos)
+
+  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] = Remote.InstantFromMilli(milliSecond)
+
+  def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.DurationFromLong(seconds)
+
+  def ofSeconds(seconds: Remote[Long], nanos: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, nanos)
+
+  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
+
+  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60L))
+
+  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
+
+  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
+    Remote.DurationFromAmount(milliseconds, Remote(ChronoUnit.MILLIS))
+
+  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
+    Remote.DurationFromAmount(nanoseconds, Remote(ChronoUnit.NANOS))
+
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)
 
@@ -2107,7 +2199,7 @@ object Remote {
   implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
     Tuple4(t._1, t._2, t._3, t._4)
 
-//  def suspend[A: Schema](remote: Remote[A]): Remote[A] = Lazy(() => remote)
+  def suspend[A: Schema](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
 //  implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
@@ -2185,6 +2277,14 @@ object Remote {
       .:+:(DurationFromAmount.schemaCase[A])
       .:+:(DurationToLongs.schemaCase[A])
       .:+:(DurationToLong.schemaCase[A])
+      .:+:(DurationPlusDuration.schemaCase[A])
+      .:+:(DurationMinusDuration.schemaCase[A])
+      .:+:(Iterate.schemaCase[A])
+      .:+:(Lazy.schemaCase[A])
+      .:+:(Some0.schemaCase[A])
+      .:+:(FoldOption.schemaCase[A])
+      .:+:(ZipOption.schemaCase[A])
+      .:+:(OptionContains.schemaCase[A])
   )
 
   implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]

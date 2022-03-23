@@ -16,8 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.{Remote, remote}
-import zio.schema
+import zio.flow.Remote
 import zio.schema.{CaseSet, Schema}
 
 sealed trait Numeric[A] {
@@ -136,7 +135,7 @@ object Numeric extends NumericImplicits0 {
       CaseSet
         .Cons(
           shortCase,
-          CaseSet.Empty[Numeric[Any]]
+          CaseSet.Empty[Numeric[Any]]()
         )
         .:+:(longCase)
         .:+:(bigIntCase)
@@ -520,7 +519,7 @@ object Fractional {
       CaseSet
         .Cons(
           floatCase,
-          CaseSet.Empty[Fractional[Any]]
+          CaseSet.Empty[Fractional[Any]]()
         )
         .:+:(doubleCase)
         .:+:(bigDecimalCase)

@@ -13,64 +13,72 @@
 // * See the License for the specific language governing permissions and
 // * limitations under the License.
 // */
-//
-//package zio.flow
-//
-//import zio.flow.Remote.RemoteFunction
-//import zio.schema.Schema
-//
-//sealed trait Mappable[F[_]] {
-//  def performMap[A: Schema, B: Schema](fa: Remote[F[A]], ab: Remote[A] => Remote[B]): Remote[F[B]]
-//
-//  def performFilter[A: Schema](fa: Remote[F[A]], predicate: Remote[A] => Remote[Boolean]): Remote[F[A]]
-//
-//  def performFlatmap[A: Schema, B: Schema](fa: Remote[F[A]], ab: Remote[A] => Remote[F[B]]): Remote[F[B]]
-//}
-//
-//object Mappable {
-//
-//  implicit case object MappableOption extends Mappable[Option] {
-//    override def performMap[A: Schema, B: Schema](
-//      fa: Remote[Option[A]],
-//      ab: Remote[A] => Remote[B]
-//    ): Remote[Option[B]] =
-//      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.Some0(ab(a))))
-//
-//    override def performFilter[A: Schema](
-//      fa: Remote[Option[A]],
-//      predicate: Remote[A] => Remote[Boolean]
-//    ): Remote[Option[A]] =
-//      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote(None))))
-//
-//    override def performFlatmap[A: Schema, B: Schema](
-//      fa: Remote[Option[A]],
-//      ab: Remote[A] => Remote[Option[B]]
-//    ): Remote[Option[B]] =
-//      Remote.FoldOption(fa, Remote(None), RemoteFunction(ab))
-//  }
-//
-//  implicit case object MappableList extends Mappable[List] {
-//
-//    override def performMap[A: Schema, B: Schema](fa: Remote[List[A]], ab: Remote[A] => Remote[B]): Remote[List[B]] =
-//      Remote.Fold(fa, Remote(Nil), RemoteFunction((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2))))
-//
-//    override def performFilter[A: Schema](
-//      fa: Remote[List[A]],
-//      predicate: Remote[A] => Remote[Boolean]
-//    ): Remote[List[A]] =
-//      Remote.Fold(
-//        fa,
-//        Remote(Nil),
-//        RemoteFunction((tuple: Remote[(List[A], A)]) =>
-//          predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
-//        )
-//      )
-//
-//    override def performFlatmap[A: Schema, B: Schema](
-//      fa: Remote[List[A]],
-//      ab: Remote[A] => Remote[List[B]]
-//    ): Remote[List[B]] =
-//      Remote.Fold(fa, Remote(Nil), RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)))
-//  }
-//
-//}
+
+package zio.flow
+
+import zio.flow.Remote.RemoteFunction
+import zio.schema.Schema
+
+sealed trait Mappable[F[_]] {
+  def performMap[A: Schema, B: Schema](fa: Remote[F[A]], ab: Remote[A] => Remote[B]): Remote[F[B]]
+
+  def performFilter[A: Schema](fa: Remote[F[A]], predicate: Remote[A] => Remote[Boolean]): Remote[F[A]]
+
+  def performFlatmap[A: Schema, B: Schema](fa: Remote[F[A]], ab: Remote[A] => Remote[F[B]]): Remote[F[B]]
+}
+
+object Mappable {
+
+  implicit case object MappableOption extends Mappable[Option] {
+    override def performMap[A: Schema, B: Schema](
+      fa: Remote[Option[A]],
+      ab: Remote[A] => Remote[B]
+    ): Remote[Option[B]] =
+      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.Some0(ab(a))).evaluated)
+
+    override def performFilter[A: Schema](
+      fa: Remote[Option[A]],
+      predicate: Remote[A] => Remote[Boolean]
+    ): Remote[Option[A]] =
+      Remote.FoldOption(
+        fa,
+        Remote(None),
+        RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote(None))).evaluated
+      )
+
+    override def performFlatmap[A: Schema, B: Schema](
+      fa: Remote[Option[A]],
+      ab: Remote[A] => Remote[Option[B]]
+    ): Remote[Option[B]] =
+      Remote.FoldOption(fa, Remote(None), RemoteFunction(ab).evaluated)
+  }
+
+  implicit case object MappableList extends Mappable[List] {
+
+    override def performMap[A: Schema, B: Schema](fa: Remote[List[A]], ab: Remote[A] => Remote[B]): Remote[List[B]] =
+      Remote.Fold(
+        fa,
+        Remote(Nil),
+        RemoteFunction((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2))).evaluated
+      )
+
+    override def performFilter[A: Schema](
+      fa: Remote[List[A]],
+      predicate: Remote[A] => Remote[Boolean]
+    ): Remote[List[A]] =
+      Remote.Fold(
+        fa,
+        Remote(Nil),
+        RemoteFunction((tuple: Remote[(List[A], A)]) =>
+          predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
+        ).evaluated
+      )
+
+    override def performFlatmap[A: Schema, B: Schema](
+      fa: Remote[List[A]],
+      ab: Remote[A] => Remote[List[B]]
+    ): Remote[List[B]] =
+      Remote.Fold(fa, Remote(Nil), RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)).evaluated)
+  }
+
+}

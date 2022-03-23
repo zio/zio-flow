@@ -15,7 +15,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     suite("Remote serialization")(
       suite("roundtrip equality")(
         equalityWithCodec(JsonCodec)
-//      equalityWithCodec(ProtobufCodec) // TODO: fix
+        // equalityWithCodec(ProtobufCodec) // TODO: fix
       ),
       suite("roundtrip evaluation")(
         evalWithCodec(JsonCodec)
@@ -110,7 +110,14 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("duration from longs")(roundtripCheck(codec, genDurationFromLongs)),
       test("duration from big decimal")(roundtripCheck(codec, genDurationFromBigDecimal)),
       test("duration to longs")(roundtripCheck(codec, genDurationToLongs)),
-      test("duration to long")(roundtripCheck(codec, genDurationToLong))
+      test("duration to long")(roundtripCheck(codec, genDurationToLong)),
+      test("duration plus duration")(roundtripCheck(codec, genDurationPlusDuration)),
+      test("duration minus duration")(roundtripCheck(codec, genDurationMinusDuration)),
+      test("iterate")(roundtripCheck(codec, genIterate)),
+      test("some0")(roundtripCheck(codec, genSome0)),
+      test("fold option")(roundtripCheck(codec, genFoldOption)),
+      test("zip option")(roundtripCheck(codec, genZipOption)),
+      test("option contains")(roundtripCheck(codec, genOptionContains))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
@@ -166,6 +173,18 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
           val remote = Remote.DurationFromAmount(Remote(amount.toLong), Remote(chronoUnit))
           roundtripEval(codec, remote).provide(RemoteContext.inMemory)
         }
+      },
+      test("lazy") {
+        check(Gen.int) { a =>
+          val remote = Remote.Lazy(() => Remote(a))
+          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
+        }
+      },
+      test("literal user type wrapped in Some") {
+        check(TestCaseClass.gen) { data =>
+          val literal = Remote.Some0(Remote(data))
+          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+        }
       }
     )
 
@@ -181,7 +200,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     val encoded = codec.encode(Remote.schemaRemoteAny)(value)
     val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
 
-    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+//    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     assertTrue(decoded == Right(value))
   }

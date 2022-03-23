@@ -246,6 +246,59 @@ object RemoteSpec extends DefaultRunnableSpec {
 
           test.provide(RemoteContext.inMemory)
         }
+      ),
+      suite("ZipOption")(
+        test("evaluates correctly with custom types when both are Some") {
+          val remote = Remote.ZipOption(
+            Remote.Some0(Remote(TestCaseClass("a", 10))),
+            Remote.Some0(Remote(20))
+          )
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Option[(TestCaseClass, Int)]]
+            } yield assertTrue(
+              dyn == SchemaAndValue
+                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], Some(TestCaseClass("a", 10), 20)),
+              typ == Some(TestCaseClass("a", 10), 20)
+            )
+
+          test.provide(RemoteContext.inMemory)
+        },
+        test("evaluates correctly with custom types when one of them is None") {
+          val remote = Remote.ZipOption(
+            Remote.Some0(Remote(TestCaseClass("a", 10))),
+            Remote[Option[Int]](None)
+          )
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Option[(TestCaseClass, Int)]]
+            } yield assertTrue(
+              dyn == SchemaAndValue
+                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], None),
+              typ == None
+            )
+
+          test.provide(RemoteContext.inMemory)
+        },
+        test("evaluates correctly with custom types when both of them are None") {
+          val remote = Remote.ZipOption[TestCaseClass, Int](
+            Remote[Option[TestCaseClass]](None),
+            Remote[Option[Int]](None)
+          )
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Option[(TestCaseClass, Int)]]
+            } yield assertTrue(
+              dyn == SchemaAndValue
+                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], None),
+              typ == None
+            )
+
+          test.provide(RemoteContext.inMemory)
+        }
       )
     )
 }

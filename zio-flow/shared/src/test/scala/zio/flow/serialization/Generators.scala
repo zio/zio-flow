@@ -1,5 +1,6 @@
 package zio.flow.serialization
 
+import zio.flow.Remote.RemoteFunction
 import zio.{Duration, Random, flow}
 import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
 import zio.flow.remote.{Fractional, Numeric}
@@ -577,6 +578,60 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   val genDurationToLong: Gen[Random, Remote[Any]] =
     Gen.finiteDuration.map(duration => Remote.DurationToLong(Remote(duration)))
+
+  val genDurationPlusDuration: Gen[Random, Remote[Any]] =
+    for {
+      a              <- Gen.finiteDuration
+      seconds        <- Gen.long
+      nanoAdjustment <- Gen.long
+    } yield Remote.DurationPlusDuration(Remote(a), Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment)))
+
+  val genDurationMinusDuration: Gen[Random, Remote[Any]] =
+    for {
+      a <- Gen.finiteDuration
+      b <- Gen.finiteDuration
+    } yield Remote.DurationMinusDuration(Remote(a), Remote(b))
+
+  val genIterate: Gen[Random, Remote[Any]] =
+    for {
+      initial <- Gen.int.map(Remote(_))
+      delta   <- Gen.int
+      iterate  = RemoteFunction((a: Remote[Int]) => Remote.AddNumeric(a, Remote(delta), Numeric.NumericInt))
+      limit   <- Gen.int
+      predicate = RemoteFunction((a: Remote[Int]) =>
+                    Remote.Equal(
+                      a,
+                      Remote.AddNumeric(
+                        initial,
+                        Remote.MulNumeric(Remote(delta), Remote(limit), Numeric.NumericInt),
+                        Numeric.NumericInt
+                      )
+                    )
+                  )
+    } yield Remote.Iterate(initial, iterate.evaluated, predicate.evaluated)
+
+  val genSome0: Gen[Random with Sized, Remote[Any]] =
+    for {
+      value <- genLiteral
+    } yield Remote.Some0(value)
+
+  val genFoldOption: Gen[Random with Sized, Remote[Any]] =
+    for {
+      a <- Gen.int.map(Remote(_))
+      b <- genLiteral
+    } yield Remote.FoldOption(Remote.Some0(a), b, Remote.RemoteFunction((_: Remote[Int]) => b).evaluated)
+
+  val genZipOption: Gen[Random with Sized, Remote.ZipOption[Any, Any]] =
+    for {
+      a <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
+      b <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
+    } yield Remote.ZipOption(a, b)
+
+  val genOptionContains: Gen[Random with Sized, Remote.OptionContains[String]] =
+    for {
+      a <- Gen.string.map(Remote(_))
+      b <- Gen.string.map(Remote(_))
+    } yield Remote.OptionContains(Remote.Some0(a), b)
 }
 
 object Generators {
