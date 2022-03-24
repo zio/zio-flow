@@ -279,8 +279,8 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       v <- genRemoteVariable
       (r, s) <- Gen.oneOf(
-                  genLiteral.map(l => (l, l.asInstanceOf[Remote.Literal[Any]].schema)),
-                  genRemoteVariable.map(l => (l, l.asInstanceOf[Remote.Variable[Any]].schema)),
+                  genLiteral.map(l => (l, l.asInstanceOf[Remote.Literal[Any]].schemaA)),
+                  genRemoteVariable.map(l => (l, l.asInstanceOf[Remote.Variable[Any]].schemaA)),
                   genAddNumeric.map(l => (l, l.asInstanceOf[Remote.AddNumeric[Any]].numeric.schema))
                 )
     } yield (Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Variable[Any]], r), s)

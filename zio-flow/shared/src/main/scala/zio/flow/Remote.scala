@@ -38,6 +38,8 @@ sealed trait Remote[+A] { self =>
   def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[RemoteContext, String, A1] =
     evalDynamic.flatMap(dyn => ZIO.fromEither(dyn.value.toTypedValue(schema)))
 
+  def schema: SchemaOrNothing.Aux[_ <: A]
+
   final def iterate[A1 >: A: Schema](
     step: Remote[A1] => Remote[A1]
   )(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
@@ -68,18 +70,20 @@ object Remote {
 //  ): schema.schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
 //    schema.schema.makeAccessors(RemoteAccessorBuilder)
 
-  final case class Literal[A](value: DynamicValue, schema: Schema[A]) extends Remote[A] {
+  final case class Literal[A](value: DynamicValue, schemaA: Schema[A]) extends Remote[A] {
+
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(schemaA)
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
-      ZIO.succeed(SchemaAndValue(schema, value))
+      ZIO.succeed(SchemaAndValue(schemaA, value))
 
-    override def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[RemoteContext, String, A1] =
-      ZIO.fromEither(value.toTypedValue(schema))
+    override def eval[A1 >: A](implicit schemaA1: Schema[A1]): ZIO[RemoteContext, String, A1] =
+      ZIO.fromEither(value.toTypedValue(schemaA))
 
     override def equals(that: Any): Boolean =
       that match {
         case Literal(otherValue, otherSchema) =>
-          value == otherValue && Schema.structureEquality.equal(schema, otherSchema)
+          value == otherValue && Schema.structureEquality.equal(schemaA, otherSchema)
         case _ => false
       }
   }
@@ -92,7 +96,7 @@ object Remote {
         .semiDynamic[A]()
         .transformOrFail(
           { case (value, schema) => Right(Literal(DynamicValue.fromSchemaAndValue(schema, value), schema)) },
-          (lit: Literal[A]) => lit.value.toTypedValue(lit.schema).map((_, lit.schema))
+          (lit: Literal[A]) => lit.value.toTypedValue(lit.schemaA).map((_, lit.schemaA))
         )
 
     def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
@@ -100,7 +104,7 @@ object Remote {
   }
 
   final case class Ignore() extends Remote[Unit] {
-    val schema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
+    override val schema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Unit]] =
       ZIO.succeed(SchemaAndValue(Schema.primitive[Unit], DynamicValue.Primitive((), StandardType.UnitType)))
@@ -112,17 +116,19 @@ object Remote {
       Schema.Case("Ignore", schema, _.asInstanceOf[Ignore])
   }
 
-  final case class Variable[A](identifier: RemoteVariableName, schema: Schema[A]) extends Remote[A] {
+  final case class Variable[A](identifier: RemoteVariableName, schemaA: Schema[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(schemaA)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       RemoteContext.getVariable(identifier).flatMap {
         case None        => ZIO.fail(s"Could not find identifier $identifier")
-        case Some(value) => ZIO.succeed(SchemaAndValue(schema, value))
+        case Some(value) => ZIO.succeed(SchemaAndValue(schemaA, value))
       }
 
     override def equals(that: Any): Boolean =
       that match {
         case Variable(otherIdentifier, otherSchema) =>
-          otherIdentifier == identifier && Schema.structureEquality.equal(schema, otherSchema)
+          otherIdentifier == identifier && Schema.structureEquality.equal(schemaA, otherSchema)
         case _ => false
       }
   }
@@ -135,7 +141,7 @@ object Remote {
         construct = (identifier: String, s: SchemaAst) =>
           Variable(RemoteVariableName(identifier), s.toSchema.asInstanceOf[Schema[A]]),
         extractField1 = (variable: Variable[A]) => RemoteVariableName.unwrap(variable.identifier),
-        extractField2 = (variable: Variable[A]) => SchemaAst.fromSchema(variable.schema)
+        extractField2 = (variable: Variable[A]) => SchemaAst.fromSchema(variable.schemaA)
       )
 
     def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
@@ -146,6 +152,7 @@ object Remote {
     input: Variable[A],
     result: Remote[B]
   ) extends Remote[B] {
+    override val schema = result.schema
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       result.evalDynamic
@@ -172,6 +179,8 @@ object Remote {
   }
 
   final case class RemoteFunction[A: SchemaOrNothing.Aux, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
+    override lazy val schema = evaluated.result.schema
+
     lazy val evaluated: EvaluatedRemoteFunction[A, B] = {
       val input = Variable[A](RemoteContext.generateFreshVariableName, SchemaOrNothing[A].schema)
       EvaluatedRemoteFunction(
@@ -193,6 +202,8 @@ object Remote {
   type ===>[A, B] = RemoteFunction[A, B]
 
   final case class RemoteApply[A, B](f: EvaluatedRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+    override val schema = f.schema
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       a.evalDynamic.flatMap { value =>
         RemoteContext.setVariable(f.input.identifier, value.value) *>
@@ -219,6 +230,8 @@ object Remote {
   }
 
   final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -244,6 +257,8 @@ object Remote {
   }
 
   final case class DivNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -268,6 +283,8 @@ object Remote {
   }
 
   final case class MulNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -292,6 +309,8 @@ object Remote {
   }
 
   final case class PowNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -316,6 +335,8 @@ object Remote {
   }
 
   final case class NegationNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         v <- value.eval(numeric.schema)
@@ -337,6 +358,8 @@ object Remote {
   }
 
   final case class RootNumeric[A](value: Remote[A], n: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- value.eval(numeric.schema)
@@ -361,6 +384,8 @@ object Remote {
   }
 
   final case class LogNumeric[A](value: Remote[A], base: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- value.eval(numeric.schema)
@@ -385,6 +410,8 @@ object Remote {
   }
 
   final case class ModNumeric(left: Remote[Int], right: Remote[Int]) extends Remote[Int] {
+    override val schema: SchemaOrNothing.Aux[Int] = SchemaOrNothing.fromSchema[Int]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
       for {
         l <- left.eval(NumericInt.schema)
@@ -407,6 +434,8 @@ object Remote {
   }
 
   final case class AbsoluteNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         v <- value.eval(numeric.schema)
@@ -428,6 +457,8 @@ object Remote {
   }
 
   final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -452,6 +483,8 @@ object Remote {
   }
 
   final case class MaxNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- left.eval(numeric.schema)
@@ -476,6 +509,8 @@ object Remote {
   }
 
   final case class FloorNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- value.eval(numeric.schema)
@@ -497,6 +532,8 @@ object Remote {
   }
 
   final case class CeilNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- value.eval(numeric.schema)
@@ -518,6 +555,8 @@ object Remote {
   }
 
   final case class RoundNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(numeric.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         l <- value.eval(numeric.schema)
@@ -539,6 +578,8 @@ object Remote {
   }
 
   final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(fractional.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         v <- value.eval(fractional.schema)
@@ -560,6 +601,8 @@ object Remote {
   }
 
   final case class SinInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(fractional.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         v <- value.eval(fractional.schema)
@@ -584,6 +627,8 @@ object Remote {
   }
 
   final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(fractional.schema)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         v <- value.eval(fractional.schema)
@@ -611,6 +656,11 @@ object Remote {
   final case class Either0[A, B](
     either: Either[(Remote[A], SchemaOrNothing.Aux[B]), (SchemaOrNothing.Aux[A], Remote[B])]
   ) extends Remote[Either[A, B]] {
+    override val schema: SchemaOrNothing.Aux[_ <: Either[A, B]] =
+      SchemaOrNothing.fromSchema(either match {
+        case Left((r, s))  => Schema.either(r.schema.schema, s.schema)
+        case Right((s, r)) => Schema.either(s.schema, r.schema.schema)
+      })
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Either[A, B]]] =
       either match {
@@ -629,13 +679,13 @@ object Remote {
 
         case Right((leftSchema, right)) =>
           right.evalDynamic.flatMap { evaluatedRight =>
-            ZIO.fromEither(evaluatedRight.toTyped).map { rigthValue =>
+            ZIO.fromEither(evaluatedRight.toTyped).map { rightValue =>
               SchemaAndValue.fromSchemaAndValue[Either[A, B]](
                 Schema.either[A, B](
                   leftSchema.schema,
                   evaluatedRight.schema.asInstanceOf[Schema[B]]
                 ),
-                Right(rigthValue)
+                Right(rightValue)
               )
             }
           }
@@ -699,12 +749,15 @@ object Remote {
     cSchema: SchemaOrNothing.Aux[C]
   ) extends Remote[Either[A, C]] {
 
+    override val schema: SchemaOrNothing.Aux[Either[A, C]] =
+      SchemaOrNothing.fromSchema(Schema.either(aSchema.schema, cSchema.schema))
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Either[A, C]]] =
-      either.eval[Either[A, B]](Schema.either(aSchema.schema, f.input.schema)).flatMap {
+      either.eval[Either[A, B]](Schema.either(aSchema.schema, f.input.schemaA)).flatMap {
         case Left(a) =>
           ZIO.succeed(SchemaAndValue.fromSchemaAndValue(Schema.either(aSchema.schema, cSchema.schema), Left(a)))
         case Right(b) =>
-          f(Remote(b)(f.input.schema)).evalDynamic
+          f(Remote(b)(f.input.schemaA)).evalDynamic
       }
 
     override def equals(that: Any): Boolean =
@@ -751,13 +804,14 @@ object Remote {
     left: EvaluatedRemoteFunction[A, C],
     right: EvaluatedRemoteFunction[B, C]
   ) extends Remote[C] {
+    override val schema = left.schema
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
-      either.eval(Schema.either(left.input.schema, right.input.schema)).flatMap {
+      either.eval(Schema.either(left.input.schemaA, right.input.schemaA)).flatMap {
         case Left(a) =>
-          left(Remote(a)(left.input.schema)).evalDynamic
+          left(Remote(a)(left.input.schemaA)).evalDynamic
         case Right(b) =>
-          right(Remote(b)(right.input.schema)).evalDynamic
+          right(Remote(b)(right.input.schemaA)).evalDynamic
       }
   }
 
@@ -791,6 +845,13 @@ object Remote {
   final case class SwapEither[A, B](
     either: Remote[Either[A, B]]
   ) extends Remote[Either[B, A]] {
+    override val schema: SchemaOrNothing.Aux[Either[B, A]] =
+      SchemaOrNothing.fromSchema(
+        Schema.either(
+          either.schema.schema.asInstanceOf[Schema.EitherSchema[A, B]].right,
+          either.schema.schema.asInstanceOf[Schema.EitherSchema[A, B]].left
+        )
+      )
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Either[B, A]]] =
       either.evalDynamic.flatMap { schemaAndValue =>
@@ -820,6 +881,25 @@ object Remote {
 
   final case class Try[A](either: Either[(Remote[Throwable], SchemaOrNothing.Aux[A]), Remote[A]])
       extends Remote[scala.util.Try[A]] {
+    override val schema: SchemaOrNothing.Aux[scala.util.Try[A]] = SchemaOrNothing.fromSchema {
+      val schemaA = either match {
+        case Left((_, schema)) => schema
+        case Right(remote)     => remote.schema.asInstanceOf[SchemaOrNothing.Aux[A]]
+      }
+      Schema
+        .either(Schema[Throwable], schemaA.schema)
+        .transform(
+          {
+            case Left(error)  => scala.util.Failure(error)
+            case Right(value) => scala.util.Success(value)
+          },
+          {
+            case scala.util.Success(value) => Right(value)
+            case scala.util.Failure(error) => Left(error)
+          }
+        )
+    }
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[util.Try[A]]] =
       either match {
         case Left((remoteThrowable, valueSchema)) =>
@@ -880,6 +960,11 @@ object Remote {
   // TODO: generate the tuple constructor / selector remotes?
 
   final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
+    override val schema: SchemaOrNothing.Aux[_ <: (A, B)] =
+      SchemaOrNothing.fromSchema(
+        Schema.tuple2(left.schema.schema, right.schema.schema)
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B)]] =
       for {
         leftDyn  <- left.evalDynamic
@@ -912,6 +997,9 @@ object Remote {
   }
 
   final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
+    override val schema: SchemaOrNothing.Aux[_ <: (A, B, C)] =
+      SchemaOrNothing.fromSchema(Schema.tuple3(_1.schema.schema, _2.schema.schema, _3.schema.schema))
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C)]] =
       for {
         dyn1 <- _1.evalDynamic
@@ -947,6 +1035,12 @@ object Remote {
 
   final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
       extends Remote[(A, B, C, D)] {
+
+    override val schema: SchemaOrNothing.Aux[_ <: (A, B, C, D)] =
+      SchemaOrNothing.fromSchema(
+        Schema.tuple4(_1.schema.schema, _2.schema.schema, _3.schema.schema, _4.schema.schema)
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C, D)]] =
       for {
         dyn1 <- _1.evalDynamic
@@ -983,6 +1077,11 @@ object Remote {
   }
 
   final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema.asInstanceOf[Schema.Tuple[A, B]].left
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         dyn        <- tuple.evalDynamic
@@ -1007,6 +1106,9 @@ object Remote {
   }
 
   final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
+    override val schema: SchemaOrNothing.Aux[B] =
+      SchemaOrNothing.fromSchema(tuple.schema.schema.asInstanceOf[Schema.Tuple[A, B]].right)
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       for {
         dyn        <- tuple.evalDynamic
@@ -1031,6 +1133,17 @@ object Remote {
   }
 
   final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .left
+          .asInstanceOf[Schema.Tuple[A, B]]
+          .left
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1061,6 +1174,18 @@ object Remote {
   }
 
   final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
+
+    override val schema: SchemaOrNothing.Aux[B] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .left
+          .asInstanceOf[Schema.Tuple[A, B]]
+          .right
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1091,6 +1216,16 @@ object Remote {
   }
 
   final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
+
+    override val schema: SchemaOrNothing.Aux[C] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .right
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1119,6 +1254,19 @@ object Remote {
   }
 
   final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+          .left
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .left
+          .asInstanceOf[Schema.Tuple[A, B]]
+          .left
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1151,6 +1299,19 @@ object Remote {
   }
 
   final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
+    override val schema: SchemaOrNothing.Aux[B] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+          .left
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .left
+          .asInstanceOf[Schema.Tuple[A, B]]
+          .right
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1183,6 +1344,17 @@ object Remote {
   }
 
   final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
+    override val schema: SchemaOrNothing.Aux[C] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+          .left
+          .asInstanceOf[Schema.Tuple[(A, B), C]]
+          .right
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1213,6 +1385,15 @@ object Remote {
   }
 
   final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
+    override val schema: SchemaOrNothing.Aux[D] =
+      SchemaOrNothing.fromSchema(
+        tuple.schema.schema
+          .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
+          .codec
+          .asInstanceOf[Schema.Tuple[((A, B), C), D]]
+          .right
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[D]] =
       for {
         dyn <- tuple.evalDynamic
@@ -1241,6 +1422,8 @@ object Remote {
   }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
+    override val schema: SchemaOrNothing.Aux[A] =
+      ifTrue.schema.asInstanceOf[SchemaOrNothing.Aux[A]]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       predicate.eval.flatMap {
@@ -1268,6 +1451,8 @@ object Remote {
   }
 
   case class Length(remoteString: Remote[String]) extends Remote[Int] {
+    override val schema: SchemaOrNothing.Aux[Int] = SchemaOrNothing[Int]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
       remoteString.eval.map { value =>
         SchemaAndValue.fromSchemaAndValue(Schema[Int], value.length)
@@ -1289,6 +1474,8 @@ object Remote {
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       for {
         leftDyn      <- left.evalDynamic
@@ -1317,6 +1504,8 @@ object Remote {
   }
 
   final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
+    override val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       for {
         leftDyn  <- left.evalDynamic
@@ -1342,6 +1531,8 @@ object Remote {
   }
 
   final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
+    override val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       value.eval.map { boolValue =>
         SchemaAndValue.fromSchemaAndValue(Schema[Boolean], !boolValue)
@@ -1363,6 +1554,8 @@ object Remote {
   }
 
   final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
+    override val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       for {
         lval <- left.eval
@@ -1388,6 +1581,8 @@ object Remote {
 
   final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: EvaluatedRemoteFunction[(B, A), B])
       extends Remote[B] {
+    override val schema = body.schema
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       list.evalDynamic.flatMap { listDyn =>
         for {
@@ -1437,6 +1632,8 @@ object Remote {
 
   final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
 
+    override val schema: SchemaOrNothing.Aux[List[A]] = list.schema.asInstanceOf[SchemaOrNothing.Aux[List[A]]]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[A]]] =
       head.evalDynamic.flatMap { headDyn =>
         val listSchema = Schema.list(headDyn.schema.asInstanceOf[Schema[A]])
@@ -1466,6 +1663,12 @@ object Remote {
   }
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
+
+    override val schema: SchemaOrNothing.Aux[Option[(A, List[A])]] = SchemaOrNothing.fromSchema {
+      val listSchema = list.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
+      Schema.option(Schema.tuple2(listSchema.schemaA, listSchema))
+    }
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[(A, List[A])]]] =
       list.evalDynamic.flatMap { listDyn =>
         val listSchema = listDyn.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
@@ -1493,6 +1696,7 @@ object Remote {
   }
 
   final case class InstantFromLong(seconds: Remote[Long]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       seconds.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochSecond(s)))
@@ -1513,6 +1717,8 @@ object Remote {
   }
 
   final case class InstantFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       for {
         s <- seconds.eval[Long]
@@ -1538,6 +1744,8 @@ object Remote {
   }
 
   final case class InstantFromMilli(millis: Remote[Long]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       millis.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochMilli(s)))
   }
@@ -1557,6 +1765,8 @@ object Remote {
   }
 
   final case class InstantFromString(charSeq: Remote[String]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.parse(s)))
   }
@@ -1576,6 +1786,8 @@ object Remote {
   }
 
   final case class InstantToTuple(instant: Remote[Instant]) extends Remote[(Long, Int)] {
+    override val schema: SchemaOrNothing.Aux[(Long, Int)] = SchemaOrNothing[(Long, Int)]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(Long, Int)]] =
       instant.eval[Instant].map { instant =>
         SchemaAndValue
@@ -1598,6 +1810,8 @@ object Remote {
   }
 
   final case class InstantPlusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       for {
         instant  <- instant.eval[Instant]
@@ -1623,6 +1837,8 @@ object Remote {
   }
 
   final case class InstantMinusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       for {
         instant  <- instant.eval[Instant]
@@ -1648,6 +1864,8 @@ object Remote {
   }
 
   final case class InstantTruncate(instant: Remote[Instant], temporalUnit: Remote[ChronoUnit]) extends Remote[Instant] {
+    override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       for {
         instant      <- instant.eval[Instant]
@@ -1674,6 +1892,8 @@ object Remote {
   }
 
   final case class DurationFromString(charSeq: Remote[String]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Duration], Duration.parse(s)))
   }
@@ -1694,6 +1914,8 @@ object Remote {
 
   final case class DurationBetweenInstants(startInclusive: Remote[Instant], endExclusive: Remote[Instant])
       extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         start <- startInclusive.eval[Instant]
@@ -1719,18 +1941,21 @@ object Remote {
   }
 
   final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
-    private val oneBillion = new BigDecimal(1000000000L)
+
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         bd     <- seconds.eval[BigDecimal]
         seconds = bd.longValue()
-        nanos   = bd.subtract(new BigDecimal(seconds)).multiply(oneBillion).intValue()
+        nanos   = bd.subtract(new BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
         result  = Duration.ofSeconds(seconds, nanos.toLong)
       } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
   }
 
   object DurationFromBigDecimal {
+    private val oneBillion = new BigDecimal(1000000000L)
+
     val schema: Schema[DurationFromBigDecimal] = Schema.defer(
       Remote
         .schema[BigDecimal]
@@ -1745,6 +1970,8 @@ object Remote {
   }
 
   final case class DurationFromLong(seconds: Remote[Long]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       seconds
         .eval[Long]
@@ -1766,6 +1993,8 @@ object Remote {
   }
 
   final case class DurationFromLongs(seconds: Remote[Long], nanoAdjustment: Remote[Long]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         seconds        <- seconds.eval[Long]
@@ -1791,6 +2020,8 @@ object Remote {
   }
 
   final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         amount       <- amount.eval[Long]
@@ -1816,6 +2047,8 @@ object Remote {
   }
 
   final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+    override val schema: SchemaOrNothing.Aux[(Long, Long)] = SchemaOrNothing[(Long, Long)]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(Long, Long)]] =
       duration.eval[Duration].map { duration =>
         SchemaAndValue
@@ -1838,6 +2071,8 @@ object Remote {
   }
 
   final case class DurationToLong(duration: Remote[Duration]) extends Remote[Long] {
+    override val schema: SchemaOrNothing.Aux[Long] = SchemaOrNothing[Long]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Long]] =
       duration.eval[Duration].map { duration =>
         SchemaAndValue.fromSchemaAndValue(Schema[Long], duration.getSeconds)
@@ -1859,6 +2094,8 @@ object Remote {
   }
 
   final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         left  <- left.eval[Duration]
@@ -1884,6 +2121,8 @@ object Remote {
   }
 
   final case class DurationMinusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
+    override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       for {
         left  <- left.eval[Duration]
@@ -1913,6 +2152,7 @@ object Remote {
     iterate: EvaluatedRemoteFunction[A, A],
     predicate: EvaluatedRemoteFunction[A, Boolean]
   ) extends Remote[A] {
+    override val schema = iterate.schema
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] = {
       def loop(current: Remote[A]): ZIO[RemoteContext, String, SchemaAndValue[A]] =
@@ -1944,6 +2184,8 @@ object Remote {
   }
 
   final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
+    override lazy val schema = value().schema
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       value().evalDynamic
   }
@@ -1958,6 +2200,8 @@ object Remote {
 
   // TODO: better name
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
+    override val schema = SchemaOrNothing.fromSchema(Schema.option(value.schema.schema))
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[A]]] =
       for {
         schemaAndValue <- value.evalDynamic
@@ -1977,11 +2221,13 @@ object Remote {
     ifEmpty: Remote[B],
     ifNonEmpty: EvaluatedRemoteFunction[A, B]
   ) extends Remote[B] {
+    override val schema = ifEmpty.schema
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
       option.evalDynamic.flatMap { optionDyn =>
         ZIO.fromEither(optionDyn.toTyped).flatMap { optionTyped =>
           optionTyped.fold(ifEmpty.evalDynamic)((a: A) =>
-            ifNonEmpty(Remote.Literal(SchemaAndValue.fromSchemaAndValue(ifNonEmpty.input.schema, a))).evalDynamic
+            ifNonEmpty(Remote.Literal(SchemaAndValue.fromSchemaAndValue(ifNonEmpty.input.schemaA, a))).evalDynamic
           )
         }
       }
@@ -2006,6 +2252,16 @@ object Remote {
   }
 
   final case class ZipOption[A, B](left: Remote[Option[A]], right: Remote[Option[B]]) extends Remote[Option[(A, B)]] {
+    override val schema =
+      SchemaOrNothing.fromSchema(
+        Schema.option(
+          Schema.tuple2(
+            left.schema.asInstanceOf[SchemaOrNothing.Aux[Option[A]]].schema.asInstanceOf[Schema.Optional[A]].codec,
+            right.schema.asInstanceOf[SchemaOrNothing.Aux[Option[B]]].schema.asInstanceOf[Schema.Optional[B]].codec
+          )
+        )
+      )
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[(A, B)]]] =
       for {
         leftDyn  <- left.evalDynamic
@@ -2046,6 +2302,8 @@ object Remote {
   }
 
   final case class OptionContains[A](option: Remote[Option[A]], value: Remote[A]) extends Remote[Boolean] {
+    override val schema: SchemaOrNothing.Aux[Boolean] = SchemaOrNothing[Boolean]
+
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       option.evalDynamic.flatMap { optionDyn =>
         ZIO
