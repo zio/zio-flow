@@ -78,7 +78,7 @@ object Remote {
       ZIO.succeed(SchemaAndValue(schemaA, value))
 
     override def eval[A1 >: A](implicit schemaA1: Schema[A1]): ZIO[RemoteContext, String, A1] =
-      ZIO.fromEither(value.toTypedValue(schemaA))
+      ZIO.fromEither(value.toTypedValue(schemaA1))
 
     override def equals(that: Any): Boolean =
       that match {
@@ -1665,7 +1665,7 @@ object Remote {
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
 
     override val schema: SchemaOrNothing.Aux[Option[(A, List[A])]] = SchemaOrNothing.fromSchema {
-      val listSchema = list.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
+      val listSchema = list.schema.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
       Schema.option(Schema.tuple2(listSchema.schemaA, listSchema))
     }
 
@@ -2198,7 +2198,7 @@ object Remote {
       Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
   }
 
-  // TODO: better name
+  // TODO: This need to be Optional and store the schema in case it's None, like we do with Eithers
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
     override val schema = SchemaOrNothing.fromSchema(Schema.option(value.schema.schema))
 
