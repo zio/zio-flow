@@ -18,7 +18,7 @@ package zio.flow
 
 import zio.NeedsEnv
 import zio.flow.Remote._
-import zio.schema.Schema
+import zio.schema.{CaseSet, Schema}
 
 import java.time.{Duration, Instant}
 
@@ -178,14 +178,44 @@ object ZFlow {
     val resultSchema = value.schema
   }
 
+  object Return {
+    def schema[A]: Schema[Return[A]] =
+      Remote
+        .schema[A]
+        .transform(
+          Return(_),
+          _.value
+        )
+
+    def schemaCase[R, E, A]: Schema.Case[Return[A], ZFlow[R, E, A]] =
+      Schema.Case("Return", schema[A], _.asInstanceOf[Return[A]])
+  }
+
   case object Now extends ZFlow[Any, Nothing, Instant] {
     val errorSchema                                = SchemaOrNothing.nothing
     val resultSchema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing.fromSchema[Instant]
+
+    val schema: Schema[Now.type] = Schema.singleton(Now)
+    def schemaCase[R, E, A]: Schema.Case[Now.type, ZFlow[R, E, A]] =
+      Schema.Case("Now", schema, _.asInstanceOf[Now.type])
   }
 
   final case class WaitTill(time: Remote[Instant]) extends ZFlow[Any, Nothing, Unit] {
     val errorSchema                             = SchemaOrNothing.nothing
     val resultSchema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
+  }
+
+  object WaitTill {
+    def schema[A]: Schema[WaitTill] =
+      Remote
+        .schema[Instant]
+        .transform(
+          WaitTill(_),
+          _.time
+        )
+
+    def schemaCase[R, E, A]: Schema.Case[WaitTill, ZFlow[R, E, A]] =
+      Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
   final case class Modify[A, B](svar: Remote[Remote.Variable[A]], f: A ===> (B, A))(implicit
@@ -446,23 +476,11 @@ object ZFlow {
 
   val executionEnvironment: ZFlow[Any, Nothing, ExecutionEnvironment] = ZFlow.GetExecutionEnvironment
 
-//  object Schemas {
-//    implicit val returnSchema: Schema[Return[_]] = Schema.CaseClass1()
-//    implicit val nowSchema: Schema[Now.type] = DeriveSchema.gen
-//  }
-//  val erasedSchema: Schema[ZFlow[_, _, _]] = {
-//    import Schemas._
-//    Schema.enumeration(
-//      caseOf[Return[_], ZFlow[_, _, _]](id = "Return")((flow: ZFlow[_, _, _]) => flow.asInstanceOf[Return[_]]) ++
-//      caseOf[Now.type, ZFlow[_, _, _]](id = "Now")((flow: ZFlow[_, _, _]) => flow.asInstanceOf[Now.type])
-//    )
-//  }
-//
-//  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] =
-//    erasedSchema.transform(
-//      _.asInstanceOf[ZFlow[R, E, A]],
-//      _.asInstanceOf[ZFlow[_, _, _]]
-//    )
-
-  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] = Schema.fail("TODO: zflow serializer")
+  implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(Return.schemaCase[R, E, A], CaseSet.Empty[ZFlow[R, E, A]]())
+        .:+:(Now.schemaCase[R, E, A])
+        .:+:(WaitTill.schemaCase[R, E, A])
+    )
 }

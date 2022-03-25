@@ -39,7 +39,9 @@ object SchemaAndValue {
   def apply[A](schema0: SchemaOrNothing.Aux[A], value0: DynamicValue): SchemaAndValue[A] =
     apply(schema0.schema, value0)
 
-  // TODO: make a version of this that implicilty captures the schema and use it everywhere
+  def of[A: Schema](value: A): SchemaAndValue[A] =
+    fromSchemaAndValue(Schema[A], value)
+
   def fromSchemaAndValue[A](schema: Schema[A], value: A): SchemaAndValue[A] =
     SchemaAndValue(schema, DynamicValue.fromSchemaAndValue(schema, value))
 

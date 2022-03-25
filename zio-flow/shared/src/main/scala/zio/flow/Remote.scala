@@ -1455,7 +1455,7 @@ object Remote {
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
       remoteString.eval.map { value =>
-        SchemaAndValue.fromSchemaAndValue(Schema[Int], value.length)
+        SchemaAndValue.of(value.length)
       }
   }
 
@@ -1484,7 +1484,7 @@ object Remote {
         leftVal      <- ZIO.fromEither(leftDyn.toTyped)
         rightVal     <- ZIO.fromEither(rightDyn.toTyped)
         compareResult = ordering.compare(leftVal, rightVal.asInstanceOf[leftDyn.Subtype])
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], compareResult <= 0)
+      } yield SchemaAndValue.of(compareResult <= 0)
   }
 
   object LessThanEqual {
@@ -1511,7 +1511,7 @@ object Remote {
         leftDyn  <- left.evalDynamic
         rightDyn <- right.evalDynamic
         result    = leftDyn.value == rightDyn.value && Schema.structureEquality.equal(leftDyn.schema, rightDyn.schema)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object Equal {
@@ -1535,7 +1535,7 @@ object Remote {
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
       value.eval.map { boolValue =>
-        SchemaAndValue.fromSchemaAndValue(Schema[Boolean], !boolValue)
+        SchemaAndValue.of(!boolValue)
       }
   }
 
@@ -1560,7 +1560,7 @@ object Remote {
       for {
         lval <- left.eval
         rval <- right.eval
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Boolean], lval && rval)
+      } yield SchemaAndValue.of(lval && rval)
   }
 
   object And {
@@ -1699,7 +1699,7 @@ object Remote {
     override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
-      seconds.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochSecond(s)))
+      seconds.eval[Long].map(s => SchemaAndValue.of(Instant.ofEpochSecond(s)))
   }
 
   object InstantFromLong {
@@ -1723,7 +1723,7 @@ object Remote {
       for {
         s <- seconds.eval[Long]
         n <- nanos.eval[Long]
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochSecond(s, n))
+      } yield SchemaAndValue.of(Instant.ofEpochSecond(s, n))
   }
 
   object InstantFromLongs {
@@ -1747,7 +1747,7 @@ object Remote {
     override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
-      millis.eval[Long].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.ofEpochMilli(s)))
+      millis.eval[Long].map(s => SchemaAndValue.of(Instant.ofEpochMilli(s)))
   }
 
   object InstantFromMilli {
@@ -1768,7 +1768,7 @@ object Remote {
     override val schema: SchemaOrNothing.Aux[Instant] = SchemaOrNothing[Instant]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
-      charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Instant], Instant.parse(s)))
+      charSeq.eval[String].map(s => SchemaAndValue.of(Instant.parse(s)))
   }
 
   object InstantFromString {
@@ -1817,7 +1817,7 @@ object Remote {
         instant  <- instant.eval[Instant]
         duration <- duration.eval[Duration]
         result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object InstantPlusDuration {
@@ -1844,7 +1844,7 @@ object Remote {
         instant  <- instant.eval[Instant]
         duration <- duration.eval[Duration]
         result    = instant.minusSeconds(duration.getSeconds).minusNanos(duration.getNano.toLong)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object InstantMinusDuration {
@@ -1872,7 +1872,7 @@ object Remote {
         _            <- ZIO.debug(s"temporal unit is $temporalUnit")
         temporalUnit <- temporalUnit.eval[ChronoUnit].tapError(s => ZIO.debug(s"Failed to evaluate temporal unit: $s"))
         result        = instant.truncatedTo(temporalUnit)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Instant], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object InstantTruncate {
@@ -1895,7 +1895,7 @@ object Remote {
     override val schema: SchemaOrNothing.Aux[Duration] = SchemaOrNothing[Duration]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
-      charSeq.eval[String].map(s => SchemaAndValue.fromSchemaAndValue(Schema[Duration], Duration.parse(s)))
+      charSeq.eval[String].map(s => SchemaAndValue.of(Duration.parse(s)))
   }
 
   object DurationFromString {
@@ -1921,7 +1921,7 @@ object Remote {
         start <- startInclusive.eval[Instant]
         end   <- endExclusive.eval[Instant]
         result = Duration.between(start, end)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationBetweenInstants {
@@ -1950,7 +1950,7 @@ object Remote {
         seconds = bd.longValue()
         nanos   = bd.subtract(new BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
         result  = Duration.ofSeconds(seconds, nanos.toLong)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationFromBigDecimal {
@@ -1975,7 +1975,7 @@ object Remote {
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Duration]] =
       seconds
         .eval[Long]
-        .map(seconds => SchemaAndValue.fromSchemaAndValue(Schema[Duration], Duration.ofSeconds(seconds)))
+        .map(seconds => SchemaAndValue.of(Duration.ofSeconds(seconds)))
   }
 
   object DurationFromLong {
@@ -2000,7 +2000,7 @@ object Remote {
         seconds        <- seconds.eval[Long]
         nanoAdjustment <- nanoAdjustment.eval[Long]
         result          = Duration.ofSeconds(seconds, nanoAdjustment)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationFromLongs {
@@ -2027,7 +2027,7 @@ object Remote {
         amount       <- amount.eval[Long]
         temporalUnit <- temporalUnit.eval[ChronoUnit]
         result        = Duration.of(amount, temporalUnit)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationFromAmount {
@@ -2075,7 +2075,7 @@ object Remote {
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Long]] =
       duration.eval[Duration].map { duration =>
-        SchemaAndValue.fromSchemaAndValue(Schema[Long], duration.getSeconds)
+        SchemaAndValue.of(duration.getSeconds)
       }
   }
 
@@ -2101,7 +2101,7 @@ object Remote {
         left  <- left.eval[Duration]
         right <- right.eval[Duration]
         result = left.plus(right)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationPlusDuration {
@@ -2128,7 +2128,7 @@ object Remote {
         left  <- left.eval[Duration]
         right <- right.eval[Duration]
         result = left.plus(right)
-      } yield SchemaAndValue.fromSchemaAndValue(Schema[Duration], result)
+      } yield SchemaAndValue.of(result)
   }
 
   object DurationMinusDuration {
@@ -2314,11 +2314,11 @@ object Remote {
               case DynamicValue.SomeValue(dynValue) =>
                 ZIO.fromEither(dynValue.toTypedValue(valueSchema)).flatMap { typedValue =>
                   value.eval(valueSchema).map { expectedValue =>
-                    SchemaAndValue.fromSchemaAndValue(Schema[Boolean], typedValue == expectedValue)
+                    SchemaAndValue.of(typedValue == expectedValue)
                   }
                 }
               case _ =>
-                ZIO.succeed(SchemaAndValue.fromSchemaAndValue(Schema[Boolean], false))
+                ZIO.succeed(SchemaAndValue.of(false))
             }
           }
       }

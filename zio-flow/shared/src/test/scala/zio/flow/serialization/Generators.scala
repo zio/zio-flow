@@ -2,7 +2,7 @@ package zio.flow.serialization
 
 import zio.flow.Remote.RemoteFunction
 import zio.{Duration, Random, flow}
-import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
+import zio.flow.{Remote, RemoteVariableName, SchemaAndValue, SchemaOrNothing, ZFlow}
 import zio.flow.remote.{Fractional, Numeric}
 import zio.flow.serialization.Generators.TestException
 import zio.schema.{DefaultJavaTimeSchemas, Schema}
@@ -621,17 +621,31 @@ trait Generators extends DefaultJavaTimeSchemas {
       b <- genLiteral
     } yield Remote.FoldOption(Remote.Some0(a), b, Remote.RemoteFunction((_: Remote[Int]) => b).evaluated)
 
-  val genZipOption: Gen[Random with Sized, Remote.ZipOption[Any, Any]] =
+  val genZipOption: Gen[Random with Sized, Remote[Any]] =
     for {
       a <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
       b <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
     } yield Remote.ZipOption(a, b)
 
-  val genOptionContains: Gen[Random with Sized, Remote.OptionContains[String]] =
+  val genOptionContains: Gen[Random with Sized, Remote[Any]] =
     for {
       a <- Gen.string.map(Remote(_))
       b <- Gen.string.map(Remote(_))
     } yield Remote.OptionContains(Remote.Some0(a), b)
+
+  val genZFlowReturn: Gen[Random with Sized, ZFlow.Return[Any]] =
+    Gen
+      .oneOf(
+        genLiteral,
+        genSome0,
+        genRemoteApply
+      )
+      .map(ZFlow.Return(_))
+
+  val genZFlowNow: Gen[Any, ZFlow.Now.type] = Gen.const(ZFlow.Now)
+
+  val genZFlowWaitTill: Gen[Random, ZFlow.WaitTill] =
+    Gen.instant.map(Remote(_)).map(ZFlow.WaitTill(_))
 }
 
 object Generators {
