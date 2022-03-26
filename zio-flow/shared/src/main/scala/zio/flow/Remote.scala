@@ -17,6 +17,7 @@
 package zio.flow
 
 import zio.ZIO
+import zio.flow.SchemaOrNothing.Aux
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
 import zio.schema.ast.SchemaAst
@@ -70,6 +71,8 @@ object Remote {
 //  ): schema.schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
 //    schema.schema.makeAccessors(RemoteAccessorBuilder)
 
+  // TODO: need a specialized Literal[ZFlow] that does not serialize the zflow schema
+
   final case class Literal[A](value: DynamicValue, schemaA: Schema[A]) extends Remote[A] {
 
     override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(schemaA)
@@ -101,6 +104,28 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
       Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
+  }
+
+  final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[ZFlow[R, E, A]]] =
+      ZIO.succeed(SchemaAndValue.fromSchemaAndValue(ZFlow.schema[R, E, A], flow))
+
+    override def schema = SchemaOrNothing.fromSchema(ZFlow.schema[R, E, A])
+  }
+
+  object Flow {
+    def schema[R, E, A]: Schema[Flow[R, E, A]] =
+      Schema.defer(
+        ZFlow
+          .schema[R, E, A]
+          .transform(
+            Flow(_),
+            _.flow
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Flow[Any, Any, Any], Remote[A]] =
+      Schema.Case("Flow", schema[Any, Any, Any], _.asInstanceOf[Flow[Any, Any, Any]])
   }
 
   final case class Ignore() extends Remote[Unit] {
@@ -2472,7 +2497,8 @@ object Remote {
   def schema[A]: Schema[Remote[A]] = Schema.EnumN(
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
-      .:+:(Ignore.schemaCase)
+      .:+:(Flow.schemaCase[A])
+      .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
       .:+:(AddNumeric.schemaCase[A])
       .:+:(EvaluatedRemoteFunction.schemaCase[Any, A])

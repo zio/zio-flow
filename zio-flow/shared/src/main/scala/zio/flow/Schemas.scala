@@ -28,7 +28,10 @@ object SchemaOrNothing {
 
   implicit def nothing: SchemaOrNothing.Aux[Nothing] = new SchemaOrNothing {
     override type A = Nothing
-    override val schema: Schema[Nothing] = Schema.fail("nothing")
+
+    // NOTE: Schema.Fail would be more correct but that makes it unserializable currently
+    override val schema: Schema[Nothing] =
+      Schema[Unit].transformOrFail[Nothing](_ => Left("nothing"), (_: Nothing) => Left("nothing"))
   }
 
   def apply[A: SchemaOrNothing.Aux]: SchemaOrNothing.Aux[A] = implicitly[SchemaOrNothing.Aux[A]]
@@ -37,6 +40,11 @@ object SchemaOrNothing {
 trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.DurationType)
+
+  implicit val schemaUri: Schema[java.net.URI] = Schema[String].transformOrFail(
+    s => Try(new java.net.URI(s)).toEither.left.map(_.getMessage),
+    uri => Right(uri.toString)
+  )
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(

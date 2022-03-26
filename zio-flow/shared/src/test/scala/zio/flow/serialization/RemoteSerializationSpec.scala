@@ -52,7 +52,12 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("ignore") {
         roundtrip(codec, Remote.Ignore())
       },
+      test("flow")(roundtripCheck(codec, genRemoteFlow)),
       test("variable")(roundtripCheck(codec, genRemoteVariable)),
+      test("variable of nothing") {
+        val variable = Remote.Variable[Nothing](RemoteVariableName("test"), SchemaOrNothing.nothing.schema)
+        roundtrip(codec, variable)
+      },
       test("add numeric")(roundtripCheck(codec, genAddNumeric)),
       test("div numeric")(roundtripCheck(codec, genDivNumeric)),
       test("mul numeric")(roundtripCheck(codec, genMulNumeric)),

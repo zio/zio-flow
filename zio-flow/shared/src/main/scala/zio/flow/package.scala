@@ -24,8 +24,6 @@ import java.time.Instant
 import scala.language.implicitConversions
 
 package object flow extends Schemas {
-  type ActivityError = Throwable
-
   type RemoteDuration    = Remote[Duration]
   type RemoteInstant     = Remote[Instant]
   type RemoteVariable[A] = Remote.Variable[A]
@@ -72,6 +70,10 @@ package object flow extends Schemas {
   implicit def RemoteRelational[A](remote: Remote[A]): RemoteRelationalSyntax[A] = new RemoteRelationalSyntax[A](remote)
 
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
+
+  implicit class ZFlowSyntax[R, E, A](flow: ZFlow[R, E, A]) {
+    def toRemote: Remote.Flow[R, E, A] = Remote.Flow(flow)
+  }
 
   object RemoteVariableName extends Newtype[String]
   type RemoteVariableName = RemoteVariableName.Type
