@@ -359,15 +359,40 @@ object ZFlow {
       Schema.Case("RunActivity", schema[Any, A], _.asInstanceOf[RunActivity[Any, A]])
   }
 
-  final case class Transaction[R, E, A](workflow: ZFlow[R, E, A])(implicit
-    val errorSchema: SchemaOrNothing.Aux[E],
-    val resultSchema: SchemaOrNothing.Aux[A]
-  ) extends ZFlow[R, E, A] {
+  final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A] {
     type ValueR = R
+    override val errorSchema  = workflow.errorSchema
+    override val resultSchema = workflow.resultSchema
+  }
+
+  object Transaction {
+    def schema[R, E, A]: Schema[Transaction[R, E, A]] =
+      Schema.defer(
+        ZFlow
+          .schema[R, E, A]
+          .transform(
+            Transaction(_),
+            _.workflow
+          )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Transaction[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Transaction", schema[R, E, A], _.asInstanceOf[Transaction[R, E, A]])
   }
 
   final case class Input[R]()(implicit val resultSchema: SchemaOrNothing.Aux[R]) extends ZFlow[R, Nothing, R] {
     val errorSchema = SchemaOrNothing.nothing
+  }
+
+  object Input {
+    def schema[R]: Schema[Input[R]] =
+      SchemaAst.schema.transform(
+        ast => Input()(SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[R]])),
+        _.resultSchema.schema.ast
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Input[R], ZFlow[R, E, A]] =
+      Schema.Case("Input", schema[R], _.asInstanceOf[Input[R]])
   }
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[Any, Nothing, Unit])
@@ -380,10 +405,47 @@ object ZFlow {
     val resultSchema = flow.resultSchema
   }
 
+  object Ensuring {
+    def schema[R, E, A]: Schema[Ensuring[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass2[ZFlow[R, E, A], ZFlow[Any, Nothing, Unit], Ensuring[R, E, A]](
+          Schema.Field("flow", ZFlow.schema[R, E, A]),
+          Schema.Field("finalizer", ZFlow.schema[Any, Nothing, Unit]),
+          { case (flow, finalizer) => Ensuring(flow, finalizer) },
+          _.flow,
+          _.finalizer
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Ensuring[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Ensuring", schema[R, E, A], _.asInstanceOf[Ensuring[R, E, A]])
+  }
+
   final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]])(implicit
     val errorSchema: SchemaOrNothing.Aux[E],
     val resultSchema: SchemaOrNothing.Aux[A]
   ) extends ZFlow[R, E, A]
+
+  object Unwrap {
+    def schema[R, E, A]: Schema[Unwrap[R, E, A]] =
+      Schema.CaseClass3[Remote[ZFlow[R, E, A]], SchemaAst, SchemaAst, Unwrap[R, E, A]](
+        Schema.Field("remote", Remote.schema[ZFlow[R, E, A]]),
+        Schema.Field("errorSchema", SchemaAst.schema),
+        Schema.Field("resultSchema", SchemaAst.schema),
+        { case (remote, errorSchemaAst, resultSchemaAst) =>
+          Unwrap(remote)(
+            SchemaOrNothing.fromSchema(errorSchemaAst.toSchema.asInstanceOf[Schema[E]]),
+            SchemaOrNothing.fromSchema(resultSchemaAst.toSchema.asInstanceOf[Schema[A]])
+          )
+        },
+        _.remote,
+        _.errorSchema.schema.ast,
+        _.resultSchema.schema.ast
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Unwrap[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Unwrap", schema[R, E, A], _.asInstanceOf[Unwrap[R, E, A]])
+  }
 
   final case class UnwrapRemote[A](remote: Remote[Remote[A]])(implicit
     val resultSchema: SchemaOrNothing.Aux[A]
@@ -599,6 +661,10 @@ object ZFlow {
         .:+:(Apply.schemaCase[R, E, A])
         .:+:(Log.schemaCase[R, E, A])
         .:+:(RunActivity.schemaCase[R, E, A])
+        .:+:(Transaction.schemaCase[R, E, A])
+        .:+:(Input.schemaCase[R, E, A])
+        .:+:(Ensuring.schemaCase[R, E, A])
+        .:+:(Unwrap.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
     )
 }

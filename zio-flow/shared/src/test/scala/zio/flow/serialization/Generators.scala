@@ -721,6 +721,32 @@ trait Generators extends DefaultJavaTimeSchemas {
       activity <- genActivity
     } yield ZFlow.RunActivity(input, activity)
 
+  lazy val genZFlowTransaction: Gen[Random with Sized, ZFlow.Transaction[Any, Any, Any]] =
+    Gen.oneOf(genZFlowFail, genZFlowReturn, genZFlowLog, genZFlowFold).map(ZFlow.Transaction(_))
+
+  lazy val genZFlowInput: Gen[Random with Sized, ZFlow.Input[Any]] =
+    for {
+      schemaAndValue <- genPrimitiveSchemaAndValue
+      input           = ZFlow.Input()(SchemaOrNothing.fromSchema(schemaAndValue.schema))
+    } yield input.asInstanceOf[ZFlow.Input[Any]]
+
+  lazy val genZFlowEnsuring: Gen[Random with Sized, ZFlow.Ensuring[Any, Any, Any]] =
+    for {
+      flow    <- Gen.oneOf(genZFlowFail, genZFlowReturn, genZFlowLog, genZFlowFold, genZFlowTransaction, genZFlowInput)
+      ensuring = ZFlow.log("done")
+    } yield ZFlow.Ensuring(flow, ensuring)
+
+  lazy val genZFlowUnwrap: Gen[Random with Sized, ZFlow.Unwrap[Any, Any, Any]] =
+    for {
+      flow      <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
+      remoteFlow = Remote.Flow(flow)
+    } yield ZFlow
+      .Unwrap(remoteFlow)(
+        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
+        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+      )
+      .asInstanceOf[ZFlow.Unwrap[Any, Any, Any]]
+
   lazy val genOperationHttp: Gen[Random with Sized, Operation.Http[Any, Any]] =
     for {
       url          <- Gen.oneOf(Gen.const("http://test.com/x"), Gen.const("https://100.0.0.1?test")).map(new java.net.URI(_))
