@@ -453,6 +453,24 @@ object ZFlow {
     val errorSchema = SchemaOrNothing.nothing
   }
 
+  object UnwrapRemote {
+    def schema[A]: Schema[UnwrapRemote[A]] =
+      Schema.CaseClass2[Remote[Remote[A]], SchemaAst, UnwrapRemote[A]](
+        Schema.Field("remote", Remote.schema[Remote[A]]),
+        Schema.Field("resultSchema", SchemaAst.schema),
+        { case (remote, resultSchemaAst) =>
+          UnwrapRemote(remote)(
+            SchemaOrNothing.fromSchema(resultSchemaAst.toSchema.asInstanceOf[Schema[A]])
+          )
+        },
+        _.remote,
+        _.resultSchema.schema.ast
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[UnwrapRemote[A], ZFlow[R, E, A]] =
+      Schema.Case("UnwrapRemote", schema[A], _.asInstanceOf[UnwrapRemote[A]])
+  }
+
   final case class Fork[R, E, A](workflow: ZFlow[R, E, A])(implicit
     schemaOrNE: SchemaOrNothing.Aux[E],
     schemaOrNA: SchemaOrNothing.Aux[A]
@@ -665,6 +683,7 @@ object ZFlow {
         .:+:(Input.schemaCase[R, E, A])
         .:+:(Ensuring.schemaCase[R, E, A])
         .:+:(Unwrap.schemaCase[R, E, A])
+        .:+:(UnwrapRemote.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
     )
 }

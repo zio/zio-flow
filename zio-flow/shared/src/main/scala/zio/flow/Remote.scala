@@ -128,6 +128,24 @@ object Remote {
       Schema.Case("Flow", schema[Any, Any, Any], _.asInstanceOf[Flow[Any, Any, Any]])
   }
 
+  final case class Nested[A](remote: Remote[A]) extends Remote[Remote[A]] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Remote[A]]] =
+      ZIO.succeed(SchemaAndValue(Remote.schema[A], DynamicValue.fromSchemaAndValue(Remote.schema[A], remote)))
+
+    override def eval[A1 >: Remote[A]](implicit schema: Schema[A1]): ZIO[RemoteContext, String, A1] =
+      ZIO.succeed(remote)
+
+    override def schema = SchemaOrNothing.fromSchema(Remote.schema[A])
+  }
+
+  object Nested {
+    def schema[A]: Schema[Nested[A]] =
+      Schema.defer(Remote.schema[A].transform(Nested(_), _.remote))
+
+    def schemaCase[A]: Schema.Case[Nested[Any], Remote[A]] =
+      Schema.Case("Nested", schema[Any], _.asInstanceOf[Nested[Any]])
+  }
+
   final case class Ignore() extends Remote[Unit] {
     override val schema: SchemaOrNothing.Aux[Unit] = SchemaOrNothing.fromSchema[Unit]
 
@@ -2498,6 +2516,7 @@ object Remote {
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Flow.schemaCase[A])
+      .:+:(Nested.schemaCase[A])
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
       .:+:(AddNumeric.schemaCase[A])

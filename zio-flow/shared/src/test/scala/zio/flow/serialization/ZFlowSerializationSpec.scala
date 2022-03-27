@@ -30,6 +30,7 @@ object ZFlowSerializationSpec extends DefaultRunnableSpec with Generators {
       test("Input")(roundtripCheck(codec, genZFlowInput)),
       test("Ensuring")(roundtripCheck(codec, genZFlowEnsuring)),
       test("Unwrap")(roundtripCheck(codec, genZFlowUnwrap)),
+      test("UnwrapRemote")(roundtripCheck(codec, genZFlowUnwrapRemote)),
       test("Fail")(roundtripCheck(codec, genZFlowFail))
     )
 

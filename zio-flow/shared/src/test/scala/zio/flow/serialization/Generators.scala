@@ -157,6 +157,9 @@ trait Generators extends DefaultJavaTimeSchemas {
       )
       .map(Remote.Flow(_))
 
+  lazy val genNested: Gen[Random with Sized, Remote[Any]] =
+    Gen.oneOf(genLiteral, genRemoteVariable).map(Remote.Nested(_))
+
   lazy val genRemoteVariable: Gen[Random with Sized, Remote[Any]] =
     for {
       name           <- genRemoteVariableName
@@ -746,6 +749,12 @@ trait Generators extends DefaultJavaTimeSchemas {
         SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
       )
       .asInstanceOf[ZFlow.Unwrap[Any, Any, Any]]
+
+  lazy val genZFlowUnwrapRemote: Gen[Random with Sized, ZFlow.UnwrapRemote[Any]] =
+    for {
+      schemaAndValue <- genPrimitiveSchemaAndValue
+      nested          = Remote.Nested(schemaAndValue.toRemote)
+    } yield ZFlow.UnwrapRemote(nested)(SchemaOrNothing.fromSchema(schemaAndValue.schema.asInstanceOf[Schema[Any]]))
 
   lazy val genOperationHttp: Gen[Random with Sized, Operation.Http[Any, Any]] =
     for {
