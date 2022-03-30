@@ -19,12 +19,7 @@ object ExecutingFlow {
   }
 
   implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.Enum2[InMemoryExecutingFlow[E, A], PersistentExecutingFlow[E, A], ExecutingFlow[E, A]](
-      Schema.Case[InMemoryExecutingFlow[E, A], ExecutingFlow[E, A]](
-        "InMemoryExecutingFlow",
-        Schema.fail[InMemoryExecutingFlow[E, A]]("Serialization not supported"),
-        _.asInstanceOf[InMemoryExecutingFlow[E, A]]
-      ),
+    Schema.Enum1[PersistentExecutingFlow[E, A], ExecutingFlow[E, A]](
       Schema.Case[PersistentExecutingFlow[E, A], ExecutingFlow[E, A]](
         "PersistentExecutingFlow",
         PersistentExecutingFlow.schema[E, A],

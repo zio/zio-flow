@@ -1,11 +1,13 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.RemoteFunction
+import zio.flow.internal.DurablePromise
 import zio.{Duration, Random, flow}
 import zio.flow.{
   Activity,
   ActivityError,
   EmailRequest,
+  ExecutingFlow,
   Operation,
   Remote,
   RemoteVariableName,
@@ -756,6 +758,59 @@ trait Generators extends DefaultJavaTimeSchemas {
       nested          = Remote.Nested(schemaAndValue.toRemote)
     } yield ZFlow.UnwrapRemote(nested)(SchemaOrNothing.fromSchema(schemaAndValue.schema.asInstanceOf[Schema[Any]]))
 
+  lazy val genZFlowFork: Gen[Random with Sized, ZFlow.Fork[Any, Any, Any]] =
+    for {
+      flow <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
+    } yield ZFlow
+      .Fork(flow)(
+        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
+        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+      )
+      .asInstanceOf[ZFlow.Fork[Any, Any, Any]]
+
+  lazy val genZFlowTimeout: Gen[Random with Sized, ZFlow.Timeout[Any, Any, Any]] =
+    for {
+      flow     <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
+      duration <- genDurationFromLong
+    } yield ZFlow
+      .Timeout(flow, duration.asInstanceOf[Remote[Duration]])(
+        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
+        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+      )
+      .asInstanceOf[ZFlow.Timeout[Any, Any, Any]]
+
+  lazy val genZFlowProvide: Gen[Random with Sized, ZFlow.Provide[String, Nothing, String]] =
+    for {
+      string      <- Gen.string
+      remoteString = Remote(string)
+      input        = ZFlow.Input[String]
+    } yield ZFlow.Provide(remoteString, input)
+
+  lazy val genZFlowDie: Gen[Any, ZFlow.Die.type]               = Gen.const(ZFlow.Die)
+  lazy val genZFlowRetryUntil: Gen[Any, ZFlow.RetryUntil.type] = Gen.const(ZFlow.RetryUntil)
+
+  lazy val genZFlowOrTry: Gen[Random with Sized, ZFlow.OrTry[Any, Any, Any]] =
+    for {
+      left  <- Gen.oneOf(genZFlowFail, genZFlowReturn, genZFlowLog, genZFlowFold)
+      right <- Gen.oneOf(genZFlowFail, genZFlowReturn, genZFlowLog, genZFlowFold)
+    } yield ZFlow.OrTry(left, right)
+
+  lazy val genZFlowAwait: Gen[Random with Sized, ZFlow.Await[String, Int]] =
+    for {
+      executingFlow <- genExecutingFlow[String, Int]
+    } yield ZFlow.Await[String, Int](executingFlow)(SchemaOrNothing.fromSchema[String], SchemaOrNothing.fromSchema[Int])
+
+  lazy val genZFlowInterrupt: Gen[Random with Sized, ZFlow.Interrupt[String, Int]] =
+    for {
+      executingFlow <- genExecutingFlow[String, Int]
+    } yield ZFlow.Interrupt[String, Int](executingFlow)
+
+  lazy val genZFlowNewVar: Gen[Random with Sized, ZFlow.NewVar[Any]] =
+    for {
+      name    <- Gen.string1(Gen.alphaNumericChar)
+      initial <- Gen.oneOf(genLiteral, genPowNumeric, genRemoteApply)
+    } yield ZFlow.NewVar(name, initial)
+
   lazy val genOperationHttp: Gen[Random with Sized, Operation.Http[Any, Any]] =
     for {
       url          <- Gen.oneOf(Gen.const("http://test.com/x"), Gen.const("https://100.0.0.1?test")).map(new java.net.URI(_))
@@ -796,6 +851,13 @@ trait Generators extends DefaultJavaTimeSchemas {
       compensate,
       SchemaOrNothing.fromSchema(resultSchema.asInstanceOf[Schema[Any]])
     )
+
+  def genExecutingFlow[E, A]: Gen[Random with Sized, ExecutingFlow[E, A]] =
+    for {
+      id        <- Gen.string1(Gen.asciiChar)
+      promiseId <- Gen.string1(Gen.asciiChar)
+      promise    = DurablePromise[E, A](promiseId)
+    } yield ExecutingFlow.PersistentExecutingFlow(id, promise)
 }
 
 object Generators {

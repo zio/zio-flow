@@ -49,6 +49,12 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
           roundtripEval(codec, literal).provide(RemoteContext.inMemory)
         }
       },
+      test("literal executing flow") {
+        check(genExecutingFlow) { exFlow =>
+          val literal = Remote(exFlow)
+          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+        }
+      },
       test("ignore") {
         roundtrip(codec, Remote.Ignore())
       },
@@ -219,7 +225,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     val encoded = codec.encode(Remote.schemaRemoteAny)(value)
     val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
 
-//    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     for {
       originalEvaluated <- value.eval[A]

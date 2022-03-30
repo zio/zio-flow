@@ -471,7 +471,7 @@ object ZFlow {
       Schema.Case("UnwrapRemote", schema[A], _.asInstanceOf[UnwrapRemote[A]])
   }
 
-  final case class Fork[R, E, A](workflow: ZFlow[R, E, A])(implicit
+  final case class Fork[R, E, A](flow: ZFlow[R, E, A])(implicit
     schemaOrNE: SchemaOrNothing.Aux[E],
     schemaOrNA: SchemaOrNothing.Aux[A]
   ) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
@@ -482,6 +482,29 @@ object ZFlow {
     val errorSchema        = SchemaOrNothing.nothing
     val resultSchema: SchemaOrNothing.Aux[ExecutingFlow[E, A]] =
       SchemaOrNothing.fromSchema[ExecutingFlow[E, A]](ExecutingFlow.schema)
+  }
+
+  object Fork {
+    def schema[R, E, A]: Schema[Fork[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass3[ZFlow[R, E, A], SchemaAst, SchemaAst, Fork[R, E, A]](
+          Schema.Field("flow", ZFlow.schema[R, E, A]),
+          Schema.Field("schemaE", SchemaAst.schema),
+          Schema.Field("schemaA", SchemaAst.schema),
+          { case (workflow, schemaAstE, schemaAstA) =>
+            Fork(workflow)(
+              SchemaOrNothing.fromSchema(schemaAstE.toSchema.asInstanceOf[Schema[E]]),
+              SchemaOrNothing.fromSchema(schemaAstA.toSchema.asInstanceOf[Schema[A]])
+            )
+          },
+          _.flow,
+          _.schemaE.ast,
+          _.schemaA.ast
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Fork[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Fork", schema[R, E, A], _.asInstanceOf[Fork[R, E, A]])
   }
 
   final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration])(implicit
@@ -497,6 +520,31 @@ object ZFlow {
     val resultSchema: SchemaOrNothing.Aux[Option[A]] = SchemaOrNothing.fromSchema[Option[A]]
   }
 
+  object Timeout {
+    def schema[R, E, A]: Schema[Timeout[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass4[ZFlow[R, E, A], Remote[Duration], SchemaAst, SchemaAst, Timeout[R, E, A]](
+          Schema.Field("flow", ZFlow.schema[R, E, A]),
+          Schema.Field("duration", Remote.schema[Duration]),
+          Schema.Field("schemaE", SchemaAst.schema),
+          Schema.Field("schemaA", SchemaAst.schema),
+          { case (workflow, duration, schemaAstE, schemaAstA) =>
+            Timeout(workflow, duration)(
+              SchemaOrNothing.fromSchema(schemaAstE.toSchema.asInstanceOf[Schema[E]]),
+              SchemaOrNothing.fromSchema(schemaAstA.toSchema.asInstanceOf[Schema[A]])
+            )
+          },
+          _.flow,
+          _.duration,
+          _.schemaE.ast,
+          _.schemaA.ast
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Timeout[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Timeout", schema[R, E, A], _.asInstanceOf[Timeout[R, E, A]])
+  }
+
   final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A] {
     type ValueE = E
     type ValueA = A
@@ -504,19 +552,59 @@ object ZFlow {
     val resultSchema = flow.resultSchema
   }
 
+  object Provide {
+    def schema[R, E, A]: Schema[Provide[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[R], ZFlow[R, E, A], Provide[R, E, A]](
+          Schema.Field("value", Remote.schema[R]),
+          Schema.Field("flow", ZFlow.schema[R, E, A]),
+          { case (value, flow) => Provide(value, flow) },
+          _.value,
+          _.flow
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Provide[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Provide", schema[R, E, A], _.asInstanceOf[Provide[R, E, A]])
+  }
+
   case object Die extends ZFlow[Any, Nothing, Nothing] {
     val errorSchema  = SchemaOrNothing.nothing
     val resultSchema = SchemaOrNothing.nothing
+
+    val schema: Schema[Die.type] = Schema.singleton(Die)
+    def schemaCase[R, E, A]: Schema.Case[Die.type, ZFlow[R, E, A]] =
+      Schema.Case("Die", schema, _.asInstanceOf[Die.type])
   }
 
   case object RetryUntil extends ZFlow[Any, Nothing, Nothing] {
     val errorSchema  = SchemaOrNothing.nothing
     val resultSchema = SchemaOrNothing.nothing
+
+    val schema: Schema[RetryUntil.type] = Schema.singleton(RetryUntil)
+    def schemaCase[R, E, A]: Schema.Case[RetryUntil.type, ZFlow[R, E, A]] =
+      Schema.Case("RetryUntil", schema, _.asInstanceOf[RetryUntil.type])
   }
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A] {
     val errorSchema  = left.errorSchema
     val resultSchema = left.resultSchema
+  }
+
+  object OrTry {
+    def schema[R, E, A]: Schema[OrTry[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass2[ZFlow[R, E, A], ZFlow[R, E, A], OrTry[R, E, A]](
+          Schema.Field("left", ZFlow.schema[R, E, A]),
+          Schema.Field("right", ZFlow.schema[R, E, A]),
+          { case (left, right) => OrTry(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[OrTry[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("OrTry", schema[R, E, A], _.asInstanceOf[OrTry[R, E, A]])
   }
 
   final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]])(implicit
@@ -532,9 +620,43 @@ object ZFlow {
     val resultSchema                                = SchemaOrNothing.fromSchema[Either[E, A]]
   }
 
+  object Await {
+    def schema[E, A]: Schema[Await[E, A]] =
+      Schema.CaseClass3[Remote[ExecutingFlow[E, A]], SchemaAst, SchemaAst, Await[E, A]](
+        Schema.Field("exFlow", Remote.schema[ExecutingFlow[E, A]]),
+        Schema.Field("schemaE", SchemaAst.schema),
+        Schema.Field("schemaA", SchemaAst.schema),
+        { case (exFlow, schemaAstE, schemaAstA) =>
+          Await(exFlow)(
+            SchemaOrNothing.fromSchema(schemaAstE.toSchema.asInstanceOf[Schema[E]]),
+            SchemaOrNothing.fromSchema(schemaAstA.toSchema.asInstanceOf[Schema[A]])
+          )
+        },
+        _.exFlow,
+        _.schemaE.ast,
+        _.schemaA.ast
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Await[E, A], ZFlow[R, E, A]] =
+      Schema.Case("Await", schema[E, A], _.asInstanceOf[Await[E, A]])
+  }
+
   final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Unit] {
     val errorSchema  = SchemaOrNothing.fromSchema[ActivityError]
     val resultSchema = SchemaOrNothing.fromSchema[Unit]
+  }
+
+  object Interrupt {
+    def schema[E, A]: Schema[Interrupt[E, A]] =
+      Remote
+        .schema[ExecutingFlow[E, A]]
+        .transform(
+          exFlow => Interrupt(exFlow),
+          _.exFlow
+        )
+
+    def schemaCase[R, E, A]: Schema.Case[Interrupt[E, A], ZFlow[R, E, A]] =
+      Schema.Case("Interrupt", schema[E, A], _.asInstanceOf[Interrupt[E, A]])
   }
 
   final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing] {
@@ -558,6 +680,20 @@ object ZFlow {
   final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Remote.Variable[A]] {
     val errorSchema  = SchemaOrNothing.nothing
     val resultSchema = SchemaOrNothing.fromSchema(Remote.Variable.schema[A])
+  }
+
+  object NewVar {
+    def schema[A]: Schema[NewVar[A]] =
+      Schema.CaseClass2[String, Remote[A], NewVar[A]](
+        Schema.Field("name", Schema[String]),
+        Schema.Field("initial", Remote.schema[A]),
+        { case (name, initial) => NewVar(name, initial) },
+        _.name,
+        _.initial
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[NewVar[A], ZFlow[R, E, A]] =
+      Schema.Case("NewVar", schema[A], _.asInstanceOf[NewVar[A]])
   }
 
   final case class Iterate[R, E, A](
@@ -684,6 +820,15 @@ object ZFlow {
         .:+:(Ensuring.schemaCase[R, E, A])
         .:+:(Unwrap.schemaCase[R, E, A])
         .:+:(UnwrapRemote.schemaCase[R, E, A])
+        .:+:(Fork.schemaCase[R, E, A])
+        .:+:(Timeout.schemaCase[R, E, A])
+        .:+:(Provide.schemaCase[R, E, A])
+        .:+:(Die.schemaCase[R, E, A])
+        .:+:(RetryUntil.schemaCase[R, E, A])
+        .:+:(OrTry.schemaCase[R, E, A])
+        .:+:(Await.schemaCase[R, E, A])
+        .:+:(Interrupt.schemaCase[R, E, A])
+        .:+:(NewVar.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
     )
 }
