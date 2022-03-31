@@ -40,7 +40,9 @@ object ZFlowSerializationSpec extends DefaultRunnableSpec with Generators {
       test("Await")(roundtripCheck(codec, genZFlowAwait)),
       test("Interrupt")(roundtripCheck(codec, genZFlowInterrupt)),
       test("NewVar")(roundtripCheck(codec, genZFlowNewVar)),
-      test("Fail")(roundtripCheck(codec, genZFlowFail))
+      test("Fail")(roundtripCheck(codec, genZFlowFail)),
+      test("Iterate")(roundtripCheck(codec, genZFlowIterate)),
+      test("GetExecutionEnvironment")(roundtripCheck(codec, genZFlowGetExecutionEnvironment))
     )
 
   private def roundtripCheck(

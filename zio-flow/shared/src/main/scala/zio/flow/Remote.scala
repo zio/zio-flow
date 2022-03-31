@@ -17,7 +17,6 @@
 package zio.flow
 
 import zio.ZIO
-import zio.flow.SchemaOrNothing.Aux
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
 import zio.schema.ast.SchemaAst

@@ -788,6 +788,7 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genZFlowDie: Gen[Any, ZFlow.Die.type]               = Gen.const(ZFlow.Die)
   lazy val genZFlowRetryUntil: Gen[Any, ZFlow.RetryUntil.type] = Gen.const(ZFlow.RetryUntil)
+  lazy val genZFlowGetExecutionEnvironment: Gen[Any, ZFlow.GetExecutionEnvironment.type] = Gen.const(ZFlow.GetExecutionEnvironment)
 
   lazy val genZFlowOrTry: Gen[Random with Sized, ZFlow.OrTry[Any, Any, Any]] =
     for {
@@ -810,6 +811,26 @@ trait Generators extends DefaultJavaTimeSchemas {
       name    <- Gen.string1(Gen.alphaNumericChar)
       initial <- Gen.oneOf(genLiteral, genPowNumeric, genRemoteApply)
     } yield ZFlow.NewVar(name, initial)
+
+  lazy val genZFlowIterate: Gen[Random, ZFlow.Iterate[Any, Nothing, Int]] =
+    for {
+      initial <- Gen.int.map(Remote(_))
+      delta   <- Gen.int
+      iterate = RemoteFunction((a: Remote[Int]) =>
+                  Remote.Flow(ZFlow.Return(Remote.AddNumeric(a, Remote(delta), Numeric.NumericInt)))
+                )
+      limit <- Gen.int
+      predicate = RemoteFunction((a: Remote[Int]) =>
+                    Remote.Equal(
+                      a,
+                      Remote.AddNumeric(
+                        initial,
+                        Remote.MulNumeric(Remote(delta), Remote(limit), Numeric.NumericInt),
+                        Numeric.NumericInt
+                      )
+                    )
+                  )
+    } yield ZFlow.Iterate[Any, Nothing, Int](initial, iterate.evaluated, predicate.evaluated)
 
   lazy val genOperationHttp: Gen[Random with Sized, Operation.Http[Any, Any]] =
     for {

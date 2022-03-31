@@ -114,8 +114,8 @@ sealed trait ZFlow[-R, +E, +A] {
     self.flatMap((remoteA: Remote[A1]) =>
       ZFlow.Iterate(
         remoteA,
-        RemoteFunction((a1: Remote[A1]) => step(a1).toRemote)(schemaA),
-        RemoteFunction(predicate)(schemaA)
+        RemoteFunction((a1: Remote[A1]) => step(a1).toRemote)(schemaA).evaluated,
+        RemoteFunction(predicate)(schemaA).evaluated
       )
     )
 
@@ -698,8 +698,8 @@ object ZFlow {
 
   final case class Iterate[R, E, A](
     initial: Remote[A],
-    step: A ===> ZFlow[R, E, A],
-    predicate: A ===> Boolean
+    step: EvaluatedRemoteFunction[A, ZFlow[R, E, A]],
+    predicate: EvaluatedRemoteFunction[A, Boolean]
   )(implicit
     val errorSchema: SchemaOrNothing.Aux[E],
     val resultSchema: SchemaOrNothing.Aux[A]
@@ -708,9 +708,43 @@ object ZFlow {
     type ValueA = A
   }
 
+  object Iterate {
+    def schema[R, E, A]: Schema[Iterate[R, E, A]] =
+      Schema.defer(
+        Schema.CaseClass5[Remote[A], EvaluatedRemoteFunction[A, ZFlow[R, E, A]], EvaluatedRemoteFunction[
+          A,
+          Boolean
+        ], SchemaAst, SchemaAst, Iterate[R, E, A]](
+          Schema.Field("initial", Remote.schema[A]),
+          Schema.Field("step", EvaluatedRemoteFunction.schema[A, ZFlow[R, E, A]]),
+          Schema.Field("predicate", EvaluatedRemoteFunction.schema[A, Boolean]),
+          Schema.Field("errorSchema", SchemaAst.schema),
+          Schema.Field("resultSchema", SchemaAst.schema),
+          { case (initial, step, predicate, errorSchema, resultSchema) =>
+            Iterate(initial, step, predicate)(
+              SchemaOrNothing.fromSchema(errorSchema.toSchema.asInstanceOf[Schema[E]]),
+              SchemaOrNothing.fromSchema(resultSchema.toSchema.asInstanceOf[Schema[A]])
+            )
+          },
+          _.initial,
+          _.step,
+          _.predicate,
+          _.errorSchema.schema.ast,
+          _.resultSchema.schema.ast
+        )
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Iterate[R, E, A], ZFlow[R, E, A]] =
+      Schema.Case("Iterate", schema[R, E, A], _.asInstanceOf[Iterate[R, E, A]])
+  }
+
   case object GetExecutionEnvironment extends ZFlow[Any, Nothing, ExecutionEnvironment] {
     val errorSchema  = SchemaOrNothing.nothing
     val resultSchema = SchemaOrNothing.fromSchema(Schema.fail[ExecutionEnvironment]("not serializable"))
+
+    val schema: Schema[GetExecutionEnvironment.type] = Schema.singleton(GetExecutionEnvironment)
+    def schemaCase[R, E, A]: Schema.Case[GetExecutionEnvironment.type, ZFlow[R, E, A]] =
+      Schema.Case("GetExecutionEnvironment", schema, _.asInstanceOf[GetExecutionEnvironment.type])
   }
 
   def apply[A: Schema](a: A): ZFlow[Any, Nothing, A] = Return(Remote(a))
@@ -830,5 +864,7 @@ object ZFlow {
         .:+:(Interrupt.schemaCase[R, E, A])
         .:+:(NewVar.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
+        .:+:(Iterate.schemaCase[R, E, A])
+        .:+:(GetExecutionEnvironment.schemaCase[R, E, A])
     )
 }
