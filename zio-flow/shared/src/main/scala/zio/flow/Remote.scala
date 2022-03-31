@@ -17,6 +17,7 @@
 package zio.flow
 
 import zio.ZIO
+import zio.flow.SchemaOrNothing.Aux
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
 import zio.schema.ast.SchemaAst
@@ -70,8 +71,6 @@ object Remote {
 //  ): schema.schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
 //    schema.schema.makeAccessors(RemoteAccessorBuilder)
 
-  // TODO: need a specialized Literal[ZFlow] that does not serialize the zflow schema
-
   final case class Literal[A](value: DynamicValue, schemaA: Schema[A]) extends Remote[A] {
 
     override val schema: SchemaOrNothing.Aux[A] = SchemaOrNothing.fromSchema(schemaA)
@@ -103,6 +102,20 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
       Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
+  }
+
+  /**
+   * In-memory local value for supporting the initial InMemoryExecutor. Should
+   * not be used for anything else.
+   */
+  final case class InMemoryLiteral[A] private[flow] (value: A) extends Remote[A] {
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
+      ZIO.fail("Dynamic evaluation is not supported for InMemoryLiteral")
+
+    override def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[RemoteContext, String, A1] =
+      ZIO.succeed(value)
+
+    override def schema = SchemaOrNothing.fromSchema(Schema.fail("No schema for InMemoryLiteral"))
   }
 
   final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
