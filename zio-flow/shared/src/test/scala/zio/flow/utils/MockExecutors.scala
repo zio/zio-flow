@@ -1,13 +1,12 @@
-//package zio.flow.utils
-//
-//import zio._
-//import zio.flow.{ExecutionEnvironment, OperationExecutor}
-//import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor, ZFlowExecutor}
-//import zio.flow.internal.ZFlowExecutor.InMemory
-//import zio.flow.serialization.{Deserializer, Serializer}
-//import zio.flow.utils.MockHelpers._
-//
-//object MockExecutors {
+package zio.flow.utils
+
+import zio._
+import zio.flow.{ExecutionEnvironment, OperationExecutor}
+import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor, ZFlowExecutor}
+import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.utils.MockHelpers._
+
+object MockExecutors {
 //
 //  val mockInMemoryTestClock: ZIO[Clock with Console, Nothing, InMemory[String, Clock with Console]] = ZIO
 //    .environment[Clock with Console]
@@ -35,31 +34,31 @@
 //          ref
 //        )
 //      )
-//
-//  val mockPersistentLiveClock: ZIO[DurableLog, Nothing, PersistentExecutor] =
-//    for {
-//      durableLog <- ZIO.service[DurableLog]
-//      ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
-//    } yield PersistentExecutor(
-//      Clock.ClockLive,
-//      ExecutionEnvironment(Serializer.protobuf, Deserializer.protobuf),
-//      durableLog,
-//      doesNothingKVStore,
-//      mockOpExec.asInstanceOf[OperationExecutor[Any]],
-//      ref
-//    )
-//
-//  val mockPersistentTestClock
-//    : ZManaged[Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
-//    ZManaged.environment[Console with Clock].flatMap { env =>
-//      PersistentExecutor
-//        .make(
-//          mockOpExec.provideEnvironment(env),
-//          Serializer.json,
-//          Deserializer.json
-//        )
-//        .build
-//        .map(_.get[ZFlowExecutor[String]])
-//    }
-//  }
-//}
+
+  val mockPersistentLiveClock: ZIO[DurableLog, Nothing, PersistentExecutor] =
+    for {
+      durableLog <- ZIO.service[DurableLog]
+      ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
+    } yield PersistentExecutor(
+      Clock.ClockLive,
+      ExecutionEnvironment(Serializer.protobuf, Deserializer.protobuf),
+      durableLog,
+      doesNothingKVStore,
+      mockOpExec.asInstanceOf[OperationExecutor[Any]],
+      ref
+    )
+
+  val mockPersistentTestClock
+    : ZManaged[Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
+    ZManaged.environment[Console with Clock].flatMap { env =>
+      PersistentExecutor
+        .make(
+          mockOpExec.provideEnvironment(env),
+          Serializer.json,
+          Deserializer.json
+        )
+        .build
+        .map(_.get[ZFlowExecutor[String]])
+    }
+  }
+}

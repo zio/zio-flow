@@ -1,4 +1,4 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.test.ZIOSpecDefault
 

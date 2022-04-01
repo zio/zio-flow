@@ -1,8 +1,9 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.ZIO
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test._
+import zio.flow.{Remote, RemoteContext}
+import zio.test.{BoolAlgebra, Spec, TestEnvironment, TestFailure, TestSuccess}
 
 object RemoteOptionSpec extends RemoteSpecBase {
   val suite1: Spec[TestEnvironment, TestFailure[Any], TestSuccess] =

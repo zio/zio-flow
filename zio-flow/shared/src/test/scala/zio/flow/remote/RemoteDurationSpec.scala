@@ -1,9 +1,10 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.ZIO
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
-import zio.test._
+import zio.flow.{Remote, RemoteContext}
+import zio.test.{BoolAlgebra, Gen, check}
 
 import java.time.temporal.ChronoUnit
 

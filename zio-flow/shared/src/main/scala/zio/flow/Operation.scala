@@ -20,6 +20,7 @@ import zio.schema.ast.SchemaAst
 import zio.schema._
 
 sealed trait Operation[-R, +A] {
+  val inputSchema: Schema[_ >: R]
   val resultSchema: Schema[_ <: A]
 }
 
@@ -29,11 +30,8 @@ object Operation {
     method: String = "GET",
     headers: Map[String, String],
     inputSchema: Schema[R],
-    outputSchema: Schema[A]
-  ) extends Operation[R, A] {
-
-    override val resultSchema = outputSchema
-  }
+    resultSchema: Schema[A]
+  ) extends Operation[R, A]
 
   object Http {
     def schema[R, A]: Schema[Http[R, A]] =
@@ -56,7 +54,7 @@ object Operation {
         _.method,
         _.headers,
         _.inputSchema.ast,
-        _.outputSchema.ast
+        _.resultSchema.ast
       )
 
     def schemaCase[R, A]: Schema.Case[Http[R, A], Operation[R, A]] =
@@ -68,6 +66,7 @@ object Operation {
     port: Int
   ) extends Operation[EmailRequest, Unit] {
 
+    override val inputSchema  = Schema[EmailRequest]
     override val resultSchema = Schema[Unit]
   }
 

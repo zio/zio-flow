@@ -1,8 +1,9 @@
-package zio.flow
+package zio.flow.remote
 
-import zio._
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test._
+import zio.flow.{Remote, RemoteContext}
+import zio.test.{BoolAlgebra, Gen, Sized, check}
+import zio.{Random, ZIO}
 
 object RemoteRelationalSpec extends RemoteSpecBase {
 

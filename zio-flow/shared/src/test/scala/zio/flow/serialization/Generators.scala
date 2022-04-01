@@ -788,7 +788,8 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genZFlowDie: Gen[Any, ZFlow.Die.type]               = Gen.const(ZFlow.Die)
   lazy val genZFlowRetryUntil: Gen[Any, ZFlow.RetryUntil.type] = Gen.const(ZFlow.RetryUntil)
-  lazy val genZFlowGetExecutionEnvironment: Gen[Any, ZFlow.GetExecutionEnvironment.type] = Gen.const(ZFlow.GetExecutionEnvironment)
+  lazy val genZFlowGetExecutionEnvironment: Gen[Any, ZFlow.GetExecutionEnvironment.type] =
+    Gen.const(ZFlow.GetExecutionEnvironment)
 
   lazy val genZFlowOrTry: Gen[Random with Sized, ZFlow.OrTry[Any, Any, Any]] =
     for {
@@ -863,14 +864,12 @@ trait Generators extends DefaultJavaTimeSchemas {
       operation   <- genOperation
       check        = ZFlow.Fail(Remote(ActivityError("test", None)))
       compensate   = ZFlow.Fail(Remote(ActivityError("test", None)))
-      resultSchema = operation.resultSchema
     } yield Activity(
       name,
       description,
       operation,
       check,
-      compensate,
-      SchemaOrNothing.fromSchema(resultSchema.asInstanceOf[Schema[Any]])
+      compensate
     )
 
   def genExecutingFlow[E, A]: Gen[Random with Sized, ExecutingFlow[E, A]] =

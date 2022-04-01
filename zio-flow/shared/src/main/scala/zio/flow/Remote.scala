@@ -17,7 +17,6 @@
 package zio.flow
 
 import zio.ZIO
-import zio.flow.SchemaOrNothing.Aux
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
 import zio.schema.ast.SchemaAst
@@ -49,7 +48,7 @@ sealed trait Remote[+A] { self =>
       self
     )
 
-//  final def toFlow: ZFlow[Any, Nothing, A] = ZFlow(self)
+  final def toFlow: ZFlow[Any, Nothing, A] = ZFlow(self)
 
   final def widen[B](implicit ev: A <:< B): Remote[B] = {
     val _ = ev
@@ -1924,7 +1923,6 @@ object Remote {
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Instant]] =
       for {
         instant      <- instant.eval[Instant]
-        _            <- ZIO.debug(s"temporal unit is $temporalUnit")
         temporalUnit <- temporalUnit.eval[ChronoUnit].tapError(s => ZIO.debug(s"Failed to evaluate temporal unit: $s"))
         result        = instant.truncatedTo(temporalUnit)
       } yield SchemaAndValue.of(result)
@@ -2182,7 +2180,7 @@ object Remote {
       for {
         left  <- left.eval[Duration]
         right <- right.eval[Duration]
-        result = left.plus(right)
+        result = left.minus(right)
       } yield SchemaAndValue.of(result)
   }
 
@@ -2514,7 +2512,7 @@ object Remote {
 
   def suspend[A: Schema](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
-//  implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
+  implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
   implicit def capturedRemoteToRemote[A: SchemaOrNothing.Aux, B](f: Remote[A] => Remote[B]): RemoteFunction[A, B] =
     RemoteFunction((a: Remote[A]) => f(a))

@@ -1,8 +1,9 @@
-package zio.flow
+package zio.flow.remote
 
-import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.flow.utils.RemoteAssertionSyntax._
+import zio.flow._
 import zio.schema.Schema
-import zio.test._
+import zio.test.{Gen, Spec, TestAspect, TestConfig, TestFailure, TestSuccess, ZSpec, check}
 
 object NumericSpec extends RemoteSpecBase {
 

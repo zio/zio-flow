@@ -1,7 +1,8 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test._
+import zio.flow._
+import zio.test.{Spec, TestEnvironment, TestFailure, TestSuccess}
 
 object RemoteListSpec extends RemoteSpecBase {
   val suite1: Spec[TestEnvironment, TestFailure[Nothing], TestSuccess] =
@@ -23,7 +24,7 @@ object RemoteListSpec extends RemoteSpecBase {
       },
       test("Append empty list") {
         val l1       = Remote(1 :: 2 :: 3 :: 4 :: 5 :: Nil)
-        val l2       = Remote(Nil)
+        val l2       = Remote[List[Int]](Nil)
         val appended = l1 ++ l2
         appended <-> (1 :: 2 :: 3 :: 4 :: 5 :: Nil)
       },

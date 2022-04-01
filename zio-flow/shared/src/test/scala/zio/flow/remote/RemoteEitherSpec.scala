@@ -1,9 +1,9 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.schema._
+import zio.flow._
+import zio.test.Assertion.{equalTo, hasField, isFailure, isSuccess, succeeds}
 import zio.test._
-import zio.{Runtime, ZIO}
 
 object RemoteEitherSpec extends RemoteSpecBase {
 
@@ -116,7 +116,9 @@ object RemoteEitherSpec extends RemoteSpecBase {
       suite("collectAll")(
         test("return the list of all right results") {
           check(Gen.listOf(Gen.int)) { list =>
-            remote.RemoteEitherSyntax.collectAll(Remote(list.map(Right(_)): List[Either[Short, Int]])) <-> Right(list)
+            remote.RemoteEitherSyntax.collectAll(
+              Remote[List[Either[Short, Int]]](list.map(Right(_)))
+            ) <-> Right(list)
           }
         },
         test("return the first left result") {
@@ -129,7 +131,15 @@ object RemoteEitherSpec extends RemoteSpecBase {
       ),
       test("toTry") {
         check(Gen.either(Gen.throwable, Gen.int)) { either =>
-          Remote(either).toTry <-> either.toTry
+          assertM(
+            Remote(either).toTry.eval.exit.map(_.map(_.fold(err => Left(err.getMessage), success => Right(success))))
+          )(
+            succeeds(
+              equalTo(
+                either.left.map(_.getMessage)
+              )
+            )
+          )
         }
       }
     ).provideCustom(RemoteContext.inMemory)

@@ -17,16 +17,17 @@
 package zio.flow
 
 import zio.schema.Schema
-import zio.schema.ast.SchemaAst
 
 final case class Activity[-R, A](
   name: String,
   description: String,
   operation: Operation[R, A],
   check: ZFlow[R, ActivityError, A],
-  compensate: ZFlow[A, ActivityError, Any],
-  resultSchema: SchemaOrNothing.Aux[A]
+  compensate: ZFlow[A, ActivityError, Any]
 ) { self =>
+  val inputSchema  = SchemaOrNothing.fromSchema(operation.inputSchema)
+  val resultSchema = SchemaOrNothing.fromSchema(operation.resultSchema)
+
   def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] =
     ZFlow.RunActivity(input, self)
 
@@ -53,48 +54,33 @@ final case class Activity[-R, A](
 
     self.asInstanceOf[Activity[R0, A]]
   }
-
-  override def equals(obj: Any): Boolean =
-    obj match {
-      case Activity(otherName, otherDescription, otherOperation, otherCheck, otherCompensate, otherResultSchema) =>
-        name == otherName &&
-          description == otherDescription &&
-          operation == otherOperation &&
-          check == otherCheck &&
-          compensate == otherCompensate &&
-          Schema.structureEquality.equal(resultSchema.schema, otherResultSchema.schema)
-      case _ => false
-    }
 }
 
 object Activity {
   def schema[R, A]: Schema[Activity[R, A]] =
-    Schema.CaseClass6[String, String, Operation[R, A], ZFlow[R, ActivityError, A], ZFlow[
+    Schema.CaseClass5[String, String, Operation[R, A], ZFlow[R, ActivityError, A], ZFlow[
       A,
       ActivityError,
       Any
-    ], SchemaAst, Activity[R, A]](
+    ], Activity[R, A]](
       Schema.Field("name", Schema[String]),
       Schema.Field("description", Schema[String]),
       Schema.Field("operation", Operation.schema[R, A]),
       Schema.Field("check", ZFlow.schema[R, ActivityError, A]),
       Schema.Field("compensate", ZFlow.schema[A, ActivityError, Any]),
-      Schema.Field("resultSchema", SchemaAst.schema),
-      { case (name, description, operation, check, compensate, resultSchemaAst) =>
+      { case (name, description, operation, check, compensate) =>
         Activity(
           name,
           description,
           operation,
           check,
-          compensate,
-          SchemaOrNothing.fromSchema(resultSchemaAst.toSchema.asInstanceOf[Schema[A]])
+          compensate
         )
       },
       _.name,
       _.description,
       _.operation,
       _.check,
-      _.compensate,
-      _.resultSchema.schema.ast
+      _.compensate
     )
 }

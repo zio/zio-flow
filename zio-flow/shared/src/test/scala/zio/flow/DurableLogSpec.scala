@@ -17,7 +17,7 @@ object DurableLogSpec extends ZIOSpecDefault {
       test("sequential read write") {
         check(values) { in =>
           (for {
-            _   <- ZIO.foreach(in)(DurableLog.append("partition", _))
+            _   <- ZIO.foreachDiscard(in)(DurableLog.append("partition", _))
             out <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect
           } yield assertTrue(out == in)).provideCustomLayer(durableLog)
         }

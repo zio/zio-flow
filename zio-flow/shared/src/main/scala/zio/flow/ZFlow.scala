@@ -339,8 +339,8 @@ object ZFlow {
   }
 
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A] {
-    val errorSchema                          = SchemaOrNothing.fromSchema[ActivityError]
-    val resultSchema: SchemaOrNothing.Aux[A] = activity.resultSchema
+    val errorSchema  = SchemaOrNothing.fromSchema[ActivityError]
+    val resultSchema = activity.resultSchema
   }
 
   object RunActivity {
@@ -835,6 +835,16 @@ object ZFlow {
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): ZFlow[Any, Nothing, Unit] = ZFlow.Log(message)
+
+  def iterate[R, E, A](
+    initial: Remote[A],
+    step: Remote[A] => Remote[ZFlow[R, E, A]],
+    predicate: Remote[A] => Remote[Boolean]
+  )(implicit
+    errorSchema: SchemaOrNothing.Aux[E],
+    resultSchema: SchemaOrNothing.Aux[A]
+  ): ZFlow.Iterate[R, E, A] =
+    ZFlow.Iterate(initial, RemoteFunction(step).evaluated, RemoteFunction(predicate).evaluated)
 
   val executionEnvironment: ZFlow[Any, Nothing, ExecutionEnvironment] = ZFlow.GetExecutionEnvironment
 

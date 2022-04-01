@@ -225,7 +225,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     val encoded = codec.encode(Remote.schemaRemoteAny)(value)
     val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
 
-    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+//    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     for {
       originalEvaluated <- value.eval[A]

@@ -30,7 +30,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
   }
 
   def reverse(implicit schemaA: Schema[A], schemaB: Schema[List[A]]): Remote[List[A]] =
-    fold[List[A]](Remote(Nil))((l, a) => Remote.Cons(l, a))
+    fold[List[A]](Remote[List[A]](Nil))((l, a) => Remote.Cons(l, a))
 
   def take(num: Remote[Int])(implicit schemaA: Schema[A]): Remote[List[A]] = {
     val ifTrue: Remote[List[A]] =
@@ -48,7 +48,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       .UnCons(self)
       .widen[Option[(A, List[A])]]
       .handleOption(
-        Remote(Nil),
+        Remote[List[A]](Nil),
         (tuple: Remote[(A, List[A])]) =>
           predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Nil)
       )
@@ -69,7 +69,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     Remote
       .UnCons(self)
       .widen[Option[(A, List[A])]]
-      .handleOption(Remote(Nil), (tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
+      .handleOption(Remote[List[A]](Nil), (tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
 
   final def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
@@ -101,7 +101,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
   final def filter(
     predicate: Remote[A] => Remote[Boolean]
   )(implicit schemaA: Schema[A], schemaB: Schema[List[A]]): Remote[List[A]] =
-    fold[List[A]](Remote(Nil))((a2: Remote[List[A]], a1: Remote[A]) =>
+    fold[List[A]](Remote[List[A]](Nil))((a2: Remote[List[A]], a1: Remote[A]) =>
       predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
     )
 

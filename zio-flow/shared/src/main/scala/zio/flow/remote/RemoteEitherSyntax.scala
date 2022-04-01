@@ -140,7 +140,7 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
     handleEither(_ => Remote(Nil), b => Remote.Cons(Remote(Nil), b))
 
   final def toOption(implicit schemaA: SchemaOrNothing.Aux[A], schemaB: SchemaOrNothing.Aux[B]): Remote[Option[B]] =
-    handleEither(_ => Remote(None), Remote.Some0(_))
+    handleEither(_ => Remote[Option[B]](None)(Schema.option(schemaB.schema)), Remote.Some0(_))
 
   def toTry(implicit
     ev: A <:< Throwable,
@@ -187,6 +187,7 @@ object RemoteEitherSyntax {
     implicit val eela: Schema[Either[E, List[A]]] =
       Schema.either(eSchema.schema, Schema.list(aSchema.schema)) // TODO: :((
 
-    finalize(values.fold(Remote(Right(Nil): Either[E, List[A]]))(combine(_, _)))
+    val nil = Remote[Either[E, List[A]]](Right(Nil))
+    finalize(values.fold(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))
   }
 }
