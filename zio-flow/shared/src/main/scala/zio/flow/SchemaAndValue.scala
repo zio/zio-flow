@@ -14,6 +14,8 @@ trait SchemaAndValue[+A] { self =>
   def toTyped: Either[String, Subtype] = value.toTypedValue(schema)
 
   def unsafeCoerce[B]: SchemaAndValue[B] = self.asInstanceOf[SchemaAndValue[B]]
+
+  override def toString: String = s"$value [$schema]"
 }
 
 object SchemaAndValue {
@@ -21,18 +23,18 @@ object SchemaAndValue {
     new SchemaAndValue[A] {
       override type Subtype = A
 
-      override def schema: Schema[Subtype] = schema0
+      override final val schema: Schema[Subtype] = schema0
 
-      override def value: DynamicValue = value0
+      override final val value: DynamicValue = value0
 
-      override def equals(obj: Any): Boolean =
+      override final def equals(obj: Any): Boolean =
         obj match {
           case other: SchemaAndValue[_] =>
             value == other.value && Schema.structureEquality.equal(schema, other.schema)
           case _ => false
         }
 
-      override def hashCode(): Int =
+      override final def hashCode(): Int =
         value.hashCode() ^ schema.ast.hashCode()
     }
 

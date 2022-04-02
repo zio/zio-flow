@@ -2,11 +2,10 @@ package zio.flow.serialization
 
 import zio.flow.Remote.RemoteFunction
 import zio.flow.internal.DurablePromise
-import zio.{Duration, Random, flow}
+import zio.flow.remote.{Fractional, Numeric}
 import zio.flow.{
   Activity,
   ActivityError,
-  EmailRequest,
   ExecutingFlow,
   Operation,
   Remote,
@@ -15,10 +14,9 @@ import zio.flow.{
   SchemaOrNothing,
   ZFlow
 }
-import zio.flow.remote.{Fractional, Numeric}
-import zio.flow.serialization.Generators.TestException
 import zio.schema.{DefaultJavaTimeSchemas, Schema}
 import zio.test.{Gen, Sized}
+import zio.{Duration, Random, flow}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -648,8 +646,8 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genZipOption: Gen[Random with Sized, Remote[Any]] =
     for {
-      a <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
-      b <- Gen.oneOf(genLiteral.map(Remote.Some0(_)), Gen.const(Remote(None)))
+      a <- Gen.oneOf(Gen.int.map(int => Remote.Some0(Remote(int))), Gen.const(Remote[Option[Int]](None)))
+      b <- Gen.oneOf(Gen.string.map(str => Remote.Some0(Remote(str))), Gen.const(Remote[Option[String]](None)))
     } yield Remote.ZipOption(a, b)
 
   lazy val genOptionContains: Gen[Random with Sized, Remote[Any]] =

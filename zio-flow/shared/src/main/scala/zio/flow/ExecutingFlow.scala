@@ -11,7 +11,7 @@ object ExecutingFlow {
   final case class PersistentExecutingFlow[+E, +A](id: String, result: DurablePromise[_, _]) extends ExecutingFlow[E, A]
 
   object PersistentExecutingFlow {
-    implicit def schema[E, A]: Schema[PersistentExecutingFlow[E, A]] =
+    def schema[E, A]: Schema[PersistentExecutingFlow[E, A]] =
       (Schema[String] zip Schema[DurablePromise[Either[Throwable, E], A]]).transform(
         { case (id, promise) => PersistentExecutingFlow(id, promise) },
         (ef: PersistentExecutingFlow[E, A]) => (ef.id, ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])

@@ -2251,7 +2251,6 @@ object Remote {
       Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
   }
 
-  // TODO: This need to be Optional and store the schema in case it's None, like we do with Eithers
   final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
     override val schema = SchemaOrNothing.fromSchema(Schema.option(value.schema.schema))
 
@@ -2469,7 +2468,17 @@ object Remote {
 //  }
 
   implicit def apply[A: Schema](value: A): Remote[A] =
-    Literal(DynamicValue.fromSchemaAndValue(SchemaOrNothing[A].schema, value), SchemaOrNothing[A].schema)
+    // TODO: do this on type level instead
+    value match {
+      case dynamicValue: DynamicValue =>
+        Literal(dynamicValue, SchemaOrNothing[A].schema)
+      case flow: ZFlow[Any, Any, Any] =>
+        Flow(flow).asInstanceOf[Remote[A]]
+      case remote: Remote[Any] =>
+        Nested(remote).asInstanceOf[Remote[A]]
+      case _ =>
+        Literal(DynamicValue.fromSchemaAndValue(SchemaOrNothing[A].schema, value), SchemaOrNothing[A].schema)
+    }
 
   def sequenceEither[A, B](
     either: Either[Remote[A], Remote[B]]

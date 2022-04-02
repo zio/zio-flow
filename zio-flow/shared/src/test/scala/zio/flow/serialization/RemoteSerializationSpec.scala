@@ -4,6 +4,7 @@ import zio.{Random, ZIO}
 import zio.flow.{Remote, RemoteContext, SchemaOrNothing}
 import zio.flow._
 import zio.flow.serialization.RemoteSerializationSpec.test
+import zio.schema.ast.SchemaAst
 import zio.schema.{DeriveSchema, Schema}
 import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
@@ -20,7 +21,16 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       suite("roundtrip evaluation")(
         evalWithCodec(JsonCodec)
         //      evalWithCodec(ProtobufCodec) // TODO: fix
-      )
+      ),
+      test("Remote schema is serializable") {
+        val schema             = Remote.schemaRemoteAny
+        val serialized         = JsonCodec.encode(SchemaAst.schema)(schema.ast)
+        val deserialized       = JsonCodec.decode(SchemaAst.schema)(serialized)
+        val deserializedSchema = deserialized.map(_.toSchema)
+        assertTrue(
+          Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
+        )
+      } @@ TestAspect.ignore // TODO: fix recursion
     )
 
   case class TestCaseClass(a: String, b: Int)
