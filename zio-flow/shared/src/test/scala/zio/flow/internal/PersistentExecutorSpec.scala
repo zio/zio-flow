@@ -257,9 +257,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      fiberId: FiberId,
                      logLevel: LogLevel,
                      message: () => String,
+                     cause: Cause[Any],
                      context: Map[ZFiberRef.Runtime[_], AnyRef],
                      spans: List[LogSpan],
-                     location: ZTraceElement
+                     annotations: Map[String, String]
                    ): String = {
                      val msg = message()
                      runtime.unsafeRun(logQueue.offer(message()).unit)
@@ -304,9 +305,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      fiberId: FiberId,
                      logLevel: LogLevel,
                      message: () => String,
+                     cause: Cause[Any],
                      context: Map[ZFiberRef.Runtime[_], AnyRef],
                      spans: List[LogSpan],
-                     location: ZTraceElement
+                     annotations: Map[String, String]
                    ): String = {
                      val msg = message()
                      runtime.unsafeRun {

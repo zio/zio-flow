@@ -9,7 +9,7 @@ import zio.aws.dynamodb.model._
 import org.testcontainers.containers.localstack.LocalStackContainer.{Service => AwsService}
 import zio.aws.dynamodb.model.primitives.{KeySchemaAttributeName, PositiveLongObject, TableName}
 import zio.aws.netty.NettyHttpClient
-import zio.{&, RLayer, RManaged, ULayer, ZIO, ZManaged}
+import zio.{&, RLayer, Scope, ULayer, ZIO, ZLayer}
 
 /**
  * A helper module for LocalStack DynamoDB integration. It contains helper
@@ -19,26 +19,27 @@ object DynamoDbSupport {
 
   type DynamoDB = ULayer[DynamoDb]
 
-  lazy val dynamoDb: RLayer[AwsConfig & LocalStackV2Container, DynamoDb] = (
-    for {
-      awsContainer <- ZIO.service[LocalStackV2Container].toManaged
-      dynamoDbService <-
-        DynamoDb.managed(
-          _.credentialsProvider(
-            awsContainer.staticCredentialsProvider
-          )
-            .region(awsContainer.region)
-            .endpointOverride(
-              awsContainer.endpointOverride(AwsService.DYNAMODB)
+  lazy val dynamoDb: RLayer[AwsConfig & LocalStackV2Container, DynamoDb] =
+    ZLayer.scoped {
+      for {
+        awsContainer <- ZIO.service[LocalStackV2Container]
+        dynamoDbService <-
+          DynamoDb.scoped(
+            _.credentialsProvider(
+              awsContainer.staticCredentialsProvider
             )
-        )
-    } yield dynamoDbService
-  ).toLayer
+              .region(awsContainer.region)
+              .endpointOverride(
+                awsContainer.endpointOverride(AwsService.DYNAMODB)
+              )
+          )
+      } yield dynamoDbService
+    }
 
   lazy val dynamoDbLayer: DynamoDB =
     awsLayerFor(Seq(AwsService.DYNAMODB))
 
-  def createDynamoDbTable(name: String): RManaged[DynamoDb, TableDescription.ReadOnly] = {
+  def createDynamoDbTable(name: String): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
     val createTableRequest =
       CreateTableRequest(
         tableName = TableName(name),
@@ -70,8 +71,8 @@ object DynamoDbSupport {
         )
       )
 
-    ZManaged
-      .acquireReleaseWith(
+    ZIO
+      .acquireRelease(
         for {
           tableData <- DynamoDb.createTable(createTableRequest)
           tableDesc <- tableData.getTableDescription

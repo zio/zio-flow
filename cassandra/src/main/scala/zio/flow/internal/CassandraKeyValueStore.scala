@@ -66,7 +66,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     executeAsync(query, session).flatMap { result =>
       if (result.remaining > 0)
-        Task {
+        Task.attempt {
           Option(blobValueOf(valueColumnName, result.one))
         }
       else
@@ -99,7 +99,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
               result.currentPage.iterator
             )
             .mapZIO { row =>
-              Task {
+              Task.attempt {
                 blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
               }
             }

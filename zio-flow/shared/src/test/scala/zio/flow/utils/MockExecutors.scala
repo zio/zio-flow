@@ -49,8 +49,8 @@ object MockExecutors {
     )
 
   val mockPersistentTestClock
-    : ZManaged[Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
-    ZManaged.environment[Console with Clock].flatMap { env =>
+    : ZIO[Scope with Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {
+    ZIO.environment[Console with Clock].flatMap { env =>
       PersistentExecutor
         .make(
           mockOpExec.provideEnvironment(env),

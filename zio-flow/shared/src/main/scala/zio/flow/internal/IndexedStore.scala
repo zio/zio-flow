@@ -41,7 +41,7 @@ object IndexedStore {
   val inMemory: ZLayer[Any, Nothing, IndexedStore] =
     ZLayer {
       for {
-        topics <- Ref.makeManaged[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
+        topics <- Ref.make[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
       } yield InMemoryIndexedStore(topics)
     }
 

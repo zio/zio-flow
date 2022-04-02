@@ -16,7 +16,6 @@
 
 package zio.flow
 
-import zio.NeedsEnv
 import zio.flow.Remote._
 import zio.schema.ast.SchemaAst
 import zio.schema.{CaseSet, Schema}
@@ -63,7 +62,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def ensuring[R1 <: R: SchemaOrNothing.Aux, E1 >: E: SchemaOrNothing.Aux, A1 >: A: SchemaOrNothing.Aux](
     flow: ZFlow[R1, Nothing, Any]
-  )(implicit ev: NeedsEnv[R1]): ZFlow[R1, E1, A1] =
+  ): ZFlow[R1, E1, A1] =
     ZFlow
       .input[R1]
       .flatMap[R1, E1, A1]((r: Remote[R1]) => ZFlow.Ensuring(self, flow.unit.provide(r)))

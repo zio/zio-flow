@@ -141,7 +141,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     Gen.alphaNumericString.map(msg =>
       SchemaAndValue.fromSchemaAndValue(
         SchemaOrNothing.fromSchema(zio.flow.schemaThrowable).schema,
-        new TestException(msg)
+        new Generators.TestException(msg)
       )
     )
 

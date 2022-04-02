@@ -56,8 +56,10 @@ object ZFlowAssertionSyntax {
       schemaA: SchemaOrNothing.Aux[A],
       schemaE: SchemaOrNothing.Aux[E]
     ): ZIO[Console with Clock with DurableLog with KeyValueStore, E, A] =
-      mockPersistentTestClock.use { executor =>
-        executor.submit(id, zflow)
+      ZIO.scoped {
+        mockPersistentTestClock.flatMap { executor =>
+          executor.submit(id, zflow)
+        }
       }
   }
 }

@@ -79,7 +79,7 @@ final case class PersistentExecutor(
       _        <- stateRef.update(state => state.copy(variables = state.variables.updated(variableName, value)))
       // TODO: It is time to retry a workflow that is suspended, because a variable changed.
       // _        <- stateRef.modify(state => (state.retry.forkDaemon, state.copy(retry = ZIO.unit))).flatten
-    } yield true).catchAll(_ => UIO(false))
+    } yield true).catchAll(_ => UIO.succeed(false))
 
   def start[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
     uniqueId: String,
