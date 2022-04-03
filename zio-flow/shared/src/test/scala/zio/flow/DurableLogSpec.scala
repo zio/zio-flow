@@ -7,7 +7,7 @@ import zio.test._
 object DurableLogSpec extends ZIOSpecDefault {
 
   val durableLog: ZLayer[Any, Nothing, DurableLog with IndexedStore] =
-    IndexedStore.live >+> DurableLog.live
+    IndexedStore.inMemory >+> DurableLog.live
 
   val values: Gen[Random with Sized, Chunk[Chunk[Byte]]] =
     Gen.chunkOf(Gen.chunkOf(Gen.byte)).noShrink
@@ -17,7 +17,7 @@ object DurableLogSpec extends ZIOSpecDefault {
       test("sequential read write") {
         check(values) { in =>
           (for {
-            _   <- ZIO.foreach(in)(DurableLog.append("partition", _))
+            _   <- ZIO.foreachDiscard(in)(DurableLog.append("partition", _))
             out <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect
           } yield assertTrue(out == in)).provideCustomLayer(durableLog)
         }

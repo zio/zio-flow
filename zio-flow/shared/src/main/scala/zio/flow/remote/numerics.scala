@@ -17,7 +17,7 @@
 package zio.flow.remote
 
 import zio.flow.Remote
-import zio.schema.Schema
+import zio.schema.{CaseSet, Schema}
 
 sealed trait Numeric[A] {
   def schema: Schema[A]
@@ -86,6 +86,65 @@ object Numeric extends NumericImplicits0 {
 
     override def round(left: Int): Int = Math.round(left.toFloat)
   }
+
+  private val shortCase: Schema.Case[NumericShort.type, Numeric[Any]] = Schema.Case[NumericShort.type, Numeric[Any]](
+    "NumericShort",
+    Schema.singleton[NumericShort.type](NumericShort),
+    _.asInstanceOf[NumericShort.type]
+  )
+
+  private val longCase: Schema.Case[NumericLong.type, Numeric[Any]] = Schema.Case[NumericLong.type, Numeric[Any]](
+    "NumericLong",
+    Schema.singleton[NumericLong.type](NumericLong),
+    _.asInstanceOf[NumericLong.type]
+  )
+
+  private val bigIntCase: Schema.Case[NumericBigInt.type, Numeric[Any]] = Schema.Case[NumericBigInt.type, Numeric[Any]](
+    "NumericBigInt",
+    Schema.singleton[NumericBigInt.type](NumericBigInt),
+    _.asInstanceOf[NumericBigInt.type]
+  )
+
+  private val floatCase: Schema.Case[NumericFloat.type, Numeric[Any]] = Schema.Case[NumericFloat.type, Numeric[Any]](
+    "NumericFloat",
+    Schema.singleton[NumericFloat.type](NumericFloat),
+    _.asInstanceOf[NumericFloat.type]
+  )
+
+  private val doubleCase: Schema.Case[NumericDouble.type, Numeric[Any]] = Schema.Case[NumericDouble.type, Numeric[Any]](
+    "NumericDouble",
+    Schema.singleton[NumericDouble.type](NumericDouble),
+    _.asInstanceOf[NumericDouble.type]
+  )
+
+  private val bigDecimalCase: Schema.Case[NumericBigDecimal.type, Numeric[Any]] =
+    Schema.Case[NumericBigDecimal.type, Numeric[Any]](
+      "NumericBigDecimal",
+      Schema.singleton[NumericBigDecimal.type](NumericBigDecimal),
+      _.asInstanceOf[NumericBigDecimal.type]
+    )
+
+  private val intCase: Schema.Case[NumericInt.type, Numeric[Any]] = Schema.Case[NumericInt.type, Numeric[Any]](
+    "NumericInt",
+    Schema.singleton[NumericInt.type](NumericInt),
+    _.asInstanceOf[NumericInt.type]
+  )
+
+  implicit val schema: Schema[Numeric[Any]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(
+          shortCase,
+          CaseSet.Empty[Numeric[Any]]()
+        )
+        .:+:(longCase)
+        .:+:(bigIntCase)
+        .:+:(floatCase)
+        .:+:(doubleCase)
+        .:+:(bigDecimalCase)
+        .:+:(intCase)
+    )
+
 }
 
 sealed trait NumericImplicits0 {
@@ -433,4 +492,36 @@ object Fractional {
       Math.atan(a.doubleValue)
 
   }
+
+  private val floatCase: Schema.Case[FractionalFloat.type, Fractional[Any]] =
+    Schema.Case[FractionalFloat.type, Fractional[Any]](
+      "FractionalFloat",
+      Schema.singleton[FractionalFloat.type](FractionalFloat),
+      _.asInstanceOf[FractionalFloat.type]
+    )
+
+  private val doubleCase: Schema.Case[FractionalDouble.type, Fractional[Any]] =
+    Schema.Case[FractionalDouble.type, Fractional[Any]](
+      "FractionalDouble",
+      Schema.singleton[FractionalDouble.type](FractionalDouble),
+      _.asInstanceOf[FractionalDouble.type]
+    )
+
+  private val bigDecimalCase: Schema.Case[FractionalBigDecimal.type, Fractional[Any]] =
+    Schema.Case[FractionalBigDecimal.type, Fractional[Any]](
+      "FractionalBigDecimal",
+      Schema.singleton[FractionalBigDecimal.type](FractionalBigDecimal),
+      _.asInstanceOf[FractionalBigDecimal.type]
+    )
+
+  implicit val schema: Schema[Fractional[Any]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(
+          floatCase,
+          CaseSet.Empty[Fractional[Any]]()
+        )
+        .:+:(doubleCase)
+        .:+:(bigDecimalCase)
+    )
 }

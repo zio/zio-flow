@@ -40,9 +40,9 @@ lazy val root = project
     dynamoDbKvStore,
     docs,
     examplesJVM,
-    examplesJS,
-    zioFlowJVM,
-    zioFlowJS
+//    examplesJS,
+    zioFlowJVM
+//    zioFlowJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -62,6 +62,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
     ) ++
       commonTestDependencies.map(_ % Test)
   )
+  .settings(fork := true)
   .settings(testFrameworks += zioTest)
 
 lazy val zioFlowJS = zioFlow.js

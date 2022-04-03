@@ -7,7 +7,7 @@ import com.dimafeng.testcontainers.CassandraContainer
 
 import java.net.InetSocketAddress
 import org.testcontainers.utility.DockerImageName
-import zio.{ULayer, URLayer, ZIO, ZManaged}
+import zio.{ULayer, URLayer, ZIO, ZLayer}
 import zio.ZIO.{attemptBlocking, fromCompletionStage => execAsync}
 
 /**
@@ -60,55 +60,58 @@ object CassandraTestContainerSupport {
   lazy val scyllaDb: SessionLayer =
     cassandraContainer(DockerImageTag.scyllaDb) >>> cassandraSession
 
-  lazy val cassandraSession: URLayer[CassandraContainer, CqlSession] = {
-    for {
-      container <- ZIO.service[CassandraContainer].toManaged
-      ipAddress <-
-        ZIO.attempt {
-          new InetSocketAddress(
-            container.containerIpAddress,
-            container.cassandraContainer.getFirstMappedPort
-          )
-        }.toManaged
-      _ <- createKeyspace(ipAddress)
-      session <-
-        ZManaged.acquireReleaseWith {
-          execAsync(
-            CqlSession.builder
-              .addContactPoint(ipAddress)
-              .withKeyspace(
-                CqlIdentifier.fromCql(testKeyspaceName)
-              )
-              .withLocalDatacenter(testDataCenter)
-              .buildAsync()
-          )
-        } { session =>
-          attemptBlocking {
-            session.close()
-          }.orDie
-        }
-    } yield session
-  }.orDie.toLayer
+  lazy val cassandraSession: URLayer[CassandraContainer, CqlSession] =
+    ZLayer.scoped {
+      for {
+        container <- ZIO.service[CassandraContainer]
+        ipAddress <-
+          ZIO.attempt {
+            new InetSocketAddress(
+              container.containerIpAddress,
+              container.cassandraContainer.getFirstMappedPort
+            )
+          }
+        _ <- createKeyspace(ipAddress)
+        session <-
+          ZIO.acquireRelease {
+            execAsync(
+              CqlSession.builder
+                .addContactPoint(ipAddress)
+                .withKeyspace(
+                  CqlIdentifier.fromCql(testKeyspaceName)
+                )
+                .withLocalDatacenter(testDataCenter)
+                .buildAsync()
+            )
+          } { session =>
+            attemptBlocking {
+              session.close()
+            }.orDie
+          }
+      } yield session
+    }.orDie
 
   def cassandraContainer(imageTag: String): ULayer[CassandraContainer] =
-    ZManaged.acquireReleaseWith {
-      attemptBlocking {
-        val container =
-          CassandraContainer(
-            DockerImageName
-              .parse(imageTag)
-              .asCompatibleSubstituteFor(cassandra)
-          )
-        container.start()
-        container
-      }.orDie
-    } { container =>
-      attemptBlocking(
-        container.stop()
-      ).orDie
-    }.toLayer
+    ZLayer.scoped {
+      ZIO.acquireRelease {
+        attemptBlocking {
+          val container =
+            CassandraContainer(
+              DockerImageName
+                .parse(imageTag)
+                .asCompatibleSubstituteFor(cassandra)
+            )
+          container.start()
+          container
+        }.orDie
+      } { container =>
+        attemptBlocking(
+          container.stop()
+        ).orDie
+      }
+    }
 
-  private def createKeyspace(ipAddress: InetSocketAddress) = ZManaged.acquireReleaseWith {
+  private def createKeyspace(ipAddress: InetSocketAddress) = ZIO.acquireRelease {
     for {
       session <-
         execAsync(

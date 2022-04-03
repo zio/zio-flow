@@ -50,6 +50,6 @@ object DurablePromiseSpec extends DefaultRunnableSpec {
       }
     ).provide(
       DurableLog.live,
-      IndexedStore.live
+      IndexedStore.inMemory
     )
 }

@@ -22,13 +22,13 @@ sealed trait ZFlowTransaction {
    * Suspends the transaction until the variables in the transaction are
    * modified from the outside.
    */
-  def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Any]
+  def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Unit]
 }
 
 object ZFlowTransaction {
   private[flow] val instance: ZFlowTransaction =
     new ZFlowTransaction {
-      def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Any] =
-        ZFlow.ifThenElse(predicate)(ZFlow.unit, ZFlow.RetryUntil)
+      def retryUntil(predicate: Remote[Boolean]): ZFlow[Any, Nothing, Unit] =
+        ZFlow.ifThenElse[Any, Nothing, Unit](predicate)(ZFlow.unit, ZFlow.RetryUntil)
     }
 }

@@ -1,25 +1,25 @@
-/*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+///*
+// * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+// *
+// * Licensed under the Apache License, Version 2.0 (the "License");
+// * you may not use this file except in compliance with the License.
+// * You may obtain a copy of the License at
+// *
+// *     http://www.apache.org/licenses/LICENSE-2.0
+// *
+// * Unless required by applicable law or agreed to in writing, software
+// * distributed under the License is distributed on an "AS IS" BASIS,
+// * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// * See the License for the specific language governing permissions and
+// * limitations under the License.
+// */
 
 package zio.flow.remote
 
 import zio.flow._
 
-import java.time.Duration
-import java.time.temporal.{Temporal, TemporalAmount, TemporalUnit}
+import java.time.temporal.ChronoUnit
+import java.time.{Duration, Instant}
 
 class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
@@ -31,7 +31,7 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def plus(that: Remote[Duration]): Remote[Duration] =
     Remote.DurationPlusDuration(self, that)
 
-  def plus(amountToAdd: Remote[Long], temporalUnit: Remote[TemporalUnit]): Remote[Duration] =
+  def plus(amountToAdd: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
     plus(Remote.DurationFromAmount(amountToAdd, temporalUnit))
 
   def plusDays(daysToAdd: Remote[Long]): Remote[Duration]       = plus(Remote.ofDays(daysToAdd))
@@ -43,7 +43,7 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def minus(that: Remote[Duration]): Remote[Duration] =
     Remote.DurationMinusDuration(self, that)
 
-  def minus(amountToSubtract: Remote[Long], temporalUnit: Remote[TemporalUnit]): Remote[Duration] =
+  def minus(amountToSubtract: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
     minus(Remote.DurationFromAmount(amountToSubtract, temporalUnit))
 
   def minusDays(daysToSubtract: Remote[Long]): Remote[Duration]       = minus(Remote.ofDays(daysToSubtract))
@@ -55,15 +55,12 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
 object RemoteDuration {
 
-  def from(amount: Remote[TemporalAmount]): Remote[Duration] =
-    Remote.DurationFromTemporalAmount(amount)
-
   def parse(charSequence: Remote[String]): Remote[Duration] =
     Remote.DurationFromString(charSequence)
 
   def create(seconds: Remote[java.math.BigDecimal]): Remote[Duration] =
     Remote.DurationFromBigDecimal(seconds)
 
-  def between(startInclusive: Remote[Temporal], endExclusive: Remote[Temporal]): Remote[Duration] =
-    Remote.DurationFromTemporals(startInclusive, endExclusive)
+  def between(startInclusive: Remote[Instant], endExclusive: Remote[Instant]): Remote[Duration] =
+    Remote.DurationBetweenInstants(startInclusive, endExclusive)
 }

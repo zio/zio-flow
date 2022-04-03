@@ -27,7 +27,7 @@ object BuildHelper {
     "-language:existentials",
     "-explaintypes",
     "-Yrangepos",
-    "-Xlint:_,-missing-interpolator,-type-parameter-shadow",
+    "-Xlint:_,-missing-interpolator,-type-parameter-shadow,-infer-any",
     "-Ywarn-numeric-widen",
     "-Ywarn-value-discard"
   )
@@ -129,7 +129,6 @@ object BuildHelper {
           "-Ypartial-unification",
           "-Yno-adapted-args",
           "-Ywarn-inaccessible",
-          "-Ywarn-infer-any",
           "-Ywarn-nullary-override",
           "-Ywarn-nullary-unit",
           "-Ywarn-unused:params,-implicits",
@@ -143,7 +142,6 @@ object BuildHelper {
           "-Ypartial-unification",
           "-Yno-adapted-args",
           "-Ywarn-inaccessible",
-          "-Ywarn-infer-any",
           "-Ywarn-nullary-override",
           "-Ywarn-nullary-unit",
           "-Xexperimental",

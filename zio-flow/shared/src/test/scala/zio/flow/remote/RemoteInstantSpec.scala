@@ -1,13 +1,14 @@
-package zio.flow
+package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
+import zio.flow._
 import zio.schema.Schema
-import zio.test._
+import zio.test.{Gen, check}
 
 import java.time.temporal.{ChronoField, ChronoUnit}
 
-object RemoteInstantSpec extends ZIOSpecDefault {
+object RemoteInstantSpec extends RemoteSpecBase {
   override def spec = suite("RemoteInstantSpec")(
     test("isAfter") {
       check(Gen.instant, Gen.instant) { case (i1, i2) =>
@@ -74,7 +75,7 @@ object RemoteInstantSpec extends ZIOSpecDefault {
         Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
-  )
+  ).provideCustom(RemoteContext.inMemory)
 
   implicit val chronoFieldSchema: Schema[ChronoField] =
     Schema[String].transform(ChronoField.valueOf, _.name())

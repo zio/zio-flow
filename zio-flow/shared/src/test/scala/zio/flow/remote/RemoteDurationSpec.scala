@@ -1,12 +1,14 @@
-package zio.flow
+package zio.flow.remote
 
+import zio.ZIO
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
-import zio.test._
+import zio.flow.{Remote, RemoteContext}
+import zio.test.{BoolAlgebra, Gen, check}
 
 import java.time.temporal.ChronoUnit
 
-object RemoteDurationSpec extends ZIOSpecDefault {
+object RemoteDurationSpec extends RemoteSpecBase {
   override def spec = suite("RemoteDurationSpec")(
     test("plus") {
       check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
@@ -40,12 +42,19 @@ object RemoteDurationSpec extends ZIOSpecDefault {
     },
     test("plus amount of temporal units") {
       check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        (Remote(d).plus(l, ChronoUnit.DAYS) <-> d.plus(l, ChronoUnit.DAYS)) &&
-        (Remote(d).plus(l, ChronoUnit.HOURS) <-> d.plus(l, ChronoUnit.HOURS)) &&
-        (Remote(d).plus(l, ChronoUnit.MINUTES) <-> d.plus(l, ChronoUnit.MINUTES)) &&
-        (Remote(d).plus(l, ChronoUnit.SECONDS) <-> d.plus(l, ChronoUnit.SECONDS)) &&
-        (Remote(d).plus(l, ChronoUnit.MILLIS) <-> d.plus(l, ChronoUnit.MILLIS)) &&
-        (Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS))
+        ZIO
+          .collectAll(
+            List(
+              Remote(d).plus(l, ChronoUnit.DAYS) <-> d.plus(l, ChronoUnit.DAYS),
+              Remote(d).plus(l, ChronoUnit.HOURS) <-> d.plus(l, ChronoUnit.HOURS),
+              Remote(d).plus(l, ChronoUnit.MINUTES) <-> d.plus(l, ChronoUnit.MINUTES),
+              Remote(d).plus(l, ChronoUnit.SECONDS) <-> d.plus(l, ChronoUnit.SECONDS),
+              Remote(d).plus(l, ChronoUnit.MILLIS) <-> d.plus(l, ChronoUnit.MILLIS),
+              Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS)
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
       }
     },
     test("minus") {
@@ -80,12 +89,19 @@ object RemoteDurationSpec extends ZIOSpecDefault {
     },
     test("minus amount of temporal units") {
       check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        (Remote(d).minus(l, ChronoUnit.DAYS) <-> d.minus(l, ChronoUnit.DAYS)) &&
-        (Remote(d).minus(l, ChronoUnit.HOURS) <-> d.minus(l, ChronoUnit.HOURS)) &&
-        (Remote(d).minus(l, ChronoUnit.MINUTES) <-> d.minus(l, ChronoUnit.MINUTES)) &&
-        (Remote(d).minus(l, ChronoUnit.SECONDS) <-> d.minus(l, ChronoUnit.SECONDS)) &&
-        (Remote(d).minus(l, ChronoUnit.MILLIS) <-> d.minus(l, ChronoUnit.MILLIS)) &&
-        (Remote(d).minus(l, ChronoUnit.NANOS) <-> d.minus(l, ChronoUnit.NANOS))
+        ZIO
+          .collectAll(
+            List(
+              Remote(d).minus(l, ChronoUnit.DAYS) <-> d.minus(l, ChronoUnit.DAYS),
+              Remote(d).minus(l, ChronoUnit.HOURS) <-> d.minus(l, ChronoUnit.HOURS),
+              Remote(d).minus(l, ChronoUnit.MINUTES) <-> d.minus(l, ChronoUnit.MINUTES),
+              Remote(d).minus(l, ChronoUnit.SECONDS) <-> d.minus(l, ChronoUnit.SECONDS),
+              Remote(d).minus(l, ChronoUnit.MILLIS) <-> d.minus(l, ChronoUnit.MILLIS),
+              Remote(d).minus(l, ChronoUnit.NANOS) <-> d.minus(l, ChronoUnit.NANOS)
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
       }
     },
     test("getSeconds") {
@@ -108,5 +124,5 @@ object RemoteDurationSpec extends ZIOSpecDefault {
         Remote(d).isNegative <-> d.isNegative
       }
     }
-  )
+  ).provideCustom(RemoteContext.inMemory)
 }

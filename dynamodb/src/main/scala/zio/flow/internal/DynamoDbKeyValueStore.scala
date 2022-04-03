@@ -1,13 +1,14 @@
 package zio.flow.internal
 
-import DynamoDbKeyValueStore._
-import java.io.IOException
 import zio.aws.core.AwsError
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.dynamodb.model.primitives._
 import zio.aws.dynamodb.model.{AttributeValue, GetItemRequest, ScanRequest, UpdateItemRequest}
+import zio.flow.internal.DynamoDbKeyValueStore._
 import zio.stream.ZStream
 import zio.{Chunk, IO, URLayer, ZIO}
+
+import java.io.IOException
 
 final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
@@ -58,9 +59,9 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
         ioExceptionOf(s"Error retrieving or reading value for <$namespace> namespace", _),
         result =>
           for {
-            item      <- result.item
+            item      <- result.item.toOption
             value     <- item.get(AttributeName(valueColumnName))
-            byteChunk <- value.b
+            byteChunk <- value.b.toOption
           } yield byteChunk
       )
   }
@@ -82,9 +83,9 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
         item =>
           for {
             key            <- item.get(AttributeName(keyColumnName))
-            keyByteChunk   <- key.b
+            keyByteChunk   <- key.b.toOption
             value          <- item.get(AttributeName(valueColumnName))
-            valueByteChunk <- value.b
+            valueByteChunk <- value.b.toOption
           } yield {
             keyByteChunk -> valueByteChunk
           }

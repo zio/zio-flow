@@ -17,10 +17,9 @@
 package zio.flow.internal
 
 import java.io.IOException
-
 import org.rocksdb.ColumnFamilyHandle
 import zio.rocksdb._
-import zio.{Chunk, IO, UIO, ZLayer, ZIO}
+import zio.{Chunk, IO, UIO, ZIO, ZLayer, ZRef}
 import zio.stream.ZStream
 
 trait KeyValueStore {
@@ -44,6 +43,13 @@ object KeyValueStore {
       }
     }
 
+  val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
+    ZLayer {
+      for {
+        namespaces <- ZRef.make(Map.empty[String, Map[Chunk[Byte], Chunk[Byte]]])
+      } yield InMemoryKeyValueStore(namespaces)
+    }
+
   def put(
     namespace: String,
     key: Chunk[Byte],
@@ -62,6 +68,13 @@ object KeyValueStore {
     ZStream.serviceWithStream(
       _.scanAll(namespace)
     )
+
+  private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
+    rocksDB.initialHandles
+      .map(_.map { namespace =>
+        Chunk.fromArray(namespace.getName) -> namespace
+      }.toMap)
+      .refineToOrDie[IOException]
 
   private final case class KeyValueStoreLive(
     rocksDB: RocksDB,
@@ -94,10 +107,31 @@ object KeyValueStore {
       ZIO.succeed(namespaces(Chunk.fromArray(namespace.getBytes)))
   }
 
-  private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
-    rocksDB.initialHandles
-      .map(_.map { namespace =>
-        Chunk.fromArray(namespace.getName) -> namespace
-      }.toMap)
-      .refineToOrDie[IOException]
+  private final case class InMemoryKeyValueStore(namespaces: zio.Ref[Map[String, Map[Chunk[Byte], Chunk[Byte]]]])
+      extends KeyValueStore {
+    override def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
+      namespaces.update { ns =>
+        ns.get(namespace) match {
+          case Some(data) =>
+            ns.updated(namespace, data.updated(key, value))
+          case None =>
+            ns + (namespace -> Map(key -> value))
+        }
+      }.as(true)
+
+    override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] =
+      namespaces.get.map { ns =>
+        ns.get(namespace).flatMap(_.get(key))
+      }
+
+    override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
+      ZStream.unwrap {
+        namespaces.get.map { ns =>
+          ns.get(namespace) match {
+            case Some(value) => ZStream.fromIterable(value)
+            case None        => ZStream.empty
+          }
+        }
+      }
+  }
 }

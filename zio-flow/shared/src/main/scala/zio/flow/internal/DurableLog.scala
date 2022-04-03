@@ -35,10 +35,10 @@ object DurableLog {
     ZStream.serviceWithStream(_.subscribe(topic, position))
 
   val live: ZLayer[IndexedStore, Nothing, DurableLog] =
-    ZLayer.fromManaged {
+    ZLayer.scoped {
       for {
-        indexedStore <- ZManaged.service[IndexedStore]
-        topics       <- Ref.makeManaged[Map[String, Topic]](Map.empty)
+        indexedStore <- ZIO.service[IndexedStore]
+        topics       <- Ref.make[Map[String, Topic]](Map.empty)
         durableLog    = DurableLogLive(topics, indexedStore)
       } yield durableLog
     }
@@ -57,18 +57,18 @@ object DurableLog {
         }
       }
     def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
-      ZStream.unwrapManaged {
-        getTopic(topic).toManaged.flatMap { case Topic(hub, _) =>
+      ZStream.unwrapScoped {
+        getTopic(topic).flatMap { case Topic(hub, _) =>
           hub.subscribe.flatMap { subscription =>
-            subscription.size.toManaged.flatMap { size =>
+            subscription.size.flatMap { size =>
               if (size > 0)
-                subscription.take.toManaged.map { case (value, index) =>
+                subscription.take.map { case (value, index) =>
                   indexedStore.scan(topic, position, index) ++
                     ZStream(value) ++
                     ZStream.fromQueue(subscription).map(_._1)
                 }
               else
-                indexedStore.position(topic).toManaged.map { currentPosition =>
+                indexedStore.position(topic).map { currentPosition =>
                   indexedStore.scan(topic, position, currentPosition) ++
                     collectFrom(ZStream.fromQueue(subscription), currentPosition)
                 }

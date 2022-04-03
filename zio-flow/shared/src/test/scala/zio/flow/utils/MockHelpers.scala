@@ -1,8 +1,8 @@
 package zio.flow.utils
 
 import zio._
-import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
 import zio.flow.internal.{DurableLog, KeyValueStore}
+import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
 import zio.schema.Schema
 import zio.stream.ZStream
 
@@ -10,11 +10,11 @@ import java.io.IOException
 import java.net.URI
 
 object MockHelpers {
-  val mockActivity: Activity[Any, Int] =
+  val mockActivity: Activity[Unit, Int] =
     Activity(
       "Test Activity",
       "Mock activity created for test",
-      Operation.Http[Any, Int](
+      Operation.Http[Unit, Int](
         new URI("testUrlForActivity.com"),
         "GET",
         Map.empty[String, String],
@@ -27,7 +27,9 @@ object MockHelpers {
 
   object mockOpExec extends OperationExecutor[Console with Clock] {
     override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
-      Console.printLine("Activity processing") *> ZIO.succeed(input.asInstanceOf[A])
+      Console
+        .printLine("Activity processing")
+        .mapBoth(error => ActivityError("Failed to write to console", Some(error)), _ => input.asInstanceOf[A])
   }
 
   val doesNothingDurableLog: DurableLog = new DurableLog {
