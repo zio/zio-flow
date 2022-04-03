@@ -125,7 +125,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(BoolAlgebra.all(_))
           .map(_.get)
       }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provide(RemoteContext.inMemory)
 
   override def spec = suite("OptionSpec")(suite1)
 }

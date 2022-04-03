@@ -63,6 +63,6 @@ object RemoteTupleSpec extends RemoteSpecBase {
 //          .map(BoolAlgebra.all(_))
 //          .map(_.get)
 //      }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provide(RemoteContext.inMemory)
 
 }

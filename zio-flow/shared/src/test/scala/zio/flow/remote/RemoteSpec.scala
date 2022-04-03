@@ -173,7 +173,7 @@ object RemoteSpec extends DefaultRunnableSpec {
               typ <- remote.eval[(String, TestCaseClass, Int)]
             } yield assertTrue(
               dyn == expectedDynamicValue,
-              typ == ("hello", TestCaseClass("x", 2), 1)
+              typ == expectedValue
             )
 
           test.provide(RemoteContext.inMemory)
@@ -259,8 +259,8 @@ object RemoteSpec extends DefaultRunnableSpec {
               typ <- remote.eval[Option[(TestCaseClass, Int)]]
             } yield assertTrue(
               dyn == SchemaAndValue
-                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], Some(TestCaseClass("a", 10), 20)),
-              typ == Some(TestCaseClass("a", 10), 20)
+                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], Some((TestCaseClass("a", 10), 20))),
+              typ == Some((TestCaseClass("a", 10), 20))
             )
 
           test.provide(RemoteContext.inMemory)

@@ -1,8 +1,8 @@
 package zio.flow.remote
 
-import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow._
-import zio.test.Assertion.{equalTo, hasField, isFailure, isSuccess, succeeds}
+import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.test.Assertion.{equalTo, succeeds}
 import zio.test._
 
 object RemoteEitherSpec extends RemoteSpecBase {

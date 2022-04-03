@@ -2472,7 +2472,7 @@ object Remote {
     value match {
       case dynamicValue: DynamicValue =>
         Literal(dynamicValue, SchemaOrNothing[A].schema)
-      case flow: ZFlow[Any, Any, Any] =>
+      case flow: ZFlow[_, _, _] =>
         Flow(flow).asInstanceOf[Remote[A]]
       case remote: Remote[Any] =>
         Nested(remote).asInstanceOf[Remote[A]]

@@ -38,7 +38,7 @@ object RemoteListSpec extends RemoteSpecBase {
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
         fold <-> 6
       }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provide(RemoteContext.inMemory)
 
   override def spec = suite("RemoteListSpec")(suite1)
 }

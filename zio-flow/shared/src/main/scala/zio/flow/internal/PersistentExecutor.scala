@@ -146,10 +146,14 @@ final case class PersistentExecutor(
                        .fromOption(optValue)
                        .orElseFail(new IOException(s"Undefined variable ${variable.identifier} in Modify"))
 //            _                                      <- ZIO.debug(s"Modify: ${variable.identifier}'s previous value was $value")
-            tuple <- evalDynamic(f(Remote.Literal(value, variable.schemaA)))
+            dynTuple <- evalDynamic(f(Remote.Literal(value, variable.schemaA)))
+            tuple <- dynTuple.value match {
+                       case DynamicValue.Tuple(dynResult, newValue) => ZIO.succeed((dynResult, newValue))
+                       case _                                       => ZIO.fail(new IOException(s"Modify's result was not a tuple"))
+                     }
 //            _                                      <- ZIO.debug(s"Modify: result is $tuple")
-            DynamicValue.Tuple(dynResult, newValue) = tuple.value
-            _                                      <- RemoteContext.setVariable(variable.identifier, newValue)
+            (dynResult, newValue) = tuple
+            _                    <- RemoteContext.setVariable(variable.identifier, newValue)
 //            _                                      <- ZIO.debug(s"Modify: changed value of ${variable.identifier} to $newValue")
             result = Remote.Literal(dynResult, modify.resultSchema.schema)
             //            _                 <- resume(vName, value, newValue)
@@ -384,7 +388,7 @@ final case class PersistentExecutor(
           //          }.flatten *> step(ref)
           ??? // TODO
 
-        case OrTry(left, right) =>
+        case OrTry(_, _) =>
           //          for {
           //            state <- ref.get
           //            _ <- state.tstate.addFallback(erase(right).provide(state.currentEnvironment.toRemote)) match {
@@ -397,7 +401,7 @@ final case class PersistentExecutor(
           //          } yield ()
           ??? // TODO
 
-        case Interrupt(execFlow) =>
+        case Interrupt(_) =>
           ??? // TODO
         //          val interrupt = for {
         //            exec <- eval(execFlow)
@@ -664,9 +668,9 @@ object PersistentExecutor {
         case (StateChange.SequentialChange(changes1), StateChange.SequentialChange(changes2)) =>
           StateChange.SequentialChange(changes1 ++ changes2)
         case (StateChange.SequentialChange(changes1), _) =>
-          StateChange.SequentialChange(changes1.appended(otherChange))
+          StateChange.SequentialChange(changes1 :+ otherChange)
         case (_, StateChange.SequentialChange(changes2)) =>
-          StateChange.SequentialChange(changes2.prepended(self))
+          StateChange.SequentialChange(self +: changes2)
         case _ =>
           StateChange.SequentialChange(Chunk(self, otherChange))
       }

@@ -18,6 +18,7 @@ package zio.flow.remote
 
 import zio.flow._
 import zio.schema.Schema
+import zio.stream.ZNothing
 
 class RemoteVariableSyntax[A](val self: Remote[Remote.Variable[A]]) extends AnyVal {
   def get(implicit schema: Schema[A]): ZFlow[Any, Nothing, A] = self.modify((a: Remote[A]) => (a, a))
@@ -39,9 +40,9 @@ class RemoteVariableSyntax[A](val self: Remote[Remote.Variable[A]]) extends AnyV
   def update(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] =
     updateAndGet(f).unit
 
-  def waitUntil(predicate: Remote[A] => Remote[Boolean])(implicit schema: Schema[A]): ZFlow[Any, Nothing, Unit] =
-    ZFlow.transaction[Any, Nothing, Unit] { txn =>
-      self.get.flatMap[Any, Nothing, Unit] { v =>
+  def waitUntil(predicate: Remote[A] => Remote[Boolean])(implicit schema: Schema[A]): ZFlow[Any, ZNothing, Unit] =
+    ZFlow.transaction[Any, ZNothing, Unit] { txn =>
+      self.get.flatMap[Any, ZNothing, Unit] { v =>
         txn.retryUntil(predicate(v))
       }
     }

@@ -555,7 +555,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       ChronoUnit.HOURS
     ).map(Gen.const(_)): _*
   )
-  lazy val genChronoUnit: Gen[Random, ChronoUnit] = Gen.oneOf(ChronoUnit.values().map(Gen.const(_)): _*)
+  lazy val genChronoUnit: Gen[Random, ChronoUnit] = Gen.oneOf(ChronoUnit.values().toList.map(Gen.const(_)): _*)
 
   lazy val genInstantTruncate: Gen[Random with Sized, Remote[Any]] =
     for {
@@ -781,7 +781,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       string      <- Gen.string
       remoteString = Remote(string)
-      input        = ZFlow.Input[String]
+      input        = ZFlow.Input[String]()
     } yield ZFlow.Provide(remoteString, input)
 
   lazy val genZFlowDie: Gen[Any, ZFlow.Die.type]               = Gen.const(ZFlow.Die)

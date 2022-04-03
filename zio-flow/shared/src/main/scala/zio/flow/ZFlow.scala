@@ -19,6 +19,7 @@ package zio.flow
 import zio.flow.Remote._
 import zio.schema.ast.SchemaAst
 import zio.schema.{CaseSet, Schema}
+import zio.stream.ZNothing
 
 import java.time.{Duration, Instant}
 
@@ -121,8 +122,8 @@ sealed trait ZFlow[-R, +E, +A] {
   final def map[B: SchemaOrNothing.Aux](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap[R, E, B](a => ZFlow(f(a)))(errorSchema.asInstanceOf[SchemaOrNothing.Aux[E]], SchemaOrNothing[B])
 
-  final def orDie[R1 <: R, E1 >: E, A1 >: A: SchemaOrNothing.Aux]: ZFlow[R1, Nothing, A1] =
-    self.catchAll[R1, E1, A1, Nothing]((_: Remote[E1]) => ZFlow.Die)
+  final def orDie[R1 <: R, E1 >: E, A1 >: A: SchemaOrNothing.Aux]: ZFlow[R1, ZNothing, A1] =
+    self.catchAll[R1, E1, A1, ZNothing]((_: Remote[E1]) => ZFlow.Die)
 
   final def orElse[R1 <: R, E1 >: E, E2: SchemaOrNothing.Aux, A1 >: A: SchemaOrNothing.Aux](
     that: ZFlow[R1, E2, A1]
@@ -776,7 +777,7 @@ object ZFlow {
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] = {
     implicit val schemaB: Schema[B] = SchemaOrNothing[B].schema
     for {
-      executingFlows <- ZFlow.foreach[R, Nothing, A, ExecutingFlow[ActivityError, B]](values)((remoteA: Remote[A]) =>
+      executingFlows <- ZFlow.foreach[R, ZNothing, A, ExecutingFlow[ActivityError, B]](values)((remoteA: Remote[A]) =>
                           body(remoteA).fork
                         )
       eithers <- ZFlow.foreach(executingFlows)(remote => ZFlow.Await(remote))
@@ -798,8 +799,8 @@ object ZFlow {
 
   def sleep(duration: Remote[Duration]): ZFlow[Any, Nothing, Unit] =
     // TODO: why are these type args needed - they prevent using for comprehension
-    ZFlow.now.flatMap[Any, Nothing, Unit] { now =>
-      ZFlow(now.plusDuration(duration)).flatMap[Any, Nothing, Unit] { later =>
+    ZFlow.now.flatMap[Any, ZNothing, Unit] { now =>
+      ZFlow(now.plusDuration(duration)).flatMap[Any, ZNothing, Unit] { later =>
         ZFlow.waitTill(later).map { _ =>
           Remote.unit
         }

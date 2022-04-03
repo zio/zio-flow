@@ -13,6 +13,8 @@ import java.util.concurrent.TimeUnit
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
+  private val unit: Unit = ()
+
   private val testActivity: Activity[Int, Int] =
     Activity(
       "Test Activity",
@@ -47,14 +49,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         .succeed(15)
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
-      assertTrue(result == ())
+      assertTrue(result == unit)
     },
     testFlow("foldM - error side") {
       ZFlow
         .fail(15)
         .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
-      assertTrue(result == ())
+      assertTrue(result == unit)
     },
     testFlow("flatMap 1") {
       ZFlow
@@ -132,7 +134,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         a        <- variable.modify(n => (n - 1, n + 1))
         b        <- variable.get
       } yield (a, b)
-    }(result => assertTrue(result == (-1, 1))),
+    } { result =>
+      val expected = (-1, 1)
+      assertTrue(result == expected)
+    },
     testFlowAndLogs("log") {
       ZFlow.log("first message") *> ZFlow.log("second message").as(100)
     } { (result, logs) =>
@@ -173,10 +178,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  r2 <- flow2.await[Nothing, Int]
                  _  <- ZFlow.log(r1.toString)
                } yield (r1.toOption, r2.toOption)
-        fiber  <- flow.evaluateTestPersistent("fork").fork
-        _      <- TestClock.adjust(3.seconds)
-        result <- fiber.join
-      } yield assertTrue(result == (Some(1), Some(2)))
+        fiber   <- flow.evaluateTestPersistent("fork").fork
+        _       <- TestClock.adjust(3.seconds)
+        result  <- fiber.join
+        expected = (Some(1), Some(2))
+      } yield assertTrue(result == expected)
     },
     test("timeout") {
       for {
