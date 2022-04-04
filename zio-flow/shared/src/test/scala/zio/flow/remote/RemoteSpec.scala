@@ -1,7 +1,7 @@
 package zio.flow.remote
 
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
-import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue, SchemaOrNothing}
+import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue}
 import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
@@ -53,7 +53,7 @@ object RemoteSpec extends DefaultRunnableSpec {
       ),
       suite("Either")(
         test("evaluates correctly when it is Left") {
-          val remote = Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema(Schema[Int]))))
+          val remote = Remote.Either0(Left((Remote("test"), Schema[Int])))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -66,7 +66,7 @@ object RemoteSpec extends DefaultRunnableSpec {
           test.provide(RemoteContext.inMemory)
         },
         test("evaluates correctly when it is Right") {
-          val remote = Remote.Either0(Right((SchemaOrNothing.fromSchema(Schema[Int]), (Remote("test")))))
+          val remote = Remote.Either0(Right((Schema[Int], (Remote("test")))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -82,16 +82,16 @@ object RemoteSpec extends DefaultRunnableSpec {
       suite("FlatMapEither")(
         test("evaluates correctly when it is Left") {
           val remote = Remote.FlatMapEither(
-            Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema[Int]))),
+            Remote.Either0(Left((Remote("test"), Schema[Int]))),
             Remote
               .RemoteFunction((a: Remote[Int]) =>
                 Remote.Either0(
-                  Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
+                  Right((Schema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
                 )
               )
               .evaluated,
-            SchemaOrNothing.fromSchema[String],
-            SchemaOrNothing.fromSchema[Int]
+            Schema[String],
+            Schema[Int]
           )
           val test =
             for {
@@ -105,16 +105,16 @@ object RemoteSpec extends DefaultRunnableSpec {
         },
         test("evaluates correctly when it is Right") {
           val remote = Remote.FlatMapEither(
-            Remote.Either0(Right((SchemaOrNothing.fromSchema[String], Remote(10)))),
+            Remote.Either0(Right((Schema[String], Remote(10)))),
             Remote
               .RemoteFunction((a: Remote[Int]) =>
                 Remote.Either0(
-                  Right((SchemaOrNothing.fromSchema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
+                  Right((Schema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
                 )
               )
               .evaluated,
-            SchemaOrNothing.fromSchema[String],
-            SchemaOrNothing.fromSchema[Int]
+            Schema[String],
+            Schema[Int]
           )
           val test =
             for {
@@ -130,7 +130,7 @@ object RemoteSpec extends DefaultRunnableSpec {
       suite("SwapEither")(
         test("evaluates correctly when it is Left") {
           val remote =
-            Remote.SwapEither(Remote.Either0(Left((Remote("test"), SchemaOrNothing.fromSchema(Schema[Int])))))
+            Remote.SwapEither(Remote.Either0(Left((Remote("test"), Schema[Int]))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -144,7 +144,7 @@ object RemoteSpec extends DefaultRunnableSpec {
         },
         test("evaluates correctly when it is Right") {
           val remote =
-            Remote.SwapEither(Remote.Either0(Right((SchemaOrNothing.fromSchema(Schema[Int]), (Remote("test"))))))
+            Remote.SwapEither(Remote.Either0(Right((Schema[Int], (Remote("test"))))))
           val test =
             for {
               dyn <- remote.evalDynamic

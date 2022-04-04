@@ -25,27 +25,24 @@ final case class Activity[-R, A](
   check: ZFlow[R, ActivityError, A],
   compensate: ZFlow[A, ActivityError, Any]
 ) { self =>
-  val inputSchema  = SchemaOrNothing.fromSchema(operation.inputSchema)
-  val resultSchema = SchemaOrNothing.fromSchema(operation.resultSchema)
+  val inputSchema: Schema[_ >: R]  = operation.inputSchema
+  val resultSchema: Schema[_ <: A] = operation.resultSchema
 
   def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] =
     ZFlow.RunActivity(input, self)
 
   def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit
-    ev: (R1, R2) <:< R,
-    schema: SchemaOrNothing.Aux[A]
+    ev: (R1, R2) <:< R
   ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2)].apply(Remote.tuple2((R1, R2)))
 
   def apply[R1, R2, I3](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3])(implicit
-    ev: (R1, R2, I3) <:< R,
-    schema: SchemaOrNothing.Aux[A]
+    ev: (R1, R2, I3) <:< R
   ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2, I3)].apply(Remote.tuple3((R1, R2, i3)))
 
   def apply[R1, R2, I3, I4](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3], i4: Remote[I4])(implicit
-    ev: (R1, R2, I3, I4) <:< R,
-    schema: SchemaOrNothing.Aux[A]
+    ev: (R1, R2, I3, I4) <:< R
   ): ZFlow[Any, ActivityError, A] =
     self.narrow[(R1, R2, I3, I4)].apply(Remote.tuple4((R1, R2, i3, i4)))
 

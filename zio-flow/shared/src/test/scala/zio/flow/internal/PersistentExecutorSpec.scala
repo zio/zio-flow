@@ -6,6 +6,7 @@ import zio.schema.Schema
 import zio.test.Assertion.{dies, equalTo, hasMessage}
 import zio.test.{TestAspect, TestClock, TestResult, assert, assertTrue}
 import zio._
+import zio.stream.ZNothing
 
 import java.net.URI
 import java.time.Instant
@@ -124,7 +125,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       assertTrue(result == 12)
     },
     testFlow("iterate") {
-      ZFlow.succeed(1).iterate[Any, Nothing, Int](_ + 1)(_ !== 10)
+      ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
       assertTrue(result == 10)
     } @@ TestAspect.ignore, // TODO: fix recursion support
@@ -160,7 +161,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testFlow("unwrap") {
       val flow = for {
-        wrapped   <- ZFlow.input[ZFlow[Any, Nothing, Int]]
+        wrapped   <- ZFlow.input[ZFlow[Any, ZNothing, Int]]
         unwrapped <- ZFlow.unwrap(wrapped)
         result    <- unwrapped
       } yield result
@@ -174,8 +175,8 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         flow = for {
                  flow1 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L)).as(1).fork
                  flow2 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L)).as(2).fork
-                 r1 <- flow1.await[Nothing, Int] // TODO: avoid this explicit type annotation
-                 r2 <- flow2.await[Nothing, Int]
+                 r1 <- flow1.await[ZNothing, Int] // TODO: avoid this explicit type annotation
+                 r2 <- flow2.await[ZNothing, Int]
                  _  <- ZFlow.log(r1.toString)
                } yield (r1.toOption, r2.toOption)
         fiber   <- flow.evaluateTestPersistent("fork").fork
@@ -250,7 +251,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
-  private def testFlowAndLogsExit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
+  private def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String
   )(flow: ZFlow[Any, E, A])(assert: (Exit[E, A], Chunk[String]) => TestResult) =
     test(label) {
@@ -280,24 +281,24 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield assert(flowResult, logLines)
     }
 
-  private def testFlowAndLogs[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
+  private def testFlowAndLogs[E: Schema, A: Schema](
     label: String
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult) =
     testFlowAndLogsExit(label)(flow) { case (exit, logs) =>
       exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
     }
 
-  private def testFlow[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](label: String)(flow: ZFlow[Any, E, A])(
+  private def testFlow[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
     assert: A => TestResult
   ) =
     testFlowAndLogs(label)(flow) { case (result, _) => assert(result) }
 
-  private def testFlowExit[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](label: String)(flow: ZFlow[Any, E, A])(
+  private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
     assert: Exit[E, A] => TestResult
   ) =
     testFlowAndLogsExit(label)(flow) { case (result, _) => assert(result) }
 
-  private def testRestartFlowAndLogs[E: SchemaOrNothing.Aux, A: SchemaOrNothing.Aux](
+  private def testRestartFlowAndLogs[E: Schema, A: Schema](
     label: String
   )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Chunk[String], Chunk[String]) => TestResult) =
     test(label) {
@@ -330,11 +331,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         results <- {
           val break: ZFlow[Any, Nothing, Unit] =
             (ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))(
-              SchemaOrNothing.nothing,
-              SchemaOrNothing[Unit],
-              SchemaOrNothing[Unit]
-            ) // TODO: ambigous implicit :(
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
           val finalFlow = flow(break)
           for {
             fiber1 <- finalFlow

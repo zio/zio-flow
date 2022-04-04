@@ -1,43 +1,17 @@
 package zio.flow
 
 import zio.schema._
+import zio.stream.ZNothing
 import zio.{Chunk, Duration}
 
 import java.time.temporal.ChronoUnit
 import scala.util.Try
 
-// TODO: get rid of the whole thing
-trait SchemaOrNothing {
-  type A
-  val schema: Schema[A]
-
-  override def toString: String = schema.toString
-}
-
-object SchemaOrNothing {
-  type Aux[_A] = SchemaOrNothing {
-    type A = _A
-  }
-
-  // TODO: fromAst?
-
-  implicit def fromSchema[_A: Schema]: SchemaOrNothing.Aux[_A] = new SchemaOrNothing {
-    override type A = _A
-    override val schema: Schema[_A] = Schema[_A]
-  }
-
-  implicit def nothing: SchemaOrNothing.Aux[Nothing] = new SchemaOrNothing {
-    override type A = Nothing
-
-    // NOTE: Schema.Fail would be more correct but that makes it unserializable currently
-    override val schema: Schema[Nothing] =
-      Schema[Unit].transformOrFail[Nothing](_ => Left("nothing"), (_: Nothing) => Left("nothing"))
-  }
-
-  def apply[A: SchemaOrNothing.Aux]: SchemaOrNothing.Aux[A] = implicitly[SchemaOrNothing.Aux[A]]
-}
-
 trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
+
+  // NOTE: Schema.Fail would be more correct but that makes it unserializable currently
+  implicit val schemaZNothing: Schema[ZNothing] =
+    Schema[Unit].transformOrFail[ZNothing](_ => Left("nothing"), (_: ZNothing) => Left("nothing"))
 
   implicit val schemaDuration: Schema[Duration] = Schema.Primitive(StandardType.DurationType)
 

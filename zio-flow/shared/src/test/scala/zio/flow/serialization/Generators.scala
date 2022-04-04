@@ -11,10 +11,11 @@ import zio.flow.{
   Remote,
   RemoteVariableName,
   SchemaAndValue,
-  SchemaOrNothing,
-  ZFlow
+  ZFlow,
+  schemaZNothing
 }
 import zio.schema.{DefaultJavaTimeSchemas, Schema}
+import zio.stream.ZNothing
 import zio.test.{Gen, Sized}
 import zio.{Duration, Random, flow}
 
@@ -140,7 +141,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genThrowableSchemaAndValue: Gen[Random with Sized, SchemaAndValue[Throwable]] =
     Gen.alphaNumericString.map(msg =>
       SchemaAndValue.fromSchemaAndValue(
-        SchemaOrNothing.fromSchema(zio.flow.schemaThrowable).schema,
+        zio.flow.schemaThrowable,
         new Generators.TestException(msg)
       )
     )
@@ -319,8 +320,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       left  <- genPrimitiveSchemaAndValue
       right <- genPrimitiveSchemaAndValue
       either <- Gen.oneOf(
-                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
-                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                  Gen.const(Left((left.toRemote, right.schema.asInstanceOf[Schema[Any]]))),
+                  Gen.const(Right((left.schema.asInstanceOf[Schema[Any]], right.toRemote)))
                 )
     } yield Remote.Either0(either)
 
@@ -329,16 +330,16 @@ trait Generators extends DefaultJavaTimeSchemas {
       left  <- genPrimitiveSchemaAndValue
       right <- genPrimitiveSchemaAndValue
       either <- Gen.oneOf(
-                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
-                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                  Gen.const(Left((left.toRemote, right.schema.asInstanceOf[Schema[Any]]))),
+                  Gen.const(Right((left.schema.asInstanceOf[Schema[Any]], right.toRemote)))
                 )
       (f, cSchema) <- genEvaluatedRemoteFunctionWithResultSchema
-      aSchema       = SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]])
+      aSchema       = left.schema.asInstanceOf[Schema[Any]]
     } yield Remote.FlatMapEither[Any, Any, Any](
       Remote.Either0(either),
       f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]],
       aSchema,
-      SchemaOrNothing.fromSchema(cSchema)
+      cSchema
     )
 
   lazy val genFoldEither: Gen[Random with Sized, Remote[Any]] =
@@ -346,8 +347,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       left  <- genPrimitiveSchemaAndValue
       right <- genPrimitiveSchemaAndValue
       either <- Gen.oneOf(
-                  Gen.const(Left((left.toRemote, SchemaOrNothing.fromSchema(right.schema.asInstanceOf[Schema[Any]])))),
-                  Gen.const(Right((SchemaOrNothing.fromSchema(left.schema.asInstanceOf[Schema[Any]]), right.toRemote)))
+                  Gen.const(Left((left.toRemote, right.schema.asInstanceOf[Schema[Any]]))),
+                  Gen.const(Right((left.schema.asInstanceOf[Schema[Any]], right.toRemote)))
                 )
       // TODO: generate functions compatible with the generated either
       leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
@@ -365,7 +366,7 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(
                     (
                       error.toRemote,
-                      SchemaOrNothing.fromSchema(value.schema.asInstanceOf[Schema[Any]])
+                      value.schema.asInstanceOf[Schema[Any]]
                     )
                   ),
                   Gen.const(value.toRemote)
@@ -686,23 +687,23 @@ trait Generators extends DefaultJavaTimeSchemas {
       f = Remote.RemoteFunction((a: Remote[Int]) =>
             Remote.Tuple2(Remote("done"), Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))
           )
-    } yield ZFlow.Modify(svar, f.evaluated)(SchemaOrNothing.fromSchema[String])
+    } yield ZFlow.Modify(svar, f.evaluated)(Schema[String])
 
-  lazy val genZFlowFold: Gen[Random with Sized, ZFlow.Fold[Any, Nothing, Nothing, Instant, Any]] =
+  lazy val genZFlowFold: Gen[Random with Sized, ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any]] =
     for {
       flow                  <- genZFlowNow
       successSchemaAndValue <- genPrimitiveSchemaAndValue
       ifSuccess =
-        RemoteFunction[Instant, ZFlow[Any, Nothing, Any]]((_: Remote[Instant]) =>
-          ZFlow.Return(Remote.Literal(successSchemaAndValue)).asInstanceOf[ZFlow[Any, Nothing, Any]].toRemote
+        RemoteFunction[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
+          ZFlow.Return(Remote.Literal(successSchemaAndValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
         ).evaluated
       ifError =
-        RemoteFunction[Nothing, ZFlow[Any, Nothing, Any]]((_: Remote[Nothing]) =>
-          ZFlow.Return(Remote.Literal(successSchemaAndValue)).asInstanceOf[ZFlow[Any, Nothing, Any]].toRemote
+        RemoteFunction[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
+          ZFlow.Return(Remote.Literal(successSchemaAndValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
         ).evaluated
-    } yield ZFlow.Fold[Any, Nothing, Nothing, Instant, Any](flow, ifError, ifSuccess)(
-      SchemaOrNothing.nothing,
-      SchemaOrNothing.fromSchema(successSchemaAndValue.schema.asInstanceOf[Schema[Any]])
+    } yield ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any](flow, ifError, ifSuccess)(
+      zio.flow.schemaZNothing,
+      successSchemaAndValue.schema.asInstanceOf[Schema[Any]]
     )
 
   lazy val genZFlowApply: Gen[Random with Sized, ZFlow[Any, Any, Any]] =
@@ -710,8 +711,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       resultFlow <- Gen.oneOf(genZFlowFold, genZFlowModify, genZFlowReturn)
     } yield ZFlow
       .Apply[Int, Nothing, Any](RemoteFunction((_: Remote[Int]) => resultFlow.toRemote).evaluated)(
-        SchemaOrNothing.nothing,
-        resultFlow.resultSchema.asInstanceOf[SchemaOrNothing.Aux[Any]]
+        zio.flow.schemaZNothing,
+        resultFlow.resultSchema.asInstanceOf[Schema[Any]]
       )
       .asInstanceOf[ZFlow[Any, Any, Any]]
 
@@ -730,7 +731,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowInput: Gen[Random with Sized, ZFlow.Input[Any]] =
     for {
       schemaAndValue <- genPrimitiveSchemaAndValue
-      input           = ZFlow.Input()(SchemaOrNothing.fromSchema(schemaAndValue.schema))
+      input           = ZFlow.Input()(schemaAndValue.schema)
     } yield input.asInstanceOf[ZFlow.Input[Any]]
 
   lazy val genZFlowEnsuring: Gen[Random with Sized, ZFlow.Ensuring[Any, Any, Any]] =
@@ -745,8 +746,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       remoteFlow = Remote.Flow(flow)
     } yield ZFlow
       .Unwrap(remoteFlow)(
-        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
-        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+        schemaZNothing.asInstanceOf[Schema[Any]],
+        Schema[Int].asInstanceOf[Schema[Any]]
       )
       .asInstanceOf[ZFlow.Unwrap[Any, Any, Any]]
 
@@ -754,15 +755,15 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       schemaAndValue <- genPrimitiveSchemaAndValue
       nested          = Remote.Nested(schemaAndValue.toRemote)
-    } yield ZFlow.UnwrapRemote(nested)(SchemaOrNothing.fromSchema(schemaAndValue.schema.asInstanceOf[Schema[Any]]))
+    } yield ZFlow.UnwrapRemote(nested)(schemaAndValue.schema.asInstanceOf[Schema[Any]])
 
   lazy val genZFlowFork: Gen[Random with Sized, ZFlow.Fork[Any, Any, Any]] =
     for {
       flow <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
     } yield ZFlow
       .Fork(flow)(
-        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
-        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+        schemaZNothing.asInstanceOf[Schema[Any]],
+        Schema[Int].asInstanceOf[Schema[Any]]
       )
       .asInstanceOf[ZFlow.Fork[Any, Any, Any]]
 
@@ -772,8 +773,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       duration <- genDurationFromLong
     } yield ZFlow
       .Timeout(flow, duration.asInstanceOf[Remote[Duration]])(
-        SchemaOrNothing.nothing.asInstanceOf[SchemaOrNothing.Aux[Any]],
-        SchemaOrNothing.fromSchema[Int].asInstanceOf[SchemaOrNothing.Aux[Any]]
+        zio.flow.schemaZNothing.asInstanceOf[Schema[Any]],
+        Schema[Int].asInstanceOf[Schema[Any]]
       )
       .asInstanceOf[ZFlow.Timeout[Any, Any, Any]]
 
@@ -798,7 +799,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowAwait: Gen[Random with Sized, ZFlow.Await[String, Int]] =
     for {
       executingFlow <- genExecutingFlow[String, Int]
-    } yield ZFlow.Await[String, Int](executingFlow)(SchemaOrNothing.fromSchema[String], SchemaOrNothing.fromSchema[Int])
+    } yield ZFlow.Await[String, Int](executingFlow)(Schema[String], Schema[Int])
 
   lazy val genZFlowInterrupt: Gen[Random with Sized, ZFlow.Interrupt[String, Int]] =
     for {
