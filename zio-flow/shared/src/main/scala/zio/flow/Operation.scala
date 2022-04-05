@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.schema.ast.SchemaAst
+import zio.flow.serialization.FlowSchemaAst
 import zio.schema._
 
 sealed trait Operation[-R, +A] {
@@ -35,26 +35,26 @@ object Operation {
 
   object Http {
     def schema[R, A]: Schema[Http[R, A]] =
-      Schema.CaseClass5[java.net.URI, String, Map[String, String], SchemaAst, SchemaAst, Http[R, A]](
+      Schema.CaseClass5[java.net.URI, String, Map[String, String], FlowSchemaAst, FlowSchemaAst, Http[R, A]](
         Schema.Field("url", Schema[java.net.URI]),
         Schema.Field("method", Schema[String]),
         Schema.Field("headers", Schema.map[String, String]),
-        Schema.Field("inputSchema", SchemaAst.schema),
-        Schema.Field("outputSchema", SchemaAst.schema),
+        Schema.Field("inputSchema", FlowSchemaAst.schema),
+        Schema.Field("outputSchema", FlowSchemaAst.schema),
         { case (url, method, headers, inputSchemaAst, outputSchemaAst) =>
           Http(
             url,
             method,
             headers,
-            inputSchemaAst.toSchema.asInstanceOf[Schema[R]],
-            outputSchemaAst.toSchema.asInstanceOf[Schema[A]]
+            inputSchemaAst.toSchema[R],
+            outputSchemaAst.toSchema[A]
           )
         },
         _.url,
         _.method,
         _.headers,
-        _.inputSchema.ast,
-        _.resultSchema.ast
+        op => FlowSchemaAst.fromSchema(op.inputSchema),
+        op => FlowSchemaAst.fromSchema(op.resultSchema)
       )
 
     def schemaCase[R, A]: Schema.Case[Http[R, A], Operation[R, A]] =

@@ -22,7 +22,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
         //      evalWithCodec(ProtobufCodec) // TODO: fix
       ),
       test("Remote schema is serializable") {
-        val schema             = Remote.schemaRemoteAny
+        val schema             = Remote.schemaAny
         val serialized         = JsonCodec.encode(SchemaAst.schema)(schema.ast)
         val deserialized       = JsonCodec.decode(SchemaAst.schema)(serialized)
         val deserializedSchema = deserialized.map(_.toSchema)
@@ -218,8 +218,8 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     }
 
   private def roundtrip(codec: Codec, value: Remote[Any]): Assert = {
-    val encoded = codec.encode(Remote.schemaRemoteAny)(value)
-    val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
+    val encoded = codec.encode(Remote.schemaAny)(value)
+    val decoded = codec.decode(Remote.schemaAny)(encoded)
 
 //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
@@ -231,8 +231,8 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     value: Remote[A],
     test: (A, A) => Boolean = (a: A, b: A) => a == b
   ): ZIO[RemoteContext, String, Assert] = {
-    val encoded = codec.encode(Remote.schemaRemoteAny)(value)
-    val decoded = codec.decode(Remote.schemaRemoteAny)(encoded)
+    val encoded = codec.encode(Remote.schemaAny)(value)
+    val decoded = codec.decode(Remote.schemaAny)(encoded)
 
 //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
