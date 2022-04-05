@@ -167,7 +167,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       flow.provide(ZFlow.succeed(100))
     } { result =>
       assertTrue(result == 100)
-    } @@ TestAspect.ignore, // TODO: fix recursive schema serialization
+    },
     test("fork") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)

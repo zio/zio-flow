@@ -96,7 +96,7 @@ final case class PersistentExecutor(
       def onError(value: Remote[_], stateChange: StateChange = StateChange.none): UIO[StepResult] =
         ZIO.succeed(StepResult(stateChange, Some(Left(value))))
 
-      //      println(s"STEP ${state.current}")
+//    println(s"STEP ${state.current}")
 
       state.current match {
         case Return(value) =>
@@ -238,7 +238,7 @@ final case class PersistentExecutor(
 
         case UnwrapRemote(remote) =>
           for {
-            evaluated <- eval(remote.asInstanceOf[Remote[Remote[Any]]])(Remote.schemaRemoteAny)
+            evaluated <- eval(remote.asInstanceOf[Remote[Remote[Any]]])(Remote.schemaAny)
           } yield StepResult(StateChange.none, Some(Right(evaluated)))
 
         case fork @ Fork(workflow) =>

@@ -19,7 +19,7 @@ package zio.flow
 import zio.ZIO
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
-import zio.schema.ast.SchemaAst
+import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DynamicValue, Schema, StandardType}
 
 import java.math.BigDecimal
@@ -189,13 +189,13 @@ object Remote {
 
   object Variable {
     implicit def schema[A]: Schema[Variable[A]] =
-      Schema.CaseClass2[String, SchemaAst, Variable[A]](
+      Schema.CaseClass2[String, FlowSchemaAst, Variable[A]](
         Schema.Field("identifier", Schema.primitive[String]),
-        Schema.Field("schema", SchemaAst.schema),
-        construct = (identifier: String, s: SchemaAst) =>
+        Schema.Field("schema", FlowSchemaAst.schema),
+        construct = (identifier: String, s: FlowSchemaAst) =>
           Variable(RemoteVariableName(identifier), s.toSchema.asInstanceOf[Schema[A]]),
         extractField1 = (variable: Variable[A]) => RemoteVariableName.unwrap(variable.identifier),
-        extractField2 = (variable: Variable[A]) => SchemaAst.fromSchema(variable.schemaA)
+        extractField2 = (variable: Variable[A]) => FlowSchemaAst.fromSchema(variable.schemaA)
       )
 
     def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
@@ -764,22 +764,22 @@ object Remote {
       Schema
         .tuple2(
           Schema.defer(Remote.schema[A]),
-          SchemaAst.schema
+          FlowSchemaAst.schema
         )
         .transform(
-          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[B]])) },
-          { case (v, s) => (v, s.schema.ast) }
+          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema[B])) },
+          { case (v, s) => (v, FlowSchemaAst.fromSchema(s.schema)) }
         )
 
     private def rightSchema[A, B]: Schema[(SchemaOrNothing.Aux[A], Remote[B])] =
       Schema
         .tuple2(
-          SchemaAst.schema,
+          FlowSchemaAst.schema,
           Schema.defer(Remote.schema[B])
         )
         .transform(
-          { case (ast, v) => (SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[A]]), v) },
-          { case (s, v) => (s.schema.ast, v) }
+          { case (ast, v) => (SchemaOrNothing.fromSchema(ast.toSchema[A]), v) },
+          { case (s, v) => (FlowSchemaAst.fromSchema(s.schema), v) }
         )
 
     private def eitherSchema[A, B]
@@ -830,23 +830,23 @@ object Remote {
       Schema.CaseClass4[Remote[Either[A, B]], EvaluatedRemoteFunction[
         B,
         Either[A, C]
-      ], SchemaAst, SchemaAst, FlatMapEither[A, B, C]](
+      ], FlowSchemaAst, FlowSchemaAst, FlatMapEither[A, B, C]](
         Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
         Schema.Field("f", EvaluatedRemoteFunction.schema[B, Either[A, C]]),
-        Schema.Field("aSchema", SchemaAst.schema),
-        Schema.Field("cSchema", SchemaAst.schema),
+        Schema.Field("aSchema", FlowSchemaAst.schema),
+        Schema.Field("cSchema", FlowSchemaAst.schema),
         { case (either, ef, aAst, cAst) =>
           FlatMapEither(
             either,
             ef,
-            SchemaOrNothing.fromSchema(aAst.toSchema.asInstanceOf[Schema[A]]),
-            SchemaOrNothing.fromSchema(cAst.toSchema.asInstanceOf[Schema[C]])
+            SchemaOrNothing.fromSchema(aAst.toSchema[A]),
+            SchemaOrNothing.fromSchema(cAst.toSchema[C])
           )
         },
         _.either,
         _.f,
-        _.aSchema.schema.ast,
-        _.cSchema.schema.ast
+        r => FlowSchemaAst.fromSchema(r.aSchema.schema),
+        r => FlowSchemaAst.fromSchema(r.cSchema.schema)
       )
 
     def schemaCase[A]: Schema.Case[FlatMapEither[Any, Any, Any], Remote[A]] =
@@ -989,11 +989,11 @@ object Remote {
       Schema
         .tuple2(
           Schema.defer(Remote.schema[Throwable]),
-          SchemaAst.schema
+          FlowSchemaAst.schema
         )
         .transform(
-          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema.asInstanceOf[Schema[A]])) },
-          { case (v, s) => (v, s.schema.ast) }
+          { case (v, ast) => (v, SchemaOrNothing.fromSchema(ast.toSchema[A])) },
+          { case (v, s) => (v, FlowSchemaAst.fromSchema(s.schema)) }
         )
 
     private def eitherSchema[A]: Schema[Either[(Remote[Throwable], SchemaOrNothing.Aux[A]), Remote[A]]] =
@@ -2531,7 +2531,7 @@ object Remote {
 
   val unit: Remote[Unit] = Remote.Ignore()
 
-  def schema[A]: Schema[Remote[A]] = Schema.EnumN(
+  private def createSchema[A]: Schema[Remote[A]] = Schema.EnumN(
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Flow.schemaCase[A])
@@ -2609,5 +2609,6 @@ object Remote {
       .:+:(OptionContains.schemaCase[A])
   )
 
-  implicit val schemaRemoteAny: Schema[Remote[Any]] = schema[Any]
+  implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
+  def schema[A]: Schema[Remote[A]]            = schemaAny.asInstanceOf[Schema[Remote[A]]]
 }
