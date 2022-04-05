@@ -38,9 +38,6 @@ object SchemaAndValue {
         value.hashCode() ^ schema.ast.hashCode()
     }
 
-  def apply[A](schema0: SchemaOrNothing.Aux[A], value0: DynamicValue): SchemaAndValue[A] =
-    apply(schema0.schema, value0)
-
   def of[A: Schema](value: A): SchemaAndValue[A] =
     fromSchemaAndValue(Schema[A], value)
 

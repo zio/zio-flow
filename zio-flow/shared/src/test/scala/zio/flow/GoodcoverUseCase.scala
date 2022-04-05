@@ -2,6 +2,7 @@ package zio.flow
 
 import zio.flow
 import zio.schema.{DeriveSchema, Schema}
+import zio.stream.ZNothing
 import zio.test._
 
 import java.net.URI
@@ -12,7 +13,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     remoteBoolVar: Remote[RemoteVariable[Boolean]],
     sleepDuration: Long,
     value: Boolean
-  ): ZFlow[Any, Nothing, Unit] = for {
+  ): ZFlow[Any, ZNothing, Unit] = for {
     _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()
@@ -76,7 +77,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     ZFlow.unit
   )
 
-  def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariable[Boolean]]): ZFlow[Any, Nothing, Unit] =
+  def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariable[Boolean]]): ZFlow[Any, ZNothing, Unit] =
     for {
       boolVar <- evaluationDone
       _       <- ZFlow.sleep(Remote.ofSeconds(3L))
