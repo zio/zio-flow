@@ -731,9 +731,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowInput: Gen[Random with Sized, ZFlow.Input[Any]] =
     for {
       input <- Gen.oneOf(
-                 genPrimitiveSchemaAndValue.map(schemaAndValue =>
-                   ZFlow.Input()(schemaAndValue.schema)
-                 ),
+                 genPrimitiveSchemaAndValue.map(schemaAndValue => ZFlow.Input()(schemaAndValue.schema)),
                  Gen.const(ZFlow.Input()(ZFlow.schemaAny)),
                  Gen.const(ZFlow.Input()(Remote.schemaAny))
                )
