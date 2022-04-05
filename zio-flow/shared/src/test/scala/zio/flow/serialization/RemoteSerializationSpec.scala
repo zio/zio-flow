@@ -4,6 +4,7 @@ import zio.flow._
 import zio.schema.ast.SchemaAst
 import zio.schema.codec.{Codec, JsonCodec}
 import zio.schema.{DeriveSchema, Schema}
+import zio.stream.ZNothing
 import zio.test._
 import zio.{Random, ZIO}
 
@@ -70,7 +71,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("nested")(roundtripCheck(codec, genNested)),
       test("variable")(roundtripCheck(codec, genRemoteVariable)),
       test("variable of nothing") {
-        val variable = Remote.Variable[Nothing](RemoteVariableName("test"), SchemaOrNothing.nothing.schema)
+        val variable = Remote.Variable[ZNothing](RemoteVariableName("test"), schemaZNothing)
         roundtrip(codec, variable)
       },
       test("add numeric")(roundtripCheck(codec, genAddNumeric)),
@@ -154,7 +155,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
             either.fold(
               msg => {
                 val throwable: Throwable = new Generators.TestException(msg)
-                Left((Remote(throwable), SchemaOrNothing.fromSchema[Int]))
+                Left((Remote(throwable), Schema[Int]))
               },
               value => Right(value)
             )
