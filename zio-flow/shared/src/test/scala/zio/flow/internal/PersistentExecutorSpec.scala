@@ -237,7 +237,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         logs2.contains("second"),
         !logs2.contains("first")
       )
-    } @@ TestAspect.ignore // TODO: finish support for restarting persitent flows
+    },
+    testRestartFlowAndLogs("newVar[Int]-|-get") { break =>
+      for {
+        v      <- ZFlow.newVar[Int]("var1", 100)
+        _      <- break
+        result <- v.get
+      } yield result
+    } { (result, _, _) =>
+      assertTrue(
+        result == 100
+      )
+    }
   )
 
   override def spec =
@@ -246,7 +257,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory
-      )
+      ) @@ TestAspect.runtimeConfig(RuntimeConfigAspect.addLogger(ZLogger.default.map(println(_))))
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
