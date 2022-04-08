@@ -1,7 +1,7 @@
 package zio.flow
 
-import zio.{Promise, ZEnvironment, ZIO}
 import zio.flow.internal.{DurableLog, DurablePromise, IndexedStore}
+import zio.{Promise, ZEnvironment, ZIO}
 import zio.flow.serialization._
 import zio.test.{DefaultRunnableSpec, TestEnvironment, ZSpec, assertTrue}
 

@@ -1,7 +1,7 @@
 package zio.flow
 
 import zio._
-import zio.flow.internal._
+import zio.flow.internal.{DurableLog, IndexedStore}
 import zio.test._
 
 object DurableLogSpec extends ZIOSpecDefault {

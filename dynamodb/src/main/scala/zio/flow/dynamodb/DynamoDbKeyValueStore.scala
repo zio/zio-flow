@@ -1,10 +1,11 @@
-package zio.flow.internal
+package zio.flow.dynamodb
 
 import zio.aws.core.AwsError
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.dynamodb.model.primitives._
-import zio.aws.dynamodb.model.{AttributeValue, GetItemRequest, ScanRequest, UpdateItemRequest}
-import zio.flow.internal.DynamoDbKeyValueStore._
+import zio.aws.dynamodb.model.{AttributeValue, DeleteItemRequest, GetItemRequest, Put, ScanRequest, TransactWriteItem, TransactWriteItemsRequest, UpdateItemRequest}
+import DynamoDbKeyValueStore._
+import zio.flow.internal.KeyValueStore
 import zio.stream.ZStream
 import zio.{Chunk, IO, URLayer, ZIO}
 
@@ -20,7 +21,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
     val request =
       UpdateItemRequest(
-        TableName(tableName),
+        tableName,
         dynamoDbKey(namespace, key),
         updateExpression = Option(
           UpdateExpression(
@@ -46,7 +47,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
     val request =
       GetItemRequest(
-        TableName(tableName),
+        tableName,
         dynamoDbKey(namespace, key),
         projectionExpression = Option(
           ProjectionExpression(valueColumnName)
@@ -94,37 +95,67 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
         byteChunkPair
       }
   }
+
+  override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
+    dynamoDB
+      .deleteItem(
+        DeleteItemRequest(
+          tableName = tableName,
+          key = dynamoDbKey(namespace, key)
+        )
+      )
+      .mapBoth(
+        ioExceptionOf(s"Error deleting item from <$namespace> namespace", _),
+        _ => ()
+      )
+
+  override def putAll(items: Chunk[KeyValueStore.Item]): IO[IOException, Unit] =
+    dynamoDB
+      .transactWriteItems(
+        TransactWriteItemsRequest(
+          transactItems = items.map { item =>
+            TransactWriteItem(
+              put = Put(
+                tableName = tableName,
+                item = dynamoDbKey(item.namespace, item.key) +
+                  (AttributeName(valueColumnName) -> binaryValue(item.value))
+              )
+            )
+          }
+        )
+      )
+      .mapBoth(
+        ioExceptionOf(s"Error putting multiple items transactionally", _),
+        _ => ()
+      )
 }
 
 object DynamoDbKeyValueStore {
-
-  val live: URLayer[DynamoDb, KeyValueStore] =
+  val layer: URLayer[DynamoDb, KeyValueStore] =
     ZIO
       .service[DynamoDb]
       .map(new DynamoDbKeyValueStore(_))
       .toLayer
 
-  val tableName: String = "_zflow_key_value_store"
+  private[dynamodb] val tableName: TableName = TableName("_zflow_key_value_store")
 
-  val namespaceColumnName: String =
+  private[dynamodb] val namespaceColumnName: String =
     withColumnPrefix("namespace")
 
-  val keyColumnName: String =
+  private[dynamodb] val keyColumnName: String =
     withColumnPrefix("key")
 
-  val valueColumnName: String =
+  private[dynamodb] val valueColumnName: String =
     withColumnPrefix("value")
 
-  object RequestExpressionPlaceholder {
-
+  private object RequestExpressionPlaceholder {
     val namespaceColumn: String = ":namespaceValue"
-
-    val valueColumn: String = ":valueColumnValue"
+    val valueColumn: String     = ":valueColumnValue"
   }
 
-  val scanRequest: ScanRequest =
+  private val scanRequest: ScanRequest =
     ScanRequest(
-      TableName(tableName),
+      tableName,
       projectionExpression = Option(
         ProjectionExpression(
           Seq(keyColumnName, valueColumnName).mkString(", ")
@@ -137,23 +168,23 @@ object DynamoDbKeyValueStore {
       )
     )
 
-  def binaryValue(b: Chunk[Byte]): AttributeValue =
+  private def binaryValue(b: Chunk[Byte]): AttributeValue =
     AttributeValue(
       b = Option(BinaryAttributeValue(b))
     )
 
-  def stringValue(s: String): AttributeValue =
+  private def stringValue(s: String): AttributeValue =
     AttributeValue(
       s = Option(StringAttributeValue(s))
     )
 
-  def dynamoDbKey(namespace: String, key: Chunk[Byte]): Map[AttributeName, AttributeValue] =
+  private def dynamoDbKey(namespace: String, key: Chunk[Byte]): Map[AttributeName, AttributeValue] =
     Map(
       AttributeName(namespaceColumnName) -> stringValue(namespace),
       AttributeName(keyColumnName)       -> binaryValue(key)
     )
 
-  def ioExceptionOf(errorContext: String, awsError: AwsError): IOException = {
+  private def ioExceptionOf(errorContext: String, awsError: AwsError): IOException = {
     val error = awsError.toThrowable
 
     new IOException(s"$errorContext: <${error.getMessage}>.", error)

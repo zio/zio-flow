@@ -1,6 +1,7 @@
-package zio.flow.internal
+package zio.flow.cassandra
 
-import CassandraTestContainerSupport.{cassandraV3, cassandraV4, scyllaDb, SessionLayer}
+import CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
+import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
@@ -125,7 +126,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
           )
         }
       }
-    ).provideCustomLayerShared(database >>> CassandraKeyValueStore.live) @@ nondeterministic @@ sequential
+    ).provideCustomLayerShared(database >>> CassandraKeyValueStore.layer) @@ nondeterministic @@ sequential
 
   private def newTimeBasedName() =
     s"${java.time.Instant.now}"

@@ -1,4 +1,4 @@
-package zio.flow.internal
+package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.{keyColumnName, namespaceColumnName}
 import LocalStackTestContainerSupport.awsContainer
@@ -39,10 +39,10 @@ object DynamoDbSupport {
   lazy val dynamoDbLayer: DynamoDB =
     awsLayerFor(Seq(AwsService.DYNAMODB))
 
-  def createDynamoDbTable(name: String): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
+  def createDynamoDbTable(name: TableName): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
     val createTableRequest =
       CreateTableRequest(
-        tableName = TableName(name),
+        tableName = name,
         attributeDefinitions = Seq(
           AttributeDefinition(
             KeySchemaAttributeName(namespaceColumnName),

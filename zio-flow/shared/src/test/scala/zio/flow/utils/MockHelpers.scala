@@ -1,12 +1,9 @@
 package zio.flow.utils
 
 import zio._
-import zio.flow.internal.{DurableLog, KeyValueStore}
 import zio.flow.{Activity, ActivityError, Operation, OperationExecutor, ZFlow}
 import zio.schema.Schema
-import zio.stream.ZStream
 
-import java.io.IOException
 import java.net.URI
 
 object MockHelpers {
@@ -30,23 +27,5 @@ object MockHelpers {
       Console
         .printLine("Activity processing")
         .mapBoth(error => ActivityError("Failed to write to console", Some(error)), _ => input.asInstanceOf[A])
-  }
-
-  val doesNothingDurableLog: DurableLog = new DurableLog {
-    override def append(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
-      Console.printLine("Append Does Nothing").provideLayer(Console.live).as(12L)
-
-    override def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
-      ZStream.fromChunk(Chunk.empty)
-  }
-
-  val doesNothingKVStore: KeyValueStore = new KeyValueStore {
-    override def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
-      ZIO.succeed(true)
-
-    override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] = ZIO.none
-
-    override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
-      ZStream.fromChunk(Chunk.empty) zip ZStream.fromChunk(Chunk.empty)
   }
 }

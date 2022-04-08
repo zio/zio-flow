@@ -1,4 +1,4 @@
-package zio.flow.internal
+package zio.flow.cassandra
 
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
