@@ -319,14 +319,16 @@ object ZFlow {
       Schema.Case("Apply", schema[Any, E, A], _.asInstanceOf[Apply[Any, E, A]])
   }
 
-  final case class Log(message: String) extends ZFlow[Any, Nothing, Unit] {
+  final case class Log(message: Remote[String]) extends ZFlow[Any, Nothing, Unit] {
     val errorSchema                = Schema[ZNothing]
     val resultSchema: Schema[Unit] = Schema[Unit]
   }
 
   object Log {
     val schema: Schema[Log] =
-      Schema[String].transform(Log(_), _.message)
+      Schema.defer {
+        Remote.schema[String].transform(Log(_), _.message)
+      }
 
     def schemaCase[R, E, A]: Schema.Case[ZFlow.Log, ZFlow[R, E, A]] =
       Schema.Case("Log", schema, _.asInstanceOf[Log])
@@ -817,7 +819,9 @@ object ZFlow {
   def fromEither[E: Schema, A: Schema](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
-  def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(message)
+  def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(Remote(message))
+
+  def log(remoteMessage: Remote[String]): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(remoteMessage)
 
   def iterate[R, E, A](
     initial: Remote[A],

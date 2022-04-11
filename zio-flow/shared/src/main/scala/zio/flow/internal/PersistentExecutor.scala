@@ -448,8 +448,10 @@ final case class PersistentExecutor(
 
             ZIO.succeed(StepResult(StateChange.setCurrent(zFlow) ++ StateChange.increaseTempVarCounter, None))
 
-          case Log(message) =>
-            ZIO.log(message) *> onSuccess(())
+          case Log(remoteMessage) =>
+            eval(remoteMessage).flatMap { message =>
+              ZIO.log(message) *> onSuccess(())
+            }
 
           case GetExecutionEnvironment =>
             onSuccess(Remote.InMemoryLiteral(execEnv))
