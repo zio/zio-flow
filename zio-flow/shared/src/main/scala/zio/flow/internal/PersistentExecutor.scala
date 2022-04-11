@@ -806,7 +806,49 @@ object PersistentExecutor {
   }
 
   object State {
-    implicit def schema[E, A]: Schema[State[E, A]] = DeriveSchema.gen
+    implicit def schema[E, A]: Schema[State[E, A]] =
+      Schema.CaseClass9(
+        Schema.Field("workflowId", Schema[String]),
+        Schema.Field("current", ZFlow.schemaAny),
+        Schema.Field("stack", Schema[List[Instruction]]),
+        Schema.Field("result", Schema[DurablePromise[Either[Throwable, E], A]]),
+        Schema.Field("envStack", Schema[List[Remote[_]]]),
+        Schema.Field("tempVarCounter", Schema[Int]),
+        Schema.Field("promiseIdCounter", Schema[Int]),
+        Schema.Field("forkCounter", Schema[Int]),
+        Schema.Field("status", Schema[PersistentWorkflowStatus]),
+        (
+          workflowId: String,
+          current: ZFlow[_, _, _],
+          stack: List[Instruction],
+          result: DurablePromise[Either[Throwable, E], A],
+          envStack: List[Remote[_]],
+          tempVarCounter: Int,
+          promiseIdCounter: Int,
+          forkCounter: Int,
+          status: PersistentWorkflowStatus
+        ) =>
+          State(
+            workflowId,
+            current,
+            stack,
+            result,
+            envStack,
+            tempVarCounter,
+            promiseIdCounter,
+            forkCounter,
+            status
+          ),
+        _.workflowId,
+        _.current.asInstanceOf[ZFlow[Any, Any, Any]],
+        _.stack,
+        _.result,
+        _.envStack,
+        _.tempVarCounter,
+        _.promiseIdCounter,
+        _.forkCounter,
+        _.status
+      )
   }
 }
 
