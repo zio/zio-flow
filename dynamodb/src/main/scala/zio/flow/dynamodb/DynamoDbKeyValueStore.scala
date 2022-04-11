@@ -3,7 +3,16 @@ package zio.flow.dynamodb
 import zio.aws.core.AwsError
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.dynamodb.model.primitives._
-import zio.aws.dynamodb.model.{AttributeValue, DeleteItemRequest, GetItemRequest, Put, ScanRequest, TransactWriteItem, TransactWriteItemsRequest, UpdateItemRequest}
+import zio.aws.dynamodb.model.{
+  AttributeValue,
+  DeleteItemRequest,
+  GetItemRequest,
+  Put,
+  ScanRequest,
+  TransactWriteItem,
+  TransactWriteItemsRequest,
+  UpdateItemRequest
+}
 import DynamoDbKeyValueStore._
 import zio.flow.internal.KeyValueStore
 import zio.stream.ZStream

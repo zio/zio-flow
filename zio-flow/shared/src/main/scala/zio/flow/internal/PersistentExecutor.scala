@@ -519,11 +519,13 @@ final case class PersistentExecutor(
 
     def runSteps(stateRef: Ref[State[E, A]]): ZIO[RemoteContext, IOException, Unit] =
       for {
-        state0     <- stateRef.get
-        stepResult <- step(state0)
-        state1      = stepResult.stateChange(state0)
-        _          <- stateRef.set(state1)
-        _          <- persistState(uniqueId, state0, stepResult.stateChange, state1)
+        state0 <- stateRef.get
+
+        recordingContext <- RecordingRemoteContext.startRecording
+        stepResult       <- step(state0).provideService(recordingContext.remoteContext)
+        state1            = stepResult.stateChange(state0)
+        _                <- stateRef.set(state1)
+        _                <- persistState(uniqueId, state0, stepResult.stateChange, state1, recordingContext)
         continue <- stepResult.result match {
                       case Some(Left(error)) =>
                         onError(stateRef, error)
@@ -593,14 +595,26 @@ final case class PersistentExecutor(
     id: String,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
-    state1: PersistentExecutor.State[_, _]
+    state1: PersistentExecutor.State[_, _],
+    recordingContext: RecordingRemoteContext
   ): IO[IOException, Unit] = {
     val key            = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
     val persistedState = execEnv.serializer.serialize(state1)
-    ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)") *>
-      kvStore.put("_zflow_workflow_states", key, persistedState).unit
-
-    // TODO: modified remote variables from RemoteContext should be persisted transactionally with this
+    for {
+      _                 <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
+      modifiedVariables <- recordingContext.getModifiedVariables
+      _                 <- ZIO.logInfo(s"Persisting changes to ${modifiedVariables.size} remote variables")
+      _ <- kvStore.putAll(
+             modifiedVariables.map { case (name, value) =>
+               KeyValueStore.Item(
+                 "_zflow_variables",
+                 Chunk.fromArray(RemoteVariableName.unwrap(name).getBytes(StandardCharsets.UTF_8)),
+                 execEnv.serializer.serialize(value)
+               )
+             } :+
+               KeyValueStore.Item("_zflow_workflow_states", key, persistedState)
+           )
+    } yield ()
   }
 
   private def loadState(id: String): IO[IOException, Option[PersistentExecutor.State[_, _]]] =
