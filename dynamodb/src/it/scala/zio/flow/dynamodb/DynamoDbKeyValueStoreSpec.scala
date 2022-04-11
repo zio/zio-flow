@@ -1,7 +1,8 @@
-package zio.flow.internal
+package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.tableName
 import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
+import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
@@ -10,7 +11,7 @@ import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
 object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
 
   private val dynamoDbKeyValueStore =
-    dynamoDbLayer >+> DynamoDbKeyValueStore.live
+    dynamoDbLayer >+> DynamoDbKeyValueStore.layer
 
   private val dynamoDbNameGen =
     Gen.alphaNumericStringBounded(

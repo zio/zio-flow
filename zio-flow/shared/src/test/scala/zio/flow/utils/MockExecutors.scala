@@ -1,7 +1,6 @@
 package zio.flow.utils
 
 import zio._
-import zio.flow.{ExecutionEnvironment, OperationExecutor}
 import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor, ZFlowExecutor}
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.utils.MockHelpers._
@@ -34,19 +33,6 @@ object MockExecutors {
 //          ref
 //        )
 //      )
-
-  val mockPersistentLiveClock: ZIO[DurableLog, Nothing, PersistentExecutor] =
-    for {
-      durableLog <- ZIO.service[DurableLog]
-      ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
-    } yield PersistentExecutor(
-      Clock.ClockLive,
-      ExecutionEnvironment(Serializer.protobuf, Deserializer.protobuf),
-      durableLog,
-      doesNothingKVStore,
-      mockOpExec.asInstanceOf[OperationExecutor[Any]],
-      ref
-    )
 
   val mockPersistentTestClock
     : ZIO[Scope with Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] = {

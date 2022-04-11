@@ -16,11 +16,11 @@
 
 package zio.flow.internal
 
-import java.io.IOException
-import org.rocksdb.ColumnFamilyHandle
-import zio.rocksdb._
-import zio.{Chunk, IO, UIO, ZIO, ZLayer, ZRef}
+import zio.flow.internal.KeyValueStore.Item
 import zio.stream.ZStream
+import zio.{Chunk, IO, ZIO, ZLayer, ZRef}
+
+import java.io.IOException
 
 trait KeyValueStore {
 
@@ -29,19 +29,14 @@ trait KeyValueStore {
   def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]]
 
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
+
+  def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit]
+
+  def putAll(items: Chunk[Item]): IO[IOException, Unit]
 }
 
 object KeyValueStore {
-
-  val live: ZLayer[RocksDB, IOException, KeyValueStore] =
-    ZLayer {
-      for {
-        rocksDB    <- ZIO.service[RocksDB]
-        namespaces <- getNamespaces(rocksDB)
-      } yield {
-        KeyValueStoreLive(rocksDB, namespaces)
-      }
-    }
+  final case class Item(namespace: String, key: Chunk[Byte], value: Chunk[Byte])
 
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
     ZLayer {
@@ -69,54 +64,11 @@ object KeyValueStore {
       _.scanAll(namespace)
     )
 
-  private def getNamespaces(rocksDB: RocksDB): IO[IOException, Map[Chunk[Byte], ColumnFamilyHandle]] =
-    rocksDB.initialHandles
-      .map(_.map { namespace =>
-        Chunk.fromArray(namespace.getName) -> namespace
-      }.toMap)
-      .refineToOrDie[IOException]
-
-  private final case class KeyValueStoreLive(
-    rocksDB: RocksDB,
-    namespaces: Map[Chunk[Byte], ColumnFamilyHandle]
-  ) extends KeyValueStore {
-
-    def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
-      for {
-        namespace <- getNamespace(namespace)
-        _         <- rocksDB.put(namespace, key.toArray, value.toArray).refineToOrDie[IOException]
-      } yield true
-
-    def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] =
-      for {
-        namespace <- getNamespace(namespace)
-        value     <- rocksDB.get(namespace, key.toArray).refineToOrDie[IOException]
-      } yield value.map(Chunk.fromArray)
-
-    def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
-      ZStream.unwrap {
-        getNamespace(namespace).map { namespace =>
-          rocksDB
-            .newIterator(namespace)
-            .map { case (key, value) => Chunk.fromArray(key) -> Chunk.fromArray(value) }
-            .refineToOrDie[IOException]
-        }
-      }
-
-    def getNamespace(namespace: String): UIO[ColumnFamilyHandle] =
-      ZIO.succeed(namespaces(Chunk.fromArray(namespace.getBytes)))
-  }
-
   private final case class InMemoryKeyValueStore(namespaces: zio.Ref[Map[String, Map[Chunk[Byte], Chunk[Byte]]]])
       extends KeyValueStore {
     override def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
       namespaces.update { ns =>
-        ns.get(namespace) match {
-          case Some(data) =>
-            ns.updated(namespace, data.updated(key, value))
-          case None =>
-            ns + (namespace -> Map(key -> value))
-        }
+        add(ns, Item(namespace, key, value))
       }.as(true)
 
     override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] =
@@ -132,6 +84,32 @@ object KeyValueStore {
             case None        => ZStream.empty
           }
         }
+      }
+
+    override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
+      namespaces.update { ns =>
+        ns.get(namespace) match {
+          case Some(data) =>
+            ns.updated(namespace, data - key)
+          case None =>
+            ns
+        }
+      }
+
+    override def putAll(items: Chunk[Item]): IO[IOException, Unit] =
+      namespaces.update { ns =>
+        items.foldLeft(ns)(add)
+      }
+
+    private def add(
+      ns: Map[String, Map[Chunk[Byte], Chunk[Byte]]],
+      item: Item
+    ): Map[String, Map[Chunk[Byte], Chunk[Byte]]] =
+      ns.get(item.namespace) match {
+        case Some(data) =>
+          ns.updated(item.namespace, data.updated(item.key, item.value))
+        case None =>
+          ns + (item.namespace -> Map(item.key -> item.value))
       }
   }
 }

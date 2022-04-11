@@ -2,7 +2,7 @@ package zio.flow.internal
 
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
-import zio.schema.Schema
+import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.{dies, equalTo, hasMessage}
 import zio.test.{TestAspect, TestClock, TestResult, assert, assertTrue}
 import zio._
@@ -237,7 +237,74 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         logs2.contains("second"),
         !logs2.contains("first")
       )
-    } @@ TestAspect.ignore // TODO: finish support for restarting persitent flows
+    },
+    testRestartFlowAndLogs("newVar[Int]-|-get") { break =>
+      for {
+        v      <- ZFlow.newVar[Int]("var1", 100)
+        _      <- break
+        result <- v.get
+      } yield result
+    } { (result, _, _) =>
+      assertTrue(
+        result == 100
+      )
+    },
+    testRestartFlowAndLogs("newVar[TestData]-|-get") { break =>
+      for {
+        v      <- ZFlow.newVar[TestData]("var1", TestData("test", 100))
+        _      <- break
+        result <- v.get
+      } yield result
+    } { (result, _, _) =>
+      assertTrue(
+        result == TestData("test", 100)
+      )
+    },
+    testRestartFlowAndLogs("provide(log-|-input) (string)") { break =>
+      (for {
+        _ <- ZFlow.log("before break")
+        _ <- break
+        v <- ZFlow.input[String]
+        _ <- ZFlow.log(v)
+      } yield v).provide("abc")
+    } { (result, logs1, logs2) =>
+      assertTrue(
+        result == "abc",
+        logs1.contains("before break"),
+        !logs2.contains("before break"),
+        logs2.contains("abc"),
+        !logs1.contains("abc")
+      )
+    },
+    testRestartFlowAndLogs("provide(log-|-input) (user-defined)") { break =>
+      (for {
+        _ <- break
+        v <- ZFlow.input[TestData]
+      } yield v).provide(TestData("abc", 123))
+    } { (result, _, _) =>
+      assertTrue(
+        result == TestData("abc", 123)
+      )
+    },
+    testRestartFlowAndLogs("newVar,ensuring(set-|-set),get") { break =>
+      for {
+        v <- ZFlow.newVar[Int]("testvar", 1)
+        _ <- (
+               for {
+                 _ <- v.set(10)
+                 _ <- break
+                 _ <- v.set(100)
+               } yield ()
+             ).ensuring {
+               v.update(_ + 1)
+             }
+        r <- v.get
+      } yield r
+    } { (result, _, _) =>
+      assertTrue(
+        result == 101
+      )
+    }
   )
 
   override def spec =
@@ -246,7 +313,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory
-      )
+      ) @@ TestAspect.runtimeConfig(RuntimeConfigAspect.addLogger(ZLogger.default.map(println(_))))
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
@@ -353,4 +420,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         }
       } yield assert.tupled(results)
     }
+
+  case class TestData(a: String, b: Int)
+  object TestData {
+    implicit val schema: Schema[TestData] = DeriveSchema.gen
+  }
 }

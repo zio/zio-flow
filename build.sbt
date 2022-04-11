@@ -36,8 +36,9 @@ lazy val root = project
     publish / skip := true
   )
   .aggregate(
-    cassandraKvStore,
-    dynamoDbKvStore,
+    rocksdb,
+    cassandra,
+    dynamodb,
     docs,
     examplesJVM,
 //    examplesJS,
@@ -53,7 +54,6 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"                   % Version.zio,
-      "dev.zio" %% "zio-rocksdb"           % Version.zioRocksDb,
       "dev.zio" %% "zio-schema"            % Version.zioSchema,
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
@@ -70,12 +70,29 @@ lazy val zioFlowJS = zioFlow.js
 
 lazy val zioFlowJVM = zioFlow.jvm
 
-lazy val cassandraKvStore = project
+lazy val rocksdb = project
+  .in(file("rocksdb"))
+  .dependsOn(zioFlowJVM)
+  .configs(IntegrationTest)
+  .settings(
+    stdSettings("zio-flow-rocksdb"),
+    Defaults.itSettings,
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio-rocksdb" % Version.zioRocksDb
+    ) ++ (
+      commonTestDependencies ++
+        Seq(
+        )
+    ).map(_ % IntegrationTest),
+    testFrameworks += zioTest
+  )
+
+lazy val cassandra = project
   .in(file("cassandra"))
   .dependsOn(zioFlowJVM)
   .configs(IntegrationTest)
   .settings(
-    stdSettings("zio-flow-cassandra-kv-store"),
+    stdSettings("zio-flow-cassandra"),
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "com.scylladb"  % "java-driver-core-shaded"   % Version.cassandraJavaDriver,
@@ -90,12 +107,12 @@ lazy val cassandraKvStore = project
     testFrameworks += zioTest
   )
 
-lazy val dynamoDbKvStore = project
+lazy val dynamodb = project
   .in(file("dynamodb"))
   .dependsOn(zioFlowJVM)
   .configs(IntegrationTest)
   .settings(
-    stdSettings("zio-flow-dynamodb-kv-store"),
+    stdSettings("zio-flow-dynamodb"),
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-aws-dynamodb" % Version.zioAws,

@@ -1,4 +1,4 @@
-package zio.flow.internal
+package zio.flow.dynamodb
 
 import com.dimafeng.testcontainers.LocalStackV2Container
 import zio.ZIO.attemptBlocking
