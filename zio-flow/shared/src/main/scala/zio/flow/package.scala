@@ -16,10 +16,12 @@
 
 package zio
 
+import zio.flow.FlowId.unwrap
 import zio.flow.remote._
 import zio.prelude.Newtype
 import zio.schema.Schema
 
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scala.language.implicitConversions
 
@@ -78,4 +80,12 @@ package object flow extends Schemas {
 
   object RemoteVariableName extends Newtype[String]
   type RemoteVariableName = RemoteVariableName.Type
+
+  object FlowId extends Newtype[String]
+  type FlowId = FlowId.Type
+
+  implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
+    def +(postfix: String): FlowId = FlowId(unwrap(flowId) + postfix)
+    def toRaw: Chunk[Byte]         = Chunk.fromArray(unwrap(flowId).getBytes(StandardCharsets.UTF_8))
+  }
 }

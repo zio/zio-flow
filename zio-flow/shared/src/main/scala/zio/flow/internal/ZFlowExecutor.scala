@@ -17,11 +17,11 @@
 package zio.flow.internal
 
 import zio._
-import zio.flow.ZFlow
+import zio.flow.{FlowId, ZFlow}
 import zio.schema.Schema
 
-trait ZFlowExecutor[-U] {
-  def submit[E: Schema, A: Schema](uniqueId: U, flow: ZFlow[Any, E, A]): IO[E, A]
+trait ZFlowExecutor {
+  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
 }
 
 object ZFlowExecutor {}

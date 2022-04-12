@@ -7,6 +7,7 @@ import zio.flow.{
   Activity,
   ActivityError,
   ExecutingFlow,
+  FlowId,
   Operation,
   Remote,
   RemoteVariableName,
@@ -879,7 +880,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       id        <- Gen.string1(Gen.asciiChar)
       promiseId <- Gen.string1(Gen.asciiChar)
       promise    = DurablePromise[E, A](promiseId)
-    } yield ExecutingFlow.PersistentExecutingFlow(id, promise)
+    } yield ExecutingFlow.PersistentExecutingFlow(FlowId(id), promise)
 }
 
 object Generators {

@@ -36,7 +36,7 @@ final case class PersistentExecutor(
   kvStore: KeyValueStore,
   opExec: OperationExecutor[Any],
   workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
-) extends ZFlowExecutor[String] {
+) extends ZFlowExecutor {
 
   import PersistentExecutor._
 
@@ -54,7 +54,7 @@ final case class PersistentExecutor(
     remote.evalDynamic.mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
 
   def start[E: Schema, A: Schema](
-    uniqueId: String,
+    id: FlowId,
     flow: ZFlow[Any, E, A]
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, E], A]] = {
     import zio.flow.ZFlow._
@@ -80,12 +80,15 @@ final case class PersistentExecutor(
             onSuccess(state.currentEnvironment)
 
           case WaitTill(instant) =>
-            val wait = for {
-              start <- clock.instant
-              end   <- eval(instant)(instantSchema)
-              _     <- clock.sleep(Duration.between(start, end))
-            } yield ()
-            wait *> onSuccess(())
+            for {
+              start   <- clock.instant
+              end     <- eval(instant)(instantSchema)
+              duration = Duration.between(start, end)
+              _       <- ZIO.logInfo(s"Sleeping for $duration")
+              _       <- clock.sleep(duration)
+              _       <- ZIO.logInfo(s"Resuming execution after sleeping $duration")
+              result  <- onSuccess(())
+            } yield result
 
           case modify @ Modify(svar, f0) =>
             // TODO: resume
@@ -217,7 +220,7 @@ final case class PersistentExecutor(
             } yield StepResult(StateChange.none, Some(Right(evaluated)))
 
           case fork @ Fork(workflow) =>
-            val forkId = uniqueId + s"_fork_${state.forkCounter}"
+            val forkId = id + s"_fork_${state.forkCounter}"
             for {
               resultPromise <- start[fork.ValueE, fork.ValueA](
                                  forkId,
@@ -271,7 +274,7 @@ final case class PersistentExecutor(
           case timeout @ Timeout(flow, duration) =>
             for {
               d     <- eval(duration)
-              forkId = uniqueId + s"_timeout_${state.forkCounter}"
+              forkId = id + s"_timeout_${state.forkCounter}"
               resultPromise <-
                 start[timeout.ValueE, timeout.ValueA](
                   forkId,
@@ -527,7 +530,7 @@ final case class PersistentExecutor(
         stepResult       <- step(state0).provideService(recordingContext.remoteContext)
         state1            = stepResult.stateChange(state0)
         _                <- stateRef.set(state1)
-        _                <- persistState(uniqueId, state0, stepResult.stateChange, state1, recordingContext)
+        _                <- persistState(id, state0, stepResult.stateChange, state1, recordingContext)
         continue <- stepResult.result match {
                       case Some(Left(error)) =>
                         onError(stateRef, error)
@@ -540,13 +543,14 @@ final case class PersistentExecutor(
       } yield ()
 
     val durablePromise =
-      DurablePromise.make[Either[Throwable, E], A](uniqueId + "_result")
+      DurablePromise.make[Either[Throwable, E], A](FlowId.unwrap(id + "_result"))
 
     for {
-      state <- loadState(uniqueId).map(
+      _ <- persistWorkflowStarted(id, Schema[E], Schema[A])
+      state <- loadState(id).map(
                  _.getOrElse(
                    State(
-                     workflowId = uniqueId,
+                     id = id,
                      current = flow,
                      stack = Nil,
                      result = durablePromise,
@@ -564,7 +568,7 @@ final case class PersistentExecutor(
              .provide(RemoteContext.persistent, ZLayer.succeed(execEnv), ZLayer.succeed(kvStore))
              .absorb
              .catchAll { error =>
-               ZIO.logError(s"Persistent executor ${uniqueId} failed") *>
+               ZIO.logError(s"Persistent executor ${id} failed") *>
                  ZIO.logErrorCause(Cause.die(error)) *>
                  durablePromise
                    .fail(Left(error))
@@ -575,17 +579,18 @@ final case class PersistentExecutor(
                    }
                    .unit
              }
+             .ensuring(persistWorkflowFinished(id).orDie)
              .fork
       // TODO: store running workflow and it's fiber
       // TODO: clean up persisted state in the end
     } yield state.result
   }
 
-  def submit[E: Schema, A: Schema](uniqueId: String, flow: ZFlow[Any, E, A]): IO[E, A] =
+  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
-      resultPromise <- start(uniqueId, flow).orDie
+      resultPromise <- start(id, flow).orDie
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
-      _             <- ZIO.log(s"$uniqueId finished with $promiseResult")
+      _             <- ZIO.log(s"$id finished with $promiseResult")
       result <- promiseResult match {
                   case Left(Left(fail))   => ZIO.die(fail)
                   case Left(Right(error)) => ZIO.fail(error)
@@ -594,13 +599,13 @@ final case class PersistentExecutor(
     } yield result
 
   @nowarn private def persistState(
-    id: String,
+    id: FlowId,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
     state1: PersistentExecutor.State[_, _],
     recordingContext: RecordingRemoteContext
   ): IO[IOException, Unit] = {
-    val key            = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
+    val key            = id.toRaw
     val persistedState = execEnv.serializer.serialize(state1)
     for {
       _                 <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
@@ -619,10 +624,10 @@ final case class PersistentExecutor(
     } yield ()
   }
 
-  private def loadState(id: String): IO[IOException, Option[PersistentExecutor.State[_, _]]] =
+  private def loadState(id: FlowId): IO[IOException, Option[PersistentExecutor.State[_, _]]] =
     for {
       _              <- ZIO.logInfo(s"Looking for persisted flow state $id")
-      key             = Chunk.fromArray(id.getBytes(StandardCharsets.UTF_8))
+      key             = id.toRaw
       persistedState <- kvStore.get("_zflow_workflow_states", key)
       state <- persistedState match {
                  case Some(bytes) =>
@@ -633,6 +638,16 @@ final case class PersistentExecutor(
                  case None => ZIO.logInfo("No persisted state available").as(None)
                }
     } yield state
+
+  private def persistWorkflowStarted[E, A](
+    id: FlowId,
+    errorSchema: Schema[E],
+    successSchema: Schema[A]
+  ): IO[IOException, Unit] =
+    ZIO.unit // TODO
+
+  private def persistWorkflowFinished(id: FlowId): IO[IOException, Unit] =
+    ZIO.unit // TODO
 }
 
 object PersistentExecutor {
@@ -699,7 +714,7 @@ object PersistentExecutor {
     opEx: OperationExecutor[Any],
     serializer: Serializer,
     deserializer: Deserializer
-  ): ZLayer[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor[String]] =
+  ): ZLayer[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
     (
       for {
         durableLog <- ZIO.service[DurableLog]
@@ -787,7 +802,7 @@ object PersistentExecutor {
   }
 
   final case class State[E, A](
-    workflowId: String,
+    id: FlowId,
     current: ZFlow[_, _, _],
     stack: List[Instruction],
     result: DurablePromise[Either[Throwable, E], A],
@@ -808,7 +823,7 @@ object PersistentExecutor {
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
       Schema.CaseClass9(
-        Schema.Field("workflowId", Schema[String]),
+        Schema.Field("id", Schema[String]),
         Schema.Field("current", ZFlow.schemaAny),
         Schema.Field("stack", Schema[List[Instruction]]),
         Schema.Field("result", Schema[DurablePromise[Either[Throwable, E], A]]),
@@ -818,7 +833,7 @@ object PersistentExecutor {
         Schema.Field("forkCounter", Schema[Int]),
         Schema.Field("status", Schema[PersistentWorkflowStatus]),
         (
-          workflowId: String,
+          id: String,
           current: ZFlow[_, _, _],
           stack: List[Instruction],
           result: DurablePromise[Either[Throwable, E], A],
@@ -829,7 +844,7 @@ object PersistentExecutor {
           status: PersistentWorkflowStatus
         ) =>
           State(
-            workflowId,
+            FlowId(id),
             current,
             stack,
             result,
@@ -839,7 +854,7 @@ object PersistentExecutor {
             forkCounter,
             status
           ),
-        _.workflowId,
+        state => FlowId.unwrap(state.id),
         _.current.asInstanceOf[ZFlow[Any, Any, Any]],
         _.stack,
         _.result,
