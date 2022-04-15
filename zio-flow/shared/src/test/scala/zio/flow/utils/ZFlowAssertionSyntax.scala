@@ -1,8 +1,8 @@
 package zio.flow.utils
 
 import zio._
-import zio.flow.ZFlow
 import zio.flow.internal.{DurableLog, KeyValueStore}
+import zio.flow.{FlowId, ZFlow}
 import zio.schema.Schema
 
 object ZFlowAssertionSyntax {
@@ -16,7 +16,8 @@ object ZFlowAssertionSyntax {
     ): ZIO[Console with Clock with DurableLog with KeyValueStore, E, A] =
       ZIO.scoped {
         mockPersistentTestClock.flatMap { executor =>
-          executor.submit(id, zflow)
+          executor.restartAll().orDie *>
+            executor.submit(FlowId(id), zflow)
         }
       }
   }

@@ -8,13 +8,14 @@ sealed trait ExecutingFlow[+E, +A]
 
 object ExecutingFlow {
   final case class InMemoryExecutingFlow[+E, +A](fiber: Fiber[E, A])                         extends ExecutingFlow[E, A]
-  final case class PersistentExecutingFlow[+E, +A](id: String, result: DurablePromise[_, _]) extends ExecutingFlow[E, A]
+  final case class PersistentExecutingFlow[+E, +A](id: FlowId, result: DurablePromise[_, _]) extends ExecutingFlow[E, A]
 
   object PersistentExecutingFlow {
     def schema[E, A]: Schema[PersistentExecutingFlow[E, A]] =
       (Schema[String] zip Schema[DurablePromise[Either[Throwable, E], A]]).transform(
-        { case (id, promise) => PersistentExecutingFlow(id, promise) },
-        (ef: PersistentExecutingFlow[E, A]) => (ef.id, ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])
+        { case (id, promise) => PersistentExecutingFlow(FlowId(id), promise) },
+        (ef: PersistentExecutingFlow[E, A]) =>
+          (FlowId.unwrap(ef.id), ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]])
       )
   }
 

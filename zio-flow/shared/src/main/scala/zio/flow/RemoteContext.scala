@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.internal.KeyValueStore
+import zio.flow.internal.{KeyValueStore, Namespaces}
 import zio.schema.DynamicValue
 import zio.{Chunk, UIO, ULayer, ZIO, ZLayer}
 import zio.stm.TMap
@@ -53,7 +53,7 @@ object RemoteContext {
               val serializedValue = execEnv.serializer.serialize(value)
               kvStore
                 .put(
-                  "_zflow_variables",
+                  Namespaces.variables,
                   key(name),
                   serializedValue
                 )
@@ -64,7 +64,7 @@ object RemoteContext {
             override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
               kvStore
                 .get(
-                  "_zflow_variables",
+                  Namespaces.variables,
                   key(name)
                 )
                 .orDie // TODO: rethink/cleanup error handling
