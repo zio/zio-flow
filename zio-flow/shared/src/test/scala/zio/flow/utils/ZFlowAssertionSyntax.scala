@@ -1,8 +1,8 @@
 package zio.flow.utils
 
 import zio._
+import zio.flow.internal.{DurableLog, KeyValueStore}
 import zio.flow.{FlowId, ZFlow}
-import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.schema.Schema
 
 object ZFlowAssertionSyntax {
