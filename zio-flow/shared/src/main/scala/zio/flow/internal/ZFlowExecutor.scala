@@ -20,8 +20,24 @@ import zio._
 import zio.flow.{FlowId, ZFlow}
 import zio.schema.Schema
 
+import java.io.IOException
+
 trait ZFlowExecutor {
+
+  /**
+   * Submits a flow to be executed, and waits for it to complete.
+   *
+   * If the executor is already running a flow with the given ID, that flow's
+   * result will be awaited.
+   */
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
+
+  /**
+   * Restart all known persisted running flows after recreating an executor.
+   *
+   * Executors with no support for persistency should do nothing.
+   */
+  def restartAll(): ZIO[Any, IOException, Unit]
 }
 
 object ZFlowExecutor {}

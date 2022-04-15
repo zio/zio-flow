@@ -21,7 +21,7 @@ import zio.flow.ExecutingFlow.PersistentExecutingFlow
 import zio.flow.Remote.{EvaluatedRemoteFunction, RemoteFunction}
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
+import zio.schema.{CaseSet, DynamicValue, Schema}
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -35,7 +35,7 @@ final case class PersistentExecutor(
   durableLog: DurableLog,
   kvStore: KeyValueStore,
   opExec: OperationExecutor[Any],
-  workflows: Ref[Map[String, Ref[PersistentExecutor.State[_, _]]]]
+  workflows: Ref[Map[FlowId, PersistentExecutor.RuntimeState[_, _]]]
 ) extends ZFlowExecutor {
 
   import PersistentExecutor._
@@ -53,35 +53,83 @@ final case class PersistentExecutor(
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
     remote.evalDynamic.mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
 
-  def start[E, A](
+  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
+    for {
+      resultPromise <- start(id, flow).orDie
+      promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
+      _             <- ZIO.log(s"$id finished with $promiseResult")
+      result <- promiseResult match {
+                  case Left(Left(fail)) => ZIO.die(fail)
+                  case Left(Right(dynamicError)) =>
+                    ZIO
+                      .fromEither(dynamicError.toTypedValue(Schema[E]))
+                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize error: $error")))
+                      .flatMap(success => ZIO.fail(success))
+                  case Right(dynamicSuccess) =>
+                    ZIO
+                      .fromEither(dynamicSuccess.toTypedValue(Schema[A]))
+                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize success: $error")))
+                }
+    } yield result
+
+  def restartAll(): ZIO[Any, IOException, Unit] =
+    for {
+      deserializedStates <- kvStore
+                              .scanAll(Namespaces.workflowState)
+                              .mapZIO { case (rawKey, rawState) =>
+                                val id = FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8))
+                                ZIO
+                                  .fromEither(
+                                    execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
+                                  )
+                                  .mapBoth(
+                                    error => new IOException(s"Failed to deserialize state of $id: $error"),
+                                    state => (FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8)), state)
+                                  )
+                              }
+                              .runCollect
+      _ <- ZIO.foreachDiscard(deserializedStates) { case (id, state) =>
+             ZIO.log(s"Restarting $id") *>
+               run(state).orDie
+           }
+    } yield ()
+
+  private def start[E, A](
     id: FlowId,
     flow: ZFlow[Any, E, A]
-  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] = {
-    val durablePromise =
-      DurablePromise.make[Either[Throwable, DynamicValue], DynamicValue](FlowId.unwrap(id + "_result"))
+  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] =
+    workflows.get.flatMap { runningWorkflows =>
+      runningWorkflows.get(id) match {
+        case Some(runtimeState) =>
+          ZIO.logInfo(s"Flow $id is already running").as(runtimeState.result)
 
-    loadState(id)
-      .map(
-        _.getOrElse(
-          State(
-            id = id,
-            current = flow,
-            stack = Nil,
-            result = durablePromise,
-            envStack = Nil,
-            tempVarCounter = 0,
-            promiseIdCounter = 0,
-            forkCounter = 0,
-            status = PersistentWorkflowStatus.Running
-          )
-        ).asInstanceOf[State[E, A]]
-      )
-      .flatMap { state =>
-        run(state)
+        case None =>
+          val durablePromise =
+            DurablePromise.make[Either[Throwable, DynamicValue], DynamicValue](FlowId.unwrap(id + "_result"))
+
+          loadState(id)
+            .map(
+              _.getOrElse(
+                State(
+                  id = id,
+                  current = flow,
+                  stack = Nil,
+                  result = durablePromise,
+                  envStack = Nil,
+                  tempVarCounter = 0,
+                  promiseIdCounter = 0,
+                  forkCounter = 0,
+                  status = PersistentWorkflowStatus.Running
+                )
+              ).asInstanceOf[State[E, A]]
+            )
+            .flatMap { state =>
+              run(state)
+            }
       }
-  }
+    }
 
-  def run[E, A](
+  private def run[E, A](
     state: State[E, A]
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] = {
     import zio.flow.ZFlow._
@@ -301,19 +349,17 @@ final case class PersistentExecutor(
                           .timeout(d)
                           .provideEnvironment(ZEnvironment(clock))
               finishWith <- result match {
-                              case Some(Right(success)) =>
+                              case Some(Right(dynamicSuccess)) =>
                                 // succeeded
                                 ZIO.right(
-                                  Remote[Option[timeout.ValueA]](Some(success))(
-                                    Schema.option(timeout.schemaA)
-                                  )
+                                  Remote.Literal(DynamicValue.SomeValue(dynamicSuccess), Schema.option(timeout.schemaA))
                                 )
                               case Some(Left(Left(fatal))) =>
                                 // failed with fatal error
                                 ZIO.die(new IOException("Awaited flow died", fatal))
-                              case Some(Left(Right(error))) =>
+                              case Some(Left(Right(dynamicError))) =>
                                 // failed with typed error
-                                ZIO.left(Remote[timeout.ValueE](error)(timeout.schemaE))
+                                ZIO.left(Remote[timeout.ValueE](dynamicError)(timeout.schemaE))
                               case None =>
                                 // timed out
                                 // TODO: interrupt
@@ -557,69 +603,32 @@ final case class PersistentExecutor(
       } yield ()
 
     for {
-      ref <- Ref.make[State[E, A]](state)
-      _ <- runSteps(ref)
-             .provide(RemoteContext.persistent, ZLayer.succeed(execEnv), ZLayer.succeed(kvStore))
-             .absorb
-             .catchAll { error =>
-               ZIO.logError(s"Persistent executor ${state.id} failed") *>
-                 ZIO.logErrorCause(Cause.die(error)) *>
-                 state.result
-                   .fail(Left(error))
-                   .provideEnvironment(promiseEnv)
-                   .absorb
-                   .catchAll { error2 =>
-                     ZIO.logFatal(s"Failed to serialize execution failure: $error2")
-                   }
-                   .unit
-             }
-             .zipLeft(deleteState(state.id).orDie)
-             .fork
-      // TODO: store running workflow and it's fiber
+      ref       <- Ref.make[State[E, A]](state)
+      startGate <- Promise.make[Nothing, Unit]
+      fiber <- (for {
+                 _ <- startGate.await
+                 _ <- runSteps(ref)
+                        .provide(RemoteContext.persistent, ZLayer.succeed(execEnv), ZLayer.succeed(kvStore))
+                        .absorb
+                        .catchAll { error =>
+                          ZIO.logError(s"Persistent executor ${state.id} failed") *>
+                            ZIO.logErrorCause(Cause.die(error)) *>
+                            state.result
+                              .fail(Left(error))
+                              .provideEnvironment(promiseEnv)
+                              .absorb
+                              .catchAll { error2 =>
+                                ZIO.logFatal(s"Failed to serialize execution failure: $error2")
+                              }
+                              .unit
+                        }
+                 _ <- deleteState(state.id).orDie
+               } yield ()).ensuring(workflows.update(_ - state.id)).fork
+      runtimeState = PersistentExecutor.RuntimeState(state.result, fiber)
+      _           <- workflows.update(_ + (state.id -> runtimeState))
+      _           <- startGate.succeed(())
     } yield state.result
   }
-
-  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
-    for {
-      resultPromise <- start(id, flow).orDie
-      promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
-      _             <- ZIO.log(s"$id finished with $promiseResult")
-      result <- promiseResult match {
-                  case Left(Left(fail)) => ZIO.die(fail)
-                  case Left(Right(dynamicError)) =>
-                    ZIO
-                      .fromEither(dynamicError.toTypedValue(Schema[E]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize error: $error")))
-                      .flatMap(success => ZIO.fail(success))
-                  case Right(dynamicSuccess) =>
-                    ZIO
-                      .fromEither(dynamicSuccess.toTypedValue(Schema[A]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize success: $error")))
-                }
-    } yield result
-
-  def restartAll(): ZIO[Any, IOException, Unit] =
-    for {
-      deserializedStates <- kvStore
-                              .scanAll(Namespaces.workflowState)
-                              .mapZIO { case (rawKey, rawState) =>
-                                val id = FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8))
-                                ZIO
-                                  .fromEither(
-                                    execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
-                                  )
-                                  .mapBoth(
-                                    error => new IOException(s"Failed to deserialize state of $id: $error"),
-                                    state => (FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8)), state)
-                                  )
-                              }
-                              .runCollect
-      _ <- ZIO.foreachDiscard(deserializedStates) { case (id, state) =>
-             ZIO.log(s"Restarting $id") *>
-               run(state).orDie
-           }
-      // TODO: and store fibers
-    } yield ()
 
   @nowarn private def persistState(
     id: FlowId,
@@ -741,7 +750,7 @@ object PersistentExecutor {
         durableLog <- ZIO.service[DurableLog]
         kvStore    <- ZIO.service[KeyValueStore]
         clock      <- ZIO.service[Clock]
-        ref        <- Ref.make[Map[String, Ref[PersistentExecutor.State[_, _]]]](Map.empty)
+        ref        <- Ref.make[Map[FlowId, PersistentExecutor.RuntimeState[_, _]]](Map.empty)
         execEnv     = ExecutionEnvironment(serializer, deserializer)
       } yield PersistentExecutor(clock, execEnv, durableLog, kvStore, opEx, ref)
     ).toLayer
@@ -886,16 +895,9 @@ object PersistentExecutor {
         _.status
       )
   }
-}
 
-final case class FlowDurablePromise[E, A](flow: ZFlow[Any, E, A], promise: DurablePromise[E, A])
-
-sealed trait PersistentWorkflowStatus
-
-object PersistentWorkflowStatus {
-  case object Running   extends PersistentWorkflowStatus
-  case object Done      extends PersistentWorkflowStatus
-  case object Suspended extends PersistentWorkflowStatus
-
-  implicit val schema: Schema[PersistentWorkflowStatus] = DeriveSchema.gen
+  final case class RuntimeState[E, A](
+    result: DurablePromise[Either[Throwable, DynamicValue], DynamicValue],
+    fiber: Fiber[Nothing, Unit]
+  )
 }

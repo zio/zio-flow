@@ -16,8 +16,7 @@ object ZFlowAssertionSyntax {
     ): ZIO[Console with Clock with DurableLog with KeyValueStore, E, A] =
       ZIO.scoped {
         mockPersistentTestClock.flatMap { executor =>
-          // TODO: expose this properly so no cast is needed, better error handling, etc.
-          executor.asInstanceOf[PersistentExecutor].restartAll().orDie *>
+          executor.restartAll().orDie *>
             executor.submit(FlowId(id), zflow)
         }
       }

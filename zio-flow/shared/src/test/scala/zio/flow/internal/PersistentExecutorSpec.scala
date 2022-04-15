@@ -1,12 +1,12 @@
 package zio.flow.internal
 
-import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio._
 import zio.flow._
+import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
+import zio.stream.ZNothing
 import zio.test.Assertion.{dies, equalTo, hasMessage}
 import zio.test.{TestAspect, TestClock, TestResult, assert, assertTrue}
-import zio._
-import zio.stream.ZNothing
 
 import java.net.URI
 import java.time.Instant
@@ -308,23 +308,24 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testRestartFlowAndLogs("fork-|-await") { break =>
       for {
         fiber <- (for {
-                   _ <- ZFlow.log("fiber started")
-                   _ <- ZFlow.waitTill(Remote.ofEpochSecond(220L))
-                   _ <- ZFlow.log("after 2 seconds")
+                   _   <- ZFlow.log("fiber started")
+                   now <- ZFlow.now
+                   _ <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
+                   _ <- ZFlow.log("fiber finished")
                  } yield 10).fork
-        _ <- ZFlow.waitTill(Instant.ofEpochSecond(10L))
-        _ <- break // waits for 100s
-        result <- fiber.await[ZNothing, Int].timeout(Remote.ofSeconds(120L))
+        _ <- ZFlow.waitTill(Remote.ofEpochSecond(10L)) // wait for absolute T=10s
+        _ <- break                                     // waits for 100s
+        result <- fiber.await[ZNothing, Int].timeout(Remote.ofSeconds(150L))
       } yield result
     } { (result, logs1, logs2) =>
       assertTrue(
         result == Some(Right(10)),
         logs1.contains("fiber started"),
-        !logs1.contains("after 2 seconds"),
+        !logs1.contains("fiber finished"),
         !logs2.contains("fiber started"),
-        logs2.contains("after 2 seconds")
+        logs2.contains("fiber finished")
       )
-    } @@ TestAspect.diagnose(10.seconds)
+    }
   )
 
   override def spec =
@@ -390,6 +391,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Chunk[String], Chunk[String]) => TestResult) =
     test(label) {
       for {
+        _            <- ZIO.logDebug(s"=== testRestartFlowAndLogs $label started === ")
         logQueue     <- ZQueue.unbounded[String]
         runtime      <- ZIO.runtime[Any]
         breakPromise <- Promise.make[Nothing, Unit]
@@ -425,10 +427,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                         .evaluateTestPersistent(label)
                         .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
                         .fork
-            _         <- ZIO.logDebug("Adjusting clock by 50s")
-            _         <- TestClock.adjust(50.seconds)
-            _         <- ZIO.logDebug("Waiting for break")
-            _         <- breakPromise.await
+            _ <- ZIO.logDebug(s"Adjusting clock by 20s")
+            _ <- TestClock.adjust(20.seconds)
+            _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+                   breakPromise.await
+                 }
             _         <- ZIO.logDebug("Interrupting executor")
             _         <- fiber1.interrupt
             logLines1 <- logQueue.takeAll
@@ -436,9 +439,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                         .evaluateTestPersistent(label)
                         .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
                         .fork
-            _         <- ZIO.logDebug("Adjusting clock by 200s")
-            _         <- TestClock.adjust(200.seconds)
-            result    <- waitAndPeriodicallyAdjustClock(fiber2, 1.second, 10.seconds)
+            _ <- ZIO.logDebug(s"Adjusting clock by 200s")
+            _ <- TestClock.adjust(200.seconds)
+            result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+                        fiber2.join
+                      }
             logLines2 <- logQueue.takeAll
           } yield (result, logLines1, logLines2)
         }
@@ -446,20 +451,22 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
 
   private def waitAndPeriodicallyAdjustClock[E, A](
-    fiber: Fiber[E, A],
+    description: String,
     duration: Duration,
     adjustment: Duration
-  ): ZIO[TestClock, E, A] =
+  )(wait: ZIO[Any, E, A]): ZIO[TestClock, E, A] =
     for {
-      _           <- ZIO.logDebug(s"Waiting for executor to finish")
-      maybeResult <- fiber.join.timeout(1.second).provideLayer(Clock.live)
+      _           <- ZIO.logDebug(s"Waiting for $description")
+      maybeResult <- wait.timeout(1.second).provideLayer(Clock.live)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None =>
                     for {
-                      _      <- ZIO.logDebug(s"Adjusting clock by $duration")
+                      _      <- ZIO.logDebug(s"Adjusting clock by $adjustment")
                       _      <- TestClock.adjust(adjustment)
-                      result <- waitAndPeriodicallyAdjustClock(fiber, duration, adjustment)
+                      now    <- Clock.instant
+                      _      <- ZIO.logDebug(s"T=$now")
+                      result <- waitAndPeriodicallyAdjustClock(description, duration, adjustment)(wait)
                     } yield result
                 }
     } yield result
