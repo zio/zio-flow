@@ -362,10 +362,11 @@ final case class PersistentExecutor(
                                 ZIO.left(Remote[timeout.ValueE](dynamicError)(timeout.schemaE))
                               case None =>
                                 // timed out
-                                // TODO: interrupt
-                                ZIO.right(
-                                  Remote[Option[timeout.ValueA]](None)(
-                                    Schema.option(timeout.schemaA)
+                                interruptFlow(forkId).as(
+                                  Right(
+                                    Remote[Option[timeout.ValueA]](None)(
+                                      Schema.option(timeout.schemaA)
+                                    )
                                   )
                                 )
                             }
@@ -439,17 +440,21 @@ final case class PersistentExecutor(
             //          } yield ()
             ??? // TODO
 
-          case Interrupt(_) =>
-            ??? // TODO
-          //          val interrupt = for {
-          //            exec <- eval(execFlow)
-          //            exit <- exec.interrupt
-          //          } yield exit.toEither
-          //
-          //          interrupt.flatMap {
-          //            case Left(error)    => onError(lit(error))
-          //            case Right(success) => onSuccess(success)
-          //          }
+          case Interrupt(remoteExecFlow) =>
+            for {
+              executingFlow          <- eval(remoteExecFlow)
+              persistentExecutingFlow = executingFlow.asInstanceOf[PersistentExecutingFlow[Any, Any]]
+              interrupted            <- interruptFlow(persistentExecutingFlow.id)
+              result = if (interrupted)
+                         Right(Remote.unit)
+                       else
+                         Left(
+                           Remote(
+                             ActivityError(s"Flow ${persistentExecutingFlow.id} to be interrupted is not running", None)
+                           )
+                         )
+
+            } yield StepResult(StateChange.none, result = Some(result))
 
           case Fail(error) =>
             onError(error)
@@ -678,6 +683,18 @@ final case class PersistentExecutor(
       _ <- ZIO.logInfo(s"Deleting persisted state $id")
       _ <- kvStore.delete(Namespaces.workflowState, id.toRaw)
     } yield ()
+
+  private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
+    for {
+      _           <- ZIO.log(s"Interrupting flow $id")
+      workflowMap <- workflows.get
+      result <- workflowMap.get(id) match {
+                  case Some(runtimeState) =>
+                    runtimeState.fiber.interrupt.as(true)
+                  case None =>
+                    ZIO.succeed(false)
+                }
+    } yield result
 }
 
 object PersistentExecutor {
