@@ -169,7 +169,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == 100)
     },
-    test("fork") {
+    test("fork/await") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
         flow = for {
@@ -185,7 +185,25 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         expected = (Some(1), Some(2))
       } yield assertTrue(result == expected)
     },
-    test("timeout") {
+    testFlowAndLogs("fork/interrupt", periodicAdjustClock = Some(1.seconds)) {
+      for {
+        now   <- ZFlow.now
+        flow1 <- (ZFlow.waitTill(now.plusSeconds(2L)) *> ZFlow.log("first")).fork
+        flow2 <- (ZFlow.waitTill(now.plusSeconds(3L)) *> ZFlow.log("second")).fork
+        flow3 <- (ZFlow.waitTill(now.plusSeconds(5L)) *> ZFlow.log("third")).fork
+        _ <- flow1.await[ZNothing, Unit] // TODO: avoid this explicit type annotation
+        _ <- flow2.interrupt
+        _ <- flow3.await[ZNothing, Unit] // TODO: avoid this explicit type annotation
+      } yield 111
+    } { (result, logs) =>
+      assertTrue(
+        result == 111,
+        logs.contains("first"),
+        logs.contains("third"),
+        !logs.contains("second")
+      )
+    },
+    test("timeout works") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
         flow = ZFlow
@@ -197,23 +215,20 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         result <- fiber.join
       } yield assertTrue(result == None)
     },
-    test("timeout interrupts") {
+    testFlow("timeout interrupts", periodicAdjustClock = Some(1.seconds)) {
       for {
-        curr <- Clock.currentTime(TimeUnit.SECONDS)
-        flow = for {
-                 v <- ZFlow.newVar[Boolean]("result", false)
-                 _ <- (for {
-                        _ <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L))
-                        _ <- v.set(true)
-                      } yield ()).timeout(Remote.ofSeconds(1L))
-                 _ <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L))
-                 r <- v.get
-               } yield r
-        fiber  <- flow.evaluateTestPersistent("timeout-interrupts").fork
-        _      <- TestClock.adjust(4.seconds)
-        result <- fiber.join
-      } yield assertTrue(result == false)
-    } @@ TestAspect.ignore, // TODO: fix
+        now <- ZFlow.now
+        v   <- ZFlow.newVar[Boolean]("result", false)
+        _ <- (for {
+               _ <- ZFlow.waitTill(now.plusSeconds(2L))
+               _ <- v.set(true)
+             } yield ()).timeout(Remote.ofSeconds(1L))
+        _ <- ZFlow.waitTill(now.plusSeconds(3L))
+        r <- v.get
+      } yield r
+    } { result =>
+      assertTrue(result == false)
+    },
     testFlowExit[String, Nothing]("die") {
       ZFlow.fail("test").orDie
     } { (result: Exit[String, Nothing]) =>
@@ -340,7 +355,8 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     if ((a mod Remote(2)) == Remote(1)) (Remote(true), a) else (Remote(false), a)
 
   private def testFlowAndLogsExit[E: Schema, A: Schema](
-    label: String
+    label: String,
+    periodicAdjustClock: Option[Duration] = None
   )(flow: ZFlow[Any, E, A])(assert: (Exit[E, A], Chunk[String]) => TestResult) =
     test(label) {
       for {
@@ -363,23 +379,30 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                    }
                  }
         rc <- ZIO.runtimeConfig
-        flowResult <-
-          flow.evaluateTestPersistent(label).withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger)).exit
+        fiber <-
+          flow.evaluateTestPersistent(label).withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger)).exit.fork
+        flowResult <- periodicAdjustClock match {
+                        case Some(value) => waitAndPeriodicallyAdjustClock("flow result", 1.second, value)(fiber.join)
+                        case None        => fiber.join
+                      }
         logLines <- logQueue.takeAll
       } yield assert(flowResult, logLines)
     }
 
   private def testFlowAndLogs[E: Schema, A: Schema](
-    label: String
+    label: String,
+    periodicAdjustClock: Option[Duration] = None
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult) =
-    testFlowAndLogsExit(label)(flow) { case (exit, logs) =>
+    testFlowAndLogsExit(label, periodicAdjustClock)(flow) { case (exit, logs) =>
       exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
     }
 
-  private def testFlow[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
+  private def testFlow[E: Schema, A: Schema](label: String, periodicAdjustClock: Option[Duration] = None)(
+    flow: ZFlow[Any, E, A]
+  )(
     assert: A => TestResult
   ) =
-    testFlowAndLogs(label)(flow) { case (result, _) => assert(result) }
+    testFlowAndLogs(label, periodicAdjustClock)(flow) { case (result, _) => assert(result) }
 
   private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
     assert: Exit[E, A] => TestResult
