@@ -302,6 +302,7 @@ object ZFlow {
       Schema.Case("Log", schema, _.asInstanceOf[Log])
   }
 
+  // TODO: why not get the input from the flow environment?
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A] {
     val errorSchema  = Schema[ActivityError]
     val resultSchema = activity.resultSchema
@@ -361,7 +362,6 @@ object ZFlow {
 
   final case class Ensuring[R, E, A](flow: ZFlow[R, E, A], finalizer: ZFlow[Any, ZNothing, Unit])
       extends ZFlow[R, E, A] {
-    type ValueR = R
     type ValueE = E
     type ValueA = A
 
