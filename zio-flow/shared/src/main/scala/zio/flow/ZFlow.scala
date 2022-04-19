@@ -151,10 +151,10 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
-  final def timeout[E1 >: E: Schema, A1 >: A: Schema](
+  final def timeout(
     duration: Remote[Duration]
-  ): ZFlow[R, E1, Option[A1]] =
-    ZFlow.Timeout[R, E1, A1](self, duration)
+  ): ZFlow[R, E, Option[A]] =
+    ZFlow.Timeout[R, E, A](self, duration)
 
   final def unit: ZFlow[R, E, Unit] = as(())
 
@@ -493,35 +493,24 @@ object ZFlow {
       Schema.Case("Fork", schema[R, E, A], _.asInstanceOf[Fork[R, E, A]])
   }
 
-  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration])(implicit
-    val schemaE: Schema[E],
-    val schemaA: Schema[A]
-  ) extends ZFlow[R, E, Option[A]] {
+  final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
     type ValueA = A
     type ValueE = E
-    val schemaEitherE: Schema[Either[Throwable, E]] = Schema[Either[Throwable, E]]
-    val errorSchema                                 = schemaE
-    val resultSchema: Schema[Option[A]]             = Schema[Option[A]]
+    val errorSchema  = flow.errorSchema
+    val resultSchema = Schema.option(flow.resultSchema)
   }
 
   object Timeout {
     def schema[R, E, A]: Schema[Timeout[R, E, A]] =
       Schema.defer(
-        Schema.CaseClass4[ZFlow[R, E, A], Remote[Duration], FlowSchemaAst, FlowSchemaAst, Timeout[R, E, A]](
+        Schema.CaseClass2[ZFlow[R, E, A], Remote[Duration], Timeout[R, E, A]](
           Schema.Field("flow", ZFlow.schema[R, E, A]),
           Schema.Field("duration", Remote.schema[Duration]),
-          Schema.Field("schemaE", FlowSchemaAst.schema),
-          Schema.Field("schemaA", FlowSchemaAst.schema),
-          { case (workflow, duration, schemaAstE, schemaAstA) =>
-            Timeout(workflow, duration)(
-              schemaAstE.toSchema[E],
-              schemaAstA.toSchema[A]
-            )
+          { case (workflow, duration) =>
+            Timeout(workflow, duration)
           },
           _.flow,
-          _.duration,
-          flow => FlowSchemaAst.fromSchema(flow.schemaE),
-          flow => FlowSchemaAst.fromSchema(flow.schemaA)
+          _.duration
         )
       )
 

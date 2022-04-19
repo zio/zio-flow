@@ -349,21 +349,19 @@ final case class PersistentExecutor(
                               case Some(Right(dynamicSuccess)) =>
                                 // succeeded
                                 ZIO.right(
-                                  Remote.Literal(DynamicValue.SomeValue(dynamicSuccess), Schema.option(timeout.schemaA))
+                                  Remote.Literal(DynamicValue.SomeValue(dynamicSuccess), timeout.resultSchema)
                                 )
                               case Some(Left(Left(fatal))) =>
                                 // failed with fatal error
                                 ZIO.die(new IOException("Awaited flow died", fatal))
                               case Some(Left(Right(dynamicError))) =>
                                 // failed with typed error
-                                ZIO.left(Remote[timeout.ValueE](dynamicError)(timeout.schemaE))
+                                ZIO.left(Remote.Literal(dynamicError, timeout.errorSchema))
                               case None =>
                                 // timed out
                                 interruptFlow(forkId).as(
                                   Right(
-                                    Remote[Option[timeout.ValueA]](None)(
-                                      Schema.option(timeout.schemaA)
-                                    )
+                                    Remote.Literal(DynamicValue.NoneValue, timeout.resultSchema)
                                   )
                                 )
                             }
