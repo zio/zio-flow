@@ -10,7 +10,7 @@ import java.net.URI
 object GoodcoverUseCase extends ZIOSpecDefault {
 
   def setBoolVarAfterSleep(
-    remoteBoolVar: Remote[RemoteVariable[Boolean]],
+    remoteBoolVar: Remote[RemoteVariableReference[Boolean]],
     sleepDuration: Long,
     value: Boolean
   ): ZFlow[Any, ZNothing, Unit] = for {
@@ -77,7 +77,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     ZFlow.unit
   )
 
-  def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariable[Boolean]]): ZFlow[Any, ZNothing, Unit] =
+  def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariableReference[Boolean]]): ZFlow[Any, ZNothing, Unit] =
     for {
       boolVar <- evaluationDone
       _       <- ZFlow.sleep(Remote.ofSeconds(3L))
@@ -85,7 +85,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     } yield ()
 
   def manualEvalReminderFlow(
-    manualEvalDone: Remote[RemoteVariable[Boolean]]
+    manualEvalDone: Remote[RemoteVariableReference[Boolean]]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.iterate(
     Remote(true),
     (_: Remote[Boolean]) => // TODO: could be eliminated by reenabling implicit R=>F conversion
@@ -103,7 +103,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
   )
 
   def policyPaymentReminderFlow(
-    renewPolicy: Remote[RemoteVariable[Boolean]]
+    renewPolicy: Remote[RemoteVariableReference[Boolean]]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.iterate(
     Remote(true),
     (_: Remote[Boolean]) =>

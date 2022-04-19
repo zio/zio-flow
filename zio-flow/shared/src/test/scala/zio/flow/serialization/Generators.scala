@@ -11,6 +11,7 @@ import zio.flow.{
   Operation,
   Remote,
   RemoteVariableName,
+  RemoteVariableReference,
   SchemaAndValue,
   ZFlow,
   schemaZNothing
@@ -684,11 +685,11 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowModify: Gen[Random with Sized, ZFlow.Modify[Int, String]] =
     for {
       varName <- genRemoteVariableName
-      svar     = Remote.Variable(varName, Schema[Int])
+      svar     = RemoteVariableReference[Int](varName)
       f = Remote.RemoteFunction((a: Remote[Int]) =>
             Remote.Tuple2(Remote("done"), Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))
           )
-    } yield ZFlow.Modify(svar, f.evaluated)(Schema[String])
+    } yield ZFlow.Modify(Remote(svar), f.evaluated)(Schema[String])
 
   lazy val genZFlowFold: Gen[Random with Sized, ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any]] =
     for {

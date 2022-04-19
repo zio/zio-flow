@@ -188,7 +188,7 @@ object Remote {
   }
 
   object Variable {
-    implicit def schema[A]: Schema[Variable[A]] =
+    def schema[A]: Schema[Variable[A]] =
       Schema.CaseClass2[String, FlowSchemaAst, Variable[A]](
         Schema.Field("identifier", Schema.primitive[String]),
         Schema.Field("schema", FlowSchemaAst.schema),

@@ -217,16 +217,19 @@ object ZFlow {
       Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
-  final case class Modify[A, B](svar: Remote[Remote.Variable[A]], f: EvaluatedRemoteFunction[A, (B, A)])(implicit
-    val resultSchema: Schema[B]
+  final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])(
+    implicit val resultSchema: Schema[B]
   ) extends ZFlow[Any, Nothing, B] {
     val errorSchema = Schema[ZNothing]
   }
 
   object Modify {
     def schema[A, B]: Schema[Modify[A, B]] =
-      Schema.CaseClass3[Remote[Remote.Variable[A]], EvaluatedRemoteFunction[A, (B, A)], FlowSchemaAst, Modify[A, B]](
-        Schema.Field("svar", Remote.schema[Remote.Variable[A]]), // TODO: eliminate the need of recursive remote
+      Schema.CaseClass3[Remote[RemoteVariableReference[A]], EvaluatedRemoteFunction[A, (B, A)], FlowSchemaAst, Modify[
+        A,
+        B
+      ]](
+        Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
         Schema.Field("f", EvaluatedRemoteFunction.schema[A, (B, A)]),
         Schema.Field("resultSchema", FlowSchemaAst.schema),
         { case (svar, f, schemaAst) =>
@@ -667,9 +670,9 @@ object ZFlow {
       Schema.Case("Fail", schema[E], _.asInstanceOf[Fail[E]])
   }
 
-  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, Remote.Variable[A]] {
+  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, RemoteVariableReference[A]] {
     val errorSchema  = Schema[ZNothing]
-    val resultSchema = Remote.Variable.schema[A]
+    val resultSchema = RemoteVariableReference.schema[A]
   }
 
   object NewVar {
@@ -777,7 +780,7 @@ object ZFlow {
 
   def input[R: Schema]: ZFlow[R, ZNothing, R] = Input[R]()
 
-  def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, ZNothing, Remote.Variable[A]] =
+  def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, ZNothing, RemoteVariableReference[A]] =
     NewVar(name, initial)
 
   def now: ZFlow[Any, ZNothing, Instant] = Now
