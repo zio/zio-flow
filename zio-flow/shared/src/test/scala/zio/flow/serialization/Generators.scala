@@ -11,6 +11,7 @@ import zio.flow.{
   Operation,
   Remote,
   RemoteVariableName,
+  RemoteVariableReference,
   SchemaAndValue,
   ZFlow,
   schemaZNothing
@@ -684,11 +685,11 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowModify: Gen[Random with Sized, ZFlow.Modify[Int, String]] =
     for {
       varName <- genRemoteVariableName
-      svar     = Remote.Variable(varName, Schema[Int])
+      svar     = RemoteVariableReference[Int](varName)
       f = Remote.RemoteFunction((a: Remote[Int]) =>
             Remote.Tuple2(Remote("done"), Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))
           )
-    } yield ZFlow.Modify(svar, f.evaluated)(Schema[String])
+    } yield ZFlow.Modify(Remote(svar), f.evaluated)
 
   lazy val genZFlowFold: Gen[Random with Sized, ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any]] =
     for {
@@ -706,16 +707,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       zio.flow.schemaZNothing,
       successSchemaAndValue.schema.asInstanceOf[Schema[Any]]
     )
-
-  lazy val genZFlowApply: Gen[Random with Sized, ZFlow[Any, Any, Any]] =
-    for {
-      resultFlow <- Gen.oneOf(genZFlowFold, genZFlowModify, genZFlowReturn)
-    } yield ZFlow
-      .Apply[Int, Nothing, Any](RemoteFunction((_: Remote[Int]) => resultFlow.toRemote).evaluated)(
-        zio.flow.schemaZNothing,
-        resultFlow.resultSchema.asInstanceOf[Schema[Any]]
-      )
-      .asInstanceOf[ZFlow[Any, Any, Any]]
 
   lazy val genZFlowLog: Gen[Random with Sized, ZFlow.Log] =
     Gen.string.map(ZFlow.Log(_))
@@ -765,10 +756,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       flow <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
     } yield ZFlow
-      .Fork(flow)(
-        schemaZNothing.asInstanceOf[Schema[Any]],
-        Schema[Int].asInstanceOf[Schema[Any]]
-      )
+      .Fork(flow)
       .asInstanceOf[ZFlow.Fork[Any, Any, Any]]
 
   lazy val genZFlowTimeout: Gen[Random with Sized, ZFlow.Timeout[Any, Any, Any]] =
@@ -776,10 +764,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       flow     <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
       duration <- genDurationFromLong
     } yield ZFlow
-      .Timeout(flow, duration.asInstanceOf[Remote[Duration]])(
-        zio.flow.schemaZNothing.asInstanceOf[Schema[Any]],
-        Schema[Int].asInstanceOf[Schema[Any]]
-      )
+      .Timeout(flow, duration.asInstanceOf[Remote[Duration]])
       .asInstanceOf[ZFlow.Timeout[Any, Any, Any]]
 
   lazy val genZFlowProvide: Gen[Random with Sized, ZFlow.Provide[String, Nothing, String]] =
