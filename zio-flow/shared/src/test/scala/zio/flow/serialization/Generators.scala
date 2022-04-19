@@ -689,7 +689,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       f = Remote.RemoteFunction((a: Remote[Int]) =>
             Remote.Tuple2(Remote("done"), Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))
           )
-    } yield ZFlow.Modify(Remote(svar), f.evaluated)(Schema[String])
+    } yield ZFlow.Modify(Remote(svar), f.evaluated)
 
   lazy val genZFlowFold: Gen[Random with Sized, ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any]] =
     for {

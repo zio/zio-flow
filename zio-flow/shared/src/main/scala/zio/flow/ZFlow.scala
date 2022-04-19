@@ -217,27 +217,25 @@ object ZFlow {
       Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
-  final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])(
-    implicit val resultSchema: Schema[B]
-  ) extends ZFlow[Any, Nothing, B] {
-    val errorSchema = Schema[ZNothing]
+  final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])
+      extends ZFlow[Any, Nothing, B] {
+    val errorSchema  = Schema[ZNothing]
+    val resultSchema = f.schema.asInstanceOf[Schema.Tuple[B, A]].left
   }
 
   object Modify {
     def schema[A, B]: Schema[Modify[A, B]] =
-      Schema.CaseClass3[Remote[RemoteVariableReference[A]], EvaluatedRemoteFunction[A, (B, A)], FlowSchemaAst, Modify[
+      Schema.CaseClass2[Remote[RemoteVariableReference[A]], EvaluatedRemoteFunction[A, (B, A)], Modify[
         A,
         B
       ]](
         Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
         Schema.Field("f", EvaluatedRemoteFunction.schema[A, (B, A)]),
-        Schema.Field("resultSchema", FlowSchemaAst.schema),
-        { case (svar, f, schemaAst) =>
-          Modify(svar, f)(schemaAst.toSchema[B])
+        { case (svar, f) =>
+          Modify(svar, f)
         },
         _.svar,
-        _.f,
-        flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+        _.f
       )
 
     def schemaCase[R, E, A]: Schema.Case[Modify[Any, Any], ZFlow[R, E, A]] =
@@ -586,9 +584,8 @@ object ZFlow {
   ) extends ZFlow[Any, ActivityError, Either[E, A]] {
     type ValueE = E
     type ValueA = A
-    val schemaEitherE: Schema[Either[Throwable, E]] = Schema[Either[Throwable, E]]
-    val errorSchema                                 = Schema[ActivityError]
-    val resultSchema                                = Schema[Either[E, A]]
+    val errorSchema  = Schema[ActivityError]
+    val resultSchema = Schema[Either[E, A]]
   }
 
   object Await {
