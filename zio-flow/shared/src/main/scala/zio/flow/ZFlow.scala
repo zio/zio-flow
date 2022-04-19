@@ -287,39 +287,6 @@ object ZFlow {
       Schema.Case("Fold", schema[Any, Any, Any, Any, Any], _.asInstanceOf[Fold[Any, Any, Any, Any, Any]])
   }
 
-  // TODO: not used for anything?
-  final case class Apply[A, E, B](lambda: EvaluatedRemoteFunction[A, ZFlow[Any, E, B]])(implicit
-    val errorSchema: Schema[E],
-    val resultSchema: Schema[B]
-  ) extends ZFlow[A, E, B] {
-    type ValueE = E
-    type ValueA = A
-    type ValueB = B
-  }
-
-  object Apply {
-    def schema[A, E, B]: Schema[Apply[A, E, B]] =
-      Schema.defer(
-        Schema.CaseClass3[EvaluatedRemoteFunction[A, ZFlow[Any, E, B]], FlowSchemaAst, FlowSchemaAst, Apply[A, E, B]](
-          Schema.Field("lambda", EvaluatedRemoteFunction.schema[A, ZFlow[Any, E, B]]),
-          Schema.Field("errorSchema", FlowSchemaAst.schema),
-          Schema.Field("resultSchema", FlowSchemaAst.schema),
-          { case (lambda, errorSchema, resultSchema) =>
-            Apply(lambda)(
-              errorSchema.toSchema[E],
-              resultSchema.toSchema[B]
-            )
-          },
-          _.lambda,
-          flow => FlowSchemaAst.fromSchema(flow.errorSchema),
-          flow => FlowSchemaAst.fromSchema(flow.resultSchema)
-        )
-      )
-
-    def schemaCase[R, E, A]: Schema.Case[ZFlow.Apply[Any, E, A], ZFlow[R, E, A]] =
-      Schema.Case("Apply", schema[Any, E, A], _.asInstanceOf[Apply[Any, E, A]])
-  }
-
   final case class Log(message: Remote[String]) extends ZFlow[Any, Nothing, Unit] {
     val errorSchema                = Schema[ZNothing]
     val resultSchema: Schema[Unit] = Schema[Unit]
@@ -821,7 +788,6 @@ object ZFlow {
         .:+:(WaitTill.schemaCase[R, E, A])
         .:+:(Modify.schemaCase[R, E, A])
         .:+:(Fold.schemaCase[R, E, A])
-        .:+:(Apply.schemaCase[R, E, A])
         .:+:(Log.schemaCase[R, E, A])
         .:+:(RunActivity.schemaCase[R, E, A])
         .:+:(Transaction.schemaCase[R, E, A])

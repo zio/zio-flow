@@ -208,13 +208,6 @@ final case class PersistentExecutor(
                             ) // TODO: is it ok to add it only _after_ resume?
             } yield stepResult
 
-          case apply @ Apply(_) =>
-            val env         = state.currentEnvironment
-            val appliedFlow = apply.lambda(env)
-            for {
-              nextFlow <- eval(appliedFlow)
-            } yield StepResult(StateChange.setCurrent(nextFlow), None)
-
           case fold @ Fold(_, _, _) =>
             val cont =
               Instruction.Continuation[fold.ValueR, fold.ValueA, fold.ValueE, fold.ValueE2, fold.ValueB](

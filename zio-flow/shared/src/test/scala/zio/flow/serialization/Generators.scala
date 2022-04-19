@@ -708,16 +708,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       successSchemaAndValue.schema.asInstanceOf[Schema[Any]]
     )
 
-  lazy val genZFlowApply: Gen[Random with Sized, ZFlow[Any, Any, Any]] =
-    for {
-      resultFlow <- Gen.oneOf(genZFlowFold, genZFlowModify, genZFlowReturn)
-    } yield ZFlow
-      .Apply[Int, Nothing, Any](RemoteFunction((_: Remote[Int]) => resultFlow.toRemote).evaluated)(
-        zio.flow.schemaZNothing,
-        resultFlow.resultSchema.asInstanceOf[Schema[Any]]
-      )
-      .asInstanceOf[ZFlow[Any, Any, Any]]
-
   lazy val genZFlowLog: Gen[Random with Sized, ZFlow.Log] =
     Gen.string.map(ZFlow.Log(_))
 
