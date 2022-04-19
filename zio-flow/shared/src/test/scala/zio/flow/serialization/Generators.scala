@@ -766,10 +766,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       flow <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
     } yield ZFlow
-      .Fork(flow)(
-        schemaZNothing.asInstanceOf[Schema[Any]],
-        Schema[Int].asInstanceOf[Schema[Any]]
-      )
+      .Fork(flow)
       .asInstanceOf[ZFlow.Fork[Any, Any, Any]]
 
   lazy val genZFlowTimeout: Gen[Random with Sized, ZFlow.Timeout[Any, Any, Any]] =

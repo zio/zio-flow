@@ -95,8 +95,8 @@ sealed trait ZFlow[-R, +E, +A] {
       ).evaluated
     )
 
-  final def fork[E1 >: E: Schema, A1 >: A: Schema]: ZFlow[R, ZNothing, ExecutingFlow[E1, A1]] =
-    ZFlow.Fork[R, E1, A1](self)
+  final def fork: ZFlow[R, ZNothing, ExecutingFlow[E, A]] =
+    ZFlow.Fork(self)
 
   final def ifThenElse[R1 <: R, E1 >: E: Schema, B: Schema](
     ifTrue: ZFlow[R1, E1, B],
@@ -470,10 +470,7 @@ object ZFlow {
       Schema.Case("UnwrapRemote", schema[A], _.asInstanceOf[UnwrapRemote[A]])
   }
 
-  final case class Fork[R, E, A](flow: ZFlow[R, E, A])(implicit
-    val schemaE: Schema[E],
-    val schemaA: Schema[A]
-  ) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
+  final case class Fork[R, E, A](flow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
     type ValueE = E
     type ValueA = A
     val errorSchema = Schema[ZNothing]
@@ -484,20 +481,12 @@ object ZFlow {
   object Fork {
     def schema[R, E, A]: Schema[Fork[R, E, A]] =
       Schema.defer(
-        Schema.CaseClass3[ZFlow[R, E, A], FlowSchemaAst, FlowSchemaAst, Fork[R, E, A]](
-          Schema.Field("flow", ZFlow.schema[R, E, A]),
-          Schema.Field("schemaE", FlowSchemaAst.schema),
-          Schema.Field("schemaA", FlowSchemaAst.schema),
-          { case (workflow, schemaAstE, schemaAstA) =>
-            Fork(workflow)(
-              schemaAstE.toSchema[E],
-              schemaAstA.toSchema[A]
-            )
-          },
-          _.flow,
-          flow => FlowSchemaAst.fromSchema(flow.schemaE),
-          flow => FlowSchemaAst.fromSchema(flow.schemaA)
-        )
+        ZFlow
+          .schema[R, E, A]
+          .transform(
+            Fork(_),
+            _.flow
+          )
       )
 
     def schemaCase[R, E, A]: Schema.Case[Fork[R, E, A], ZFlow[R, E, A]] =
