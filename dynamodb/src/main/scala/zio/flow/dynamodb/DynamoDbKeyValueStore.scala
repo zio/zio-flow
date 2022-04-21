@@ -11,6 +11,7 @@ import zio.stream.ZStream
 import zio.{Chunk, IO, URLayer, ZIO}
 
 import java.io.IOException
+import scala.util.Try
 
 final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
@@ -65,7 +66,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
             item         <- result.item.toOption
             value        <- item.get(AttributeName(versionColumnName))
             numberString <- value.n.toOption
-            number       <- numberString.toLongOption
+            number       <- Try(numberString.toLong).toOption
           } yield RemoteVariableVersion(number)
       )
   }
