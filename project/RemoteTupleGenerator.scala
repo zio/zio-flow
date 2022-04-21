@@ -1,6 +1,7 @@
 import sbt._
 import sbt.Keys._
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import scala.meta._
 
@@ -209,7 +210,7 @@ object RemoteTupleGenerator extends AutoPlugin {
        }
        """
 
-    Files.writeString(targetFile.toPath, code.toString)
+    Files.write(targetFile.toPath, code.toString.getBytes(StandardCharsets.UTF_8))
   }
 
   lazy val generateSource =
