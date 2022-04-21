@@ -63,10 +63,11 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
             version1      <- KeyValueStore.getVersion(namespace, key)
             putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
             version2      <- KeyValueStore.getVersion(namespace, key)
+            distance       = version2.get.distanceFrom(version1.get)
           } yield assertTrue(
             putSucceeded1,
             putSucceeded2,
-            RemoteVariableVersion.unwrap(version2.get) - RemoteVariableVersion.unwrap(version1.get) == 1
+            distance == 1
           )
         }
       },

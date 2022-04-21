@@ -40,6 +40,8 @@ package object flow extends Syntax with Schemas {
 
   implicit class RemoteVariableVersionSyntax(val version: RemoteVariableVersion) extends AnyVal {
     def increment: RemoteVariableVersion = RemoteVariableVersion(RemoteVariableVersion.unwrap(version) + 1)
+    def distanceFrom(olderVersion: RemoteVariableVersion): Long =
+      RemoteVariableVersion.unwrap(version) - RemoteVariableVersion.unwrap(olderVersion)
   }
 
   object FlowId extends Newtype[String]

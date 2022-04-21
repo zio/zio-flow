@@ -133,6 +133,11 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
                     s"SET $versionColumnName = $versionColumnName + ${RequestExpressionPlaceholder.increment}"
                   ),
                   key = dynamoDbKey(item.namespace, item.key),
+                  expressionAttributeNames = Option(
+                    Map(
+                      ExpressionAttributeNameVariable(versionColumnName) -> AttributeName(versionColumnName)
+                    )
+                  ),
                   expressionAttributeValues = Option(
                     Map(
                       ExpressionAttributeValueVariable(RequestExpressionPlaceholder.increment) -> AttributeValue(n =
