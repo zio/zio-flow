@@ -251,8 +251,8 @@ trait Syntax {
 
   implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
 
-  implicit def RemoteExecutingFlow[A](remote: Remote[A]): RemoteExecutingFlowSyntax[A] =
-    new RemoteExecutingFlowSyntax[A](remote)
+  implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
+    new RemoteExecutingFlowSyntax[E, A](remote)
 
   implicit def RemoteNumeric[A](remote: Remote[A]): RemoteNumericSyntax[A] = new RemoteNumericSyntax[A](remote)
 
