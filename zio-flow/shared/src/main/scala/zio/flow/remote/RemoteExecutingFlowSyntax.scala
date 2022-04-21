@@ -24,9 +24,9 @@ class RemoteExecutingFlowSyntax[E, A](self: Remote[ExecutingFlow[E, A]]) {
   def flowId: Remote[FlowId] = ???
 
   def await(implicit schemaE: Schema[E], schemaA: Schema[A]): ZFlow[Any, ActivityError, Either[E, A]] =
-    ZFlow.Await(self.widen[ExecutingFlow[E, A]])
+    ZFlow.Await(self)
 
   def interrupt: ZFlow[Any, ActivityError, Any] =
-    ZFlow.Interrupt(self.widen[ExecutingFlow[E, A]])
+    ZFlow.Interrupt(self)
 
 }
