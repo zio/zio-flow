@@ -19,16 +19,14 @@ package zio.flow.remote
 import zio.flow.{ActivityError, ExecutingFlow, FlowId, Remote, ZFlow}
 import zio.schema.Schema
 
-class RemoteExecutingFlowSyntax[A](self: Remote[A]) {
+class RemoteExecutingFlowSyntax[E, A](self: Remote[ExecutingFlow[E, A]]) {
 
-  def flowId[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): Remote[FlowId] = ???
+  def flowId: Remote[FlowId] = ???
 
-  def await[E: Schema, A2: Schema](implicit
-    ev: A <:< ExecutingFlow[E, A2]
-  ): ZFlow[Any, ActivityError, Either[E, A2]] =
-    ZFlow.Await(self.widen[ExecutingFlow[E, A2]])
+  def await(implicit schemaE: Schema[E], schemaA: Schema[A]): ZFlow[Any, ActivityError, Either[E, A]] =
+    ZFlow.Await(self.widen[ExecutingFlow[E, A]])
 
-  def interrupt[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): ZFlow[Any, ActivityError, Any] =
-    ZFlow.Interrupt(self.widen[ExecutingFlow[E, A2]])
+  def interrupt: ZFlow[Any, ActivityError, Any] =
+    ZFlow.Interrupt(self.widen[ExecutingFlow[E, A]])
 
 }
