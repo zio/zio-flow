@@ -396,70 +396,11 @@ trait Generators extends DefaultJavaTimeSchemas {
       d <- genEither0
     } yield Remote.Tuple4(a, b, c, d)
 
-  lazy val genFirst: Gen[Random with Sized, Remote[Any]] =
+  lazy val genTupleAccess: Gen[Random with Sized, Remote[Any]] =
     for {
-      a <- genLiteral
-      b <- genLiteral
-    } yield Remote.First(Remote.Tuple2(a, b))
-
-  lazy val genSecond: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-    } yield Remote.Second(Remote.Tuple2(a, b))
-
-  lazy val genFirstOf3: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-    } yield Remote.FirstOf3(Remote.Tuple3(a, b, c))
-
-  lazy val genSecondOf3: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-    } yield Remote.SecondOf3(Remote.Tuple3(a, b, c))
-
-  lazy val genThirdOf3: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-    } yield Remote.ThirdOf3(Remote.Tuple3(a, b, c))
-
-  lazy val genFirstOf4: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-      d <- genLiteral
-    } yield Remote.FirstOf4(Remote.Tuple4(a, b, c, d))
-
-  lazy val genSecondOf4: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-      d <- genLiteral
-    } yield Remote.SecondOf4(Remote.Tuple4(a, b, c, d))
-
-  lazy val genThirdOf4: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-      d <- genLiteral
-    } yield Remote.ThirdOf4(Remote.Tuple4(a, b, c, d))
-
-  lazy val genFourthOf4: Gen[Random with Sized, Remote[Any]] =
-    for {
-      a <- genLiteral
-      b <- genLiteral
-      c <- genLiteral
-      d <- genLiteral
-    } yield Remote.ThirdOf4(Remote.Tuple4(a, b, c, d))
+      tuple <- genTuple4
+      n     <- Gen.int(0, 3)
+    } yield Remote.TupleAccess[(Any, Any, Any, Any), Any](tuple.asInstanceOf[Remote[(Any, Any, Any, Any)]], n)
 
   lazy val genBranch: Gen[Random with Sized, Remote[Any]] =
     for {
@@ -503,7 +444,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       list    <- Gen.listOf(Gen.double).map(Remote(_))
       initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
       fun = Remote.RemoteFunction((tuple: Remote[(Double, Double)]) =>
-              Remote.AddNumeric(Remote.First(tuple), Remote.Second(tuple), Numeric.NumericDouble)
+              Remote.AddNumeric(Remote.TupleAccess(tuple, 0), Remote.TupleAccess(tuple, 1), Numeric.NumericDouble)
             )
     } yield Remote.Fold(list, initial, fun.evaluated)
 

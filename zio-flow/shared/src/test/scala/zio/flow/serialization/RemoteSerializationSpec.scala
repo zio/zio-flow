@@ -101,15 +101,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("tuple2")(roundtripCheck(codec, genTuple2)),
       test("tuple3")(roundtripCheck(codec, genTuple3)),
       test("tuple4")(roundtripCheck(codec, genTuple4)),
-      test("first")(roundtripCheck(codec, genFirst)),
-      test("second")(roundtripCheck(codec, genSecond)),
-      test("first of tuple3")(roundtripCheck(codec, genFirstOf3)),
-      test("second of tuple3")(roundtripCheck(codec, genSecondOf3)),
-      test("third of tuple3")(roundtripCheck(codec, genThirdOf3)),
-      test("first of tuple4")(roundtripCheck(codec, genFirstOf4)),
-      test("second of tuple4")(roundtripCheck(codec, genSecondOf4)),
-      test("third of tuple4")(roundtripCheck(codec, genThirdOf4)),
-      test("fourth of tuple4")(roundtripCheck(codec, genFourthOf4)),
+      test("tupleAccess")(roundtripCheck(codec, genTupleAccess)),
       test("branch")(roundtripCheck(codec, genBranch)),
       test("length")(roundtripCheck(codec, genLength)),
       test("less than equal")(roundtripCheck(codec, genLessThanEqual)),
@@ -173,13 +165,13 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       },
       test("first") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
-          val first = Remote.First(Remote.Tuple2(Remote(a), Remote(b)))
+          val first = Remote.TupleAccess[(TestCaseClass, String), TestCaseClass](Remote.Tuple2(Remote(a), Remote(b)), 0)
           roundtripEval(codec, first).provide(RemoteContext.inMemory)
         }
       },
       test("second") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
-          val first = Remote.Second(Remote.Tuple2(Remote(b), Remote(a)))
+          val first = Remote.TupleAccess[(String, TestCaseClass), TestCaseClass](Remote.Tuple2(Remote(b), Remote(a)), 1)
           roundtripEval(codec, first).provide(RemoteContext.inMemory)
         }
       },
