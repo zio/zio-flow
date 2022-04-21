@@ -2,6 +2,7 @@ package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.tableName
 import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
+import zio.flow.RemoteVariableVersion
 import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
@@ -46,6 +47,30 @@ object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
                 retrieved1.get == value1,
                 putSucceeded2,
                 retrieved2.get == value2
+              )
+            }
+          }
+        }
+      },
+      test("should maintain version of key-value pairs") {
+        checkN(10)(
+          dynamoDbNameGen,
+          nonEmptyByteChunkGen,
+          byteChunkGen,
+          byteChunkGen
+        ) { (namespace, key, value1, value2) =>
+          ZIO.scoped {
+            createDynamoDbTable(tableName) *> {
+              for {
+                putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
+                version1      <- KeyValueStore.getVersion(namespace, key)
+                putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
+                version2      <- KeyValueStore.getVersion(namespace, key)
+              } yield assertTrue(
+                putSucceeded1,
+                version1.get == RemoteVariableVersion(0L),
+                putSucceeded2,
+                version2.get == RemoteVariableVersion(1L)
               )
             }
           }

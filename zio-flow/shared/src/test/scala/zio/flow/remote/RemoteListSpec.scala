@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow._
 import zio.test.{Spec, TestEnvironment, TestFailure, TestSuccess}
@@ -38,7 +39,7 @@ object RemoteListSpec extends RemoteSpecBase {
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
         fold <-> 6
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory))
 
   override def spec = suite("RemoteListSpec")(suite1)
 }

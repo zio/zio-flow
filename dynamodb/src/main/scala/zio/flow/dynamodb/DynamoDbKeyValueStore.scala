@@ -3,17 +3,9 @@ package zio.flow.dynamodb
 import zio.aws.core.AwsError
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.dynamodb.model.primitives._
-import zio.aws.dynamodb.model.{
-  AttributeValue,
-  DeleteItemRequest,
-  GetItemRequest,
-  Put,
-  ScanRequest,
-  TransactWriteItem,
-  TransactWriteItemsRequest,
-  UpdateItemRequest
-}
-import DynamoDbKeyValueStore._
+import zio.aws.dynamodb.model._
+import zio.flow.RemoteVariableVersion
+import zio.flow.dynamodb.DynamoDbKeyValueStore._
 import zio.flow.internal.KeyValueStore
 import zio.stream.ZStream
 import zio.{Chunk, IO, URLayer, ZIO}
@@ -26,31 +18,8 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
     namespace: String,
     key: Chunk[Byte],
     value: Chunk[Byte]
-  ): IO[IOException, Boolean] = {
-
-    val request =
-      UpdateItemRequest(
-        tableName,
-        dynamoDbKey(namespace, key),
-        updateExpression = Option(
-          UpdateExpression(
-            s"SET $valueColumnName = ${RequestExpressionPlaceholder.valueColumn}"
-          )
-        ),
-        expressionAttributeValues = Option(
-          Map(
-            ExpressionAttributeValueVariable(RequestExpressionPlaceholder.valueColumn) -> binaryValue(value)
-          )
-        )
-      )
-
-    dynamoDB
-      .updateItem(request)
-      .mapBoth(
-        ioExceptionOf(s"Error putting key-value pair for <$namespace> namespace", _),
-        _ => true
-      )
-  }
+  ): IO[IOException, Boolean] =
+    putAll(Chunk(KeyValueStore.Item(namespace, key, value))).as(true)
 
   override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] = {
 
@@ -73,6 +42,31 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
             value     <- item.get(AttributeName(valueColumnName))
             byteChunk <- value.b.toOption
           } yield byteChunk
+      )
+  }
+
+  override def getVersion(namespace: String, key: Chunk[Byte]): IO[IOException, Option[RemoteVariableVersion]] = {
+
+    val request =
+      GetItemRequest(
+        tableName,
+        dynamoDbKey(namespace, key),
+        projectionExpression = Option(
+          ProjectionExpression(versionColumnName)
+        )
+      )
+
+    dynamoDB
+      .getItem(request)
+      .mapBoth(
+        ioExceptionOf(s"Error retrieving or reading version for <$namespace> namespace", _),
+        result =>
+          for {
+            item         <- result.item.toOption
+            value        <- item.get(AttributeName(versionColumnName))
+            numberString <- value.n.toOption
+            number       <- numberString.toLongOption
+          } yield RemoteVariableVersion(number)
       )
   }
 
@@ -122,12 +116,21 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
     dynamoDB
       .transactWriteItems(
         TransactWriteItemsRequest(
-          transactItems = items.map { item =>
-            TransactWriteItem(
-              put = Put(
-                tableName = tableName,
-                item = dynamoDbKey(item.namespace, item.key) +
-                  (AttributeName(valueColumnName) -> binaryValue(item.value))
+          transactItems = items.flatMap { item =>
+            Chunk(
+              TransactWriteItem(
+                put = Put(
+                  tableName = tableName,
+                  item = dynamoDbKey(item.namespace, item.key) +
+                    (AttributeName(valueColumnName) -> binaryValue(item.value))
+                )
+              ),
+              TransactWriteItem(
+                update = Update(
+                  tableName = tableName,
+                  updateExpression = UpdateExpression("SET $versionColumnName = $versionColumnName + 1"),
+                  key = dynamoDbKey(item.namespace, item.key)
+                )
               )
             )
           }
@@ -156,6 +159,9 @@ object DynamoDbKeyValueStore {
 
   private[dynamodb] val valueColumnName: String =
     withColumnPrefix("value")
+
+  private[dynamodb] val versionColumnName: String =
+    withColumnPrefix("version")
 
   private object RequestExpressionPlaceholder {
     val namespaceColumn: String = ":namespaceValue"

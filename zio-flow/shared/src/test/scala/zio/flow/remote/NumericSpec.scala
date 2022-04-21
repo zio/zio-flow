@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax._
 import zio.flow._
 import zio.schema.Schema
@@ -21,7 +22,7 @@ object NumericSpec extends RemoteSpecBase {
       )(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory))
 
   private def numericTests[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]

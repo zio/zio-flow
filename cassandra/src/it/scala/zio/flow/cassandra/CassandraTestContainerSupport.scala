@@ -40,6 +40,23 @@ object CassandraTestContainerSupport {
       )
       .build
 
+  private val createVersionTable =
+    SchemaBuilder
+      .createTable(testKeyspaceName, CassandraKeyValueStore.versionTableName)
+      .withPartitionKey(
+        CassandraKeyValueStore.namespaceColumnName,
+        DataTypes.TEXT
+      )
+      .withClusteringColumn(
+        CassandraKeyValueStore.keyColumnName,
+        DataTypes.BLOB
+      )
+      .withColumn(
+        CassandraKeyValueStore.versionColumnName,
+        DataTypes.COUNTER
+      )
+      .build
+
   object DockerImageTag {
     val cassandraV3: String = s"$cassandra:3.11.11"
     val cassandraV4: String = s"$cassandra:4.0.1"
@@ -127,6 +144,10 @@ object CassandraTestContainerSupport {
       _ <-
         execAsync(
           session.executeAsync(createTable)
+        )
+      _ <-
+        execAsync(
+          session.executeAsync(createVersionTable)
         )
     } yield session
   } { session =>

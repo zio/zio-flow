@@ -28,6 +28,15 @@ package object flow extends Syntax with Schemas {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
   }
 
+  type RemoteVariableVersion = RemoteVariableVersion.Type
+  object RemoteVariableVersion extends Newtype[Long] {
+    implicit val schema: Schema[RemoteVariableVersion] = Schema[Long].transform(apply(_), unwrap)
+  }
+
+  implicit class RemoteVariableVersionSyntax(val version: RemoteVariableVersion) extends AnyVal {
+    def increment: RemoteVariableVersion = RemoteVariableVersion(RemoteVariableVersion.unwrap(version) + 1)
+  }
+
   object FlowId extends Newtype[String]
   type FlowId = FlowId.Type
 

@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
 import zio.test.BoolAlgebra
@@ -54,6 +54,6 @@ object RemoteBooleanSpec extends RemoteSpecBase {
           .map(BoolAlgebra.all(_))
           .map(_.get)
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory))
 
 }

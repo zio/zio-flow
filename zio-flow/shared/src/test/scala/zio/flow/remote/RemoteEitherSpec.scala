@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow._
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test.Assertion.{equalTo, succeeds}
@@ -142,7 +143,7 @@ object RemoteEitherSpec extends RemoteSpecBase {
           )
         }
       }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory))
 
   // TODO: fix tests using partialLift
   //  private def partialLift[A: Schema, B: Schema](runtime: Runtime[RemoteContext], f: A => B): Remote[A] => Remote[B] =

@@ -1,12 +1,15 @@
 package zio.flow.internal
 
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle}
+import zio.flow.RemoteVariableVersion
+import zio.flow.internal.RocksDbKeyValueStore.{decodeLong, encodeLong}
 import zio.rocksdb.{RocksDB, Transaction, TransactionDB}
 import zio.stm.{TMap, ZSTM}
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, ZIO, ZLayer}
 
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 final case class RocksDbKeyValueStore(
@@ -15,19 +18,23 @@ final case class RocksDbKeyValueStore(
 ) extends KeyValueStore {
 
   def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
-    getOrCreateNamespace(namespace).flatMap { handle =>
-      rocksDB.put(handle, key.toArray, value.toArray).refineToOrDie[IOException].as(true)
-    }
+    putAll(Chunk(KeyValueStore.Item(namespace, key, value))).as(true)
 
   def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] =
     for {
-      handle <- getOrCreateNamespace(namespace)
+      handle <- getOrCreateNamespace(dataNamespace(namespace))
       value  <- rocksDB.get(handle, key.toArray).refineToOrDie[IOException]
     } yield value.map(Chunk.fromArray)
 
+  override def getVersion(namespace: String, key: Chunk[Byte]): IO[IOException, Option[RemoteVariableVersion]] =
+    for {
+      handle <- getOrCreateNamespace(versionNamespace(namespace))
+      value  <- rocksDB.get(handle, key.toArray).refineToOrDie[IOException]
+    } yield value.map(Chunk.fromArray).map(decodeLong).map(RemoteVariableVersion(_))
+
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
     ZStream.unwrap {
-      getOrCreateNamespace(namespace).map { handle =>
+      getOrCreateNamespace(dataNamespace(namespace)).map { handle =>
         rocksDB
           .newIterator(handle)
           .map { case (key, value) => Chunk.fromArray(key) -> Chunk.fromArray(value) }
@@ -36,18 +43,37 @@ final case class RocksDbKeyValueStore(
     }
 
   override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
-    getOrCreateNamespace(namespace).flatMap { handle =>
-      rocksDB.delete(handle, key.toArray).refineToOrDie[IOException]
-    }
+    getOrCreateNamespace(dataNamespace(namespace)).flatMap { handle =>
+      rocksDB.delete(handle, key.toArray)
+    }.refineToOrDie[IOException] *>
+      getOrCreateNamespace(versionNamespace(namespace)).flatMap { handle =>
+        rocksDB.delete(handle, key.toArray)
+      }.refineToOrDie[IOException]
 
   override def putAll(items: Chunk[KeyValueStore.Item]): IO[IOException, Unit] =
     rocksDB.atomically {
       ZIO.foreach(items) { item =>
-        getOrCreateNamespace(item.namespace).flatMap { handle =>
-          Transaction.put(handle, item.key.toArray, item.value.toArray)
-        }
+        for {
+          dataNamespace    <- getOrCreateNamespace(dataNamespace(item.namespace))
+          versionNamespace <- getOrCreateNamespace(versionNamespace(item.namespace))
+          _                <- Transaction.put(dataNamespace, item.key.toArray, item.value.toArray)
+          lastVersion      <- Transaction.getForUpdate(versionNamespace, item.key.toArray, exclusive = true)
+          _ <- Transaction.put(
+                 versionNamespace,
+                 item.key.toArray,
+                 encodeLong(lastVersion.map { lastVersionArray =>
+                   decodeLong(Chunk.fromArray(lastVersionArray)) + 1
+                 }.getOrElse(0L)).toArray
+               )
+        } yield ()
       }
     }.refineToOrDie[IOException].unit
+
+  private def dataNamespace(namespace: String): String =
+    s"data__$namespace"
+
+  private def versionNamespace(namespace: String): String =
+    s"version__$namespace"
 
   private def getOrCreateNamespace(namespace: String): IO[IOException, ColumnFamilyHandle] =
     Promise.make[IOException, ColumnFamilyHandle].flatMap { newPromise =>
@@ -97,4 +123,14 @@ object RocksDbKeyValueStore {
       }
     }.refineToOrDie[IOException]
 
+  private def encodeLong(value: Long): Chunk[Byte] = {
+    val buffer = ByteBuffer.allocate(8)
+    buffer.putLong(value)
+    Chunk.fromArray(buffer.array())
+  }
+
+  private def decodeLong(buffer: Chunk[Byte]): Long = {
+    val byteBuffer = ByteBuffer.wrap(buffer.toArray)
+    byteBuffer.getLong()
+  }
 }

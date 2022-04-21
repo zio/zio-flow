@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext, remote}
 import zio.schema.Schema
@@ -14,7 +15,7 @@ object FractionalSpec extends RemoteSpecBase {
       fractionalTests("BigDecimal", Gen.bigDecimal(BigDecimal(Double.MinValue), BigDecimal(Double.MaxValue)))(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory))
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: FractionalOps[A])(implicit
     fractionalA: remote.Fractional[A]

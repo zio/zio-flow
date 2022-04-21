@@ -16,6 +16,7 @@
 
 package zio.flow.internal
 
+import zio.flow.RemoteVariableVersion
 import zio.flow.internal.KeyValueStore.Item
 import zio.stream.ZStream
 import zio.{Chunk, IO, ZIO, ZLayer, ZRef}
@@ -27,6 +28,8 @@ trait KeyValueStore {
   def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean]
 
   def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]]
+
+  def getVersion(namespace: String, key: Chunk[Byte]): IO[IOException, Option[RemoteVariableVersion]]
 
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
 
@@ -41,7 +44,7 @@ object KeyValueStore {
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
     ZLayer {
       for {
-        namespaces <- ZRef.make(Map.empty[String, Map[Chunk[Byte], Chunk[Byte]]])
+        namespaces <- ZRef.make(Map.empty[String, Map[Chunk[Byte], InMemoryKeyValueEntry]])
       } yield InMemoryKeyValueStore(namespaces)
     }
 
@@ -59,13 +62,21 @@ object KeyValueStore {
       _.get(namespace, key)
     )
 
+  def getVersion(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Option[RemoteVariableVersion]] =
+    ZIO.serviceWithZIO(
+      _.getVersion(namespace, key)
+    )
+
   def scanAll(namespace: String): ZStream[KeyValueStore, IOException, (Chunk[Byte], Chunk[Byte])] =
     ZStream.serviceWithStream(
       _.scanAll(namespace)
     )
 
-  private final case class InMemoryKeyValueStore(namespaces: zio.Ref[Map[String, Map[Chunk[Byte], Chunk[Byte]]]])
-      extends KeyValueStore {
+  private final case class InMemoryKeyValueEntry(data: Chunk[Byte], version: RemoteVariableVersion)
+
+  private final case class InMemoryKeyValueStore(
+    namespaces: zio.Ref[Map[String, Map[Chunk[Byte], InMemoryKeyValueEntry]]]
+  ) extends KeyValueStore {
     override def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte]): IO[IOException, Boolean] =
       namespaces.update { ns =>
         add(ns, Item(namespace, key, value))
@@ -73,14 +84,19 @@ object KeyValueStore {
 
     override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] =
       namespaces.get.map { ns =>
-        ns.get(namespace).flatMap(_.get(key))
+        ns.get(namespace).flatMap(_.get(key)).map(_.data)
+      }
+
+    override def getVersion(namespace: String, key: Chunk[Byte]): IO[IOException, Option[RemoteVariableVersion]] =
+      namespaces.get.map { ns =>
+        ns.get(namespace).flatMap(_.get(key)).map(_.version)
       }
 
     override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
       ZStream.unwrap {
         namespaces.get.map { ns =>
           ns.get(namespace) match {
-            case Some(value) => ZStream.fromIterable(value)
+            case Some(value) => ZStream.fromIterable(value).map { case (key, value) => (key, value.data) }
             case None        => ZStream.empty
           }
         }
@@ -102,14 +118,31 @@ object KeyValueStore {
       }
 
     private def add(
-      ns: Map[String, Map[Chunk[Byte], Chunk[Byte]]],
+      ns: Map[String, Map[Chunk[Byte], InMemoryKeyValueEntry]],
       item: Item
-    ): Map[String, Map[Chunk[Byte], Chunk[Byte]]] =
+    ): Map[String, Map[Chunk[Byte], InMemoryKeyValueEntry]] =
       ns.get(item.namespace) match {
         case Some(data) =>
-          ns.updated(item.namespace, data.updated(item.key, item.value))
+          data.get(item.key) match {
+            case Some(entry) =>
+              ns.updated(
+                item.namespace,
+                data.updated(
+                  item.key,
+                  InMemoryKeyValueEntry(
+                    item.value,
+                    entry.version.increment
+                  )
+                )
+              )
+            case None =>
+              ns.updated(
+                item.namespace,
+                data.updated(item.key, InMemoryKeyValueEntry(item.value, RemoteVariableVersion(0)))
+              )
+          }
         case None =>
-          ns + (item.namespace -> Map(item.key -> item.value))
+          ns + (item.namespace -> Map(item.key -> InMemoryKeyValueEntry(item.value, RemoteVariableVersion(0))))
       }
   }
 }

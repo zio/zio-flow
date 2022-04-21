@@ -373,59 +373,9 @@ final case class PersistentExecutor(
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil =>
-            //          def storeSuspended(
-            //            readVars: Set[String],
-            //            durablePromise: DurablePromise[Nothing, Unit]
-            //          ): IO[IOException, Unit] = {
-            //            def namespace(readVar: String): String =
-            //              s"_zflow_suspended_workflows_readVar_$readVar"
-            //
-            //            def key(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
-            //              Chunk.fromArray(durablePromise.promiseId.getBytes)
-            //
-            //            def value(durablePromise: DurablePromise[Nothing, Unit]): Chunk[Byte] =
-            //              ??? // TODO : Implement serialization of DurablePromise
-            //
-            //            ZIO.foreachDiscard(readVars)(readVar =>
-            //              kvStore.put(namespace(readVar), key(durablePromise), value(durablePromise))
-            //            )
-            //          }
-
-            //          ref.modify { state =>
-            //            state.tstate match {
-            //              case TState.Empty =>
-            //                ZIO.unit -> state.copy(current = ZFlow.unit)
-            //              case transaction @ TState.Transaction(_, _, _, fallback :: fallbacks) =>
-            //                val tstate = transaction.copy(fallbacks = fallbacks)
-            //                ZIO.unit -> state.copy(current = fallback, tstate = tstate)
-            //              case TState.Transaction(_, readVars, _, Nil) =>
-            //                val durablePromise = DurablePromise.make[Nothing, Unit](
-            //                  s"_zflow_workflow_${state.workflowId}_durablepromise_${state.promiseIdCounter}"
-            //                )
-            //                storeSuspended(readVars, durablePromise) *>
-            //                  durablePromise
-            //                    .awaitEither(Schema.fail("nothing schema"), Schema[Unit])
-            //                    .provideEnvironment(promiseEnv) ->
-            //                  state.copy(
-            //                    current = ZFlow.unit,
-            //                    compileStatus = PersistentCompileStatus.Suspended,
-            //                    promiseIdCounter = state.promiseIdCounter + 1
-            //                  )
-            //            }
-            //          }.flatten *> step(ref)
             ??? // TODO
 
           case OrTry(_, _) =>
-            //          for {
-            //            state <- ref.get
-            //            _ <- state.tstate.addFallback(erase(right).provide(state.currentEnvironment.toRemote)) match {
-            //                   case None => ZIO.dieMessage("The OrTry operator can only be used inside transactions.")
-            //                   case Some(tstate) =>
-            //                     ref.set(
-            //                       state.copy(current = left, tstate = tstate, stack = Instruction.PopFallback :: state.stack)
-            //                     ) *> step(ref)
-            //                 }
-            //          } yield ()
             ??? // TODO
 
           case Interrupt(remoteExecFlow) =>
@@ -449,10 +399,11 @@ final case class PersistentExecutor(
 
           case NewVar(name, initial) =>
             for {
-              schemaAndValue <- evalDynamic(initial)
-              vref            = RemoteVariableReference[Any](RemoteVariableName(name))
-              _              <- RemoteContext.setVariable(RemoteVariableName(name), schemaAndValue.value)
-              _              <- ZIO.logDebug(s"Created new variable $name")
+              schemaAndValue    <- evalDynamic(initial)
+              remoteVariableName = RemoteVariableName(name)
+              vref               = RemoteVariableReference[Any](remoteVariableName)
+              _                 <- RemoteContext.setVariable(remoteVariableName, schemaAndValue.value)
+              _                 <- ZIO.logDebug(s"Created new variable $name")
             } yield StepResult(
               StateChange.addVariable(name, schemaAndValue),
               Some(Right(Remote(vref)))
@@ -592,7 +543,11 @@ final case class PersistentExecutor(
       fiber <- (for {
                  _ <- startGate.await
                  _ <- runSteps(ref)
-                        .provide(RemoteContext.persistent, ZLayer.succeed(execEnv), ZLayer.succeed(kvStore))
+                        .provide(
+                          ZLayer(RemoteContext.persistent(state.id)),
+                          ZLayer.succeed(execEnv),
+                          ZLayer.succeed(kvStore)
+                        )
                         .absorb
                         .catchAll { error =>
                           ZIO.logError(s"Persistent executor ${state.id} failed") *>

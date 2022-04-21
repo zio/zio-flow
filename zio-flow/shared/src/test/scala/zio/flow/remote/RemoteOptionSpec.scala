@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
 import zio.test.{BoolAlgebra, Spec, TestEnvironment, TestFailure, TestSuccess}
@@ -125,7 +125,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(BoolAlgebra.all(_))
           .map(_.get)
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory))
 
   override def spec = suite("OptionSpec")(suite1)
 }

@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
 import zio.flow._
@@ -75,7 +76,7 @@ object RemoteInstantSpec extends RemoteSpecBase {
         Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
-  ).provideCustom(RemoteContext.inMemory)
+  ).provideCustom(ZLayer(RemoteContext.inMemory))
 
   implicit val chronoFieldSchema: Schema[ChronoField] =
     Schema[String].transform(ChronoField.valueOf, _.name())

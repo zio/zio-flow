@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
 import zio.test.{BoolAlgebra, Spec, TestEnvironment, TestFailure, TestSuccess}
@@ -47,22 +47,22 @@ object RemoteTupleSpec extends RemoteSpecBase {
           )
           .map(BoolAlgebra.all(_))
           .map(_.get)
+      },
+      test("Tuple5") {
+        val tuple5 = Remote((1, "A", true, 10.5, "X"))
+        ZIO
+          .collectAll(
+            List(
+              tuple5._1 <-> 1,
+              tuple5._2 <-> "A",
+              tuple5._3 <-> true,
+              tuple5._4 <-> 10.5,
+              tuple5._5 <-> "X"
+            )
+          )
+          .map(BoolAlgebra.all(_))
+          .map(_.get)
       }
-//      test("Tuple5") {
-//        val tuple5 = Remote((1, "A", true, 10.5, "X"))
-//        ZIO
-//          .collectAll(
-//            List(
-//              tuple5._1 <-> 1,
-//              tuple5._2 <-> "A",
-//              tuple5._3 <-> true,
-//              tuple5._4 <-> 10.5,
-//              tuple5._5 <-> "X"
-//            )
-//          )
-//          .map(BoolAlgebra.all(_))
-//          .map(_.get)
-//      }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory))
 
 }

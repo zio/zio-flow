@@ -3,7 +3,7 @@ package zio.flow.remote
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
 import zio.test.{BoolAlgebra, Gen, Sized, check}
-import zio.{Random, ZIO}
+import zio.{Random, ZIO, ZLayer}
 
 object RemoteRelationalSpec extends RemoteSpecBase {
 
@@ -29,5 +29,5 @@ object RemoteRelationalSpec extends RemoteSpecBase {
             .map(_.get)
         }
       }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory))
 }
