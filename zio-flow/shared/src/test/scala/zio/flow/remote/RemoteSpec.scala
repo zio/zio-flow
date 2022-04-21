@@ -214,7 +214,7 @@ object RemoteSpec extends DefaultRunnableSpec {
             Remote(100),
             Remote
               .RemoteFunction((tuple: Remote[(Int, Int)]) =>
-                Remote.AddNumeric(Remote.First(tuple), Remote.Second(tuple), Numeric.NumericInt)
+                Remote.AddNumeric(Remote.TupleAccess(tuple, 0), Remote.TupleAccess(tuple, 1), Numeric.NumericInt)
               )
               .evaluated
           )
@@ -233,7 +233,11 @@ object RemoteSpec extends DefaultRunnableSpec {
           val remote = Remote.Fold(
             Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
             Remote(TestCaseClass("d", 40)),
-            Remote.RemoteFunction((tuple: Remote[(TestCaseClass, TestCaseClass)]) => Remote.Second(tuple)).evaluated
+            Remote
+              .RemoteFunction((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
+                Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
+              )
+              .evaluated
           )
           val test =
             for {

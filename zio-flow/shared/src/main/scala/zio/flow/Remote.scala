@@ -19,6 +19,7 @@ package zio.flow
 import zio.ZIO
 import zio.flow.remote.Numeric.NumericInt
 import zio.flow.remote._
+import zio.flow.remote.RemoteTuples._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DynamicValue, Schema, StandardType}
 
@@ -1006,448 +1007,889 @@ object Remote {
       Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]])
   }
 
-  // TODO: generate the tuple constructor / selector remotes?
+  // beginning of generated tuple constructors
+  final case class Tuple2[T1, T2](t1: Remote[T1], t2: Remote[T2])
+      extends Remote[(T1, T2)]
+      with RemoteTuple2.Construct[T1, T2]
 
-  final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
-    override val schema: Schema[_ <: (A, B)] =
-      Schema.tuple2(left.schema, right.schema)
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B)]] =
-      for {
-        leftDyn  <- left.evalDynamic
-        rightDyn <- right.evalDynamic
-
-        a <- ZIO.fromEither(leftDyn.toTyped)
-        b <- ZIO.fromEither(rightDyn.toTyped)
-
-        result = SchemaAndValue.fromSchemaAndValue(
-                   Schema.tuple2(leftDyn.schema, rightDyn.schema),
-                   (a, b)
-                 )
-      } yield result
+  object Tuple2 extends RemoteTuple2.ConstructStatic[Tuple2] {
+    def construct[T1, T2](t1: Remote[T1], t2: Remote[T2]): Tuple2[T1, T2] = Tuple2(t1, t2)
   }
 
-  object Tuple2 {
-    def schema[A, B]: Schema[Tuple2[A, B]] =
-      Schema.defer(
-        Schema
-          .tuple2(Remote.schema[A], Remote.schema[B])
-          .transform(
-            { case (a, b) => Tuple2(a, b) },
-            (t: Tuple2[A, B]) => (t.left, t.right)
-          )
-      )
+  final case class Tuple3[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3])
+      extends Remote[(T1, T2, T3)]
+      with RemoteTuple3.Construct[T1, T2, T3]
 
-    def schemaCase[A]: Schema.Case[Tuple2[Any, Any], Remote[A]] =
-      Schema.Case("Tuple2", schema[Any, Any], _.asInstanceOf[Tuple2[Any, Any]])
-
+  object Tuple3 extends RemoteTuple3.ConstructStatic[Tuple3] {
+    def construct[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3]): Tuple3[T1, T2, T3] = Tuple3(t1, t2, t3)
   }
 
-  final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
-    override val schema: Schema[_ <: (A, B, C)] =
-      Schema.tuple3(_1.schema, _2.schema, _3.schema)
+  final case class Tuple4[T1, T2, T3, T4](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3], t4: Remote[T4])
+      extends Remote[(T1, T2, T3, T4)]
+      with RemoteTuple4.Construct[T1, T2, T3, T4]
 
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C)]] =
-      for {
-        dyn1 <- _1.evalDynamic
-        dyn2 <- _2.evalDynamic
-        dyn3 <- _3.evalDynamic
-
-        a <- ZIO.fromEither(dyn1.toTyped)
-        b <- ZIO.fromEither(dyn2.toTyped)
-        c <- ZIO.fromEither(dyn3.toTyped)
-
-        result = SchemaAndValue.fromSchemaAndValue(
-                   Schema.tuple3(dyn1.schema, dyn2.schema, dyn3.schema),
-                   (a, b, c)
-                 )
-      } yield result
+  object Tuple4 extends RemoteTuple4.ConstructStatic[Tuple4] {
+    def construct[T1, T2, T3, T4](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4]
+    ): Tuple4[T1, T2, T3, T4] = Tuple4(t1, t2, t3, t4)
   }
 
-  object Tuple3 {
-    def schema[A, B, C]: Schema[Tuple3[A, B, C]] =
-      Schema.defer(
-        Schema
-          .tuple3(Remote.schema[A], Remote.schema[B], Remote.schema[C])
-          .transform(
-            { case (a, b, c) => Tuple3(a, b, c) },
-            (t: Tuple3[A, B, C]) => (t._1, t._2, t._3)
-          )
-      )
+  final case class Tuple5[T1, T2, T3, T4, T5](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5]
+  ) extends Remote[(T1, T2, T3, T4, T5)]
+      with RemoteTuple5.Construct[T1, T2, T3, T4, T5]
 
-    def schemaCase[A]: Schema.Case[Tuple3[Any, Any, Any], Remote[A]] =
-      Schema.Case("Tuple3", schema[Any, Any, Any], _.asInstanceOf[Tuple3[Any, Any, Any]])
-
+  object Tuple5 extends RemoteTuple5.ConstructStatic[Tuple5] {
+    def construct[T1, T2, T3, T4, T5](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5]
+    ): Tuple5[T1, T2, T3, T4, T5] = Tuple5(t1, t2, t3, t4, t5)
   }
 
-  final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
-      extends Remote[(A, B, C, D)] {
+  final case class Tuple6[T1, T2, T3, T4, T5, T6](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6)]
+      with RemoteTuple6.Construct[T1, T2, T3, T4, T5, T6]
 
-    override val schema: Schema[_ <: (A, B, C, D)] =
-      Schema.tuple4(_1.schema, _2.schema, _3.schema, _4.schema)
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[(A, B, C, D)]] =
-      for {
-        dyn1 <- _1.evalDynamic
-        dyn2 <- _2.evalDynamic
-        dyn3 <- _3.evalDynamic
-        dyn4 <- _4.evalDynamic
-
-        a <- ZIO.fromEither(dyn1.toTyped)
-        b <- ZIO.fromEither(dyn2.toTyped)
-        c <- ZIO.fromEither(dyn3.toTyped)
-        d <- ZIO.fromEither(dyn4.toTyped)
-
-        result = SchemaAndValue.fromSchemaAndValue(
-                   Schema.tuple4(dyn1.schema, dyn2.schema, dyn3.schema, dyn4.schema),
-                   (a, b, c, d)
-                 )
-      } yield result
+  object Tuple6 extends RemoteTuple6.ConstructStatic[Tuple6] {
+    def construct[T1, T2, T3, T4, T5, T6](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6]
+    ): Tuple6[T1, T2, T3, T4, T5, T6] = Tuple6(t1, t2, t3, t4, t5, t6)
   }
 
-  object Tuple4 {
-    def schema[A, B, C, D]: Schema[Tuple4[A, B, C, D]] =
-      Schema.defer(
-        Schema
-          .tuple4(Remote.schema[A], Remote.schema[B], Remote.schema[C], Remote.schema[D])
-          .transform(
-            { case (a, b, c, d) => Tuple4(a, b, c, d) },
-            (t: Tuple4[A, B, C, D]) => (t._1, t._2, t._3, t._4)
-          )
-      )
+  final case class Tuple7[T1, T2, T3, T4, T5, T6, T7](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7)]
+      with RemoteTuple7.Construct[T1, T2, T3, T4, T5, T6, T7]
 
-    def schemaCase[A]: Schema.Case[Tuple4[Any, Any, Any, Any], Remote[A]] =
-      Schema.Case("Tuple4", schema[Any, Any, Any, Any], _.asInstanceOf[Tuple4[Any, Any, Any, Any]])
-
+  object Tuple7 extends RemoteTuple7.ConstructStatic[Tuple7] {
+    def construct[T1, T2, T3, T4, T5, T6, T7](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7]
+    ): Tuple7[T1, T2, T3, T4, T5, T6, T7] = Tuple7(t1, t2, t3, t4, t5, t6, t7)
   }
 
-  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
+  final case class Tuple8[T1, T2, T3, T4, T5, T6, T7, T8](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8)]
+      with RemoteTuple8.Construct[T1, T2, T3, T4, T5, T6, T7, T8]
+
+  object Tuple8 extends RemoteTuple8.ConstructStatic[Tuple8] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8]
+    ): Tuple8[T1, T2, T3, T4, T5, T6, T7, T8] = Tuple8(t1, t2, t3, t4, t5, t6, t7, t8)
+  }
+
+  final case class Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)]
+      with RemoteTuple9.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9]
+
+  object Tuple9 extends RemoteTuple9.ConstructStatic[Tuple9] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9]
+    ): Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9] = Tuple9(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  }
+
+  final case class Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)]
+      with RemoteTuple10.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]
+
+  object Tuple10 extends RemoteTuple10.ConstructStatic[Tuple10] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10]
+    ): Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] = Tuple10(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+  }
+
+  final case class Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)]
+      with RemoteTuple11.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]
+
+  object Tuple11 extends RemoteTuple11.ConstructStatic[Tuple11] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11]
+    ): Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] = Tuple11(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+  }
+
+  final case class Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)]
+      with RemoteTuple12.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]
+
+  object Tuple12 extends RemoteTuple12.ConstructStatic[Tuple12] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12]
+    ): Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] =
+      Tuple12(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12)
+  }
+
+  final case class Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)]
+      with RemoteTuple13.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]
+
+  object Tuple13 extends RemoteTuple13.ConstructStatic[Tuple13] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13]
+    ): Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] =
+      Tuple13(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13)
+  }
+
+  final case class Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)]
+      with RemoteTuple14.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]
+
+  object Tuple14 extends RemoteTuple14.ConstructStatic[Tuple14] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14]
+    ): Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] =
+      Tuple14(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14)
+  }
+
+  final case class Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)]
+      with RemoteTuple15.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]
+
+  object Tuple15 extends RemoteTuple15.ConstructStatic[Tuple15] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15]
+    ): Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] =
+      Tuple15(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15)
+  }
+
+  final case class Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)]
+      with RemoteTuple16.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16]
+
+  object Tuple16 extends RemoteTuple16.ConstructStatic[Tuple16] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16]
+    ): Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] =
+      Tuple16(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16)
+  }
+
+  final case class Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)]
+      with RemoteTuple17.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17]
+
+  object Tuple17 extends RemoteTuple17.ConstructStatic[Tuple17] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17]
+    ): Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] =
+      Tuple17(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17)
+  }
+
+  final case class Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)]
+      with RemoteTuple18.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18]
+
+  object Tuple18 extends RemoteTuple18.ConstructStatic[Tuple18] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18]
+    ): Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] =
+      Tuple18(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18)
+  }
+
+  final case class Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)]
+      with RemoteTuple19.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19]
+
+  object Tuple19 extends RemoteTuple19.ConstructStatic[Tuple19] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19]
+    ): Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19] =
+      Tuple19(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19)
+  }
+
+  final case class Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)]
+      with RemoteTuple20.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20
+      ]
+
+  object Tuple20 extends RemoteTuple20.ConstructStatic[Tuple20] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20]
+    ): Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20] =
+      Tuple20(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20)
+  }
+
+  final case class Tuple21[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    T21
+  ](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20],
+    t21: Remote[T21]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)]
+      with RemoteTuple21.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20,
+        T21
+      ]
+
+  object Tuple21 extends RemoteTuple21.ConstructStatic[Tuple21] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20],
+      t21: Remote[T21]
+    ): Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21] =
+      Tuple21(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21)
+  }
+
+  final case class Tuple22[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    T21,
+    T22
+  ](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20],
+    t21: Remote[T21],
+    t22: Remote[T22]
+  ) extends Remote[
+        (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)
+      ]
+      with RemoteTuple22.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20,
+        T21,
+        T22
+      ]
+
+  object Tuple22 extends RemoteTuple22.ConstructStatic[Tuple22] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20],
+      t21: Remote[T21],
+      t22: Remote[T22]
+    ): Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22] =
+      Tuple22(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22)
+  }
+  // end of generated tuple constructors
+
+  final case class TupleAccess[T, A](tuple: Remote[T], n: Int) extends Remote[A] {
     override val schema: Schema[A] =
-      tuple.schema.asInstanceOf[Schema.Tuple[A, B]].left
+      TupleAccess.findSchemaIn(tuple.schema, n).asInstanceOf[Schema[A]]
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
       for {
-        dyn        <- tuple.evalDynamic
-        tupleSchema = dyn.schema.asInstanceOf[Schema.Tuple[A, B]]
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(tupleSchema.left, tupleValue._1)
+        dynTuple <- tuple.evalDynamic
+        schema    = TupleAccess.findSchemaIn(dynTuple.schema, n).asInstanceOf[Schema[A]]
+        value     = TupleAccess.findValueIn(dynTuple.value, n)
+      } yield SchemaAndValue(schema, value)
   }
 
-  object First {
-    def schema[A, B]: Schema[First[A, B]] =
+  object TupleAccess {
+    private def findSchemaIn(schema: Schema[_], n: Int): Schema[_] = {
+      def find(schema: Schema[_], current: Int): Either[Int, Schema[_]] =
+        schema match {
+          case Schema.Transform(inner, _, _, _, _) =>
+            find(inner, current)
+          case Schema.Tuple(a, b, _) =>
+            if (current == n) {
+              find(a, current)
+            } else {
+              find(a, current) match {
+                case Left(updated) =>
+                  find(b, updated)
+                case Right(value) =>
+                  Right(value)
+              }
+            }
+          case _ if current == n =>
+            Right(schema)
+          case _ =>
+            Left(current + 1)
+        }
+
+      find(schema, 0) match {
+        case Left(_)      => throw new IllegalStateException(s"Cannot find schema for index $n in tuple schema")
+        case Right(value) => value
+      }
+    }
+
+    private def findValueIn(value: DynamicValue, n: Int): DynamicValue = {
+      def find(value: DynamicValue, current: Int): Either[Int, DynamicValue] =
+        value match {
+          case DynamicValue.Tuple(a, b) =>
+            if (current == n) {
+              find(a, current)
+            } else {
+              find(a, current) match {
+                case Left(updated) =>
+                  find(b, updated)
+                case Right(value) =>
+                  Right(value)
+              }
+            }
+          case _ if current == n =>
+            Right(value)
+          case _ =>
+            Left(current + 1)
+        }
+
+      find(value, 0) match {
+        case Left(_)      => throw new IllegalStateException(s"Cannot find value for index $n in dynamic tuple")
+        case Right(value) => value
+      }
+    }
+
+    def schema[T, A]: Schema[TupleAccess[T, A]] =
       Schema.defer(
-        Remote
-          .schema[(A, B)]
-          .transform(
-            First.apply,
-            _.tuple
-          )
+        Schema.CaseClass2[Remote[T], Int, TupleAccess[T, A]](
+          Schema.Field("tuple", Remote.schema[T]),
+          Schema.Field("n", Schema[Int]),
+          TupleAccess(_, _),
+          _.tuple,
+          _.n
+        )
       )
 
-    def schemaCase[A]: Schema.Case[First[A, Any], Remote[A]] =
-      Schema.Case("First", schema[A, Any], _.asInstanceOf[First[A, Any]])
-  }
-
-  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
-    override val schema: Schema[B] =
-      tuple.schema.asInstanceOf[Schema.Tuple[A, B]].right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
-      for {
-        dyn        <- tuple.evalDynamic
-        tupleSchema = dyn.schema.asInstanceOf[Schema.Tuple[A, B]]
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(tupleSchema.right, tupleValue._2)
-  }
-
-  object Second {
-    def schema[A, B]: Schema[Second[A, B]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B)]
-          .transform(
-            Second.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[Second[A, Any], Remote[A]] =
-      Schema.Case("Second", schema[A, Any], _.asInstanceOf[Second[A, Any]])
-  }
-
-  final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
-    override val schema: Schema[A] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .left
-        .asInstanceOf[Schema.Tuple[A, B]]
-        .left
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[A, B]]
-                   .left
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._1)
-  }
-
-  object FirstOf3 {
-    def schema[A, B, C]: Schema[FirstOf3[A, B, C]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C)]
-          .transform(
-            FirstOf3.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[FirstOf3[A, Any, Any], Remote[A]] =
-      Schema.Case("FirstOf3", schema[A, Any, Any], _.asInstanceOf[FirstOf3[A, Any, Any]])
-  }
-
-  final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
-
-    override val schema: Schema[B] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .left
-        .asInstanceOf[Schema.Tuple[A, B]]
-        .right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[A, B]]
-                   .right
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._2)
-  }
-
-  object SecondOf3 {
-    def schema[A, B, C]: Schema[SecondOf3[A, B, C]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C)]
-          .transform(
-            SecondOf3.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[SecondOf3[Any, A, Any], Remote[A]] =
-      Schema.Case("SecondOf3", schema[Any, A, Any], _.asInstanceOf[SecondOf3[Any, A, Any]])
-  }
-
-  final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
-
-    override val schema: Schema[C] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[((A, B), C), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .right
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._3)
-  }
-
-  object ThirdOf3 {
-    def schema[A, B, C]: Schema[ThirdOf3[A, B, C]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C)]
-          .transform(
-            ThirdOf3.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[ThirdOf3[Any, Any, A], Remote[A]] =
-      Schema.Case("ThirdOf3", schema[Any, Any, A], _.asInstanceOf[ThirdOf3[Any, Any, A]])
-  }
-
-  final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
-    override val schema: Schema[A] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-        .left
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .left
-        .asInstanceOf[Schema.Tuple[A, B]]
-        .left
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[A, B]]
-                   .left
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._1)
-  }
-
-  object FirstOf4 {
-    def schema[A, B, C, D]: Schema[FirstOf4[A, B, C, D]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C, D)]
-          .transform(
-            FirstOf4.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[FirstOf4[A, Any, Any, Any], Remote[A]] =
-      Schema.Case("FirstOf4", schema[A, Any, Any, Any], _.asInstanceOf[FirstOf4[A, Any, Any, Any]])
-  }
-
-  final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
-    override val schema: Schema[B] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-        .left
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .left
-        .asInstanceOf[Schema.Tuple[A, B]]
-        .right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[A, B]]
-                   .right
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._2)
-  }
-
-  object SecondOf4 {
-    def schema[A, B, C, D]: Schema[SecondOf4[A, B, C, D]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C, D)]
-          .transform(
-            SecondOf4.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[SecondOf4[Any, A, Any, Any], Remote[A]] =
-      Schema.Case("SecondOf4", schema[Any, A, Any, Any], _.asInstanceOf[SecondOf4[Any, A, Any, Any]])
-  }
-
-  final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
-    override val schema: Schema[C] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-        .left
-        .asInstanceOf[Schema.Tuple[(A, B), C]]
-        .right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[C]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-                   .left
-                   .asInstanceOf[Schema.Tuple[(A, B), C]]
-                   .right
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._3)
-  }
-
-  object ThirdOf4 {
-    def schema[A, B, C, D]: Schema[ThirdOf4[A, B, C, D]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C, D)]
-          .transform(
-            ThirdOf4.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[ThirdOf4[Any, Any, A, Any], Remote[A]] =
-      Schema.Case("ThirdOf4", schema[Any, Any, A, Any], _.asInstanceOf[ThirdOf4[Any, Any, A, Any]])
-  }
-
-  final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
-    override val schema: Schema[D] =
-      tuple.schema
-        .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-        .codec
-        .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-        .right
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[D]] =
-      for {
-        dyn <- tuple.evalDynamic
-        schema = dyn.schema
-                   .asInstanceOf[Schema.Transform[(((A, B), C), D), _, _]]
-                   .codec
-                   .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-                   .right
-        tupleValue <- ZIO.fromEither(dyn.toTyped)
-      } yield SchemaAndValue.fromSchemaAndValue(schema, tupleValue._4)
-  }
-
-  object FourthOf4 {
-    def schema[A, B, C, D]: Schema[FourthOf4[A, B, C, D]] =
-      Schema.defer(
-        Remote
-          .schema[(A, B, C, D)]
-          .transform(
-            FourthOf4.apply,
-            _.tuple
-          )
-      )
-
-    def schemaCase[A]: Schema.Case[FourthOf4[Any, Any, Any, A], Remote[A]] =
-      Schema.Case("FourthOf4", schema[Any, Any, Any, A], _.asInstanceOf[FourthOf4[Any, Any, Any, A]])
+    def schemaCase[A]: Schema.Case[TupleAccess[Any, A], Remote[A]] =
+      Schema.Case("TupleAccess", schema[Any, A], _.asInstanceOf[TupleAccess[Any, A]])
   }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
@@ -2538,15 +2980,25 @@ object Remote {
       .:+:(Tuple2.schemaCase[A])
       .:+:(Tuple3.schemaCase[A])
       .:+:(Tuple4.schemaCase[A])
-      .:+:(First.schemaCase[A])
-      .:+:(Second.schemaCase[A])
-      .:+:(FirstOf3.schemaCase[A])
-      .:+:(SecondOf3.schemaCase[A])
-      .:+:(ThirdOf3.schemaCase[A])
-      .:+:(FirstOf4.schemaCase[A])
-      .:+:(SecondOf4.schemaCase[A])
-      .:+:(ThirdOf4.schemaCase[A])
-      .:+:(FourthOf4.schemaCase[A])
+      .:+:(Tuple5.schemaCase[A])
+      .:+:(Tuple6.schemaCase[A])
+      .:+:(Tuple7.schemaCase[A])
+      .:+:(Tuple8.schemaCase[A])
+      .:+:(Tuple9.schemaCase[A])
+      .:+:(Tuple10.schemaCase[A])
+      .:+:(Tuple11.schemaCase[A])
+      .:+:(Tuple12.schemaCase[A])
+      .:+:(Tuple13.schemaCase[A])
+      .:+:(Tuple14.schemaCase[A])
+      .:+:(Tuple15.schemaCase[A])
+      .:+:(Tuple16.schemaCase[A])
+      .:+:(Tuple17.schemaCase[A])
+      .:+:(Tuple18.schemaCase[A])
+      .:+:(Tuple19.schemaCase[A])
+      .:+:(Tuple20.schemaCase[A])
+      .:+:(Tuple21.schemaCase[A])
+      .:+:(Tuple22.schemaCase[A])
+      .:+:(TupleAccess.schemaCase[A])
       .:+:(Branch.schemaCase[A])
       .:+:(Length.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
