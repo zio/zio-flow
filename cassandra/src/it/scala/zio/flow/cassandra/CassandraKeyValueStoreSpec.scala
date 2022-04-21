@@ -65,9 +65,8 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
             version2      <- KeyValueStore.getVersion(namespace, key)
           } yield assertTrue(
             putSucceeded1,
-            version1.get == RemoteVariableVersion(0L),
             putSucceeded2,
-            version2.get == RemoteVariableVersion(1L)
+            RemoteVariableVersion.unwrap(version2.get) - RemoteVariableVersion.unwrap(version1.get) == 1
           )
         }
       },

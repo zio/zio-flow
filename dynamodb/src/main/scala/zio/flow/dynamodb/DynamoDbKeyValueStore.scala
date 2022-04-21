@@ -129,7 +129,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
               TransactWriteItem(
                 update = Update(
                   tableName = tableName,
-                  updateExpression = UpdateExpression("SET $versionColumnName = $versionColumnName + 1"),
+                  updateExpression = UpdateExpression(s"SET $versionColumnName = $versionColumnName + 1"),
                   key = dynamoDbKey(item.namespace, item.key)
                 )
               )
