@@ -38,13 +38,9 @@ object RemoteContext {
   def persistent(flowId: FlowId): ZIO[KeyValueStore with ExecutionEnvironment, Nothing, RemoteContext] =
     ZIO.service[KeyValueStore].flatMap { kvStore =>
       ZIO.service[ExecutionEnvironment].map { execEnv =>
-        val keyPrefix = FlowId.unwrap(flowId) + "__"
-
         new RemoteContext {
-          private def key(name: RemoteVariableName): Chunk[Byte] = {
-            val key = keyPrefix + RemoteVariableName.unwrap(name)
-            Chunk.fromArray(key.getBytes(StandardCharsets.UTF_8))
-          }
+          private def key(name: RemoteVariableName): Chunk[Byte] =
+            Chunk.fromArray(name.prefixedBy(flowId).getBytes(StandardCharsets.UTF_8))
 
           override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] = {
             val serializedValue = execEnv.serializer.serialize(value)

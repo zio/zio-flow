@@ -28,6 +28,11 @@ package object flow extends Syntax with Schemas {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
   }
 
+  implicit class RemoteVariableNameSyntax(val name: RemoteVariableName) extends AnyVal {
+    def prefixedBy(flowId: FlowId): String =
+      FlowId.unwrap(flowId) + RemoteVariableName.unwrap(name)
+  }
+
   type RemoteVariableVersion = RemoteVariableVersion.Type
   object RemoteVariableVersion extends Newtype[Long] {
     implicit val schema: Schema[RemoteVariableVersion] = Schema[Long].transform(apply(_), unwrap)
@@ -43,5 +48,10 @@ package object flow extends Syntax with Schemas {
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
     def +(postfix: String): FlowId = FlowId(unwrap(flowId) + postfix)
     def toRaw: Chunk[Byte]         = Chunk.fromArray(unwrap(flowId).getBytes(StandardCharsets.UTF_8))
+  }
+
+  type TransactionId = TransactionId.Type
+  object TransactionId extends Newtype[String] {
+    implicit val schema: Schema[TransactionId] = Schema[String].transform(apply(_), unwrap)
   }
 }

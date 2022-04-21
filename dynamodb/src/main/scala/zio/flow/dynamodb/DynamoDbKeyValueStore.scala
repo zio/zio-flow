@@ -129,8 +129,17 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
               TransactWriteItem(
                 update = Update(
                   tableName = tableName,
-                  updateExpression = UpdateExpression(s"SET $versionColumnName = $versionColumnName + 1"),
-                  key = dynamoDbKey(item.namespace, item.key)
+                  updateExpression = UpdateExpression(
+                    s"SET $versionColumnName = $versionColumnName + ${RequestExpressionPlaceholder.increment}"
+                  ),
+                  key = dynamoDbKey(item.namespace, item.key),
+                  expressionAttributeValues = Option(
+                    Map(
+                      ExpressionAttributeValueVariable(RequestExpressionPlaceholder.increment) -> AttributeValue(n =
+                        Some(NumberAttributeValue("1"))
+                      )
+                    )
+                  )
                 )
               )
             )
@@ -166,7 +175,7 @@ object DynamoDbKeyValueStore {
 
   private object RequestExpressionPlaceholder {
     val namespaceColumn: String = ":namespaceValue"
-    val valueColumn: String     = ":valueColumnValue"
+    val increment: String       = ":increment"
   }
 
   private val scanRequest: ScanRequest =
