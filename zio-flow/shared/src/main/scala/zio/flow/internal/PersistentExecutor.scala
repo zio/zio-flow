@@ -55,7 +55,7 @@ final case class PersistentExecutor(
 
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
-      resultPromise <- start(id, flow).orDie
+      resultPromise <- start(id, id, flow).orDie
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
       _             <- ZIO.log(s"$id finished with $promiseResult")
       result <- promiseResult match {
@@ -96,6 +96,7 @@ final case class PersistentExecutor(
 
   private def start[E, A](
     id: FlowId,
+    rootId: FlowId,
     flow: ZFlow[Any, E, A]
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] =
     workflows.get.flatMap { runningWorkflows =>
@@ -112,6 +113,7 @@ final case class PersistentExecutor(
               _.getOrElse(
                 State(
                   id = id,
+                  rootId = rootId,
                   current = flow,
                   stack = Nil,
                   result = durablePromise,
@@ -337,6 +339,7 @@ final case class PersistentExecutor(
             for {
               resultPromise <- start[fork.ValueE, fork.ValueA](
                                  forkId,
+                                 state.rootId,
                                  workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
                                )
               result <- onSuccess(
@@ -381,6 +384,7 @@ final case class PersistentExecutor(
               resultPromise <-
                 start[timeout.ValueE, timeout.ValueA](
                   forkId,
+                  state.rootId,
                   flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
                 )
               result <- resultPromise.awaitEither
@@ -533,7 +537,7 @@ final case class PersistentExecutor(
                  _ <- startGate.await
                  _ <- runSteps(ref)
                         .provide(
-                          ZLayer(RemoteContext.persistent(state.id)),
+                          ZLayer(RemoteContext.persistent(state.rootId)),
                           ZLayer.succeed(execEnv),
                           ZLayer.succeed(kvStore)
                         )
@@ -579,7 +583,7 @@ final case class PersistentExecutor(
              modifiedVariables.map { case (name, value) =>
                KeyValueStore.Item(
                  Namespaces.variables,
-                 Chunk.fromArray(name.prefixedBy(id).getBytes(StandardCharsets.UTF_8)),
+                 Chunk.fromArray(name.prefixedBy(state0.rootId).getBytes(StandardCharsets.UTF_8)),
                  execEnv.serializer.serialize(value)
                )
              } :+
@@ -790,6 +794,7 @@ object PersistentExecutor {
 
   final case class State[E, A](
     id: FlowId,
+    rootId: FlowId,
     current: ZFlow[_, _, _],
     stack: List[Instruction],
     result: DurablePromise[Either[Throwable, DynamicValue], DynamicValue],
@@ -811,8 +816,9 @@ object PersistentExecutor {
 
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
-      Schema.CaseClass11(
+      Schema.CaseClass12(
         Schema.Field("id", Schema[String]),
+        Schema.Field("rootId", Schema[String]),
         Schema.Field("current", ZFlow.schemaAny),
         Schema.Field("stack", Schema[List[Instruction]]),
         Schema.Field("result", Schema[DurablePromise[Either[Throwable, DynamicValue], DynamicValue]]),
@@ -825,6 +831,7 @@ object PersistentExecutor {
         Schema.Field("status", Schema[PersistentWorkflowStatus]),
         (
           id: String,
+          rootId: String,
           current: ZFlow[_, _, _],
           stack: List[Instruction],
           result: DurablePromise[Either[Throwable, DynamicValue], DynamicValue],
@@ -838,6 +845,7 @@ object PersistentExecutor {
         ) =>
           State(
             FlowId(id),
+            FlowId(rootId),
             current,
             stack,
             result,
@@ -850,6 +858,7 @@ object PersistentExecutor {
             status
           ),
         state => FlowId.unwrap(state.id),
+        state => FlowId.unwrap(state.rootId),
         _.current.asInstanceOf[ZFlow[Any, Any, Any]],
         _.stack,
         _.result,
