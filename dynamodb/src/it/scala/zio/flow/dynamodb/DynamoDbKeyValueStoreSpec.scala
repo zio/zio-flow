@@ -1,13 +1,12 @@
 package zio.flow.dynamodb
 
-import DynamoDbKeyValueStore.tableName
-import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
-import zio.flow.RemoteVariableVersion
+import zio.flow.dynamodb.DynamoDbKeyValueStore.tableName
+import zio.flow.dynamodb.DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
 import zio.flow.internal.KeyValueStore
-import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
+import zio.{Chunk, ZIO}
 
 object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
 

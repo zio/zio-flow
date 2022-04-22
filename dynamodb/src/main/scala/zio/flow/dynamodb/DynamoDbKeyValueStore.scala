@@ -13,6 +13,18 @@ import zio.{Chunk, IO, URLayer, ZIO}
 import java.io.IOException
 import scala.util.Try
 
+/*
+Idea for a safer encoding:
+
+- Store each version of values so always put with retrying on version collision
+- Return the version in put
+- The recording context just records the versions, but immediately stores in the store
+- Store each used variable's latest version in the state and use it in the context for getting them
+- When getting, use the latest version if it's not in the state
+- Ability to delete all versions
+=> This way there is no need for putAll at all
+ */
+
 final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
   override def put(
@@ -127,17 +139,21 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
                 )
               ),
               TransactWriteItem(
+                put = Put(
+                  tableName = tableName,
+                  conditionExpression = ConditionExpression(s"attribute_not_exists($versionColumnName)"),
+                  item = dynamoDbKey(item.namespace, item.key) +
+                    (AttributeName(versionColumnName) -> AttributeValue(n = Some(NumberAttributeValue("0"))))
+                )
+              ),
+              TransactWriteItem(
                 update = Update(
                   tableName = tableName,
+                  conditionExpression = ConditionExpression(s"attribute_exists($versionColumnName)"),
                   updateExpression = UpdateExpression(
                     s"SET $versionColumnName = $versionColumnName + ${RequestExpressionPlaceholder.increment}"
                   ),
                   key = dynamoDbKey(item.namespace, item.key),
-                  expressionAttributeNames = Option(
-                    Map(
-                      ExpressionAttributeNameVariable(versionColumnName) -> AttributeName(versionColumnName)
-                    )
-                  ),
                   expressionAttributeValues = Option(
                     Map(
                       ExpressionAttributeValueVariable(RequestExpressionPlaceholder.increment) -> AttributeValue(n =

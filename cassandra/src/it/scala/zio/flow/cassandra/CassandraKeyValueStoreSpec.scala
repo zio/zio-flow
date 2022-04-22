@@ -1,12 +1,11 @@
 package zio.flow.cassandra
 
-import CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
-import zio.flow.RemoteVariableVersion
+import zio.flow.cassandra.CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
 import zio.flow.internal.KeyValueStore
-import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
+import zio.{Chunk, ZIO}
 
 object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
 

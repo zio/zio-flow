@@ -10,5 +10,5 @@ object Version {
   val zioSchema           = "0.2.0-RC3-1"
   val awsSdkV1            = "1.12.141"
   val cassandraJavaDriver = "4.13.0.0"
-  val testContainers      = "0.39.12"
+  val testContainers      = "0.40.5"
 }
