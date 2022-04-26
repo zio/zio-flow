@@ -1,6 +1,6 @@
 package zio.flow
 
-import zio.flow.internal.{KeyValueStore, Namespaces}
+import zio.flow.internal.{KeyValueStore, Namespaces, VirtualClock}
 import zio.schema.DynamicValue
 import zio.stm.TMap
 import zio.{Chunk, UIO, ZIO}
@@ -35,43 +35,52 @@ object RemoteContext {
       }
     }
 
-  def persistent(flowId: FlowId): ZIO[KeyValueStore with ExecutionEnvironment, Nothing, RemoteContext] =
-    ZIO.service[KeyValueStore].flatMap { kvStore =>
-      ZIO.service[ExecutionEnvironment].map { execEnv =>
-        new RemoteContext {
-          private def key(name: RemoteVariableName): Chunk[Byte] =
-            Chunk.fromArray(name.prefixedBy(flowId).getBytes(StandardCharsets.UTF_8))
+  def persistent(
+    flowId: FlowId
+  ): ZIO[KeyValueStore with ExecutionEnvironment with VirtualClock, Nothing, RemoteContext] =
+    ZIO.service[VirtualClock].flatMap { virtualClock =>
+      ZIO.service[KeyValueStore].flatMap { kvStore =>
+        ZIO.service[ExecutionEnvironment].map { execEnv =>
+          new RemoteContext {
+            private def key(name: RemoteVariableName): Chunk[Byte] =
+              Chunk.fromArray(name.prefixedBy(flowId).getBytes(StandardCharsets.UTF_8))
 
-          override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] = {
-            val serializedValue = execEnv.serializer.serialize(value)
-            kvStore
-              .put(
-                Namespaces.variables,
-                key(name),
-                serializedValue
-              )
-              .orDie // TODO: rethink/cleanup error handling
-              .unit
-          }
-
-          override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
-            kvStore
-              .get(
-                Namespaces.variables,
-                key(name)
-              )
-              .orDie // TODO: rethink/cleanup error handling
-              .flatMap {
-                case Some(serializedValue) =>
-                  ZIO
-                    .fromEither(execEnv.deserializer.deserialize[DynamicValue](serializedValue))
-                    .map(Some(_))
-                    .orDieWith(msg =>
-                      new IOException(s"Failed to deserialize remote variable $name: $msg")
-                    ) // TODO: rethink/cleanup error handling
-                case None =>
-                  ZIO.none
+            override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+              virtualClock.current.flatMap { timestamp =>
+                val serializedValue = execEnv.serializer.serialize(value)
+                kvStore
+                  .put(
+                    Namespaces.variables,
+                    key(name),
+                    serializedValue,
+                    timestamp
+                  )
+                  .orDie // TODO: rethink/cleanup error handling
+                  .unit
               }
+
+            override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+              virtualClock.current.flatMap { timestamp =>
+                kvStore
+                  .getLatest(
+                    Namespaces.variables,
+                    key(name),
+                    Some(timestamp)
+                  )
+                  .orDie // TODO: rethink/cleanup error handling
+                  .flatMap {
+                    case Some(serializedValue) =>
+                      ZIO
+                        .fromEither(execEnv.deserializer.deserialize[DynamicValue](serializedValue))
+                        .map(Some(_))
+                        .orDieWith(msg =>
+                          new IOException(s"Failed to deserialize remote variable $name: $msg")
+                        ) // TODO: rethink/cleanup error handling
+                    case None =>
+                      ZIO.none
+                  }
+              }
+          }
         }
       }
     }
