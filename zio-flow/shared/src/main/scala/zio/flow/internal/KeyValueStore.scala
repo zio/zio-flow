@@ -27,6 +27,8 @@ trait KeyValueStore {
 
   def getLatest(namespace: String, key: Chunk[Byte], before: Option[Timestamp]): IO[IOException, Option[Chunk[Byte]]]
 
+  def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]]
+
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
 
   def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit]
@@ -91,6 +93,15 @@ object KeyValueStore {
             _.filter(_.timestamp <= before.getOrElse(Timestamp(Long.MaxValue)))
               .maxByOption(_.timestamp.value)
               .map(_.data)
+          )
+      }
+
+    override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]] =
+      namespaces.get.map { ns =>
+        ns.get(namespace)
+          .flatMap(_.get(key))
+          .flatMap(
+            _.maxByOption(_.timestamp.value).map(_.timestamp)
           )
       }
 
