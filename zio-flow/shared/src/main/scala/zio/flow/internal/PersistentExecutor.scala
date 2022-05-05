@@ -140,12 +140,14 @@ final case class PersistentExecutor(
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] = {
     import zio.flow.ZFlow._
 
-    def step(state: State[E, A]): ZIO[RemoteContext, IOException, StepResult] = {
-      @tailrec
+    def step(
+      state: State[E, A]
+    ): ZIO[RemoteContext with VirtualClock with KeyValueStore with ExecutionEnvironment, IOException, StepResult] = {
+
       def onSuccess(
         value: Remote[_],
         stateChange: StateChange = StateChange.none
-      ): ZIO[RemoteContext, IOException, StepResult] = {
+      ): ZIO[RemoteContext with VirtualClock with KeyValueStore with ExecutionEnvironment, IOException, StepResult] = {
         val updatedState = stateChange(state)
         updatedState.stack match {
           case Nil =>
@@ -172,7 +174,17 @@ final case class PersistentExecutor(
               )
             }
           case Instruction.CommitTransaction :: _ =>
-            onSuccess(value, stateChange ++ StateChange.popContinuation) // TODO
+            for {
+              currentContext <- ZIO.service[RemoteContext]
+              targetContext <- RemoteContext.persistent(
+                                 StateChange.leaveTransaction(updatedState).toScopeStack
+                               )
+              _ <- commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
+              result <- onSuccess(
+                          value,
+                          stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+                        )
+            } yield result
         }
       }
 
@@ -207,7 +219,10 @@ final case class PersistentExecutor(
               )
             }
           case Instruction.CommitTransaction :: _ =>
-            onError(value, stateChange ++ StateChange.popContinuation) // TODO
+            onError(
+              value,
+              stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+            ) // TODO: revert transaction
         }
       }
 
@@ -293,6 +308,7 @@ final case class PersistentExecutor(
             ZIO.succeed(
               StepResult(
                 StateChange.enterTransaction(flow.provide(env.asInstanceOf[Remote[tx.ValueR]])) ++
+                  StateChange.pushContinuation(Instruction.CommitTransaction) ++
                   StateChange.setCurrent(flow),
                 continue = true
               )
@@ -522,17 +538,28 @@ final case class PersistentExecutor(
       }
     }
 
-    def runSteps(stateRef: Ref[State[E, A]]): ZIO[RemoteContext with VirtualClock, IOException, Unit] =
-      for {
-        state0 <- stateRef.get
+    def runSteps(
+      stateRef: Ref[State[E, A]]
+    ): ZIO[VirtualClock with KeyValueStore with ExecutionEnvironment, IOException, Unit] =
+      stateRef.get.flatMap { state0 =>
+        val scopeStack    = state0.toScopeStack
+        val remoteContext = ZLayer(RemoteContext.persistent(scopeStack))
 
-        recordingContext <- RecordingRemoteContext.startRecording
-        stepResult       <- step(state0).provideService(recordingContext.remoteContext)
-        state1            = stepResult.stateChange(state0)
-        _                <- stateRef.set(state1)
-        _                <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
-        _                <- runSteps(stateRef).when(stepResult.continue)
-      } yield ()
+        remoteContext {
+          for {
+
+            recordingContext <- RecordingRemoteContext.startRecording
+            stepResult <-
+              step(state0).provideSomeEnvironment[VirtualClock with KeyValueStore with ExecutionEnvironment](
+                _ ++ ZEnvironment(recordingContext.remoteContext)
+              )
+            state1  = stepResult.stateChange(state0)
+            state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
+            _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+            _      <- runSteps(stateRef).when(stepResult.continue)
+          } yield ()
+        }
+      }
 
     for {
       ref       <- Ref.make[State[E, A]](state)
@@ -541,7 +568,6 @@ final case class PersistentExecutor(
                  _ <- startGate.await
                  _ <- runSteps(ref)
                         .provide(
-                          ZLayer(RemoteContext.persistent(state.rootId)),
                           ZLayer.succeed(execEnv),
                           ZLayer.succeed(kvStore),
                           ZLayer(VirtualClock.make(state.lastTimestamp))
@@ -567,21 +593,53 @@ final case class PersistentExecutor(
     } yield state.result
   }
 
+  private def commitModifiedVariablesToParent(
+    transactionState: TransactionState,
+    currentContext: RemoteContext,
+    targetContext: RemoteContext
+  ): ZIO[Any, IOException, Unit] =
+    ZIO.logDebug(s"Committing transaction ${transactionState.id}") *>
+      ZIO.foreachDiscard(transactionState.modifiedVariables) { case (name, modification) =>
+        // TODO: verify modification timestamps and revert and retry transaction in case of mismatch
+        currentContext.getVariable(name).flatMap {
+          case Some(value) =>
+            targetContext.setVariable(name, value)
+          case None =>
+            ZIO.fail(new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}"))
+        }
+      }
+
   @nowarn private def persistState(
     id: FlowId,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
     state1: PersistentExecutor.State[_, _],
     recordingContext: RecordingRemoteContext
-  ): IO[IOException, Unit] = {
+  ): IO[IOException, PersistentExecutor.State[_, _]] = {
     val key = id.toRaw
     for {
       _                 <- recordingContext.virtualClock.advance
       modifiedVariables <- recordingContext.getModifiedVariables
       currentTimestamp  <- recordingContext.virtualClock.current
-      state11            = state1.copy(lastTimestamp = currentTimestamp)
-      persistedState     = execEnv.serializer.serialize(state11)
-      _                 <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
+
+      modifiedVariablesWithTimestamps <- ZIO.foreach(modifiedVariables) { case (name, _) =>
+                                           kvStore
+                                             .getLatestTimestamp(
+                                               Namespaces.variables,
+                                               Chunk.fromArray(
+                                                 name
+                                                   .prefixedBy(state0.rootId, transactionId = None)
+                                                   .getBytes(StandardCharsets.UTF_8)
+                                               ) // TODO: extract function
+                                             )
+                                             .map(ts => name -> ts)
+                                         }
+      state2 = state1
+                 .copy(lastTimestamp = currentTimestamp)
+                 .recordModifiedVariables(modifiedVariablesWithTimestamps)
+
+      persistedState = execEnv.serializer.serialize(state2)
+      _             <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
       _ <- ZIO
              .logInfo(
                s"Persisting changes to ${modifiedVariables.size} remote variables (${modifiedVariables.mkString(", ")})"
@@ -589,17 +647,22 @@ final case class PersistentExecutor(
              .when(modifiedVariables.nonEmpty)
 
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (name, value) =>
+             // TODO: use a RemoteContext instance instead of duplicating code here
              kvStore
                .put(
                  Namespaces.variables,
-                 Chunk.fromArray(name.prefixedBy(state0.rootId).getBytes(StandardCharsets.UTF_8)),
+                 Chunk.fromArray(
+                   name
+                     .prefixedBy(state0.rootId, transactionId = state2.transactionStack.headOption.map(_.id))
+                     .getBytes(StandardCharsets.UTF_8)
+                 ),
                  execEnv.serializer.serialize(value),
                  currentTimestamp
                )
                .unit
            }
       _ <- kvStore.put(Namespaces.workflowState, key, persistedState, currentTimestamp)
-    } yield ()
+    } yield state2
   }
 
   private def loadState(id: FlowId): IO[IOException, Option[PersistentExecutor.State[_, _]]] =
@@ -762,10 +825,16 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] = {
         val transactionId = TransactionId("tx" + state.transactionCounter.toString)
         state.copy(
-          transactionStack = TransactionState(transactionId) :: state.transactionStack,
+          transactionStack = TransactionState(transactionId, Map.empty) :: state.transactionStack,
           transactionCounter = state.transactionCounter + 1
         )
       }
+    }
+    private case object LeaveTransaction extends StateChange {
+      override def apply[E, A](state: State[E, A]): State[E, A] =
+        state.copy(
+          transactionStack = state.transactionStack.tail
+        )
     }
     private case object IncreaseForkCounter extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -783,6 +852,8 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(envStack = state.envStack.tail)
     }
+
+    // TODO: remove?
     private final case class AddVariable(name: String, value: SchemaAndValue[_]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state // state.copy(variables = state.variables + (name -> value))
@@ -795,6 +866,7 @@ object PersistentExecutor {
     def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): StateChange = AddCompensation(newCompensation)
     def addReadVar(name: RemoteVariableName): StateChange                             = AddReadVar(name)
     def enterTransaction(flow: ZFlow[Any, _, _]): StateChange                         = EnterTransaction(flow)
+    val leaveTransaction: StateChange                                                 = LeaveTransaction
     val increaseForkCounter: StateChange                                              = IncreaseForkCounter
     val increaseTempVarCounter: StateChange                                           = IncreaseTempVarCounter
     def pushEnvironment(value: Remote[_]): StateChange                                = PushEnvironment(value)
@@ -823,6 +895,37 @@ object PersistentExecutor {
     )
 
     def setSuspended(): State[E, A] = copy(status = PersistentWorkflowStatus.Suspended)
+
+    def isInTransaction: Boolean = transactionStack.nonEmpty
+
+    def recordModifiedVariables(variables: Seq[(RemoteVariableName, Option[Timestamp])]): State[E, A] =
+      transactionStack match {
+        case currentTransaction :: rest =>
+          copy(
+            transactionStack =
+              currentTransaction.copy(modifiedVariables = variables.foldLeft(currentTransaction.modifiedVariables) {
+                case (result, (name, timestamp)) =>
+                  result.get(name) match {
+                    case Some(_) =>
+                      result
+                    case None =>
+                      // First time this variable is modified in this transaction
+                      result + (name -> RecordedModification(previousTimestamp = timestamp.getOrElse(Timestamp(0L))))
+                  }
+              }) :: rest
+          )
+        case Nil =>
+          this
+      }
+
+    def toScopeStack: NonEmptyChunk[RemoteVariableScope] =
+      NonEmptyChunk
+        .fromChunk(
+          Chunk.fromIterable(
+            transactionStack.map(txState => RemoteVariableScope(rootId, Some(txState.id)))
+          ) :+ RemoteVariableScope(rootId, None)
+        )
+        .get
   }
 
   object State {
@@ -887,7 +990,15 @@ object PersistentExecutor {
       )
   }
 
-  final case class TransactionState(id: TransactionId)
+  final case class RecordedModification(previousTimestamp: Timestamp)
+  object RecordedModification {
+    implicit val schema: Schema[RecordedModification] = DeriveSchema.gen
+  }
+
+  final case class TransactionState(
+    id: TransactionId,
+    modifiedVariables: Map[RemoteVariableName, RecordedModification]
+  )
 
   object TransactionState {
     implicit val schema: Schema[TransactionState] = DeriveSchema.gen

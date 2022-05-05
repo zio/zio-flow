@@ -29,8 +29,13 @@ package object flow extends Syntax with Schemas {
   }
 
   implicit class RemoteVariableNameSyntax(val name: RemoteVariableName) extends AnyVal {
-    def prefixedBy(flowId: FlowId): String =
-      FlowId.unwrap(flowId) + RemoteVariableName.unwrap(name)
+    def prefixedBy(flowId: FlowId, transactionId: Option[TransactionId]): String =
+      transactionId match {
+        case Some(txid) =>
+          FlowId.unwrap(flowId) + "__" + TransactionId.unwrap(txid) + "__" + RemoteVariableName.unwrap(name)
+        case None =>
+          FlowId.unwrap(flowId) + "__" + RemoteVariableName.unwrap(name)
+      }
   }
 
   object FlowId extends Newtype[String]

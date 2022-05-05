@@ -151,13 +151,28 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         i1 < i2
       )
     },
-    testFlow("transaction") {
-      // TODO: test transactional behavior
+    testFlow("nop transaction") {
       ZFlow.transaction { _ =>
         ZFlow.succeed(100)
       }
     } { result =>
       assertTrue(result == 100)
+    },
+    testFlow("setting variables in transaction") {
+      for {
+        var1 <- ZFlow.newVar[Int]("var1", 10)
+        var2 <- ZFlow.newVar[Int]("var2", 20)
+        _ <- ZFlow.transaction { _ =>
+               for {
+                 _ <- var1.set(100)
+                 _ <- var2.set(200)
+               } yield ()
+             }
+        v1 <- var1.get
+        v2 <- var2.get
+      } yield (v1, v2)
+    } { result =>
+      assertTrue(result == (100, 200))
     },
     testFlow("unwrap") {
       val flow = for {
