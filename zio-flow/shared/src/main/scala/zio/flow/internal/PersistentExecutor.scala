@@ -179,11 +179,27 @@ final case class PersistentExecutor(
               targetContext <- RemoteContext.persistent(
                                  StateChange.leaveTransaction(updatedState).toScopeStack
                                )
-              _ <- commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
-              result <- onSuccess(
-                          value,
-                          stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
-                        )
+              commitSucceeded <-
+                commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
+              result <-
+                if (commitSucceeded) {
+                  onSuccess(
+                    value,
+                    stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+                  )
+                } else {
+                  for {
+                    _ <- ZIO.unit // TODO: revert
+                    result <-
+                      onSuccess(
+                        value,
+                        stateChange ++
+                          StateChange.popContinuation ++
+                          StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                          StateChange.restartCurrentTransaction
+                      )
+                  } yield result
+                }
             } yield result
         }
       }
@@ -547,14 +563,17 @@ final case class PersistentExecutor(
 
         remoteContext {
           for {
-
             recordingContext <- RecordingRemoteContext.startRecording
+            parentContext <- RemoteContext.persistent(
+                               NonEmptyChunk.fromChunk(scopeStack.tail).getOrElse(scopeStack)
+                             )
+
             stepResult <-
               step(state0).provideSomeEnvironment[VirtualClock with KeyValueStore with ExecutionEnvironment](
                 _ ++ ZEnvironment(recordingContext.remoteContext)
               )
             state1  = stepResult.stateChange(state0)
-            state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
+            state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext, parentContext)
             _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
             _      <- runSteps(stateRef).when(stepResult.continue)
           } yield ()
@@ -597,25 +616,44 @@ final case class PersistentExecutor(
     transactionState: TransactionState,
     currentContext: RemoteContext,
     targetContext: RemoteContext
-  ): ZIO[Any, IOException, Unit] =
+  ): ZIO[Any, IOException, Boolean] =
     ZIO.logDebug(s"Committing transaction ${transactionState.id}") *>
-      ZIO.foreachDiscard(transactionState.modifiedVariables) { case (name, modification) =>
-        // TODO: verify modification timestamps and revert and retry transaction in case of mismatch
-        currentContext.getVariable(name).flatMap {
-          case Some(value) =>
-            targetContext.setVariable(name, value)
-          case None =>
-            ZIO.fail(new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}"))
+      ZIO
+        .foreachDiscard(transactionState.modifiedVariables) { case (name, modification) =>
+          targetContext.getLatestTimestamp(name).flatMap { optLatestTimestamp =>
+            val latestTimestamp = optLatestTimestamp.getOrElse(Timestamp(0L))
+            if (latestTimestamp > modification.previousTimestamp) {
+              ZIO.logWarning(
+                s"Variable ${name} in ${transactionState.id} latest: $latestTimestamp previous: ${modification.previousTimestamp}"
+              ) *>
+                ZIO.fail(None)
+              // TODO: revert and retry transaction in case of mismatch
+            } else {
+              currentContext.getVariable(name).flatMap {
+                case Some(value) =>
+                  targetContext.setVariable(name, value)
+                case None =>
+                  ZIO.fail(
+                    Some(
+                      new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}")
+                    )
+                  )
+              }
+            }
+          }
         }
-      }
+        .unsome
+        .map(_.isDefined)
 
   @nowarn private def persistState(
     id: FlowId,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
     state1: PersistentExecutor.State[_, _],
-    recordingContext: RecordingRemoteContext
+    recordingContext: RecordingRemoteContext,
+    parentContext: RemoteContext
   ): IO[IOException, PersistentExecutor.State[_, _]] = {
+    // TODO: optimization: do not persist state if there were no side effects
     val key = id.toRaw
     for {
       _                 <- recordingContext.virtualClock.advance
@@ -623,15 +661,8 @@ final case class PersistentExecutor(
       currentTimestamp  <- recordingContext.virtualClock.current
 
       modifiedVariablesWithTimestamps <- ZIO.foreach(modifiedVariables) { case (name, _) =>
-                                           kvStore
-                                             .getLatestTimestamp(
-                                               Namespaces.variables,
-                                               Chunk.fromArray(
-                                                 name
-                                                   .prefixedBy(state0.rootId, transactionId = None)
-                                                   .getBytes(StandardCharsets.UTF_8)
-                                               ) // TODO: extract function
-                                             )
+                                           parentContext
+                                             .getLatestTimestamp(name)
                                              .map(ts => name -> ts)
                                          }
       state2 = state1
@@ -684,7 +715,7 @@ final case class PersistentExecutor(
     for {
       _ <- ZIO.logInfo(s"Deleting persisted state $id")
       _ <- kvStore.delete(Namespaces.workflowState, id.toRaw)
-      // TODO: delete persisted variables?
+      // TODO: delete persisted variables
     } yield ()
 
   private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
@@ -825,7 +856,8 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] = {
         val transactionId = TransactionId("tx" + state.transactionCounter.toString)
         state.copy(
-          transactionStack = TransactionState(transactionId, Map.empty) :: state.transactionStack,
+          transactionStack =
+            TransactionState(transactionId, modifiedVariables = Map.empty, flow) :: state.transactionStack,
           transactionCounter = state.transactionCounter + 1
         )
       }
@@ -835,6 +867,17 @@ object PersistentExecutor {
         state.copy(
           transactionStack = state.transactionStack.tail
         )
+    }
+    private case object RestartCurrentTransaction extends StateChange {
+      override def apply[E, A](state: State[E, A]): State[E, A] =
+        state.transactionStack.headOption match {
+          case Some(txState) =>
+            state.copy(
+              current = txState.body,
+              transactionStack = txState.copy(modifiedVariables = Map.empty) :: state.transactionStack.tail
+            )
+          case None => state
+        }
     }
     private case object IncreaseForkCounter extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -867,6 +910,7 @@ object PersistentExecutor {
     def addReadVar(name: RemoteVariableName): StateChange                             = AddReadVar(name)
     def enterTransaction(flow: ZFlow[Any, _, _]): StateChange                         = EnterTransaction(flow)
     val leaveTransaction: StateChange                                                 = LeaveTransaction
+    val restartCurrentTransaction: StateChange                                        = RestartCurrentTransaction
     val increaseForkCounter: StateChange                                              = IncreaseForkCounter
     val increaseTempVarCounter: StateChange                                           = IncreaseTempVarCounter
     def pushEnvironment(value: Remote[_]): StateChange                                = PushEnvironment(value)
@@ -997,7 +1041,8 @@ object PersistentExecutor {
 
   final case class TransactionState(
     id: TransactionId,
-    modifiedVariables: Map[RemoteVariableName, RecordedModification]
+    modifiedVariables: Map[RemoteVariableName, RecordedModification],
+    body: ZFlow[_, _, _]
   )
 
   object TransactionState {

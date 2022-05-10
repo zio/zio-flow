@@ -12,6 +12,7 @@ import java.util.UUID
 trait RemoteContext {
   def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit]
   def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]]
+  def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]]
 }
 
 object RemoteContext {
@@ -30,6 +31,9 @@ object RemoteContext {
       store
         .get(name)
         .commit
+
+    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+      store.get(name).commit.map(_.map(_ => Timestamp(0L)))
   }
 
   def inMemory: ZIO[Any, Nothing, RemoteContext] =
@@ -62,6 +66,11 @@ object RemoteContext {
       virtualClock.current.flatMap { timestamp =>
         tryGetVariable(name, scopeStack, timestamp)
       }
+
+    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+      kvStore
+        .getLatestTimestamp(Namespaces.variables, key(name, scopeStack.head))
+        .orDie // TODO: rethink/cleanup error handling
 
     private def tryGetVariable(
       name: RemoteVariableName,

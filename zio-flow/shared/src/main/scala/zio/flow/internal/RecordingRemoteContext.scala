@@ -33,6 +33,9 @@ object RecordingRemoteContext {
                       case Some(result) => ZIO.some(result)
                       case None         => outerRemoteContext.getVariable(name)
                     }
+
+                override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+                  outerRemoteContext.getLatestTimestamp(name)
               }
 
             override def virtualClock: VirtualClock = vclock

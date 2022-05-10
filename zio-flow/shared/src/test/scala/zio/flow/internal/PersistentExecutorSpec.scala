@@ -174,6 +174,36 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == (100, 200))
     },
+    testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
+      for {
+        var1 <- ZFlow.newVar[Int]("var1", 10)
+        var2 <- ZFlow.newVar[Int]("var2", 20)
+        now  <- ZFlow.now
+        fib1 <- ZFlow.transaction { _ =>
+                  for {
+                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                    _ <- var1.update(_ + 1)
+                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                    _ <- var2.update(_ + 1)
+                  } yield ()
+                }.fork
+        fib2 <- ZFlow.transaction { _ =>
+                  for {
+                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                    _ <- var1.update(_ + 1)
+                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                    _ <- var2.update(_ + 1)
+                  } yield ()
+                }.fork
+
+        _  <- fib1.await
+        _  <- fib2.await
+        v1 <- var1.get
+        v2 <- var2.get
+      } yield (v1, v2)
+    } { result =>
+      assertTrue(result == (12, 22))
+    },
     testFlow("unwrap") {
       val flow = for {
         wrapped   <- ZFlow.input[ZFlow[Any, ZNothing, Int]]

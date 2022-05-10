@@ -3,7 +3,10 @@ package zio.flow.internal
 import zio.schema.Schema
 
 case class Timestamp(value: Long) {
+  def <(other: Timestamp): Boolean  = value < other.value
   def <=(other: Timestamp): Boolean = value <= other.value
+  def >(other: Timestamp): Boolean  = value > other.value
+  def >=(other: Timestamp): Boolean = value >= other.value
 
   def next: Timestamp = Timestamp(value + 1)
 }
