@@ -97,7 +97,7 @@ object KeyValueStore {
               .maxByOption(_.timestamp.value)
               .map(_.data)
           )
-      }.tap(result =>
+      }.tap(_ =>
         ZIO
           .logDebug(s"KVSTORE GET LATEST [$before] [$namespace] ${new String(key.toArray)}")
       )

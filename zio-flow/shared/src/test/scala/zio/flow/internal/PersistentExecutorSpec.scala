@@ -174,6 +174,20 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == (100, 200))
     },
+    testFlow("setting variables in a forked transaction") {
+      for {
+        var1 <- ZFlow.newVar[Int]("var1", 10)
+        fiber <- ZFlow.transaction { _ =>
+                   for {
+                     _ <- var1.set(100)
+                   } yield ()
+                 }.fork
+        _  <- fiber.await
+        v1 <- var1.get
+      } yield v1
+    } { result =>
+      assertTrue(result == 100)
+    },
     testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
       for {
         var1 <- ZFlow.newVar[Int]("var1", 10)

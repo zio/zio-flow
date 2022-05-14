@@ -8,6 +8,7 @@ import zio.stm.TMap
 trait RecordingRemoteContext {
   def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]]
   def remoteContext: RemoteContext
+  def commitContext: RemoteContext
   def virtualClock: VirtualClock
 }
 
@@ -17,6 +18,8 @@ object RecordingRemoteContext {
       ZIO.service[VirtualClock].flatMap { vclock =>
         TMap.empty[RemoteVariableName, DynamicValue].commit.map { cache =>
           new RecordingRemoteContext {
+            override def commitContext: RemoteContext = outerRemoteContext
+
             override def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]] =
               cache.toChunk.commit
 
