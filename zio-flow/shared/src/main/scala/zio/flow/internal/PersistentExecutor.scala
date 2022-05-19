@@ -587,8 +587,9 @@ final case class PersistentExecutor(
                 state1  = stepResult.stateChange(state0)
                 state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
                 _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-                _      <- runSteps(stateRef).when(stepResult.continue)
-              } yield ()
+              } yield stepResult
+            }.flatMap { stepResult =>
+              runSteps(stateRef).when(stepResult.continue).unit
             }
           }
         }
