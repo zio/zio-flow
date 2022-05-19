@@ -2,6 +2,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow._
+import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.stream.ZNothing
@@ -28,7 +29,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         Schema[Int]
       ),
       ZFlow.succeed(12),
-      ZFlow.succeed(15)
+      ZFlow.unit
     )
 
   val suite1 = suite("Operators in single run")(
@@ -121,9 +122,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     },
     testFlow("Activity") {
       testActivity(12)
-    } { result =>
-      assertTrue(result == 12)
-    },
+    }(
+      assert = result => assertTrue(result == 12),
+      mock = MockedOperation.Http[Int, Int](
+        urlMatcher = equalTo(new URI("testUrlForActivity.com")),
+        methodMatcher = equalTo("GET"),
+        result = () => 12
+      )
+    ),
     testFlow("iterate") {
       ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
@@ -416,7 +422,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   private def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None
-  )(flow: ZFlow[Any, E, A])(assert: (Exit[E, A], Chunk[String]) => TestResult) =
+  )(
+    flow: ZFlow[Any, E, A]
+  )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
     test(label) {
       for {
         logQueue <- ZQueue.unbounded[String]
@@ -439,7 +447,11 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  }
         rc <- ZIO.runtimeConfig
         fiber <-
-          flow.evaluateTestPersistent(label).withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger)).exit.fork
+          flow
+            .evaluateTestPersistent(label, mock)
+            .withRuntimeConfig(rc @@ RuntimeConfigAspect.addLogger(logger))
+            .exit
+            .fork
         flowResult <- periodicAdjustClock match {
                         case Some(value) => waitAndPeriodicallyAdjustClock("flow result", 1.second, value)(fiber.join)
                         case None        => fiber.join
@@ -451,17 +463,21 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   private def testFlowAndLogs[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None
-  )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult) =
-    testFlowAndLogsExit(label, periodicAdjustClock)(flow) { case (exit, logs) =>
-      exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
-    }
+  )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
+    testFlowAndLogsExit(label, periodicAdjustClock)(flow)(
+      { case (exit, logs) =>
+        exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
+      },
+      mock
+    )
 
   private def testFlow[E: Schema, A: Schema](label: String, periodicAdjustClock: Option[Duration] = None)(
     flow: ZFlow[Any, E, A]
   )(
-    assert: A => TestResult
+    assert: A => TestResult,
+    mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogs(label, periodicAdjustClock)(flow) { case (result, _) => assert(result) }
+    testFlowAndLogs(label, periodicAdjustClock)(flow)({ case (result, _) => assert(result) }, mock)
 
   private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
     assert: Exit[E, A] => TestResult

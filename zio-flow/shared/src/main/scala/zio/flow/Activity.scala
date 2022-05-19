@@ -23,7 +23,7 @@ final case class Activity[-R, A](
   description: String,
   operation: Operation[R, A],
   check: ZFlow[R, ActivityError, A],
-  compensate: ZFlow[A, ActivityError, Any]
+  compensate: ZFlow[A, ActivityError, Unit]
 ) { self =>
   val inputSchema: Schema[_ >: R]  = operation.inputSchema
   val resultSchema: Schema[_ <: A] = operation.resultSchema
@@ -58,13 +58,13 @@ object Activity {
     Schema.CaseClass5[String, String, Operation[R, A], ZFlow[R, ActivityError, A], ZFlow[
       A,
       ActivityError,
-      Any
+      Unit
     ], Activity[R, A]](
       Schema.Field("name", Schema[String]),
       Schema.Field("description", Schema[String]),
       Schema.Field("operation", Operation.schema[R, A]),
       Schema.Field("check", ZFlow.schema[R, ActivityError, A]),
-      Schema.Field("compensate", ZFlow.schema[A, ActivityError, Any]),
+      Schema.Field("compensate", ZFlow.schema[A, ActivityError, Unit]),
       { case (name, description, operation, check, compensate) =>
         Activity(
           name,

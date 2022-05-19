@@ -190,7 +190,6 @@ final case class PersistentExecutor(
                 } else {
                   for {
                     _ <- ZIO.logInfo("Commit failed, reverting and retrying")
-                    _ <- ZIO.unit // TODO: revert (delete vars, revert operations)
                     result = StepResult(
                                stateChange ++
                                  StateChange.popContinuation ++
@@ -312,6 +311,7 @@ final case class PersistentExecutor(
                           case Left(error) => onError(Remote(error))
                           case Right(success) =>
                             val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
+                            // TODO: take advantage of activity.check
                             onSuccess(
                               remoteSuccess,
                               StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
@@ -861,9 +861,16 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = state.stack.tail)
     }
-    private final case class AddCompensation(newCompensation: ZFlow[Any, ActivityError, Any]) extends StateChange {
+    private final case class AddCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
-        state // state.copy(tstate = state.tstate.addCompensation(newCompensation.unit))
+        state.copy(
+          transactionStack = state.transactionStack match {
+            case ::(head, next) =>
+              head.copy(compensations = newCompensation :: head.compensations) :: next
+            case Nil =>
+              Nil
+          }
+        )
     }
     private final case class AddReadVar(name: RemoteVariableName) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -874,7 +881,7 @@ object PersistentExecutor {
         val transactionId = TransactionId("tx" + state.transactionCounter.toString)
         state.copy(
           transactionStack =
-            TransactionState(transactionId, modifiedVariables = Map.empty, flow) :: state.transactionStack,
+            TransactionState(transactionId, modifiedVariables = Map.empty, Nil, flow) :: state.transactionStack,
           transactionCounter = state.transactionCounter + 1
         )
       }
@@ -889,8 +896,17 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.transactionStack.headOption match {
           case Some(txState) =>
+            val compensations = txState.compensations.foldLeft[ZFlow[Any, ActivityError, Unit]](ZFlow.unit)(_ *> _)
+            val compensateAndRun: ZFlow[_, _, _] =
+              ZFlow.Fold(
+                compensations,
+                RemoteFunction((error: Remote[ActivityError]) => ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]).evaluated,
+                RemoteFunction((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]]).evaluated
+              )(
+                txState.body.errorSchema.asInstanceOf[Schema[Any]],
+                txState.body.resultSchema.asInstanceOf[Schema[Any]])
             state.copy(
-              current = txState.body,
+              current = compensateAndRun,
               transactionStack = txState.copy(modifiedVariables = Map.empty) :: state.transactionStack.tail
             )
           case None => state
@@ -923,21 +939,23 @@ object PersistentExecutor {
         state // state.copy(variables = state.variables + (name -> value))
     }
 
-    val none: StateChange                                                             = NoChange
-    def setCurrent(current: ZFlow[_, _, _]): StateChange                              = SetCurrent(current)
-    def pushContinuation(cont: Instruction): StateChange                              = PushContinuation(cont)
-    def popContinuation: StateChange                                                  = PopContinuation
-    def addCompensation(newCompensation: ZFlow[Any, ActivityError, Any]): StateChange = AddCompensation(newCompensation)
-    def addReadVar(name: RemoteVariableName): StateChange                             = AddReadVar(name)
-    def enterTransaction(flow: ZFlow[Any, _, _]): StateChange                         = EnterTransaction(flow)
-    val leaveTransaction: StateChange                                                 = LeaveTransaction
-    val restartCurrentTransaction: StateChange                                        = RestartCurrentTransaction
-    val increaseForkCounter: StateChange                                              = IncreaseForkCounter
-    val increaseTempVarCounter: StateChange                                           = IncreaseTempVarCounter
-    def pushEnvironment(value: Remote[_]): StateChange                                = PushEnvironment(value)
-    def popEnvironment: StateChange                                                   = PopEnvironment
-    def advanceClock(atLeastTo: Timestamp): StateChange                               = AdvanceClock(atLeastTo)
-    def addVariable(name: String, value: SchemaAndValue[_]): StateChange              = AddVariable(name, value)
+    val none: StateChange                                = NoChange
+    def setCurrent(current: ZFlow[_, _, _]): StateChange = SetCurrent(current)
+    def pushContinuation(cont: Instruction): StateChange = PushContinuation(cont)
+    def popContinuation: StateChange                     = PopContinuation
+    def addCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]): StateChange = AddCompensation(
+      newCompensation
+    )
+    def addReadVar(name: RemoteVariableName): StateChange                = AddReadVar(name)
+    def enterTransaction(flow: ZFlow[Any, _, _]): StateChange            = EnterTransaction(flow)
+    val leaveTransaction: StateChange                                    = LeaveTransaction
+    val restartCurrentTransaction: StateChange                           = RestartCurrentTransaction
+    val increaseForkCounter: StateChange                                 = IncreaseForkCounter
+    val increaseTempVarCounter: StateChange                              = IncreaseTempVarCounter
+    def pushEnvironment(value: Remote[_]): StateChange                   = PushEnvironment(value)
+    def popEnvironment: StateChange                                      = PopEnvironment
+    def advanceClock(atLeastTo: Timestamp): StateChange                  = AdvanceClock(atLeastTo)
+    def addVariable(name: String, value: SchemaAndValue[_]): StateChange = AddVariable(name, value)
   }
 
   final case class FlowResult(result: DynamicValue, timestamp: Timestamp)
@@ -1084,6 +1102,7 @@ object PersistentExecutor {
   final case class TransactionState(
     id: TransactionId,
     modifiedVariables: Map[RemoteVariableName, RecordedModification],
+    compensations: List[ZFlow[Any, ActivityError, Unit]],
     body: ZFlow[_, _, _]
   )
 

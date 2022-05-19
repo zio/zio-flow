@@ -66,8 +66,8 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(testFrameworks += zioTest)
   .enablePlugins(RemoteTupleGenerator)
 
-lazy val zioFlowJS = zioFlow.js
-  .settings(scalaJSUseMainModuleInitializer := true)
+//lazy val zioFlowJS = zioFlow.js
+//  .settings(scalaJSUseMainModuleInitializer := true)
 
 lazy val zioFlowJVM = zioFlow.jvm
 

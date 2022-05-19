@@ -66,7 +66,9 @@ object KeyValueStore {
       _.scanAll(namespace)
     )
 
-  private final case class InMemoryKeyValueEntry(data: Chunk[Byte], timestamp: Timestamp)
+  private final case class InMemoryKeyValueEntry(data: Chunk[Byte], timestamp: Timestamp) {
+    override def toString: String = s"<entry ($data.size bytes) at $timestamp>"
+  }
 
   private final case class InMemoryKeyValueStore(
     namespaces: zio.Ref[Map[String, Map[Chunk[Byte], List[InMemoryKeyValueEntry]]]]
@@ -165,5 +167,7 @@ object KeyValueStore {
         case None =>
           ns + (namespace -> Map(key -> List(InMemoryKeyValueEntry(value, timestamp))))
       }
+
+    override def toString: String = "InMemoryKeyValueStore"
   }
 }
