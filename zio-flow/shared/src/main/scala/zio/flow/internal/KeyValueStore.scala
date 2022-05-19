@@ -95,9 +95,11 @@ object KeyValueStore {
         ns.get(namespace)
           .flatMap(_.get(key))
           .flatMap(
-            _.filter(_.timestamp <= before.getOrElse(Timestamp(Long.MaxValue)))
-              .maxByOption(_.timestamp.value)
-              .map(_.data)
+            _.filter(_.timestamp <= before.getOrElse(Timestamp(Long.MaxValue))) match {
+              case Nil => None
+              case filtered =>
+                Some(filtered.maxBy(_.timestamp.value).data)
+            }
           )
       }.tap(_ =>
         ZIO
@@ -108,9 +110,10 @@ object KeyValueStore {
       namespaces.get.map { ns =>
         ns.get(namespace)
           .flatMap(_.get(key))
-          .flatMap(
-            _.maxByOption(_.timestamp.value).map(_.timestamp)
-          )
+          .flatMap {
+            case Nil     => None
+            case entries => Some(entries.maxBy(_.timestamp.value).timestamp)
+          }
       }.tap(result =>
         ZIO
           .logDebug(s"KVSTORE GET LATEST TIMESTAMP [$namespace] ${new String(key.toArray)} => $result")

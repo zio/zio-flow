@@ -900,11 +900,11 @@ object PersistentExecutor {
             val compensateAndRun: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                RemoteFunction((error: Remote[ActivityError]) => ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]).evaluated,
+                RemoteFunction((error: Remote[ActivityError]) =>
+                  ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
+                ).evaluated,
                 RemoteFunction((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]]).evaluated
-              )(
-                txState.body.errorSchema.asInstanceOf[Schema[Any]],
-                txState.body.resultSchema.asInstanceOf[Schema[Any]])
+              )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
             state.copy(
               current = compensateAndRun,
               transactionStack = txState.copy(modifiedVariables = Map.empty) :: state.transactionStack.tail

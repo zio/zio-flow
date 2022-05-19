@@ -111,10 +111,10 @@ final case class RocksDbKeyValueStore(
     rawVersions match {
       case Some(rawVersions) =>
         decodeRawVersions(rawVersions)
-          .map(
-            _.filter(_ <= before.getOrElse(Timestamp(Long.MaxValue)))
-              .maxByOption(_.value)
-          )
+          .map(_.filter(_ <= before.getOrElse(Timestamp(Long.MaxValue))) match {
+            case Nil      => None
+            case filtered => Some(filtered.maxBy(_.value))
+          })
       case None => ZIO.none
     }
 
