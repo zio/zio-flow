@@ -4,16 +4,33 @@ import zio.flow.Operation
 import zio.test.Assertion.anything
 
 import java.net.URI
+import zio._
+import zio.flow.mock.MockedOperation.Match
 
 // TODO: move to a separate published module to support testing user flows
 
-trait MockedOperation {
-  def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[A], MockedOperation)
+trait MockedOperation { self =>
+  def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation)
+
+  def andThen(other: MockedOperation): MockedOperation =
+    MockedOperation.Then(self, other)
+  def ++(other: MockedOperation): MockedOperation =
+    andThen(other)
+
+  def orElse(other: MockedOperation): MockedOperation =
+    MockedOperation.Or(self, other)
+  def |(other: MockedOperation): MockedOperation =
+    orElse(other)
+
+  def repeated(atMost: Int = Int.MaxValue): MockedOperation =
+    MockedOperation.Repeated(self, atMost)
 }
 
 object MockedOperation {
+  case class Match[A](result: A, delay: Duration)
+
   case object Empty extends MockedOperation {
-    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[A], MockedOperation) =
+    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation) =
       (None, Empty)
   }
   final case class Http[R, A](
@@ -21,26 +38,27 @@ object MockedOperation {
     methodMatcher: zio.test.Assertion[String] = anything,
     headersMatcher: zio.test.Assertion[Map[String, String]] = anything,
     inputMatcher: zio.test.Assertion[R] = anything,
-    result: () => A
+    result: () => A,
+    duration: Duration = Duration.Zero
   ) extends MockedOperation {
-    override def matchOperation[R1, A1](operation: Operation[R1, A1], input: R1): (Option[A1], MockedOperation) =
+    override def matchOperation[R1, A1](operation: Operation[R1, A1], input: R1): (Option[Match[A1]], MockedOperation) =
       operation match {
         case Operation.Http(url, method, headers, _, _) =>
           // TODO: check R1 and A1 types too
           val m =
             urlMatcher(url) && methodMatcher(method) && headersMatcher(headers) && inputMatcher(input.asInstanceOf[R])
           if (m.isSuccess) {
-            (Some(result().asInstanceOf[A1]), Empty)
+            (Some(Match(result().asInstanceOf[A1], duration)), Empty)
           } else {
             (None, this)
           }
-        case Operation.SendEmail(server, port) =>
+        case Operation.SendEmail(_, _) =>
           (None, this)
       }
   }
 
   final case class Then(first: MockedOperation, second: MockedOperation) extends MockedOperation {
-    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[A], MockedOperation) =
+    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation) =
       first.matchOperation(operation, input) match {
         case (result, firstRemaining) =>
           (result, Then(firstRemaining, second).normalize)
@@ -55,7 +73,7 @@ object MockedOperation {
   }
 
   final case class Or(left: MockedOperation, right: MockedOperation) extends MockedOperation {
-    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[A], MockedOperation) =
+    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation) =
       left.matchOperation(operation, input) match {
         case (None, leftRemaining) =>
           right.matchOperation(operation, input) match {
@@ -75,7 +93,7 @@ object MockedOperation {
   }
 
   final case class Repeated(mock: MockedOperation, atMost: Int) extends MockedOperation {
-    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[A], MockedOperation) =
+    override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation) =
       mock.matchOperation(operation, input) match {
         case (result, _) =>
           if (atMost > 1)

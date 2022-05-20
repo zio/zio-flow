@@ -157,73 +157,188 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         i1 < i2
       )
     },
-    testFlow("nop transaction") {
-      ZFlow.transaction { _ =>
-        ZFlow.succeed(100)
-      }
-    } { result =>
-      assertTrue(result == 100)
-    },
-    testFlow("setting variables in transaction") {
-      for {
-        var1 <- ZFlow.newVar[Int]("var1", 10)
-        var2 <- ZFlow.newVar[Int]("var2", 20)
-        _ <- ZFlow.transaction { _ =>
-               for {
-                 _ <- var1.set(100)
-                 _ <- var2.set(200)
-               } yield ()
-             }
-        v1 <- var1.get
-        v2 <- var2.get
-      } yield (v1, v2)
-    } { result =>
-      assertTrue(result == (100, 200))
-    },
-    testFlow("setting variables in a forked transaction") {
-      for {
-        var1 <- ZFlow.newVar[Int]("var1", 10)
-        fiber <- ZFlow.transaction { _ =>
-                   for {
-                     _ <- var1.set(100)
-                   } yield ()
-                 }.fork
-        _  <- fiber.await
-        v1 <- var1.get
-      } yield v1
-    } { result =>
-      assertTrue(result == 100)
-    },
-    testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
-      for {
-        var1 <- ZFlow.newVar[Int]("var1", 10)
-        var2 <- ZFlow.newVar[Int]("var2", 20)
-        now  <- ZFlow.now
-        fib1 <- ZFlow.transaction { _ =>
-                  for {
-                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
-                    _ <- var1.update(_ + 1)
-                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
-                    _ <- var2.update(_ + 1)
-                  } yield ()
-                }.fork
-        fib2 <- ZFlow.transaction { _ =>
-                  for {
-                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
-                    _ <- var1.update(_ + 1)
-                    _ <- ZFlow.waitTill(now.plusSeconds(1L))
-                    _ <- var2.update(_ + 1)
-                  } yield ()
-                }.fork
+    suite("transactions")(
+      testFlow("nop transaction") {
+        ZFlow.transaction { _ =>
+          ZFlow.succeed(100)
+        }
+      } { result =>
+        assertTrue(result == 100)
+      },
+      testFlow("setting variables in transaction") {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          var2 <- ZFlow.newVar[Int]("var2", 20)
+          _ <- ZFlow.transaction { _ =>
+                 for {
+                   _ <- var1.set(100)
+                   _ <- var2.set(200)
+                 } yield ()
+               }
+          v1 <- var1.get
+          v2 <- var2.get
+        } yield (v1, v2)
+      } { result =>
+        assertTrue(result == (100, 200))
+      },
+      testFlow("setting variables in a forked transaction") {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          fiber <- ZFlow.transaction { _ =>
+                     for {
+                       _ <- var1.set(100)
+                     } yield ()
+                   }.fork
+          _  <- fiber.await
+          v1 <- var1.get
+        } yield v1
+      } { result =>
+        assertTrue(result == 100)
+      },
+      testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          var2 <- ZFlow.newVar[Int]("var2", 20)
+          now  <- ZFlow.now
+          fib1 <- ZFlow.transaction { _ =>
+                    for {
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var1.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var2.update(_ + 1)
+                    } yield ()
+                  }.fork
+          fib2 <- ZFlow.transaction { _ =>
+                    for {
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var1.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var2.update(_ + 1)
+                    } yield ()
+                  }.fork
 
-        _  <- fib1.await
-        _  <- fib2.await
-        v1 <- var1.get
-        v2 <- var2.get
-      } yield (v1, v2)
-    } { result =>
-      assertTrue(result == (12, 22))
-    },
+          _  <- fib1.await
+          _  <- fib2.await
+          v1 <- var1.get
+          v2 <- var2.get
+        } yield (v1, v2)
+      } { result =>
+        assertTrue(result == (12, 22))
+      },
+      testFlow(
+        "retried transaction runs activity compensations in reverse order",
+        periodicAdjustClock = Some(1.second)
+      ) {
+
+        val activity1Undo1 = Activity(
+          "activity1Undo1",
+          "activity1Undo1",
+          Operation.Http(new URI("http://activity1/undo/1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity1Undo2 = Activity(
+          "activity1Undo2",
+          "activity1Undo2",
+          Operation.Http(new URI("http://activity1/undo/2"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity2Undo = Activity(
+          "activity2Undo",
+          "activity2Undo",
+          Operation.Http(new URI("http://activity2/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+
+        val activity1 = Activity(
+          "activity1",
+          "activity1",
+          Operation.Http(new URI("http://activity1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity1Undo1(n) *> activity1Undo2(n)).unit
+        )
+        val activity2 = Activity(
+          "activity2",
+          "activity2",
+          Operation.Http(new URI("http://activity2"), "POST", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
+        )
+
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 1)
+          fib1 <- ZFlow.transaction { _ =>
+                    for {
+                      v1 <- var1.get
+                      _  <- ZFlow.log(s"Got value of var1")
+                      _  <- activity1(v1)
+                      _  <- activity2(v1)
+                      _  <- var1.set(v1 + 1)
+                    } yield ()
+                  }.fork
+          now <- ZFlow.now
+          _   <- ZFlow.waitTill(now.plusSeconds(2L))
+          _   <- ZFlow.log(s"Modifying value var1")
+          _   <- var1.set(10)
+          _   <- ZFlow.log(s"Modified value var1")
+          _   <- fib1.await
+        } yield ()
+      }(
+        result => assertTrue(result == ()),
+        mock =
+          // First run (with input=1)
+          MockedOperation.Http(
+            urlMatcher = equalTo(new URI("http://activity1")),
+            methodMatcher = equalTo("GET"),
+            inputMatcher = equalTo(1),
+            result = () => 100,
+            duration = 2.seconds
+          ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity2")),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(1),
+              result = () => 200,
+              duration = 2.seconds
+            ) ++
+            // Revert
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity2/undo")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(200),
+              result = () => -2
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity1/undo/1")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -1
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity1/undo/2")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -11
+            ) ++
+            // Second run (with input=2)
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity1")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(2),
+              result = () => 100,
+              duration = 10.millis
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity2")),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(2),
+              result = () => 200,
+              duration = 10.millis
+            )
+      )
+    ),
     testFlow("unwrap") {
       val flow = for {
         wrapped   <- ZFlow.input[ZFlow[Any, ZNothing, Int]]

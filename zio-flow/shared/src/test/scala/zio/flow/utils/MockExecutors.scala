@@ -9,14 +9,16 @@ object MockExecutors {
   def persistent(
     mockedOperations: MockedOperation = MockedOperation.Empty
   ): ZIO[Scope with Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
-    MockedOperationExecutor.make(mockedOperations).flatMap { operationExecutor =>
-      PersistentExecutor
-        .make(
-          operationExecutor,
-          Serializer.json,
-          Deserializer.json
-        )
-        .build
-        .map(_.get[ZFlowExecutor])
+    ZIO.service[Clock].flatMap { clock =>
+      MockedOperationExecutor.make(mockedOperations).flatMap { operationExecutor =>
+        PersistentExecutor
+          .make(
+            operationExecutor.provideEnvironment(ZEnvironment(clock)),
+            Serializer.json,
+            Deserializer.json
+          )
+          .build
+          .map(_.get[ZFlowExecutor])
+      }
     }
 }
