@@ -26,7 +26,7 @@ import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
-import scala.annotation.{nowarn, tailrec}
+import scala.annotation.nowarn
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
@@ -147,97 +147,111 @@ final case class PersistentExecutor(
       def onSuccess(
         value: Remote[_],
         stateChange: StateChange = StateChange.none
-      ): ZIO[RemoteContext with VirtualClock with KeyValueStore with ExecutionEnvironment, IOException, StepResult] = {
+      ): ZIO[VirtualClock with KeyValueStore with ExecutionEnvironment, IOException, StepResult] = {
         val updatedState = stateChange(state)
-        updatedState.stack match {
-          case Nil =>
-            evalDynamic(value).flatMap { result =>
-              state.result
-                .succeed(FlowResult(result.value, updatedState.lastTimestamp))
-                .unit
-                .provideEnvironment(promiseEnv)
-            }.as(
-              StepResult(
-                stateChange,
-                continue = false
+
+        val scope         = updatedState.scope
+        val remoteContext = ZLayer(RemoteContext.persistent(scope))
+        remoteContext {
+          updatedState.stack match {
+            case Nil =>
+              evalDynamic(value).flatMap { result =>
+                state.result
+                  .succeed(FlowResult(result.value, updatedState.lastTimestamp))
+                  .unit
+                  .provideEnvironment(promiseEnv)
+              }.as(
+                StepResult(
+                  stateChange,
+                  continue = false
+                )
               )
-            )
-          case Instruction.PopEnv :: _ =>
-            onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
-          case Instruction.PushEnv(env) :: _ =>
-            onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
-          case Instruction.Continuation(_, onSuccess) :: _ =>
-            eval(onSuccess.apply(coerceRemote(value))).map { next =>
-              StepResult(
-                stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
-                continue = true
-              )
-            }
-          case Instruction.CommitTransaction :: _ =>
-            for {
-              currentContext <- ZIO.service[RemoteContext]
-              targetContext <- RemoteContext.persistent(
-                                 StateChange.leaveTransaction(updatedState).scope
+            case Instruction.PopEnv :: _ =>
+              onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
+            case Instruction.PushEnv(env) :: _ =>
+              onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
+            case Instruction.Continuation(_, onSuccess) :: _ =>
+              eval(onSuccess.apply(coerceRemote(value))).map { next =>
+                StepResult(
+                  stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
+                  continue = true
+                )
+              }
+            case Instruction.CommitTransaction :: _ =>
+              for {
+                currentContext <- ZIO.service[RemoteContext]
+                targetContext <- RemoteContext.persistent(
+                                   StateChange.leaveTransaction(updatedState).scope
+                                 )
+                commitSucceeded <-
+                  commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
+                result <-
+                  if (commitSucceeded) {
+                    onSuccess(
+                      value,
+                      stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+                    )
+                  } else {
+                    for {
+                      _ <- ZIO.logInfo("Commit failed, reverting and retrying")
+                      result = StepResult(
+                                 stateChange ++
+                                   StateChange.popContinuation ++
+                                   StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                                   StateChange.restartCurrentTransaction,
+                                 continue = true
                                )
-              commitSucceeded <-
-                commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
-              result <-
-                if (commitSucceeded) {
-                  onSuccess(
-                    value,
-                    stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
-                  )
-                } else {
-                  for {
-                    _ <- ZIO.logInfo("Commit failed, reverting and retrying")
-                    result = StepResult(
-                               stateChange ++
-                                 StateChange.popContinuation ++
-                                 StateChange.pushContinuation(Instruction.CommitTransaction) ++
-                                 StateChange.restartCurrentTransaction,
-                               continue = true
-                             )
-                  } yield result
-                }
-            } yield result
+                    } yield result
+                  }
+              } yield result
+          }
         }
       }
 
-      @tailrec
       def onError(
         value: Remote[_],
         stateChange: StateChange = StateChange.none
-      ): ZIO[RemoteContext, IOException, StepResult] = {
+      ): ZIO[KeyValueStore with ExecutionEnvironment with VirtualClock, IOException, StepResult] = {
         val updatedState = stateChange(state)
-        updatedState.stack match {
-          case Nil =>
-            evalDynamic(value).flatMap { schemaAndValue =>
-              state.result
-                .fail(Right(schemaAndValue.value))
-                .unit
-                .provideEnvironment(promiseEnv)
-            }.as(
-              StepResult(
-                stateChange,
-                continue = false
+
+        val scope         = updatedState.scope
+        val remoteContext = ZLayer(RemoteContext.persistent(scope))
+
+        remoteContext {
+          updatedState.stack match {
+            case Nil =>
+              evalDynamic(value).flatMap { schemaAndValue =>
+                state.result
+                  .fail(Right(schemaAndValue.value))
+                  .unit
+                  .provideEnvironment(promiseEnv)
+              }.as(
+                StepResult(
+                  stateChange,
+                  continue = false
+                )
               )
-            )
-          case Instruction.PopEnv :: _ =>
-            onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
-          case Instruction.PushEnv(env) :: _ =>
-            onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
-          case Instruction.Continuation(onError, _) :: _ =>
-            eval(onError.apply(coerceRemote(value))).map { next =>
-              StepResult(
-                stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
-                continue = true
-              )
-            }
-          case Instruction.CommitTransaction :: _ =>
-            onError(
-              value,
-              stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
-            ) // TODO: revert transaction
+            case Instruction.PopEnv :: _ =>
+              onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
+            case Instruction.PushEnv(env) :: _ =>
+              onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
+            case Instruction.Continuation(onError, _) :: _ =>
+              eval(onError.apply(coerceRemote(value))).map { next =>
+                StepResult(
+                  stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
+                  continue = true
+                )
+              }
+            case Instruction.CommitTransaction :: _ =>
+              ZIO.succeed(
+                StepResult(
+                  stateChange ++ StateChange.popContinuation ++ StateChange.revertCurrentTransaction(
+                    value
+                  ) ++ StateChange.leaveTransaction,
+                  continue = true
+                )
+              ) //
+          }
         }
       }
 
@@ -498,7 +512,10 @@ final case class PersistentExecutor(
             } yield result
 
           case Fail(error) =>
-            onError(error)
+            // Evaluating error to make sure it contains no coped variables as it will bubble up the scope stack
+            evalDynamic(error).flatMap { evaluatedError =>
+              onError(Remote.Literal(evaluatedError))
+            }
 
           case NewVar(name, initial) =>
             for {
@@ -642,7 +659,6 @@ final case class PersistentExecutor(
                 s"Variable ${name} in ${transactionState.id} latest: $latestTimestamp previous: ${modification.previousTimestamp}"
               ) *>
                 ZIO.fail(None)
-              // TODO: revert and retry transaction in case of mismatch
             } else {
               currentContext.getVariable(name).flatMap {
                 case Some(value) =>
@@ -893,6 +909,25 @@ object PersistentExecutor {
           transactionStack = state.transactionStack.tail
         )
     }
+    private case class RevertCurrentTransaction[E0](failure: Remote[E0]) extends StateChange {
+      override def apply[E, A](state: State[E, A]): State[E, A] =
+        state.transactionStack.headOption match {
+          case Some(txState) =>
+            val compensations = txState.compensations.foldLeft[ZFlow[Any, ActivityError, Unit]](ZFlow.unit)(_ *> _)
+            val compensateAndFail: ZFlow[_, _, _] =
+              ZFlow.Fold(
+                compensations,
+                RemoteFunction((error: Remote[ActivityError]) =>
+                  ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
+                ).evaluated,
+                RemoteFunction((_: Remote[Unit]) => ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]).evaluated
+              )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
+            state.copy(
+              current = compensateAndFail
+            )
+          case None => state
+        }
+    }
     private case object RestartCurrentTransaction extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.transactionStack.headOption match {
@@ -950,6 +985,7 @@ object PersistentExecutor {
     def addReadVar(name: RemoteVariableName): StateChange                = AddReadVar(name)
     def enterTransaction(flow: ZFlow[Any, _, _]): StateChange            = EnterTransaction(flow)
     val leaveTransaction: StateChange                                    = LeaveTransaction
+    def revertCurrentTransaction[E](failure: Remote[E]): StateChange     = RevertCurrentTransaction(failure)
     val restartCurrentTransaction: StateChange                           = RestartCurrentTransaction
     val increaseForkCounter: StateChange                                 = IncreaseForkCounter
     val increaseTempVarCounter: StateChange                              = IncreaseTempVarCounter

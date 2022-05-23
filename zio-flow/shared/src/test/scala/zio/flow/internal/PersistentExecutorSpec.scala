@@ -6,7 +6,7 @@ import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.stream.ZNothing
-import zio.test.Assertion.{dies, equalTo, hasMessage}
+import zio.test.Assertion._
 import zio.test.{TestAspect, TestClock, TestResult, assert, assertTrue}
 
 import java.net.URI
@@ -337,6 +337,82 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
               result = () => 200,
               duration = 10.millis
             )
+      ),
+      testFlowExit(
+        "failed transaction runs activity compensations in reverse order",
+        periodicAdjustClock = Some(1.second)
+      ) {
+
+        val activity1Undo = Activity(
+          "activity1Undo",
+          "activity1Undo",
+          Operation.Http(new URI("http://activity1/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity2Undo = Activity(
+          "activity2Undo",
+          "activity2Undo",
+          Operation.Http(new URI("http://activity2/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+
+        val activity1 = Activity(
+          "activity1",
+          "activity1",
+          Operation.Http(new URI("http://activity1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity1Undo(n)).unit
+        )
+        val activity2 = Activity(
+          "activity2",
+          "activity2",
+          Operation.Http(new URI("http://activity2"), "POST", Map.empty, Schema[Int], Schema[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
+        )
+
+        for {
+          _ <- ZFlow.transaction { _ =>
+                 for {
+                   _ <- activity1(1)
+                   _ <- activity2(1)
+                   _ <- ZFlow.fail(ActivityError("simulated failure", None))
+                 } yield ()
+               }
+        } yield ()
+      }(
+        result =>
+          assert(result)(fails(equalTo(ActivityError("simulated failure", None)))) &&
+            assert(result.causeOption.flatMap(_.dieOption))(isNone),
+        mock =
+          // First run
+          MockedOperation.Http(
+            urlMatcher = equalTo(new URI("http://activity1")),
+            methodMatcher = equalTo("GET"),
+            inputMatcher = equalTo(1),
+            result = () => 100
+          ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity2")),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(1),
+              result = () => 200
+            ) ++
+            // Revert
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity2/undo")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(200),
+              result = () => -2
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo(new URI("http://activity1/undo")),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -1
+            )
       )
     ),
     testFlow("unwrap") {
@@ -581,7 +657,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
     testFlowAndLogsExit(label, periodicAdjustClock)(flow)(
       { case (exit, logs) =>
-        exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
+        exit.fold(cause => throw FiberFailure(cause), result => assert(result, logs))
       },
       mock
     )
@@ -594,10 +670,13 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   ) =
     testFlowAndLogs(label, periodicAdjustClock)(flow)({ case (result, _) => assert(result) }, mock)
 
-  private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
-    assert: Exit[E, A] => TestResult
+  private def testFlowExit[E: Schema, A: Schema](label: String, periodicAdjustClock: Option[Duration] = None)(
+    flow: ZFlow[Any, E, A]
+  )(
+    assert: Exit[E, A] => TestResult,
+    mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogsExit(label)(flow) { case (result, _) => assert(result) }
+    testFlowAndLogsExit(label, periodicAdjustClock)(flow)({ case (result, _) => assert(result) }, mock)
 
   private def testRestartFlowAndLogs[E: Schema, A: Schema](
     label: String
