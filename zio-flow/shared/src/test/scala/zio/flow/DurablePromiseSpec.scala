@@ -3,14 +3,14 @@ package zio.flow
 import zio.flow.internal.{DurableLog, DurablePromise, IndexedStore}
 import zio.{Promise, ZEnvironment, ZIO}
 import zio.flow.serialization._
-import zio.test.{DefaultRunnableSpec, TestEnvironment, ZSpec, assertTrue}
+import zio.test.{TestEnvironment, ZIOSpecDefault, Spec, assertTrue}
 
 import java.io.IOException
 
-object DurablePromiseSpec extends DefaultRunnableSpec {
+object DurablePromiseSpec extends ZIOSpecDefault {
   private val execEnv = ExecutionEnvironment(Serializer.json, Deserializer.json)
 
-  override def spec: ZSpec[TestEnvironment, Any] =
+  override def spec: Spec[TestEnvironment, Any] =
     suite("DurablePromise")(
       test("Can't fail, await success") {
         val promise = DurablePromise.make[Nothing, Int]("dp-1")

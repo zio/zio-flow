@@ -26,7 +26,7 @@ final case class DurablePromise[E, A](promiseId: String) {
   def awaitEither(implicit
     schemaE: Schema[E],
     schemaA: Schema[A]
-  ): ZIO[DurableLog & ExecutionEnvironment, IOException, Either[E, A]] =
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Either[E, A]] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
       ZIO.log(s"Waiting for durable promise $promiseId") *>
         DurableLog
@@ -52,7 +52,7 @@ final case class DurablePromise[E, A](promiseId: String) {
   )(implicit
     schemaE: Schema[E],
     schemaA: Schema[A]
-  ): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
       ZIO.log(s"Setting $promiseId to failure $error") *>
         DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error))).map(_ == 0L)
@@ -63,7 +63,7 @@ final case class DurablePromise[E, A](promiseId: String) {
   )(implicit
     schemaE: Schema[E],
     schemaA: Schema[A]
-  ): ZIO[DurableLog & ExecutionEnvironment, IOException, Boolean] =
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
       ZIO.log(s"Setting $promiseId to success: $value") *>
         DurableLog.append(topic(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value))).map(_ == 0L)

@@ -22,8 +22,8 @@ object MockHelpers {
       ZFlow.succeed(15)
     )
 
-  object mockOpExec extends OperationExecutor[Console with Clock] {
-    override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
+  object mockOpExec extends OperationExecutor[Any] {
+    override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
       Console
         .printLine("Activity processing")
         .mapBoth(error => ActivityError("Failed to write to console", Some(error)), _ => input.asInstanceOf[A])

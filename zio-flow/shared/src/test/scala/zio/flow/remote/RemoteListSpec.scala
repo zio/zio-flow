@@ -2,10 +2,10 @@ package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow._
-import zio.test.{Spec, TestEnvironment, TestFailure, TestSuccess}
+import zio.test.{Spec, TestEnvironment}
 
 object RemoteListSpec extends RemoteSpecBase {
-  val suite1: Spec[TestEnvironment, TestFailure[Nothing], TestSuccess] =
+  val suite1: Spec[TestEnvironment, Nothing] =
     suite("RemoteListSpec")(
       test("Reverse") {
         val remoteList   = Remote(1 :: 2 :: 3 :: 4 :: Nil)

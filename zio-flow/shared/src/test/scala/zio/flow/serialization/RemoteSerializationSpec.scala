@@ -1,17 +1,16 @@
 package zio.flow.serialization
 
+import zio.{ZIO, ZNothing}
 import zio.flow._
 import zio.schema.ast.SchemaAst
 import zio.schema.codec.{Codec, JsonCodec}
 import zio.schema.{DeriveSchema, Schema}
-import zio.stream.ZNothing
 import zio.test._
-import zio.{Random, ZIO}
 
 import scala.util.{Failure, Success, Try}
 
-object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
-  override def spec: ZSpec[TestEnvironment, Any] =
+object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
+  override def spec: Spec[TestEnvironment, Any] =
     suite("Remote serialization")(
       suite("roundtrip equality")(
         equalityWithCodec(JsonCodec)
@@ -34,7 +33,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
 
   case class TestCaseClass(a: String, b: Int)
   object TestCaseClass {
-    val gen: Gen[Random with Sized, TestCaseClass] =
+    val gen: Gen[Sized, TestCaseClass] =
       for {
         a <- Gen.string
         b <- Gen.int
@@ -45,7 +44,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
 
   private def equalityWithCodec(
     codec: Codec
-  ): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
+  ): Spec[Sized with TestConfig, String] =
     suite(codec.getClass.getSimpleName)(
       test("literal") {
         check(genLiteral) { literal =>
@@ -133,7 +132,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
       test("option contains")(roundtripCheck(codec, genOptionContains))
     )
 
-  private def evalWithCodec(codec: Codec): Spec[Random with Sized with TestConfig, TestFailure[String], TestSuccess] =
+  private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =
     suite(codec.getClass.getSimpleName)(
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
@@ -203,17 +202,17 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
 
   private def roundtripCheck(
     codec: Codec,
-    gen: Gen[Random with Sized, Remote[Any]]
-  ): ZIO[Random with Sized with TestConfig, Nothing, TestResult] =
+    gen: Gen[Sized, Remote[Any]]
+  ): ZIO[Sized with TestConfig, Nothing, TestResult] =
     check(gen) { value =>
       roundtrip(codec, value)
     }
 
-  private def roundtrip(codec: Codec, value: Remote[Any]): Assert = {
+  private def roundtrip(codec: Codec, value: Remote[Any]): TestResult = {
     val encoded = codec.encode(Remote.schemaAny)(value)
     val decoded = codec.decode(Remote.schemaAny)(encoded)
 
-//    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+    //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     assertTrue(decoded == Right(value))
   }
@@ -222,7 +221,7 @@ object RemoteSerializationSpec extends DefaultRunnableSpec with Generators {
     codec: Codec,
     value: Remote[A],
     test: (A, A) => Boolean = (a: A, b: A) => a == b
-  ): ZIO[RemoteContext, String, Assert] = {
+  ): ZIO[RemoteContext, String, TestResult] = {
     val encoded = codec.encode(Remote.schemaAny)(value)
     val decoded = codec.decode(Remote.schemaAny)(encoded)
 

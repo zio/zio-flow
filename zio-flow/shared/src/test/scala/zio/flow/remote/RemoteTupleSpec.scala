@@ -3,11 +3,11 @@ package zio.flow.remote
 import zio.ZIO
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
-import zio.test.{BoolAlgebra, Spec, TestEnvironment, TestFailure, TestSuccess}
+import zio.test.{TestResult, Spec, TestEnvironment}
 
 object RemoteTupleSpec extends RemoteSpecBase {
 
-  override def spec: Spec[TestEnvironment, TestFailure[Nothing], TestSuccess] =
+  override def spec: Spec[TestEnvironment, Nothing] =
     suite("RemoteTupleSpec")(
       test("Tuple2") {
         val tuple2 = Remote((1, "A"))
@@ -18,8 +18,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple2._2 <-> "A"
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("Tuple3") {
         val tuple3 = Remote((1, "A", true))
@@ -31,8 +30,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple3._3 <-> true
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("Tuple4") {
         val tuple4 = Remote((1, "A", true, 10.5))
@@ -45,8 +43,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple4._4 <-> 10.5
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       }
 //      test("Tuple5") {
 //        val tuple5 = Remote((1, "A", true, 10.5, "X"))
@@ -60,8 +57,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
 //              tuple5._5 <-> "X"
 //            )
 //          )
-//          .map(BoolAlgebra.all(_))
-//          .map(_.get)
+//          .map(TestResult.all(_ : _*))//
 //      }
     ).provide(RemoteContext.inMemory)
 

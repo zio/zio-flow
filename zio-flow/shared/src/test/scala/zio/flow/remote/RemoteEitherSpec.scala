@@ -131,7 +131,7 @@ object RemoteEitherSpec extends RemoteSpecBase {
       ),
       test("toTry") {
         check(Gen.either(Gen.throwable, Gen.int)) { either =>
-          assertM(
+          assertZIO(
             Remote(either).toTry.eval.exit.map(_.map(_.fold(err => Left(err.getMessage), success => Right(success))))
           )(
             succeeds(

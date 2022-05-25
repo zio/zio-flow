@@ -9,7 +9,7 @@ object DurableLogSpec extends ZIOSpecDefault {
   val durableLog: ZLayer[Any, Nothing, DurableLog with IndexedStore] =
     IndexedStore.inMemory >+> DurableLog.live
 
-  val values: Gen[Random with Sized, Chunk[Chunk[Byte]]] =
+  val values: Gen[Sized, Chunk[Chunk[Byte]]] =
     Gen.chunkOf(Gen.chunkOf(Gen.byte)).noShrink
 
   def spec =
@@ -19,7 +19,7 @@ object DurableLogSpec extends ZIOSpecDefault {
           (for {
             _   <- ZIO.foreachDiscard(in)(DurableLog.append("partition", _))
             out <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect
-          } yield assertTrue(out == in)).provideCustomLayer(durableLog)
+          } yield assertTrue(out == in)).provideLayer(durableLog)
         }
       },
       test("concurrent read write") {
@@ -29,7 +29,7 @@ object DurableLogSpec extends ZIOSpecDefault {
             reader <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect.fork
             _      <- writer.join
             out    <- reader.join
-          } yield assertTrue(out == in)).provideCustomLayer(durableLog)
+          } yield assertTrue(out == in)).provideLayer(durableLog)
         }
       }
     )
