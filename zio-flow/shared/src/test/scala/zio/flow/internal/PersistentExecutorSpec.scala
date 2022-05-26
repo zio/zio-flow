@@ -1,12 +1,11 @@
 package zio.flow.internal
 
-import zio._
+import zio.{ZNothing, _}
 import zio.flow._
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
-import zio.ZNothing
 import zio.test.Assertion.{dies, equalTo, hasMessage}
-import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue, ignored, live}
+import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue, live}
 
 import java.net.URI
 import java.time.Instant
@@ -202,7 +201,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         logs.contains("third"),
         !logs.contains("second")
       )
-    } @@ ignored, // TODO: reenable, started to fail on RC6 on CI only
+    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
     test("timeout works") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
