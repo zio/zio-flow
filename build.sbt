@@ -84,6 +84,8 @@ lazy val rocksdb = project
     ) ++ (
       commonTestDependencies ++
         Seq(
+          "org.rocksdb" % "rocksdbjni" % Version.rocksDbJni,
+          "dev.zio"    %% "zio-nio"    % Version.zioNio
         )
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
