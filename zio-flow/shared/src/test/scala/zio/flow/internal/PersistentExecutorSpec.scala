@@ -6,7 +6,7 @@ import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.ZNothing
 import zio.test.Assertion.{dies, equalTo, hasMessage}
-import zio.test.{TestAspect, TestClock, TestResult, assert, assertTrue}
+import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue, live}
 
 import java.net.URI
 import java.time.Instant
@@ -482,10 +482,16 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     description: String,
     duration: Duration,
     adjustment: Duration
-  )(wait: ZIO[Any, E, A]): ZIO[Any, E, A] =
+  )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
-      _           <- ZIO.logDebug(s"Waiting for $description")
-      maybeResult <- wait.timeout(1.second).provideLayer(Clock.live)
+      _ <- ZIO.logDebug(s"Waiting for $description")
+      liveClockLayer = ZLayer.scoped {
+                         for {
+                           clock <- live(ZIO.clock)
+                           _     <- ZEnv.services.locallyScopedWith(_.add(clock))
+                         } yield ()
+                       }
+      maybeResult <- wait.timeout(1.second).provideSomeLayer[Live](liveClockLayer)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None =>
