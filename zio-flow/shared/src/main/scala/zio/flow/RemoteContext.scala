@@ -42,12 +42,11 @@ object RemoteContext {
 
   private final case class Persistent(
     virtualClock: VirtualClock,
-    kvStore: KeyValueStore,
+    remoteVariableStore: RemoteVariableKeyValueStore,
     executionEnvironment: ExecutionEnvironment,
     scope: RemoteVariableScope,
     scopeMap: TMap[RemoteVariableName, RemoteVariableScope]
   ) extends RemoteContext {
-    private val remoteVariableStore = RemoteVariableKeyValueStore(kvStore)
 
     override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
       scopeMap.getOrElse(name, scope).commit.flatMap { variableScope =>
@@ -96,11 +95,11 @@ object RemoteContext {
 
   def persistent(
     scope: RemoteVariableScope
-  ): ZIO[KeyValueStore with ExecutionEnvironment with VirtualClock, Nothing, RemoteContext] =
+  ): ZIO[RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock, Nothing, RemoteContext] =
     for {
       virtualClock         <- ZIO.service[VirtualClock]
-      kvStore              <- ZIO.service[KeyValueStore]
+      remoteVariableStore  <- ZIO.service[RemoteVariableKeyValueStore]
       executionEnvironment <- ZIO.service[ExecutionEnvironment]
       scopeMap             <- TMap.empty[RemoteVariableName, RemoteVariableScope].commit
-    } yield Persistent(virtualClock, kvStore, executionEnvironment, scope, scopeMap)
+    } yield Persistent(virtualClock, remoteVariableStore, executionEnvironment, scope, scopeMap)
 }

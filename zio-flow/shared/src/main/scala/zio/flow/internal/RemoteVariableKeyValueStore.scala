@@ -1,12 +1,16 @@
 package zio.flow.internal
 
 import zio.flow.{FlowId, RemoteVariableName, TransactionId}
-import zio.{Chunk, IO, ZIO}
+import zio.stm.TSet
+import zio.{Chunk, IO, ZIO, ZLayer}
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 
-final case class RemoteVariableKeyValueStore(keyValueStore: KeyValueStore) {
+final case class RemoteVariableKeyValueStore(
+  keyValueStore: KeyValueStore,
+  readVariables: TSet[(RemoteVariableName, RemoteVariableScope)]
+) {
   def put(
     name: RemoteVariableName,
     scope: RemoteVariableScope,
@@ -24,7 +28,10 @@ final case class RemoteVariableKeyValueStore(keyValueStore: KeyValueStore) {
     keyValueStore.getLatest(Namespaces.variables, key(getScopePrefix(scope), name), before).flatMap {
       case Some(value) =>
         ZIO.logDebug(s"Read variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
-          ZIO.some((value, scope))
+          readVariables
+            .put((name, scope))
+            .as(Some((value, scope)))
+            .commit
       case None =>
         scope.parentScope match {
           case Some(parentScope) =>
@@ -55,6 +62,9 @@ final case class RemoteVariableKeyValueStore(keyValueStore: KeyValueStore) {
     ZIO.logDebug(s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope") *>
       keyValueStore.delete(Namespaces.variables, key(getScopePrefix(scope), name))
 
+  def getReadVariables: IO[Nothing, Set[(RemoteVariableName, RemoteVariableScope)]] =
+    readVariables.toSet.commit
+
   private def key(prefix: String, name: RemoteVariableName): Chunk[Byte] =
     Chunk.fromArray((prefix + RemoteVariableName.unwrap(name)).getBytes(StandardCharsets.UTF_8))
 
@@ -67,4 +77,16 @@ final case class RemoteVariableKeyValueStore(keyValueStore: KeyValueStore) {
       case RemoteVariableScope.Transactional(parent, transaction) =>
         getScopePrefix(parent) + "tx" ++ TransactionId.unwrap(transaction) + "__"
     }
+}
+
+object RemoteVariableKeyValueStore {
+  val live: ZLayer[KeyValueStore, Nothing, RemoteVariableKeyValueStore] = ZLayer {
+    for {
+      kvStore       <- ZIO.service[KeyValueStore]
+      readVariables <- TSet.empty[(RemoteVariableName, RemoteVariableScope)].commit
+    } yield new RemoteVariableKeyValueStore(kvStore, readVariables)
+  }
+
+  def getReadVariables: ZIO[RemoteVariableKeyValueStore, Nothing, Set[(RemoteVariableName, RemoteVariableScope)]] =
+    ZIO.serviceWithZIO(_.getReadVariables)
 }

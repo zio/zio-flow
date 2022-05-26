@@ -1,9 +1,9 @@
 package zio.flow.internal
 
-import zio.{Chunk, UIO, ZIO}
 import zio.flow.{RemoteContext, RemoteVariableName}
 import zio.schema.DynamicValue
 import zio.stm.TMap
+import zio.{Chunk, UIO, ZIO}
 
 trait RecordingRemoteContext {
   def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]]
@@ -29,13 +29,10 @@ object RecordingRemoteContext {
                   cache.put(name, value).commit
 
                 override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
-                  cache
-                    .get(name)
-                    .commit
-                    .flatMap {
-                      case Some(result) => ZIO.some(result)
-                      case None         => outerRemoteContext.getVariable(name)
-                    }
+                  cache.get(name).commit.flatMap {
+                    case Some(result) => ZIO.some(result)
+                    case None         => outerRemoteContext.getVariable(name)
+                  }
 
                 override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
                   outerRemoteContext.getLatestTimestamp(name)

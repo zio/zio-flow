@@ -1,6 +1,7 @@
 package zio.flow.internal
 
 import zio.flow.{FlowId, TransactionId}
+import zio.schema.{DeriveSchema, Schema}
 
 /**
  * Describes a remote variable's scope
@@ -90,6 +91,8 @@ sealed trait RemoteVariableScope {
 }
 
 object RemoteVariableScope {
+  implicit val schema: Schema[RemoteVariableScope] = DeriveSchema.gen
+
   final case class TopLevel(flowId: FlowId) extends RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = None
     override val parentScope: Option[RemoteVariableScope] = None

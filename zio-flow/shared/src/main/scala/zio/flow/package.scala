@@ -28,8 +28,10 @@ package object flow extends Syntax with Schemas {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
   }
 
-  object FlowId extends Newtype[String]
   type FlowId = FlowId.Type
+  object FlowId extends Newtype[String] {
+    implicit val schema: Schema[FlowId] = Schema[String].transform(apply(_), unwrap)
+  }
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
     def +(postfix: String): FlowId = FlowId(unwrap(flowId) + postfix)
