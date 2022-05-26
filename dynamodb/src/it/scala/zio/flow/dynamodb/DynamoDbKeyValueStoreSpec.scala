@@ -6,9 +6,9 @@ import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
-import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
+import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}
 
-object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
+object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
 
   private val dynamoDbKeyValueStore =
     dynamoDbLayer >+> DynamoDbKeyValueStore.layer
@@ -25,7 +25,7 @@ object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
   private val byteChunkGen =
     Gen.chunkOf(Gen.byte)
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: Spec[Environment, Any] =
     suite("DynamoDbKeyValueStoreSpec")(
       test("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
         checkN(10)(

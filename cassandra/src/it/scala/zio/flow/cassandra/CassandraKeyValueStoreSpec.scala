@@ -5,9 +5,9 @@ import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
-import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
+import zio.test.{Gen, Spec, assert, assertTrue, checkN, ZIOSpecDefault}
 
-object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
+object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
 
   private val cqlNameGen =
     Gen.alphaNumericStringBounded(
@@ -21,7 +21,7 @@ object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
   private val byteChunkGen =
     Gen.chunkOf(Gen.byte)
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: Spec[Environment, Any] =
     suite("CassandraKeyValueStoreSpec")(
       testUsing(cassandraV3, "Cassandra V3"),
       testUsing(cassandraV4, "Cassandra V4"),
