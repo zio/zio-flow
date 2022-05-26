@@ -13,6 +13,8 @@ inThisBuild(
         url("http://degoes.net")
       )
     ),
+    resolvers +=
+      "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
     pgpSecretRing := file("/tmp/secret.asc")
@@ -58,9 +60,13 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
       "dev.zio" %% "zio-schema-json"       % Version.zioSchema,
-      "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema
+      "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema,
+      "io.d11"  %% "zhttp"                 % Version.zioHttp
     ) ++
       commonTestDependencies.map(_ % Test)
+      ++ Seq(
+        "io.d11" %% "zhttp-test" % Version.zioHttp % Test
+      )
   )
   .settings(fork := true)
   .settings(testFrameworks += zioTest)

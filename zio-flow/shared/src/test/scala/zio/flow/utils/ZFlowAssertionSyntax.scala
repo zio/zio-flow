@@ -3,7 +3,7 @@ package zio.flow.utils
 import zio._
 import zio.flow.internal.{DurableLog, KeyValueStore}
 import zio.flow.{FlowId, ZFlow}
-import zio.schema.Schema
+import zio.schema.{DynamicValue, Schema}
 
 object ZFlowAssertionSyntax {
 
@@ -18,6 +18,22 @@ object ZFlowAssertionSyntax {
         mockPersistentTestClock.flatMap { executor =>
           executor.restartAll().orDie *>
             executor.submit(FlowId(id), zflow)
+        }
+      }
+
+    // Submit a flow and wait for the result via the start+poll interface
+    // a bit dirty?
+    def evaluateTestStartAndPoll(
+      id: String,
+      waitBeforePoll: Duration
+    ): ZIO[DurableLog with KeyValueStore, Exception, Option[IO[DynamicValue, DynamicValue]]] =
+      ZIO.scoped {
+        val fId = FlowId(id)
+        mockPersistentTestClock.flatMap { executor =>
+          executor.restartAll().orDie *>
+            executor.start(fId, zflow) *>
+            ZIO.sleep(waitBeforePoll) *>
+            executor.pollWorkflowDynTyped(fId)
         }
       }
   }

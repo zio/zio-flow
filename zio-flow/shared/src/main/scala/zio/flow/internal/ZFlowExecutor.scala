@@ -18,7 +18,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.{FlowId, ZFlow}
-import zio.schema.Schema
+import zio.schema.{DynamicValue, Schema}
 
 import java.io.IOException
 
@@ -31,6 +31,25 @@ trait ZFlowExecutor {
    * result will be awaited.
    */
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
+
+  /**
+   * Submits a flow to be executed and returns a durable promise that will
+   * complete when the flow completes.
+   *
+   * If the executor is already running a flow with the given ID, the existing
+   * flow's durable promise will be returned
+   */
+  def start[E, A](
+    id: FlowId,
+    flow: ZFlow[Any, E, A]
+  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]]
+
+  /**
+   * Poll currently running and complete workflows.
+   *
+   * If the workflow with the provided id is completed, it will be returned.
+   */
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, Exception, Option[IO[DynamicValue, DynamicValue]]]
 
   /**
    * Restart all known persisted running flows after recreating an executor.

@@ -28,7 +28,12 @@ package object flow extends Syntax with Schemas {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
   }
 
-  object FlowId extends Newtype[String]
+  object FlowId extends Newtype[String] {
+
+    def newRandom: ZIO[Any, Nothing, FlowId] =
+      Random.nextUUID.map(rid => FlowId.apply(rid.toString))
+
+  }
   type FlowId = FlowId.Type
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {

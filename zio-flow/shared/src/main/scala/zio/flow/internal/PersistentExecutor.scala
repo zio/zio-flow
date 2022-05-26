@@ -52,24 +52,41 @@ final case class PersistentExecutor(
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
     remote.evalDynamic.mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
 
+  // synchronous -> will return when work is done.
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
+      // Start to be exposed for the rest endpoint
       resultPromise <- start(id, flow).orDie
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
       _             <- ZIO.log(s"$id finished with $promiseResult")
-      result <- promiseResult match {
-                  case Left(Left(fail)) => ZIO.die(fail)
-                  case Left(Right(dynamicError)) =>
-                    ZIO
-                      .fromEither(dynamicError.toTypedValue(Schema[E]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize error: $error")))
-                      .flatMap(success => ZIO.fail(success))
-                  case Right(dynamicSuccess) =>
-                    ZIO
-                      .fromEither(dynamicSuccess.toTypedValue(Schema[A]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize success: $error")))
-                }
+      result        <- processResult[E, A](promiseResult)
     } yield result
+
+  // Throwable: a reason to die (terminal failure), 1st DynamicVal: typed error, 2nd DynamicVal typed result
+  def processResult[E: Schema, A: Schema](
+    in: Either[Either[Throwable, DynamicValue], DynamicValue]
+  ): IO[E, A] = in match {
+    case Left(Left(fail)) => ZIO.die(fail)
+    case Left(Right(dynamicError)) =>
+      ZIO
+        .fromEither(dynamicError.toTypedValue(Schema[E]))
+        .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize error: $error")))
+        .flatMap(success => ZIO.fail(success))
+    case Right(dynamicSuccess) =>
+      ZIO
+        .fromEither(dynamicSuccess.toTypedValue(Schema[A]))
+        .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize success: $error")))
+  }
+
+  def processResultDynTyped(
+    in: Either[Either[Throwable, DynamicValue], DynamicValue]
+  ): IO[DynamicValue, DynamicValue] = in match {
+    case Left(Left(fail)) => ZIO.die(fail)
+    case Left(Right(dynamicError)) =>
+      ZIO.fail(dynamicError)
+    case Right(dynamicSuccess) =>
+      ZIO.succeed(dynamicSuccess)
+  }
 
   def restartAll(): ZIO[Any, IOException, Unit] =
     for {
@@ -93,7 +110,42 @@ final case class PersistentExecutor(
            }
     } yield ()
 
-  private def start[E, A](
+  // Looks up a workflow by id, checks its state:
+  // If it's done, return the result, otherwise nothing.
+  // Fails if the id is unknown
+  // TODO: has some problems, see commented test in PersistentExecutorSpec
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, Exception, Option[IO[DynamicValue, DynamicValue]]] =
+    workflows.get.flatMap { runningWorkflows =>
+      runningWorkflows.get(id) match {
+        case Some(runtimeState) =>
+          getResultIfCompleteDynTyped(runtimeState)
+        // Check if done
+        case None =>
+          // Unknown workflow: let's fail
+          ZIO.fail(new Exception("Unknown flow id:" + id.toString))
+      }
+    }
+
+  // We know that workflow, check if it's done:
+  // TODO confirm that this is an acceptable way to do this
+  // TODO also check if we may have some corner cases where the work is done
+  // but we somehow still run into a timeout because looking things up takes longer than expected?
+  private def getResultIfCompleteDynTyped(
+    rts: RuntimeState[_, _]
+  ): ZIO[Any, IOException, Option[IO[DynamicValue, DynamicValue]]] =
+    rts.result.awaitEither.provideEnvironment(promiseEnv).timeout(10.millis).map {
+      case None =>
+        None
+      case Some(done) =>
+        // _NOT_ doing flatmap, we don't want to conflate problems the workflow had with problems
+        // we might run into when looking up results.
+        Some(processResultDynTyped(done))
+    }
+
+  // Async: starts the work, identified by 'id' -> if work for this id is already underway, it's not rescheduled.
+  // TODO consider making package private?
+  // TODO consider renaming to something like 'submitAsync'?
+  def start[E, A](
     id: FlowId,
     flow: ZFlow[Any, E, A]
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]] =
