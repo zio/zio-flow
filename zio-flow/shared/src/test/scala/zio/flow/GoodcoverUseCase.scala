@@ -2,7 +2,7 @@ package zio.flow
 
 import zio.flow
 import zio.schema.{DeriveSchema, Schema}
-import zio.stream.ZNothing
+import zio.ZNothing
 import zio.test._
 
 import java.net.URI
@@ -136,7 +136,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
 
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
 //
-  val suite1: Spec[Annotations, TestFailure[ActivityError], TestSuccess] =
+  val suite1: Spec[Annotations, TestSuccess] =
     suite("PolicyClaimStatus")(test("PolicyClaimStatus") {
 //      val result = (for {
 //        manualEvalDone    <- ZFlow.newVar("manualEvalDone", false)

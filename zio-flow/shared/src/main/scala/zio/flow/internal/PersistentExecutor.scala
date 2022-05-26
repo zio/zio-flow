@@ -30,7 +30,6 @@ import scala.annotation.nowarn
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
-  clock: Clock,
   execEnv: ExecutionEnvironment,
   durableLog: DurableLog,
   kvStore: KeyValueStore,
@@ -261,7 +260,7 @@ final case class PersistentExecutor(
             onSuccess(value)
 
           case Now =>
-            clock.instant.flatMap { currInstant =>
+            Clock.instant.flatMap { currInstant =>
               onSuccess(coerceRemote(Remote(currInstant)))
             }
 
@@ -270,11 +269,11 @@ final case class PersistentExecutor(
 
           case WaitTill(instant) =>
             for {
-              start   <- clock.instant
+              start   <- Clock.instant
               end     <- eval(instant)(instantSchema)
               duration = Duration.between(start, end)
               _       <- ZIO.logInfo(s"Sleeping for $duration")
-              _       <- clock.sleep(duration)
+              _       <- Clock.sleep(duration)
               _       <- ZIO.logInfo(s"Resuming execution after sleeping $duration")
               result  <- onSuccess(())
             } yield result
@@ -447,7 +446,6 @@ final case class PersistentExecutor(
                           .provideEnvironment(promiseEnv)
                           .tapErrorCause(c => ZIO.log(s"Failed: $c"))
                           .timeout(d)
-                          .provideEnvironment(ZEnvironment(clock))
               stepResult <- result match {
                               case Some(Right(dynamicSuccess)) =>
                                 // succeeded
@@ -598,8 +596,8 @@ final case class PersistentExecutor(
                 recordingContext <- RecordingRemoteContext.startRecording
 
                 stepResult <-
-                  step(state0).provideSomeEnvironment[VirtualClock with KeyValueStore with ExecutionEnvironment](
-                    _ ++ ZEnvironment(recordingContext.remoteContext)
+                  step(state0).provideSomeLayer[VirtualClock with KeyValueStore with ExecutionEnvironment](
+                    ZLayer.succeed(recordingContext.remoteContext)
                   )
                 state1  = stepResult.stateChange(state0)
                 state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
@@ -829,16 +827,15 @@ object PersistentExecutor {
     opEx: OperationExecutor[Any],
     serializer: Serializer,
     deserializer: Deserializer
-  ): ZLayer[Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
-    (
+  ): ZLayer[DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
+    ZLayer {
       for {
         durableLog <- ZIO.service[DurableLog]
         kvStore    <- ZIO.service[KeyValueStore]
-        clock      <- ZIO.service[Clock]
         ref        <- Ref.make[Map[FlowId, PersistentExecutor.RuntimeState[_, _]]](Map.empty)
         execEnv     = ExecutionEnvironment(serializer, deserializer)
-      } yield PersistentExecutor(clock, execEnv, durableLog, kvStore, opEx, ref)
-    ).toLayer
+      } yield PersistentExecutor(execEnv, durableLog, kvStore, opEx, ref)
+    }
 
   case class StepResult(stateChange: StateChange, continue: Boolean)
 

@@ -4,7 +4,7 @@ import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext, remote}
 import zio.schema.Schema
-import zio.test.{Gen, TestAspect, TestConfig, ZSpec, check}
+import zio.test.{Gen, TestAspect, TestConfig, Spec, check}
 
 object FractionalSpec extends RemoteSpecBase {
 
@@ -29,7 +29,7 @@ object FractionalSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: remote.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
-  )(op: A => A): ZSpec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
     test(name) {
       check(gen) { x =>
         fractionalOp(x) <-> op(x)

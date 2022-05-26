@@ -17,7 +17,7 @@
 package zio.flow.internal
 
 import zio.stream.ZStream
-import zio.{Chunk, IO, ZIO, ZLayer, ZRef}
+import zio.{Chunk, IO, Ref, ZIO, ZLayer}
 
 import java.io.IOException
 
@@ -38,7 +38,7 @@ object KeyValueStore {
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
     ZLayer {
       for {
-        namespaces <- ZRef.make(Map.empty[String, Map[Chunk[Byte], List[InMemoryKeyValueEntry]]])
+        namespaces <- Ref.make(Map.empty[String, Map[Chunk[Byte], List[InMemoryKeyValueEntry]]])
       } yield InMemoryKeyValueStore(namespaces)
     }
 

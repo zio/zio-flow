@@ -19,7 +19,7 @@ package zio.flow
 import zio.flow.Remote._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, Schema}
-import zio.stream.ZNothing
+import zio.ZNothing
 
 import java.time.{Duration, Instant}
 

@@ -46,7 +46,9 @@ object MockedOperation {
         case Operation.Http(url, method, headers, _, _) =>
           // TODO: check R1 and A1 types too
           val m =
-            urlMatcher(url) && methodMatcher(method) && headersMatcher(headers) && inputMatcher(input.asInstanceOf[R])
+            urlMatcher.run(url) && methodMatcher.run(method) && headersMatcher.run(headers) && inputMatcher.run(
+              input.asInstanceOf[R]
+            )
           if (m.isSuccess) {
             (Some(Match(result().asInstanceOf[A1], duration)), Empty)
           } else {

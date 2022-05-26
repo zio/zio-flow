@@ -2,12 +2,12 @@ package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
-import zio.test.{BoolAlgebra, Gen, Sized, check}
-import zio.{Random, ZIO, ZLayer}
+import zio.test.{Gen, Sized, TestResult, check}
+import zio.{ZIO, ZLayer}
 
 object RemoteRelationalSpec extends RemoteSpecBase {
 
-  val smallIntGen: Gen[Random with Sized, Int] =
+  val smallIntGen: Gen[Sized, Int] =
     Gen.small(Gen.const(_))
 
   override def spec =
@@ -25,8 +25,7 @@ object RemoteRelationalSpec extends RemoteSpecBase {
                 (Remote(x) === Remote(y)) <-> (x == y)
               )
             )
-            .map(BoolAlgebra.all(_))
-            .map(_.get)
+            .map(TestResult.all(_: _*))
         }
       }
     ).provideCustom(ZLayer(RemoteContext.inMemory))

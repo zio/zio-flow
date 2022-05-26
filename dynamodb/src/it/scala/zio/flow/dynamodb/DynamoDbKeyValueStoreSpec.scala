@@ -1,14 +1,15 @@
+// TODO
 //package zio.flow.dynamodb
 //
-//import zio.flow.dynamodb.DynamoDbKeyValueStore.tableName
-//import zio.flow.dynamodb.DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
+//import DynamoDbKeyValueStore.tableName
+//import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
 //import zio.flow.internal.KeyValueStore
+//import zio.{Chunk, ZIO}
 //import zio.test.Assertion.hasSameElements
 //import zio.test.TestAspect.{nondeterministic, sequential}
-//import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
-//import zio.{Chunk, ZIO}
+//import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}
 //
-//object DynamoDbKeyValueStoreSpec extends DefaultRunnableSpec {
+//object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
 //
 //  private val dynamoDbKeyValueStore =
 //    dynamoDbLayer >+> DynamoDbKeyValueStore.layer
@@ -25,7 +26,7 @@
 //  private val byteChunkGen =
 //    Gen.chunkOf(Gen.byte)
 //
-//  override def spec: ZSpec[Environment, Failure] =
+//  override def spec: Spec[Environment, Any] =
 //    suite("DynamoDbKeyValueStoreSpec")(
 //      test("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
 //        checkN(10)(
@@ -46,30 +47,6 @@
 //                retrieved1.get == value1,
 //                putSucceeded2,
 //                retrieved2.get == value2
-//              )
-//            }
-//          }
-//        }
-//      },
-//      test("should maintain version of key-value pairs") {
-//        checkN(10)(
-//          dynamoDbNameGen,
-//          nonEmptyByteChunkGen,
-//          byteChunkGen,
-//          byteChunkGen
-//        ) { (namespace, key, value1, value2) =>
-//          ZIO.scoped {
-//            createDynamoDbTable(tableName) *> {
-//              for {
-//                putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
-//                version1      <- KeyValueStore.getVersion(namespace, key)
-//                putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
-//                version2      <- KeyValueStore.getVersion(namespace, key)
-//                distance       = version2.get.distanceFrom(version1.get)
-//              } yield assertTrue(
-//                putSucceeded1,
-//                putSucceeded2,
-//                distance == 1
 //              )
 //            }
 //          }

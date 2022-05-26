@@ -1,13 +1,14 @@
+// TODO
 //package zio.flow.cassandra
 //
-//import zio.flow.cassandra.CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
+//import CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
 //import zio.flow.internal.KeyValueStore
+//import zio.{Chunk, ZIO}
 //import zio.test.Assertion.hasSameElements
 //import zio.test.TestAspect.{nondeterministic, sequential}
-//import zio.test.{DefaultRunnableSpec, Gen, ZSpec, assert, assertTrue, checkN}
-//import zio.{Chunk, ZIO}
+//import zio.test.{Gen, Spec, assert, assertTrue, checkN, ZIOSpecDefault}
 //
-//object CassandraKeyValueStoreSpec extends DefaultRunnableSpec {
+//object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
 //
 //  private val cqlNameGen =
 //    Gen.alphaNumericStringBounded(
@@ -21,7 +22,7 @@
 //  private val byteChunkGen =
 //    Gen.chunkOf(Gen.byte)
 //
-//  override def spec: ZSpec[Environment, Failure] =
+//  override def spec: Spec[Environment, Any] =
 //    suite("CassandraKeyValueStoreSpec")(
 //      testUsing(cassandraV3, "Cassandra V3"),
 //      testUsing(cassandraV4, "Cassandra V4"),
@@ -47,26 +48,6 @@
 //            retrieved1.get == value1,
 //            putSucceeded2,
 //            retrieved2.get == value2
-//          )
-//        }
-//      },
-//      test("should maintain version of key-value pairs") {
-//        checkN(10)(
-//          cqlNameGen,
-//          nonEmptyByteChunkGen,
-//          byteChunkGen,
-//          byteChunkGen
-//        ) { (namespace, key, value1, value2) =>
-//          for {
-//            putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
-//            version1      <- KeyValueStore.getVersion(namespace, key)
-//            putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
-//            version2      <- KeyValueStore.getVersion(namespace, key)
-//            distance       = version2.get.distanceFrom(version1.get)
-//          } yield assertTrue(
-//            putSucceeded1,
-//            putSucceeded2,
-//            distance == 1
 //          )
 //        }
 //      },

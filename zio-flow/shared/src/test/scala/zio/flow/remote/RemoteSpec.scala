@@ -7,8 +7,8 @@ import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
 
-object RemoteSpec extends DefaultRunnableSpec {
-  override def spec: ZSpec[TestEnvironment, Any] =
+object RemoteSpec extends ZIOSpecDefault {
+  override def spec: Spec[TestEnvironment, Any] =
     suite("Remote")(
       suite("Literal")(
         test("evaluates correctly") {

@@ -3,8 +3,8 @@ package zio.flow.mock
 import zio.{Clock, Ref, Scope, ZIO}
 import zio.flow.{ActivityError, Operation, OperationExecutor}
 
-case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor[Clock] {
-  override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Clock, ActivityError, A] =
+case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor[Any] {
+  override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
     mocks.modify { mock =>
       mock.matchOperation(operation, input)
     }.flatMap {
@@ -18,7 +18,7 @@ case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends
 }
 
 object MockedOperationExecutor {
-  def make(mock: MockedOperation): ZIO[Scope with Clock, Nothing, MockedOperationExecutor] =
+  def make(mock: MockedOperation): ZIO[Scope, Nothing, MockedOperationExecutor] =
     Ref.make(mock).flatMap { ref =>
       val opExecutor = new MockedOperationExecutor(ref)
       ZIO.addFinalizer {

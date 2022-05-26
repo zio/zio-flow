@@ -41,9 +41,9 @@ lazy val root = project
     dynamodb,
     docs,
     examplesJVM,
-//    examplesJS,
-    zioFlowJVM
-//    zioFlowJS
+    examplesJS,
+    zioFlowJVM,
+    zioFlowJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -66,8 +66,9 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(testFrameworks += zioTest)
   .enablePlugins(RemoteTupleGenerator)
 
-//lazy val zioFlowJS = zioFlow.js
-//  .settings(scalaJSUseMainModuleInitializer := true)
+lazy val zioFlowJS = zioFlow.js
+  .settings(scalaJSUseMainModuleInitializer := true)
+  .settings(fork := false)
 
 lazy val zioFlowJVM = zioFlow.jvm
 

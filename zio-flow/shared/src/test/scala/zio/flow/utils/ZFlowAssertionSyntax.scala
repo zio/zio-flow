@@ -12,7 +12,7 @@ object ZFlowAssertionSyntax {
     def evaluateTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty)(implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
-    ): ZIO[Console with Clock with DurableLog with KeyValueStore, E, A] =
+    ): ZIO[DurableLog with KeyValueStore, E, A] =
       ZIO.scoped {
         MockExecutors.persistent(mock).flatMap { executor =>
           executor.restartAll().orDie *>

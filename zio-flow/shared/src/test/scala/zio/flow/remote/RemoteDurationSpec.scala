@@ -4,7 +4,7 @@ import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
 import zio.flow.{Remote, RemoteContext}
-import zio.test.{BoolAlgebra, Gen, check}
+import zio.test.{TestResult, Gen, check}
 
 import java.time.temporal.ChronoUnit
 
@@ -53,8 +53,8 @@ object RemoteDurationSpec extends RemoteSpecBase {
               Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS)
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
+
       }
     },
     test("minus") {
@@ -100,8 +100,8 @@ object RemoteDurationSpec extends RemoteSpecBase {
               Remote(d).minus(l, ChronoUnit.NANOS) <-> d.minus(l, ChronoUnit.NANOS)
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
+
       }
     },
     test("getSeconds") {

@@ -1,7 +1,7 @@
 package zio.flow
 
 import zio.schema._
-import zio.stream.ZNothing
+import zio.ZNothing
 import zio.{Chunk, Duration}
 
 import java.time.temporal.ChronoUnit

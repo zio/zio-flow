@@ -3,7 +3,7 @@ package zio.flow.remote
 import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
-import zio.test.BoolAlgebra
+import zio.test.TestResult
 
 object RemoteBooleanSpec extends RemoteSpecBase {
   override def spec =
@@ -17,8 +17,7 @@ object RemoteBooleanSpec extends RemoteSpecBase {
               (Remote(false) && Remote(false)) <-> false
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("Or") {
         ZIO
@@ -29,8 +28,7 @@ object RemoteBooleanSpec extends RemoteSpecBase {
               (Remote(false) || Remote(false)) <-> false
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("Not") {
         ZIO
@@ -40,8 +38,7 @@ object RemoteBooleanSpec extends RemoteSpecBase {
               !Remote(false) <-> true
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("IfThenElse") {
         ZIO
@@ -51,8 +48,7 @@ object RemoteBooleanSpec extends RemoteSpecBase {
               Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       }
     ).provide(ZLayer(RemoteContext.inMemory))
 

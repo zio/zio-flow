@@ -3,10 +3,10 @@ package zio.flow.remote
 import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
-import zio.test.{BoolAlgebra, Spec, TestEnvironment, TestFailure, TestSuccess}
+import zio.test.{TestResult, Spec, TestEnvironment}
 
 object RemoteOptionSpec extends RemoteSpecBase {
-  val suite1: Spec[TestEnvironment, TestFailure[Any], TestSuccess] =
+  val suite1: Spec[TestEnvironment, Any] =
     suite("RemoteOptionSpec")(
       test("HandleOption for Some") {
         val option: Remote[Option[Int]] = Remote(Option(12))
@@ -28,8 +28,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.isSome <-> true
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("isNone") {
         val op1 = Remote[Option[Int]](None) // TODO: otherwise diverging implicits. Should Remote be invariant?
@@ -41,8 +40,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.isNone <-> false
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("isEmpty") {
         val op1 = Remote[Option[Int]](None)
@@ -54,8 +52,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.isEmpty <-> false
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("isDefined") {
         val op1 = Remote[Option[Int]](None)
@@ -67,8 +64,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.isDefined <-> true
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("knownSize") {
         val op1 = Remote[Option[Int]](None)
@@ -80,8 +76,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.knownSize <-> 1
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("knownSize") {
         val op1 = Remote[Option[Int]](None)
@@ -94,8 +89,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.contains(11) <-> false
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("orElse") {
         val op1 = Remote[Option[Int]](None)
@@ -107,8 +101,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.orElse(Option(2)) <-> Option(12)
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       },
       test("OptionSpec") {
         val op1 = Remote[Option[Int]](None)
@@ -122,8 +115,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
               op2.zip(op3) <-> Some((12, 10))
             )
           )
-          .map(BoolAlgebra.all(_))
-          .map(_.get)
+          .map(TestResult.all(_: _*))
       }
     ).provide(ZLayer(RemoteContext.inMemory))
 
