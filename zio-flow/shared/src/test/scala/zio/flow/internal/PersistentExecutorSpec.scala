@@ -457,7 +457,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         logs.contains("third"),
         !logs.contains("second")
       )
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     test("timeout works") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
@@ -469,7 +469,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         _      <- TestClock.adjust(3.seconds)
         result <- fiber.join
       } yield assertTrue(result == None)
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     testFlow("timeout interrupts", periodicAdjustClock = Some(1.seconds)) {
       for {
         now <- ZFlow.now
@@ -483,7 +483,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield r
     } { result =>
       assertTrue(result == false)
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     testFlowExit[String, Nothing]("die") {
       ZFlow.fail("test").orDie
     } { (result: Exit[String, Nothing]) =>

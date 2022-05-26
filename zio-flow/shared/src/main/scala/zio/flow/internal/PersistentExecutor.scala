@@ -246,25 +246,62 @@ final case class PersistentExecutor(
               onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
             case Instruction.PushEnv(env) :: _ =>
               onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
-            case Instruction.Continuation(onError, _) :: _ =>
-              eval(onError.apply(coerceRemote(value))).map { next =>
-                StepResult(
-                  stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
-                  continue = true
-                )
+            case Instruction.Continuation(onErrorFun, _) :: _ =>
+              val next =
+                if (state.isInTransaction) {
+                  evalDynamic(value).map { evaluatedError =>
+                    TransactionFailure
+                      .unwrapDynamic(evaluatedError)
+                      .map(unwrapped => onErrorFun.apply(Remote.Literal(unwrapped)))
+                  }
+                } else {
+                  ZIO.some(onErrorFun.apply(coerceRemote(value)))
+                }
+              next.flatMap {
+                case Some(next) =>
+                  eval(next).map { next =>
+                    StepResult(
+                      stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
+                      continue = true
+                    )
+                  }
+                case None =>
+                  onError(value, stateChange ++ StateChange.popContinuation)
               }
             case Instruction.CommitTransaction :: _ =>
-              ZIO.succeed(
-                StepResult(
-                  stateChange ++ StateChange.popContinuation ++ StateChange.revertCurrentTransaction(
-                    value
-                  ) ++ StateChange.leaveTransaction,
-                  continue = true
-                )
-              ) //
+              evalDynamic(value).map { schemaAndValue =>
+                // Inside a transaction this is always a TransactionFailure which we have to unwrap here
+                TransactionFailure.unwrapDynamic(schemaAndValue) match {
+                  case Some(failure) =>
+                    StepResult(
+                      stateChange ++ StateChange.popContinuation ++ StateChange.revertCurrentTransaction(
+                        Remote.Literal(failure)
+                      ) ++ StateChange.leaveTransaction,
+                      continue = true
+                    )
+                  case None =>
+                    // TODO: suspend until any previously read variable gets modified
+                    StepResult(
+                      stateChange ++
+                        StateChange.popContinuation ++
+                        StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                        StateChange.restartCurrentTransaction,
+                      continue = true
+                    )
+                }
+              }
           }
         }
       }
+
+      def failWith(error: SchemaAndValue[_], stateChange: StateChange = StateChange.none) =
+        onError(
+          if (state.isInTransaction)
+            Remote.Literal(TransactionFailure.wrapDynamic(error))
+          else
+            Remote.Literal(error),
+          stateChange
+        )
 
       ZIO.logDebug(s"STEP ${state.current.getClass.getSimpleName}") *> {
         state.current match {
@@ -332,7 +369,7 @@ final case class PersistentExecutor(
               inp    <- eval(input)(activity.inputSchema)
               output <- opExec.execute(inp, activity.operation).either
               result <- output match {
-                          case Left(error) => onError(Remote(error))
+                          case Left(error) => failWith(SchemaAndValue.of(error))
                           case Right(success) =>
                             val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
                             // TODO: take advantage of activity.check
@@ -469,8 +506,8 @@ final case class PersistentExecutor(
                                 ZIO.die(new IOException("Awaited flow died", fatal))
                               case Some(Left(Right(dynamicError))) =>
                                 // failed with typed error
-                                onError(
-                                  Remote.Literal(dynamicError, timeout.errorSchema),
+                                failWith(
+                                  SchemaAndValue(timeout.errorSchema, dynamicError),
                                   StateChange.increaseForkCounter
                                 )
                               case None =>
@@ -497,7 +534,7 @@ final case class PersistentExecutor(
           case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
 
           case RetryUntil =>
-            ??? // TODO
+            onError(Remote.apply[TransactionFailure[ZNothing]](TransactionFailure.Retry))
 
           case OrTry(_, _) =>
             ??? // TODO
@@ -510,8 +547,8 @@ final case class PersistentExecutor(
               result <- if (interrupted)
                           onSuccess(Remote.unit)
                         else
-                          onError(
-                            Remote(
+                          failWith(
+                            SchemaAndValue.of(
                               ActivityError(
                                 s"Flow ${persistentExecutingFlow.id} to be interrupted is not running",
                                 None
@@ -522,9 +559,12 @@ final case class PersistentExecutor(
 
           case Fail(error) =>
             // Evaluating error to make sure it contains no coped variables as it will bubble up the scope stack
-            evalDynamic(error).flatMap { evaluatedError =>
-              onError(Remote.Literal(evaluatedError))
-            }
+            if (state.isInTransaction)
+              evalDynamic(error).flatMap { evaluatedError =>
+                failWith(evaluatedError)
+              }
+            else
+              onError(error)
 
           case NewVar(name, initial) =>
             for {
