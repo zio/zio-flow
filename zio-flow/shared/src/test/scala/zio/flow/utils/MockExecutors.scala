@@ -34,17 +34,14 @@ object MockExecutors {
 //        )
 //      )
 
-  val mockPersistentTestClock
-    : ZIO[Scope with Console with Clock with DurableLog with KeyValueStore, Nothing, ZFlowExecutor] = {
-    ZIO.environment[Console with Clock].flatMap { env =>
-      PersistentExecutor
-        .make(
-          mockOpExec.provideEnvironment(env),
-          Serializer.json,
-          Deserializer.json
-        )
-        .build
-        .map(_.get[ZFlowExecutor])
-    }
+  val mockPersistentTestClock: ZIO[Scope with DurableLog with KeyValueStore, Nothing, ZFlowExecutor] = {
+    PersistentExecutor
+      .make(
+        mockOpExec,
+        Serializer.json,
+        Deserializer.json
+      )
+      .build
+      .map(_.get[ZFlowExecutor])
   }
 }

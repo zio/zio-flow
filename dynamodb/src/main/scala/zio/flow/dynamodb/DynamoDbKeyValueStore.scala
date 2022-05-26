@@ -16,7 +16,7 @@ import zio.aws.dynamodb.model.{
 import DynamoDbKeyValueStore._
 import zio.flow.internal.KeyValueStore
 import zio.stream.ZStream
-import zio.{Chunk, IO, URLayer, ZIO}
+import zio.{Chunk, IO, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
 
@@ -141,10 +141,11 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
 object DynamoDbKeyValueStore {
   val layer: URLayer[DynamoDb, KeyValueStore] =
-    ZIO
-      .service[DynamoDb]
-      .map(new DynamoDbKeyValueStore(_))
-      .toLayer
+    ZLayer {
+      ZIO
+        .service[DynamoDb]
+        .map(new DynamoDbKeyValueStore(_))
+    }
 
   private[dynamodb] val tableName: TableName = TableName("_zflow_key_value_store")
 

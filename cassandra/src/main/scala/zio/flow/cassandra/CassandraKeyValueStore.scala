@@ -11,7 +11,7 @@ import zio.flow.cassandra.CassandraKeyValueStore._
 import zio.flow.internal.KeyValueStore
 import zio.flow.internal.KeyValueStore.Item
 import zio.stream.ZStream
-import zio.{Chunk, IO, Task, URLayer, ZIO}
+import zio.{Chunk, IO, Task, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -61,7 +61,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     executeAsync(query).flatMap { result =>
       if (result.remaining > 0)
-        Task.attempt {
+        ZIO.attempt {
           Option(blobValueOf(valueColumnName, result.one))
         }
       else
@@ -94,7 +94,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
               result.currentPage.iterator
             )
             .mapZIO { row =>
-              Task.attempt {
+              ZIO.attempt {
                 blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
               }
             }
@@ -175,10 +175,11 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 object CassandraKeyValueStore {
 
   val layer: URLayer[CqlSession, KeyValueStore] =
-    ZIO
-      .service[CqlSession]
-      .map(new CassandraKeyValueStore(_))
-      .toLayer
+    ZLayer {
+      ZIO
+        .service[CqlSession]
+        .map(new CassandraKeyValueStore(_))
+    }
 
   private[cassandra] val tableName: String =
     withDoubleQuotes("_zflow_key_value_store")
