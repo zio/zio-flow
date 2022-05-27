@@ -134,6 +134,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == 10)
     } @@ TestAspect.ignore, // TODO: fix recursion support
+    testFlow("Read") {
+      for {
+        variable <- ZFlow.newVar[Int]("var", 0)
+        a        <- variable.get
+      } yield a
+    } { result =>
+      assertTrue(result == 0)
+    },
     testFlow("Modify") {
       for {
         variable <- ZFlow.newVar[Int]("var", 0)
@@ -205,6 +213,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                       _ <- var1.update(_ + 1)
                       _ <- ZFlow.waitTill(now.plusSeconds(1L))
                       _ <- var2.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
                     } yield ()
                   }.fork
           fib2 <- ZFlow.transaction { _ =>
@@ -412,7 +421,28 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
               inputMatcher = equalTo(100),
               result = () => -1
             )
-      )
+      ),
+      testFlowAndLogs("retry until", periodicAdjustClock = Some(200.millis)) {
+        for {
+          variable <- ZFlow.newVar("var", 0)
+          fiber <- ZFlow.transaction { tx =>
+                     for {
+                       value <- variable.get
+                       _     <- ZFlow.log("TX")
+                       _     <- tx.retryUntil(value === 1)
+                     } yield value
+                   }.fork
+          _      <- ZFlow.sleep(1.second)
+          _      <- variable.set(1)
+          _      <- ZFlow.log("Waiting for the transaction fiber to stop")
+          result <- fiber.await
+        } yield result
+      } { (result, logs) =>
+        assertTrue(
+          result == Right(1),
+          logs.filter(_ == "TX").size == 1 // TODO
+        )
+      } @@ TestAspect.ignore
     ),
     testFlow("unwrap") {
       val flow = for {
@@ -604,7 +634,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory,
-        Runtime.addLogger(ZLogger.default.map(println(_)))
+        Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(println(_)))
       )
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =

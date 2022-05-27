@@ -32,6 +32,7 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
       test("Return")(roundtripCheck(codec, genZFlowReturn)),
       test("Now")(roundtripCheck(codec, genZFlowNow)),
       test("WaitTill")(roundtripCheck(codec, genZFlowWaitTill)),
+      test("Read")(roundtripCheck(codec, genZFlowRead)),
       test("Modify")(roundtripCheck(codec, genZFlowModify)),
       test("Fold")(roundtripCheck(codec, genZFlowFold)),
       test("Log")(roundtripCheck(codec, genZFlowLog)),

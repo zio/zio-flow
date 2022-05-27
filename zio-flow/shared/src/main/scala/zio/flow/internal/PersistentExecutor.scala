@@ -327,6 +327,13 @@ final case class PersistentExecutor(
               result  <- onSuccess(())
             } yield result
 
+          case Read(svar, schema) =>
+            for {
+              variableReference <- eval(svar)
+              variable           = Remote.Variable(variableReference.name, schema)
+              stepResult        <- onSuccess(variable, StateChange.none)
+            } yield stepResult
+
           case modify @ Modify(svar, f0) =>
             val f = f0.asInstanceOf[EvaluatedRemoteFunction[Any, (A, Any)]]
             for {
@@ -705,28 +712,31 @@ final case class PersistentExecutor(
   ): ZIO[Any, IOException, Boolean] =
     ZIO.logDebug(s"Committing transaction ${transactionState.id}") *>
       ZIO
-        .foreachDiscard(transactionState.modifiedVariables) { case (name, modification) =>
-          targetContext.getLatestTimestamp(name).flatMap { optLatestTimestamp =>
-            val latestTimestamp = optLatestTimestamp.getOrElse(Timestamp(0L))
-            if (latestTimestamp > modification.previousTimestamp) {
-              ZIO.logWarning(
-                s"Variable ${name} in ${transactionState.id} latest: $latestTimestamp previous: ${modification.previousTimestamp}"
-              ) *>
-                ZIO.fail(None)
-            } else {
-              currentContext.getVariable(name).flatMap {
-                case Some(value) =>
-                  ZIO.logDebug(s"Committing modified value for variable ${name}: ${value}") *>
-                    targetContext.setVariable(name, value)
-                case None =>
-                  ZIO.fail(
-                    Some(
-                      new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}")
+        .foreachDiscard(transactionState.accessedVariables) { case (name, access) =>
+          targetContext
+            .getLatestTimestamp(name)
+            .flatMap { optLatestTimestamp =>
+              val latestTimestamp = optLatestTimestamp.getOrElse(Timestamp(0L))
+              if (latestTimestamp > access.previousTimestamp) {
+                ZIO.logWarning(
+                  s"Variable ${name} in ${transactionState.id} latest: $latestTimestamp previous: ${access.previousTimestamp}"
+                ) *>
+                  ZIO.fail(None)
+              } else {
+                currentContext.getVariable(name).flatMap {
+                  case Some(value) =>
+                    ZIO.logDebug(s"Committing modified value for variable ${name}: ${value}") *>
+                      targetContext.setVariable(name, value)
+                  case None =>
+                    ZIO.fail(
+                      Some(
+                        new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}")
+                      )
                     )
-                  )
+                }
               }
             }
-          }
+            .when(access.wasModified)
         }
         .unsome
         .map(_.isDefined)
@@ -746,20 +756,21 @@ final case class PersistentExecutor(
     // TODO: optimization: do not persist state if there were no side effects
     val key = id.toRaw
     for {
-      _                 <- recordingContext.virtualClock.advance(state1.lastTimestamp)
-      modifiedVariables <- recordingContext.getModifiedVariables
-      readVariables     <- RemoteVariableKeyValueStore.getReadVariables
-      currentTimestamp  <- recordingContext.virtualClock.current
+      _                    <- recordingContext.virtualClock.advance(state1.lastTimestamp)
+      modifiedVariables    <- recordingContext.getModifiedVariables
+      readVariables        <- RemoteVariableKeyValueStore.getReadVariables
+      currentTimestamp     <- recordingContext.virtualClock.current
+      modifiedVariableNames = modifiedVariables.map(_._1).toSet
 
-      modifiedVariablesWithTimestamps <-
+      readVariablesWithTimestamps <-
         state1.scope.parentScope match {
           case Some(parentScope) =>
             RemoteContext.persistent(parentScope).flatMap { parentContext =>
-              ZIO.foreach(modifiedVariables) { case (name, _) =>
-                parentContext
-                  .getLatestTimestamp(name)
-                  .map(ts => name -> ts)
-              }
+              ZIO
+                .foreach(Chunk.fromIterable(readVariables.map(_._1))) { name =>
+                  val wasModified = modifiedVariableNames.contains(name)
+                  parentContext.getLatestTimestamp(name).map(ts => (name, ts, wasModified))
+                }
             }
           case None =>
             ZIO.succeed(Chunk.empty)
@@ -767,7 +778,7 @@ final case class PersistentExecutor(
 
       state2 = state1
                  .copy(lastTimestamp = currentTimestamp)
-                 .recordModifiedVariables(modifiedVariablesWithTimestamps)
+                 .recordAccessedVariables(readVariablesWithTimestamps)
                  .recordReadVariables(readVariables)
 
       persistedState = execEnv.serializer.serialize(state2)
@@ -950,10 +961,10 @@ object PersistentExecutor {
         state.copy(
           transactionStack = TransactionState(
             transactionId,
-            modifiedVariables = Map.empty,
             compensations = Nil,
+            accessedVariables = Map.empty,
             readVariables = Set.empty,
-            flow
+            body = flow
           ) :: state.transactionStack,
           transactionCounter = state.transactionCounter + 1
         )
@@ -999,7 +1010,8 @@ object PersistentExecutor {
               )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
             state.copy(
               current = compensateAndRun,
-              transactionStack = txState.copy(modifiedVariables = Map.empty) :: state.transactionStack.tail
+              transactionStack =
+                txState.copy(accessedVariables = Map.empty, readVariables = Set.empty) :: state.transactionStack.tail
             )
           case None => state
         }
@@ -1072,19 +1084,24 @@ object PersistentExecutor {
 
     def isInTransaction: Boolean = transactionStack.nonEmpty
 
-    def recordModifiedVariables(variables: Seq[(RemoteVariableName, Option[Timestamp])]): State[E, A] =
+    def recordAccessedVariables(
+      variables: Seq[(RemoteVariableName, Option[Timestamp], Boolean)]
+    ): State[E, A] =
       transactionStack match {
         case currentTransaction :: rest =>
           copy(
             transactionStack =
-              currentTransaction.copy(modifiedVariables = variables.foldLeft(currentTransaction.modifiedVariables) {
-                case (result, (name, timestamp)) =>
+              currentTransaction.copy(accessedVariables = variables.foldLeft(currentTransaction.accessedVariables) {
+                case (result, (name, timestamp, wasModified)) =>
                   result.get(name) match {
-                    case Some(_) =>
-                      result
+                    case Some(access) =>
+                      result + (name -> access.copy(wasModified = access.wasModified || wasModified))
                     case None =>
                       // First time this variable is modified in this transaction
-                      result + (name -> RecordedModification(previousTimestamp = timestamp.getOrElse(Timestamp(0L))))
+                      result + (name -> RecordedAccess(
+                        previousTimestamp = timestamp.getOrElse(Timestamp(0L)),
+                        wasModified
+                      ))
                   }
               }) :: rest
           )
@@ -1190,14 +1207,14 @@ object PersistentExecutor {
       )
   }
 
-  final case class RecordedModification(previousTimestamp: Timestamp)
-  object RecordedModification {
-    implicit val schema: Schema[RecordedModification] = DeriveSchema.gen
+  final case class RecordedAccess(previousTimestamp: Timestamp, wasModified: Boolean)
+  object RecordedAccess {
+    implicit val schema: Schema[RecordedAccess] = DeriveSchema.gen
   }
 
   final case class TransactionState(
     id: TransactionId,
-    modifiedVariables: Map[RemoteVariableName, RecordedModification],
+    accessedVariables: Map[RemoteVariableName, RecordedAccess],
     compensations: List[ZFlow[Any, ActivityError, Unit]],
     readVariables: Set[(RemoteVariableName, RemoteVariableScope)],
     body: ZFlow[_, _, _]

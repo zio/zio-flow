@@ -1,7 +1,7 @@
 package zio.flow.mock
 
-import zio.{Clock, Ref, Scope, ZIO}
 import zio.flow.{ActivityError, Operation, OperationExecutor}
+import zio.{Clock, Ref, Scope, ZIO}
 
 case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor[Any] {
   override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
