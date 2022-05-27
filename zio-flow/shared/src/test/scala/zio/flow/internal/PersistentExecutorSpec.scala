@@ -11,10 +11,12 @@ import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue}
 import java.net.URI
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private val unit: Unit = ()
+  private val counter    = new AtomicInteger(0)
 
   private val testActivity: Activity[Int, Int] =
     Activity(
@@ -201,6 +203,19 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         } yield v1
       } { result =>
         assertTrue(result == 100)
+      },
+      testFlow("can return with a variable not existing outside") {
+        for {
+          fiber <- ZFlow.transaction { _ =>
+                     for {
+                       variable <- ZFlow.newVar("inner", 123)
+                       v0       <- variable.get
+                     } yield v0
+                   }.fork
+          v1 <- fiber.await
+        } yield v1
+      } { result =>
+        assertTrue(result == Right(123))
       },
       testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
         for {
@@ -442,7 +457,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           result == Right(1),
           logs.filter(_ == "TX").size == 1 // TODO
         )
-      } @@ TestAspect.ignore
+      }
     ),
     testFlow("unwrap") {
       val flow = for {
@@ -669,7 +684,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  }
         fiber <-
           flow
-            .evaluateTestPersistent(label, mock)
+            .evaluateTestPersistent("wf" + counter.incrementAndGet().toString, mock)
             .provideSomeLayer[DurableLog with KeyValueStore](Runtime.addLogger(logger))
             .exit
             .fork

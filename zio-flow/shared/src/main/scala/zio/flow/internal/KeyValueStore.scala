@@ -79,12 +79,12 @@ object KeyValueStore {
       value: Chunk[Byte],
       timestamp: Timestamp
     ): IO[IOException, Boolean] =
-      ZIO.logDebug(
-        s"KVSTORE PUT [$timestamp] [$namespace] ${new String(key.toArray)}"
-      ) *>
-        namespaces.update { ns =>
-          add(ns, namespace, key, value, timestamp)
-        }.as(true)
+//      ZIO.logDebug(
+//        s"KVSTORE PUT [$timestamp] [$namespace] ${new String(key.toArray)}"
+//      ) *>
+      namespaces.update { ns =>
+        add(ns, namespace, key, value, timestamp)
+      }.as(true)
 
     override def getLatest(
       namespace: String,
@@ -101,10 +101,11 @@ object KeyValueStore {
                 Some(filtered.maxBy(_.timestamp.value).data)
             }
           )
-      }.tap(_ =>
-        ZIO
-          .logDebug(s"KVSTORE GET LATEST [$before] [$namespace] ${new String(key.toArray)}")
-      )
+      }
+//      }.tap(_ =>
+//        ZIO
+//          .logDebug(s"KVSTORE GET LATEST [$before] [$namespace] ${new String(key.toArray)}")
+//      )
 
     override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]] =
       namespaces.get.map { ns =>
@@ -114,10 +115,11 @@ object KeyValueStore {
             case Nil     => None
             case entries => Some(entries.maxBy(_.timestamp.value).timestamp)
           }
-      }.tap(result =>
-        ZIO
-          .logDebug(s"KVSTORE GET LATEST TIMESTAMP [$namespace] ${new String(key.toArray)} => $result")
-      )
+      }
+//        .tap(result =>
+//        ZIO
+//          .logDebug(s"KVSTORE GET LATEST TIMESTAMP [$namespace] ${new String(key.toArray)} => $result")
+//      )
 
     override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
       ZStream.unwrap {

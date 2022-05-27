@@ -159,60 +159,63 @@ final case class PersistentExecutor(
 
         val scope         = updatedState.scope
         val remoteContext = ZLayer(RemoteContext.persistent(scope))
-        remoteContext {
-          updatedState.stack match {
-            case Nil =>
-              evalDynamic(value).flatMap { result =>
-                state.result
-                  .succeed(FlowResult(result.value, updatedState.lastTimestamp))
-                  .unit
-                  .provideEnvironment(promiseEnv)
-              }.as(
-                StepResult(
-                  stateChange,
-                  continue = false
+        ZIO.logDebug(s"onSuccess in scope ${scope} with value ${value}") *>
+          remoteContext {
+            updatedState.stack match {
+              case Nil =>
+                evalDynamic(value).flatMap { result =>
+                  state.result
+                    .succeed(FlowResult(result.value, updatedState.lastTimestamp))
+                    .unit
+                    .provideEnvironment(promiseEnv)
+                }.as(
+                  StepResult(
+                    stateChange,
+                    continue = false
+                  )
                 )
-              )
-            case Instruction.PopEnv :: _ =>
-              onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
-            case Instruction.PushEnv(env) :: _ =>
-              onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
-            case Instruction.Continuation(_, onSuccess) :: _ =>
-              eval(onSuccess.apply(coerceRemote(value))).map { next =>
-                StepResult(
-                  stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
-                  continue = true
-                )
-              }
-            case Instruction.CommitTransaction :: _ =>
-              for {
-                currentContext <- ZIO.service[RemoteContext]
-                targetContext <- RemoteContext.persistent(
-                                   StateChange.leaveTransaction(updatedState).scope
+              case Instruction.PopEnv :: _ =>
+                onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
+              case Instruction.PushEnv(env) :: _ =>
+                onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.pushEnvironment(env))
+              case Instruction.Continuation(_, onSuccess) :: _ =>
+                eval(onSuccess.apply(coerceRemote(value))).map { next =>
+                  StepResult(
+                    stateChange ++ StateChange.popContinuation ++ StateChange.setCurrent(next),
+                    continue = true
+                  )
+                }
+              case Instruction.CommitTransaction :: _ =>
+                for {
+                  currentContext <- ZIO.service[RemoteContext]
+                  targetContext <- RemoteContext.persistent(
+                                     StateChange.leaveTransaction(updatedState).scope
+                                   )
+                  commitSucceeded <-
+                    commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
+                  result <-
+                    if (commitSucceeded) {
+                      evalDynamic(value).flatMap { evaluatedValue =>
+                        onSuccess(
+                          Remote.Literal(evaluatedValue),
+                          stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+                        )
+                      }
+                    } else {
+                      for {
+                        _ <- ZIO.logInfo("Commit failed, reverting and retrying")
+                        result = StepResult(
+                                   stateChange ++
+                                     StateChange.popContinuation ++
+                                     StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                                     StateChange.restartCurrentTransaction,
+                                   continue = true
                                  )
-                commitSucceeded <-
-                  commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
-                result <-
-                  if (commitSucceeded) {
-                    onSuccess(
-                      value,
-                      stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
-                    )
-                  } else {
-                    for {
-                      _ <- ZIO.logInfo("Commit failed, reverting and retrying")
-                      result = StepResult(
-                                 stateChange ++
-                                   StateChange.popContinuation ++
-                                   StateChange.pushContinuation(Instruction.CommitTransaction) ++
-                                   StateChange.restartCurrentTransaction,
-                                 continue = true
-                               )
-                    } yield result
-                  }
-              } yield result
+                      } yield result
+                    }
+                } yield result
+            }
           }
-        }
       }
 
       def onError(
@@ -303,7 +306,9 @@ final case class PersistentExecutor(
           stateChange
         )
 
-      ZIO.logDebug(s"STEP ${state.current.getClass.getSimpleName}") *> {
+      Console.printLine(
+        scala.Console.GREEN + s"============ [${state.scope.toString}] STEP ${state.current.getClass.getSimpleName} ============ " + scala.Console.RESET
+      ) *> {
         state.current match {
           case Return(value) =>
             onSuccess(value)
@@ -783,11 +788,12 @@ final case class PersistentExecutor(
 
       persistedState = execEnv.serializer.serialize(state2)
       _             <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
-      _ <- ZIO
-             .logInfo(
-               s"Persisting changes to ${modifiedVariables.size} remote variables (${modifiedVariables.mkString(", ")})"
-             )
-             .when(modifiedVariables.nonEmpty)
+      _ <-
+        ZIO
+          .logInfo(
+            s"Persisting changes to ${modifiedVariables.size} remote variables\n(${modifiedVariables.mkString("\n")})"
+          )
+          .when(modifiedVariables.nonEmpty)
 
       remoteContext = recordingContext.commitContext
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (name, value) =>
