@@ -1296,7 +1296,26 @@ object PersistentExecutor {
   )
 
   object TransactionState {
-    implicit val schema: Schema[TransactionState] = DeriveSchema.gen
+    implicit val schema: Schema[TransactionState] =
+      Schema.CaseClass5(
+        Schema.Field("id", Schema[TransactionId]),
+        Schema.Field("accessedVariables", Schema[Map[RemoteVariableName, RecordedAccess]]),
+        Schema.Field("compensations", Schema[List[ZFlow[Any, ActivityError, Unit]]]),
+        Schema.Field("readVariables", Schema[Set[ScopedRemoteVariableName]]),
+        Schema.Field("body", ZFlow.schemaAny),
+        (
+          id: TransactionId,
+          accessedVariables: Map[RemoteVariableName, RecordedAccess],
+          compensations: List[ZFlow[Any, ActivityError, Unit]],
+          readVariables: Set[ScopedRemoteVariableName],
+          body: ZFlow[_, _, _]
+        ) => TransactionState(id, accessedVariables, compensations, readVariables, body),
+        _.id,
+        _.accessedVariables,
+        _.compensations,
+        _.readVariables,
+        _.body.asInstanceOf[ZFlow[Any, Any, Any]]
+      )
   }
 
   final case class RuntimeState[E, A](

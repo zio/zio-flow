@@ -188,7 +188,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           v2 <- var2.get
         } yield (v1, v2)
       } { result =>
-        assertTrue(result == (100, 200))
+        assertTrue(result == ((100, 200)))
       },
       testFlow("setting variables in a forked transaction") {
         for {
@@ -246,7 +246,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           v2 <- var2.get
         } yield (v1, v2)
       } { result =>
-        assertTrue(result == (12, 22))
+        assertTrue(result == ((12, 22)))
       },
       testFlow(
         "retried transaction runs activity compensations in reverse order",
@@ -309,7 +309,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           _   <- fib1.await
         } yield ()
       }(
-        result => assertTrue(result == ()),
+        result => assertTrue(result == (())),
         mock =
           // First run (with input=1)
           MockedOperation.Http(
