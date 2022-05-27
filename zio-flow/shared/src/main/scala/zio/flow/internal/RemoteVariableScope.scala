@@ -88,6 +88,8 @@ sealed trait RemoteVariableScope {
   val flowId: FlowId
   val transactionId: Option[TransactionId]
   val parentScope: Option[RemoteVariableScope]
+
+  def rootScope: RemoteVariableScope
 }
 
 object RemoteVariableScope {
@@ -96,16 +98,22 @@ object RemoteVariableScope {
   final case class TopLevel(flowId: FlowId) extends RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = None
     override val parentScope: Option[RemoteVariableScope] = None
+
+    override def rootScope: RemoteVariableScope = this
   }
 
   final case class Fiber(flowId: FlowId, parent: RemoteVariableScope) extends RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = None
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
+
+    override def rootScope: RemoteVariableScope = parent.rootScope
   }
 
   final case class Transactional(parent: RemoteVariableScope, transaction: TransactionId) extends RemoteVariableScope {
     override val flowId: FlowId                           = parent.flowId
     override val transactionId: Option[TransactionId]     = Some(transaction)
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
+
+    override def rootScope: RemoteVariableScope = parent.rootScope
   }
 }

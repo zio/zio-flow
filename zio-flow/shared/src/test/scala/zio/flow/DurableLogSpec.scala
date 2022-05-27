@@ -1,6 +1,7 @@
 package zio.flow
 
 import zio._
+import zio.flow.internal.IndexedStore.Index
 import zio.flow.internal.{DurableLog, IndexedStore}
 import zio.test._
 
@@ -18,7 +19,7 @@ object DurableLogSpec extends ZIOSpecDefault {
         check(values) { in =>
           (for {
             _   <- ZIO.foreachDiscard(in)(DurableLog.append("partition", _))
-            out <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect
+            out <- DurableLog.subscribe("partition", Index(0L)).take(in.length.toLong).runCollect
           } yield assertTrue(out == in)).provideLayer(durableLog)
         }
       },
@@ -26,7 +27,7 @@ object DurableLogSpec extends ZIOSpecDefault {
         check(values) { in =>
           (for {
             writer <- ZIO.foreach(in)(DurableLog.append("partition", _)).fork
-            reader <- DurableLog.subscribe("partition", 0L).take(in.length.toLong).runCollect.fork
+            reader <- DurableLog.subscribe("partition", Index(0L)).take(in.length.toLong).runCollect.fork
             _      <- writer.join
             out    <- reader.join
           } yield assertTrue(out == in)).provideLayer(durableLog)

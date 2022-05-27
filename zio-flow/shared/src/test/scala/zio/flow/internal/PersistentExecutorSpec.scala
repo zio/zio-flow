@@ -455,7 +455,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } { (result, logs) =>
         assertTrue(
           result == Right(1),
-          logs.filter(_ == "TX").size == 1 // TODO
+          logs.filter(_ == "TX").size == 2
         )
       }
     ),

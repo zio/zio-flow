@@ -52,7 +52,7 @@ object KeyValueStore {
       _.put(namespace, key, value, timestamp)
     )
 
-  def geLatest(
+  def getLatest(
     namespace: String,
     key: Chunk[Byte],
     before: Option[Timestamp]

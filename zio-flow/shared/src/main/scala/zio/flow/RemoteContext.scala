@@ -95,7 +95,11 @@ object RemoteContext {
 
   def persistent(
     scope: RemoteVariableScope
-  ): ZIO[RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock, Nothing, RemoteContext] =
+  ): ZIO[
+    RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog,
+    Nothing,
+    RemoteContext
+  ] =
     for {
       virtualClock         <- ZIO.service[VirtualClock]
       remoteVariableStore  <- ZIO.service[RemoteVariableKeyValueStore]
