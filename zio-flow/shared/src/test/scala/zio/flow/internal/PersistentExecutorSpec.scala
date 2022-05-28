@@ -121,6 +121,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         result <- fiber.join
       } yield assertTrue(result.getEpochSecond == 2L)
     },
+    test("sleep") {
+      for {
+        curr <- Clock.currentTime(TimeUnit.SECONDS)
+        flow = for {
+          _   <- ZFlow.sleep(2.seconds)
+          now <- ZFlow.now
+        } yield now
+        fiber  <- flow.evaluateTestPersistent("sleep").fork
+        _      <- TestClock.adjust(2.seconds)
+        result <- fiber.join
+      } yield assertTrue(result.getEpochSecond == 2L)
+    },
     testFlow("Activity") {
       testActivity(12)
     }(
@@ -217,7 +229,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } { result =>
         assertTrue(result == Right(123))
       },
-      testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(100.millis)) {
+      testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(500.millis)) {
         for {
           var1 <- ZFlow.newVar[Int]("var1", 10)
           var2 <- ZFlow.newVar[Int]("var2", 20)
