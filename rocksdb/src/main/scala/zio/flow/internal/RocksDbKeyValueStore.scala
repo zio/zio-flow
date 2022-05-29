@@ -66,12 +66,29 @@ final case class RocksDbKeyValueStore(
 
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
     ZStream.unwrap {
-      getOrCreateNamespace(dataNamespace(namespace)).map { handle =>
-        rocksDB
-          .newIterator(handle)
-          .map { case (key, value) => Chunk.fromArray(key) -> Chunk.fromArray(value) }
-          .refineToOrDie[IOException]
-      }
+      for {
+        versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
+        dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
+        result = rocksDB
+                   .newIterator(versionNamespace)
+                   .refineToOrDie[IOException]
+                   .mapZIO { case (key, value) =>
+                     val keyChunk = Chunk.fromArray(key)
+                     getLastTimestamp(Some(value), None).flatMap {
+                       case None =>
+                         ZIO.succeed(Chunk.empty)
+                       case Some(timestamp) =>
+                         rocksDB
+                           .get(dataNamespace, getVersionedKey(keyChunk, timestamp).toArray)
+                           .refineToOrDie[IOException]
+                           .map {
+                             case None       => Chunk.empty
+                             case Some(data) => Chunk(keyChunk -> Chunk.fromArray(data))
+                           }
+                     }
+                   }
+                   .flattenChunks
+      } yield result
     }
 
   override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
@@ -97,11 +114,17 @@ final case class RocksDbKeyValueStore(
     key ++ ("_" + timestamp.value.toString).getBytes(StandardCharsets.UTF_8)
 
   private def appendTimestamp(rawVersions: Option[Array[Byte]], timestamp: Timestamp): IO[IOException, Chunk[Byte]] =
-    ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions.getOrElse(Array.emptyByteArray))) match {
-      case Left(failure) => ZIO.fail(new IOException(s"Failed to decode versions: $failure"))
-      case Right(versions) =>
-        val updatedVersions = timestamp :: versions
-        ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(updatedVersions))
+    rawVersions match {
+      case Some(rawVersions) =>
+        ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
+          case Left(failure) =>
+            ZIO.fail(new IOException(s"Failed to decode versions: $failure"))
+          case Right(versions) =>
+            val updatedVersions = timestamp :: versions
+            ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(updatedVersions))
+        }
+      case None =>
+        ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(List(timestamp)))
     }
 
   private def getLastTimestamp(
