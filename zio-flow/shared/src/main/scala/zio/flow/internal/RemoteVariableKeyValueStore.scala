@@ -40,7 +40,7 @@ final case class RemoteVariableKeyValueStore(
   ): IO[IOException, Option[(Chunk[Byte], RemoteVariableScope)]] =
     keyValueStore.getLatest(Namespaces.variables, key(getScopePrefix(scope), name), before).flatMap {
       case Some(value) =>
-        ZIO.logDebug(s"Read variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
+        ZIO.logDebug(s"Read variable ${RemoteVariableName.unwrap(name)} from scope $scope before $before") *>
           readVariables
             .put(ScopedRemoteVariableName(name, scope))
             .as(Some((value, scope)))

@@ -125,9 +125,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
         flow = for {
-          _   <- ZFlow.sleep(2.seconds)
-          now <- ZFlow.now
-        } yield now
+                 _   <- ZFlow.sleep(2.seconds)
+                 now <- ZFlow.now
+               } yield now
         fiber  <- flow.evaluateTestPersistent("sleep").fork
         _      <- TestClock.adjust(2.seconds)
         result <- fiber.join

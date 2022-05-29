@@ -766,7 +766,9 @@ final case class PersistentExecutor(
               } else {
                 currentContext.getVariable(name).flatMap {
                   case Some(value) =>
-                    ZIO.logDebug(s"Committing modified value for variable ${name}: ${value} (latestTimestamp: $latestTimestamp; recorded access: $access") *>
+                    ZIO.logDebug(
+                      s"Committing modified value for variable ${name}: ${value} (latestTimestamp: $latestTimestamp; recorded access: $access"
+                    ) *>
                       targetContext.setVariable(name, value)
                   case None =>
                     ZIO.fail(
@@ -810,7 +812,10 @@ final case class PersistentExecutor(
               ZIO
                 .foreach(Chunk.fromIterable(readVariables.map(_.name))) { name =>
                   val wasModified = modifiedVariableNames.contains(name)
-                  parentContext.getLatestTimestamp(name).map(ts => (name, ts, wasModified))
+                  parentContext.getLatestTimestamp(name).map { ts =>
+                    val finalTs = ts.map(ts => if (ts < currentTimestamp) ts else currentTimestamp)
+                    (name, finalTs, wasModified)
+                  }
                 }
             }
           case None =>
@@ -829,7 +834,7 @@ final case class PersistentExecutor(
              remoteContext.setVariable(name, value)
            }
       lastIndex <- RemoteVariableKeyValueStore.getLastIndex
-      _ <- ZIO.logDebug(s"Recording accessed variables: ${readVariablesWithTimestamps.mkString("\n")}")
+      _         <- ZIO.logDebug(s"Recording accessed variables: ${readVariablesWithTimestamps.mkString("\n")}")
       state2 = state1
                  .copy(
                    lastTimestamp = currentTimestamp,
