@@ -217,6 +217,25 @@ object ZFlow {
       Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
+  final case class Read[A](svar: Remote[RemoteVariableReference[A]], schema: Schema[A]) extends ZFlow[Any, Nothing, A] {
+    val errorSchema  = Schema[ZNothing]
+    val resultSchema = schema
+  }
+
+  object Read {
+    def schema[A]: Schema[Read[A]] =
+      Schema.CaseClass2[Remote[RemoteVariableReference[A]], FlowSchemaAst, Read[A]](
+        Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
+        Schema.Field("schema", FlowSchemaAst.schema),
+        { case (svar, schema) => Read(svar, schema.toSchema[A]) },
+        _.svar,
+        read => FlowSchemaAst.fromSchema(read.schema)
+      )
+
+    def schemaCase[R, E, A]: Schema.Case[Read[A], ZFlow[R, E, A]] =
+      Schema.Case("Read", schema[A], _.asInstanceOf[Read[A]])
+  }
+
   final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])
       extends ZFlow[Any, Nothing, B] {
     val errorSchema  = Schema[ZNothing]
@@ -786,6 +805,7 @@ object ZFlow {
         .Cons(Return.schemaCase[R, E, A], CaseSet.Empty[ZFlow[R, E, A]]())
         .:+:(Now.schemaCase[R, E, A])
         .:+:(WaitTill.schemaCase[R, E, A])
+        .:+:(Read.schemaCase[R, E, A])
         .:+:(Modify.schemaCase[R, E, A])
         .:+:(Fold.schemaCase[R, E, A])
         .:+:(Log.schemaCase[R, E, A])

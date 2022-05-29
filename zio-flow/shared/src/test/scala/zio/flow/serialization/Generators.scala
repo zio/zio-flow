@@ -622,6 +622,12 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowWaitTill: Gen[Any, ZFlow.WaitTill] =
     Gen.instant.map(Remote(_)).map(ZFlow.WaitTill(_))
 
+  lazy val genZFlowRead: Gen[Sized, ZFlow.Read[String]] =
+    for {
+      varName <- genRemoteVariableName
+      svar     = RemoteVariableReference[String](varName)
+    } yield ZFlow.Read(Remote(svar), Schema[String])
+
   lazy val genZFlowModify: Gen[Sized, ZFlow.Modify[Int, String]] =
     for {
       varName <- genRemoteVariableName

@@ -1,86 +1,109 @@
 package zio.flow
 
-import zio.flow.internal.{KeyValueStore, Namespaces}
+import zio.flow.internal._
 import zio.schema.DynamicValue
-import zio.{Chunk, UIO, ULayer, ZIO, ZLayer}
 import zio.stm.TMap
+import zio.{UIO, ZIO}
 
 import java.io.IOException
-import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 trait RemoteContext {
   def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit]
   def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]]
+  def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]]
 }
 
 object RemoteContext {
+  // TODO: mark these variables as temporary and do not persist them
   def generateFreshVariableName: RemoteVariableName =
     RemoteVariableName(s"fresh_${UUID.randomUUID()}")
+
   def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))
   def getVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Option[DynamicValue]] =
     ZIO.serviceWithZIO(_.getVariable(name))
 
-  val inMemory: ULayer[RemoteContext] =
-    ZLayer {
-      TMap.empty[RemoteVariableName, DynamicValue].commit.map { store =>
-        new RemoteContext {
-          override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
-//            ZIO.debug(s"*** STORED VARIABLE $name: $value") *>
-            store.put(name, value).commit
+  private final case class InMemory(store: TMap[RemoteVariableName, DynamicValue]) extends RemoteContext {
+    override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+      store.put(name, value).commit
 
-          override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
-            store
-              .get(name)
-              .commit
-//              .tap(v => ZIO.debug(s"*** GETTING VARIABLE $name => $v"))
+    override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+      store
+        .get(name)
+        .commit
+
+    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+      store.get(name).commit.map(_.map(_ => Timestamp(0L)))
+  }
+
+  def inMemory: ZIO[Any, Nothing, RemoteContext] =
+    TMap.empty[RemoteVariableName, DynamicValue].commit.map(InMemory.apply)
+
+  private final case class Persistent(
+    virtualClock: VirtualClock,
+    remoteVariableStore: RemoteVariableKeyValueStore,
+    executionEnvironment: ExecutionEnvironment,
+    scope: RemoteVariableScope,
+    scopeMap: TMap[RemoteVariableName, RemoteVariableScope]
+  ) extends RemoteContext {
+
+    override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+      scopeMap.getOrElse(name, scope).commit.flatMap { variableScope =>
+        virtualClock.current.flatMap { timestamp =>
+          val serializedValue = executionEnvironment.serializer.serialize(value)
+          remoteVariableStore
+            .put(
+              name,
+              if (scope.transactionId.isDefined) scope else variableScope,
+              serializedValue,
+              timestamp
+            )
+            .orDie // TODO: rethink/cleanup error handling
+            .unit
         }
       }
-    }
 
-  // TODO: caching
-  // TODO: only persist values in transaction together with the executor state
-  val persistent: ZLayer[KeyValueStore with ExecutionEnvironment, Nothing, RemoteContext] =
-    ZLayer {
-      ZIO.service[KeyValueStore].flatMap { kvStore =>
-        ZIO.service[ExecutionEnvironment].map { execEnv =>
-          new RemoteContext {
-            private def key(name: RemoteVariableName): Chunk[Byte] =
-              Chunk.fromArray(RemoteVariableName.unwrap(name).getBytes(StandardCharsets.UTF_8))
-
-            override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] = {
-              val serializedValue = execEnv.serializer.serialize(value)
-              kvStore
-                .put(
-                  Namespaces.variables,
-                  key(name),
-                  serializedValue
-                )
-                .orDie // TODO: rethink/cleanup error handling
-                .unit
-            }
-
-            override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
-              kvStore
-                .get(
-                  Namespaces.variables,
-                  key(name)
-                )
-                .orDie // TODO: rethink/cleanup error handling
-                .flatMap {
-                  case Some(serializedValue) =>
-                    ZIO
-                      .fromEither(execEnv.deserializer.deserialize[DynamicValue](serializedValue))
-                      .map(Some(_))
-                      .orDieWith(msg =>
-                        new IOException(s"Failed to deserialize remote variable $name: $msg")
-                      ) // TODO: rethink/cleanup error handling
-                  case None =>
-                    ZIO.none
-                }
+    override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+      virtualClock.current.flatMap { timestamp =>
+        remoteVariableStore
+          .getLatest(name, scope, Some(timestamp))
+          .orDie // TODO: rethink/cleanup error handling
+          .flatMap {
+            case Some((serializedValue, variableScope)) =>
+              scopeMap.put(name, variableScope).commit.zipRight {
+                ZIO
+                  .fromEither(executionEnvironment.deserializer.deserialize[DynamicValue](serializedValue))
+                  .map(Some(_))
+                  .orDieWith(msg => new IOException(s"Failed to deserialize remote variable $name: $msg"))
+              }
+            case None =>
+              ZIO.none
           }
-        }
       }
-    }
+
+    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+      remoteVariableStore
+        .getLatestTimestamp(name, scope)
+        .orDie // TODO: rethink/cleanup error handling
+        .flatMap {
+          case Some((timestamp, variableScope)) =>
+            scopeMap.put(name, variableScope).commit.as(Some(timestamp))
+          case None => ZIO.none
+        }
+  }
+
+  def persistent(
+    scope: RemoteVariableScope
+  ): ZIO[
+    RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog,
+    Nothing,
+    RemoteContext
+  ] =
+    for {
+      virtualClock         <- ZIO.service[VirtualClock]
+      remoteVariableStore  <- ZIO.service[RemoteVariableKeyValueStore]
+      executionEnvironment <- ZIO.service[ExecutionEnvironment]
+      scopeMap             <- TMap.empty[RemoteVariableName, RemoteVariableScope].commit
+    } yield Persistent(virtualClock, remoteVariableStore, executionEnvironment, scope, scopeMap)
 }

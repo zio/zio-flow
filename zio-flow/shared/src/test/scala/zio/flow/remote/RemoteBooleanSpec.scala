@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
 import zio.test.TestResult
@@ -50,6 +50,6 @@ object RemoteBooleanSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory))
 
 }

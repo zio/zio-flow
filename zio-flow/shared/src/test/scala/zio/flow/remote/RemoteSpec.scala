@@ -1,5 +1,6 @@
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue}
 import zio.schema.{DynamicValue, Schema, StandardType}
@@ -21,7 +22,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == "test"
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("Variable")(
@@ -38,7 +39,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == "test"
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("fails if not stored") {
           val name   = RemoteVariableName("test")
@@ -48,7 +49,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn <- remote.evalDynamic.exit
             } yield assert(dyn)(fails(equalTo("Could not find identifier test")))
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("Either")(
@@ -63,7 +64,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Left("test")
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly when it is Right") {
           val remote = Remote.Either0(Right((Schema[Int], (Remote("test")))))
@@ -76,7 +77,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Right("test")
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("FlatMapEither")(
@@ -101,7 +102,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
               typ == Left("test")
             )
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly when it is Right") {
           val remote = Remote.FlatMapEither(
@@ -124,7 +125,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Right(11)),
               typ == Right(11)
             )
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("SwapEither")(
@@ -140,7 +141,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Right("test")
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly when it is Right") {
           val remote =
@@ -154,7 +155,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Left("test")
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("Tuple3")(
@@ -176,7 +177,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == expectedValue
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("LessThanEqual")(
@@ -191,7 +192,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == true
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly when greater") {
           val remote = Remote.LessThanEqual(Remote(50), Remote(10))
@@ -204,7 +205,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == false
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("Fold")(
@@ -227,7 +228,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == 160
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly with custom types") {
           val remote = Remote.Fold(
@@ -248,7 +249,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == TestCaseClass("c", 30)
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("ZipOption")(
@@ -267,7 +268,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Some((TestCaseClass("a", 10), 20))
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly with custom types when one of them is None") {
           val remote = Remote.ZipOption(
@@ -284,7 +285,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == None
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly with custom types when both of them are None") {
           val remote = Remote.ZipOption[TestCaseClass, Int](
@@ -301,7 +302,7 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == None
             )
 
-          test.provide(RemoteContext.inMemory)
+          test.provide(ZLayer(RemoteContext.inMemory))
         }
       )
     )

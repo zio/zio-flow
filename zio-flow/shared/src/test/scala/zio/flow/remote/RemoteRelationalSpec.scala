@@ -2,8 +2,8 @@ package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{Remote, RemoteContext}
-import zio.test.{TestResult, Gen, Sized, check}
-import zio.ZIO
+import zio.test.{Gen, Sized, TestResult, check}
+import zio.{ZIO, ZLayer}
 
 object RemoteRelationalSpec extends RemoteSpecBase {
 
@@ -28,5 +28,5 @@ object RemoteRelationalSpec extends RemoteSpecBase {
             .map(TestResult.all(_: _*))
         }
       }
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory))
 }

@@ -21,7 +21,8 @@ import zio.schema.Schema
 import zio.ZNothing
 
 class RemoteVariableSyntax[A](val self: Remote[RemoteVariableReference[A]]) extends AnyVal {
-  def get(implicit schema: Schema[A]): ZFlow[Any, ZNothing, A] = self.modify((a: Remote[A]) => (a, a))
+  def get(implicit schema: Schema[A]): ZFlow[Any, ZNothing, A] =
+    ZFlow.Read(self, schema)
 
   def set(a: Remote[A])(implicit schema: Schema[A]): ZFlow[Any, ZNothing, Unit] =
     self.modify((_: Remote[A]) => ((), a))

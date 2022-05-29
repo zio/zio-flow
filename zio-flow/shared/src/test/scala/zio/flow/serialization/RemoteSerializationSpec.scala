@@ -1,11 +1,11 @@
 package zio.flow.serialization
 
-import zio.{ZIO, ZNothing}
 import zio.flow._
 import zio.schema.ast.SchemaAst
 import zio.schema.codec.{Codec, JsonCodec}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
+import zio.{ZIO, ZLayer, ZNothing}
 
 import scala.util.{Failure, Success, Try}
 
@@ -54,13 +54,13 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
           val literal = Remote(data)
-          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+          roundtripEval(codec, literal).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("literal executing flow") {
         check(genExecutingFlow) { exFlow =>
           val literal = Remote(exFlow)
-          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+          roundtripEval(codec, literal).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("ignore") {
@@ -137,7 +137,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
           val literal = Remote(data)
-          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+          roundtripEval(codec, literal).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("try") {
@@ -159,43 +159,43 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
               case _                        => false
             }
 
-          roundtripEval(codec, remote, compare)(schemaTry[Int]).provide(RemoteContext.inMemory)
+          roundtripEval(codec, remote, compare)(schemaTry[Int]).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("first") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
           val first = Remote.TupleAccess[(TestCaseClass, String), TestCaseClass](Remote.Tuple2(Remote(a), Remote(b)), 0)
-          roundtripEval(codec, first).provide(RemoteContext.inMemory)
+          roundtripEval(codec, first).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("second") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
           val first = Remote.TupleAccess[(String, TestCaseClass), TestCaseClass](Remote.Tuple2(Remote(b), Remote(a)), 1)
-          roundtripEval(codec, first).provide(RemoteContext.inMemory)
+          roundtripEval(codec, first).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("instant truncation") {
         check(Gen.instant zip genSmallChronoUnit) { case (instant, chronoUnit) =>
           val remote = Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
-          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
+          roundtripEval(codec, remote).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("duration from amount") {
         check(Gen.int zip genSmallChronoUnit) { case (amount, chronoUnit) =>
           val remote = Remote.DurationFromAmount(Remote(amount.toLong), Remote(chronoUnit))
-          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
+          roundtripEval(codec, remote).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("lazy") {
         check(Gen.int) { a =>
           val remote = Remote.Lazy(() => Remote(a))
-          roundtripEval(codec, remote).provide(RemoteContext.inMemory)
+          roundtripEval(codec, remote).provide(ZLayer(RemoteContext.inMemory))
         }
       },
       test("literal user type wrapped in Some") {
         check(TestCaseClass.gen) { data =>
           val literal = Remote.Some0(Remote(data))
-          roundtripEval(codec, literal).provide(RemoteContext.inMemory)
+          roundtripEval(codec, literal).provide(ZLayer(RemoteContext.inMemory))
         }
       }
     )
