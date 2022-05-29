@@ -1,4 +1,3 @@
-// TODO
 //package zio.flow.dynamodb
 //
 //import zio.aws.core.AwsError

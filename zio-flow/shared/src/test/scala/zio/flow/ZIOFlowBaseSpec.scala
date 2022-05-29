@@ -1,8 +1,5 @@
 package zio.flow
 
-import zio.test._
-
-import zio._
-import zio.test.{Live, ZIOSpecDefault}
+import zio.test.ZIOSpecDefault
 
 trait ZIOFlowBaseSpec extends ZIOSpecDefault {}

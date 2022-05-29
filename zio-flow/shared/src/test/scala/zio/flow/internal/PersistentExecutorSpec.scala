@@ -477,7 +477,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      for {
                        value <- variable.get
                        _     <- ZFlow.log("TX1")
-                       _ <- tx.retryUntil(value == 1).orTry {
+                       _ <- tx.retryUntil(value === 1).orTry {
                               ZFlow.log("TX2")
                             }
                      } yield 1
@@ -690,10 +690,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String,
-    periodicAdjustClock: Option[Duration] = None
+    periodicAdjustClock: Option[Duration]
   )(
     flow: ZFlow[Any, E, A]
-  )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
+  )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation) =
     test(label) {
       for {
         logQueue <- Queue.unbounded[String]
