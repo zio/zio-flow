@@ -18,16 +18,16 @@ import zio.schema.{DeriveSchema, Schema}
  * not in an active transaction):
  *
  *   - New(name): creates a new remote variable in the KV store's variable
- *     namespace called `"$flowid__$name"``
- *   - Get(name): reads`"$flowid__$name"`
- *   - Set(name): writes`"$flowid__$name"`
+ *     namespace called `"$$flowid__$$name"``
+ *   - Get(name): reads`"$$flowid__$$name"`
+ *   - Set(name): writes`"$$flowid__$$name"`
  *
- * ### Fibers Forked workflows are like rergular workflows but they are not
+ * ### Fibers Forked workflows are like regular workflows but they are not
  * individually submitted, instead created by the executor by the Fork operator.
  *
  * Each workflow maintains a fork counter and generates new workflow ids based
  * on that. So a forked workflow's flow identifier will be
- * `"$parentId_fork$parentForkCounter"`.
+ * `"$$parentId_fork$$parentForkCounter"`.
  *
  * Desired semantics:
  *   - Forked workflows should have read/write access to variables accessible to
@@ -40,12 +40,12 @@ import zio.schema.{DeriveSchema, Schema}
  * Operation semantics in forked workflows:
  *
  *   - New(name): creates a new remote variable in the KV store's variable
- *     namespace prefixed by the active workflow identifier `"$flowid__$name"`
- *     (which is `"$parentId_fork$parentForkCounter__$name"`).
+ *     namespace prefixed by the active workflow identifier `"$$flowid__$$name"`
+ *     (which is `"$$parentId_fork$$parentForkCounter__$$name"`).
  *   - Get(name): first finds the variable's scope by first looking in the
- *     current fiber's scope (using `"$flowid__$name"`) - if it does not exist,
- *     it recursively tries to access the variable in the parent scope
- *     (`"$parentid__$name"`).
+ *     current fiber's scope (using `"$$flowid__$$name"`) - if it does not
+ *     exist, it recursively tries to access the variable in the parent scope
+ *     (`"$$parentid__$$name"`).
  *   - Set(name): same lookup as for Get - Get and Set must always select the
  *     same variable in an executor step
  *
@@ -73,7 +73,7 @@ import zio.schema.{DeriveSchema, Schema}
  *
  * Flow state contains a transaction counter that can be used as a unique
  * identifier for transaction scopes, similar to how fiber scopes are generated:
- * `"parentId_tx$transactionCounter"`.
+ * `"parentId_tx$$transactionCounter"`.
  *
  * Operation semantics in transaction scopes:
  *
@@ -81,7 +81,7 @@ import zio.schema.{DeriveSchema, Schema}
  *   - Get(name): acts the same way as in forked workflows, but also records the
  *     accessed variable's version if necessary
  *   - Set(name): always sets the value in the transaction scope
- *     (`$parentid__$name`)
+ *     (`$$parentid__$$name`)
  */
 
 sealed trait RemoteVariableScope {
