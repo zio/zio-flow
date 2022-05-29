@@ -469,6 +469,27 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           result == Right(1),
           logs.filter(_ == "TX").size == 2
         )
+      },
+      testFlowAndLogs("orTry, second succeeds", periodicAdjustClock = Some(200.millis)) {
+        for {
+          variable <- ZFlow.newVar("var", 0)
+          fiber <- ZFlow.transaction { tx =>
+                     for {
+                       value <- variable.get
+                       _     <- ZFlow.log("TX1")
+                       _ <- tx.retryUntil(value == 1).orTry {
+                              ZFlow.log("TX2")
+                            }
+                     } yield 1
+                   }.fork
+          _      <- ZFlow.log("Waiting for the transaction fiber to stop")
+          result <- fiber.await
+        } yield result
+      } { (result, logs) =>
+        assertTrue(
+          result == Right(1),
+          logs.filter(_.startsWith("TX")) == Chunk("TX1", "TX2")
+        )
       }
     ),
     testFlow("unwrap") {
