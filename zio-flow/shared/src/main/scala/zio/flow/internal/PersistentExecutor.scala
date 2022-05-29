@@ -1251,7 +1251,7 @@ object PersistentExecutor {
         case Nil =>
           parentStack match {
             case Nil => RemoteVariableScope.TopLevel(id)
-            case parents @ ::(head, next) =>
+            case parents @ ::(_, _) =>
               RemoteVariableScope.Fiber(
                 id,
                 parentStackToScope(parents)

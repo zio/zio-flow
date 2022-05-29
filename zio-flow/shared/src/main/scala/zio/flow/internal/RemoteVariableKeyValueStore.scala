@@ -88,7 +88,7 @@ final case class RemoteVariableKeyValueStore(
     scope match {
       case RemoteVariableScope.TopLevel(flowId) =>
         FlowId.unwrap(flowId) + "__"
-      case RemoteVariableScope.Fiber(flowId, parent) =>
+      case RemoteVariableScope.Fiber(flowId, _) =>
         FlowId.unwrap(flowId) + "__"
       case RemoteVariableScope.Transactional(parent, transaction) =>
         getScopePrefix(parent) + "tx" ++ TransactionId.unwrap(transaction) + "__"
