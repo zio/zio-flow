@@ -661,7 +661,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory,
-        Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(println(_)))
+        Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))
       )
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =

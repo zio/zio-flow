@@ -30,8 +30,7 @@ final case class RemoteVariableKeyValueStore(
         )
         .orDie // TODO: rethink/cleanup error handling
         .flatMap { index =>
-          ZIO.debug(s"SET VARIABLE LAST INDEX SET TO $index") *>
-            lastIndex.set(index).commit
+          lastIndex.set(index).commit
         }
 
   def getLatest(

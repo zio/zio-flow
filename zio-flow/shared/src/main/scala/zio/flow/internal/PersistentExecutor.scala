@@ -766,7 +766,7 @@ final case class PersistentExecutor(
               } else {
                 currentContext.getVariable(name).flatMap {
                   case Some(value) =>
-                    ZIO.logDebug(s"Committing modified value for variable ${name}: ${value}") *>
+                    ZIO.logDebug(s"Committing modified value for variable ${name}: ${value} (latestTimestamp: $latestTimestamp; recorded access: $access") *>
                       targetContext.setVariable(name, value)
                   case None =>
                     ZIO.fail(
@@ -829,6 +829,7 @@ final case class PersistentExecutor(
              remoteContext.setVariable(name, value)
            }
       lastIndex <- RemoteVariableKeyValueStore.getLastIndex
+      _ <- ZIO.logDebug(s"Recording accessed variables: ${readVariablesWithTimestamps.mkString("\n")}")
       state2 = state1
                  .copy(
                    lastTimestamp = currentTimestamp,
