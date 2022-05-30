@@ -34,7 +34,7 @@ object Mappable {
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[B]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.Some0(ab(a))).evaluated)
+      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.RemoteSome(ab(a))).evaluated)
 
     override def performFilter[A: Schema](
       fa: Remote[Option[A]],

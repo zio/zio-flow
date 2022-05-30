@@ -18,13 +18,12 @@ package zio.flow.remote
 
 import zio.flow.Remote.RemoteFunction
 import zio.flow._
+import zio.flow.remote.numeric._
 import zio.schema.Schema
 
-class RemoteListSyntax[A](val self: Remote[List[A]]) {
+final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
-  def ++(
-    other: Remote[List[A]]
-  )(implicit schemaA: Schema[A], schemaB: Schema[List[A]]): Remote[List[A]] = {
+  def ++(other: Remote[List[A]])(implicit schemaA: Schema[A], schemaB: Schema[List[A]]): Remote[List[A]] = {
     val reversedSelf: Remote[List[A]] = reverse
     reversedSelf.fold(other)((l, a) => Remote.Cons(l, a))
   }
@@ -37,7 +36,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       Remote
         .UnCons(self.widen[List[A]])
         .widen[Option[(A, List[A])]]
-        .handleOption(Nil, (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
+        .fold(Nil, (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
     (num > Remote(0)).ifThenElse(ifTrue, Nil)
   }
 
@@ -47,7 +46,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     Remote
       .UnCons(self)
       .widen[Option[(A, List[A])]]
-      .handleOption(
+      .fold(
         Remote[List[A]](Nil),
         (tuple: Remote[(A, List[A])]) =>
           predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Nil)
@@ -58,7 +57,7 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
       Remote
         .UnCons(self)
         .widen[Option[(A, List[A])]]
-        .handleOption(Nil, (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
+        .fold(Nil, (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
 
     (num > Remote(0)).ifThenElse(ifTrue, self)
   }
@@ -69,42 +68,42 @@ class RemoteListSyntax[A](val self: Remote[List[A]]) {
     Remote
       .UnCons(self)
       .widen[Option[(A, List[A])]]
-      .handleOption(Remote[List[A]](Nil), (tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
+      .fold(Remote[List[A]](Nil), (tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
 
-  final def fold[B](initial: Remote[B])(
+  def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[B] =
     Remote.Fold(self, initial, RemoteFunction((tuple: Remote[(B, A)]) => f(tuple._1, tuple._2)).evaluated)
 
-  final def headOption1(implicit schemaA: Schema[A]): Remote[Option[A]] = Remote
+  def headOption1(implicit schemaA: Schema[A]): Remote[Option[A]] = Remote
     .UnCons(self)
     .widen[Option[(A, List[A])]]
-    .handleOption[Option[A]](Remote(None), tuple => Remote.Some0(tuple._1))
+    .fold[Option[A]](Remote(None), tuple => Remote.RemoteSome(tuple._1))
 
-  final def headOption(implicit
+  def headOption(implicit
     schemaA: Schema[A],
     schemaB: Schema[Option[A]]
   ): Remote[Option[A]] =
     fold[Option[A]](Remote(None))((remoteOptionA, a) =>
-      remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.Some0(a))
+      remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.RemoteSome(a))
     )
 
-  final def length(implicit schemaA: Schema[A], schemaB: Schema[Int]): Remote[Int] =
+  def length(implicit schemaA: Schema[A], schemaB: Schema[Int]): Remote[Int] =
     self.fold[Int](0)((len, _) => len + 1)
 
-  final def product(implicit numeric: Numeric[A], schemaB: Schema[A]): Remote[A] =
+  def product(implicit numeric: Numeric[A], schemaB: Schema[A]): Remote[A] =
     fold[A](numeric.fromLong(1L))(_ * _)
 
-  final def sum(implicit numeric: Numeric[A], schemaB: Schema[A]): Remote[A] =
+  def sum(implicit numeric: Numeric[A], schemaB: Schema[A]): Remote[A] =
     fold[A](numeric.fromLong(0L))(_ + _)
 
-  final def filter(
+  def filter(
     predicate: Remote[A] => Remote[Boolean]
   )(implicit schemaA: Schema[A], schemaB: Schema[List[A]]): Remote[List[A]] =
     fold[List[A]](Remote[List[A]](Nil))((a2: Remote[List[A]], a1: Remote[A]) =>
       predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
     )
 
-  final def isEmpty(implicit schemaA: Schema[A], schemaB: Schema[Option[A]]): Remote[Boolean] =
+  def isEmpty(implicit schemaA: Schema[A], schemaB: Schema[Option[A]]): Remote[Boolean] =
     self.headOption.isNone.ifThenElse(Remote(true), Remote(false))
 }

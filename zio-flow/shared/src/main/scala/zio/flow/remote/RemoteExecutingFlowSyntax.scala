@@ -16,12 +16,10 @@
 
 package zio.flow.remote
 
-import zio.flow.{ActivityError, ExecutingFlow, FlowId, Remote, ZFlow}
+import zio.flow.{ActivityError, ExecutingFlow, Remote, ZFlow}
 import zio.schema.Schema
 
-class RemoteExecutingFlowSyntax[E, A](self: Remote[ExecutingFlow[E, A]]) {
-
-  def flowId: Remote[FlowId] = ???
+final class RemoteExecutingFlowSyntax[E, A](val self: Remote[ExecutingFlow[E, A]]) extends AnyVal {
 
   def await(implicit schemaE: Schema[E], schemaA: Schema[A]): ZFlow[Any, ActivityError, Either[E, A]] =
     ZFlow.Await(self)

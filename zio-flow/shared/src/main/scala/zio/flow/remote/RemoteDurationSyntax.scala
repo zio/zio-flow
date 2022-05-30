@@ -21,7 +21,7 @@ import zio.flow._
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 
-class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
+final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
   def isZero: Remote[Boolean]     = self.getSeconds === 0L && self.getNano === 0L
   def isNegative: Remote[Boolean] = self.getSeconds < 0L
@@ -41,7 +41,7 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration]      = plus(Remote.ofNanos(nanoToAdd))
 
   def minus(that: Remote[Duration]): Remote[Duration] =
-    Remote.DurationMinusDuration(self, that)
+    Remote.DurationPlusDuration(self, that.multipliedBy(-1L))
 
   def minus(amountToSubtract: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
     minus(Remote.DurationFromAmount(amountToSubtract, temporalUnit))
@@ -51,6 +51,8 @@ class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def minusMinutes(minutesToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofMinutes(minutesToSubtract))
   def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofSeconds(secondsToSubtract))
   def minusNanos(nanosToSubtract: Remote[Long]): Remote[Duration]     = minus(Remote.ofNanos(nanosToSubtract))
+
+  def multipliedBy(amount: Remote[Long]): Remote[Duration] = Remote.DurationMultipliedBy(self, amount)
 }
 
 object RemoteDuration {

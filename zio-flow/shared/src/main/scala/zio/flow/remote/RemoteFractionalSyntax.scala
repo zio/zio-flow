@@ -17,30 +17,31 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.flow.remote.numeric._
 import zio.schema.Schema
 
-class RemoteFractionalSyntax[A](self: Remote[A]) {
+final class RemoteFractionalSyntax[A](val self: Remote[A]) extends AnyVal {
 
-  final def sin(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.SinFractional(self, fractional)
+  def sin(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.Sin)
 
-  final def cos(implicit fractional: Fractional[A]): Remote[A] = {
+  def cos(implicit fractional: Fractional[A]): Remote[A] = {
     implicit val schemaA1: Schema[A] = fractional.schema
     Remote(fractional.fromDouble(1.0)) - sin(fractional) pow Remote(fractional.fromDouble(2.0))
   }
 
-  final def tan(implicit fractional: Fractional[A]): Remote[A] =
+  def tan(implicit fractional: Fractional[A]): Remote[A] =
     sin(fractional) / cos(fractional)
 
-  final def sinInverse(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.SinInverseFractional(self, fractional)
+  def asin(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.ArcSin)
 
-  final def cosInverse(implicit fractional: Fractional[A]): Remote[A] = {
+  def acos(implicit fractional: Fractional[A]): Remote[A] = {
     implicit val schema = fractional.schema
-    Remote(fractional.fromDouble(1.571)) - sinInverse(fractional)
+    Remote(fractional.fromDouble(1.571)) - asin(fractional)
   }
 
-  final def tanInverse(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.TanInverseFractional(self, fractional)
+  def atan(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.ArcTan)
 
 }

@@ -73,27 +73,12 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
         val variable = Remote.Variable[ZNothing](RemoteVariableName("test"), schemaZNothing)
         roundtrip(codec, variable)
       },
-      test("add numeric")(roundtripCheck(codec, genAddNumeric)),
-      test("div numeric")(roundtripCheck(codec, genDivNumeric)),
-      test("mul numeric")(roundtripCheck(codec, genMulNumeric)),
-      test("pow numeric")(roundtripCheck(codec, genPowNumeric)),
-      test("negation numeric")(roundtripCheck(codec, genNegationNumeric)),
-      test("root numeric")(roundtripCheck(codec, genRootNumeric)),
-      test("log numeric")(roundtripCheck(codec, genLogNumeric)),
-      test("absolute numeric")(roundtripCheck(codec, genAbsoluteNumeric)),
-      test("mod numeric")(roundtripCheck(codec, genModNumeric)),
-      test("min numeric")(roundtripCheck(codec, genMinNumeric)),
-      test("max numeric")(roundtripCheck(codec, genMaxNumeric)),
-      test("floor numeric")(roundtripCheck(codec, genFloorNumeric)),
-      test("ceil numeric")(roundtripCheck(codec, genCeilNumeric)),
-      test("round numeric")(roundtripCheck(codec, genRoundNumeric)),
-      test("sin fractional")(roundtripCheck(codec, genSinFractional)),
-      test("sin inverse fractional")(roundtripCheck(codec, genSinInverseFractional)),
-      test("tan inverse fractional")(roundtripCheck(codec, genTanInverseFractional)),
+      test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
+      test("unary numeric")(roundtripCheck(codec, genUnaryNumeric)),
+      test("unary fractional")(roundtripCheck(codec, genUnaryFractional)),
       test("evaluated remote function")(roundtripCheck(codec, genEvaluatedRemoteFunction)),
       test("remote apply")(roundtripCheck(codec, genRemoteApply)),
-      test("either0")(roundtripCheck(codec, genEither0)),
-      test("flatMapEither")(roundtripCheck(codec, genFlatMapEither)),
+      test("remote either")(roundtripCheck(codec, genRemoteEither)),
       test("foldEither")(roundtripCheck(codec, genFoldEither)),
       test("swapEither")(roundtripCheck(codec, genSwapEither)),
       test("try")(roundtripCheck(codec, genTry)),
@@ -110,26 +95,19 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("fold")(roundtripCheck(codec, genFold)),
       test("cons")(roundtripCheck(codec, genCons)),
       test("uncons")(roundtripCheck(codec, genUnCons)),
-      test("instant from long")(roundtripCheck(codec, genInstantFromLong)),
       test("instant from longs")(roundtripCheck(codec, genInstantFromLongs)),
-      test("instant from milli")(roundtripCheck(codec, genInstantFromMilli)),
       test("instant from string")(roundtripCheck(codec, genInstantFromString)),
       test("instant to tuple")(roundtripCheck(codec, genInstantToTuple)),
       test("instant plus duration")(roundtripCheck(codec, genInstantPlusDuration)),
-      test("instant minus duration")(roundtripCheck(codec, genInstantMinusDuration)),
       test("duration from string")(roundtripCheck(codec, genDurationFromString)),
-      test("duration from long")(roundtripCheck(codec, genDurationFromLong)),
       test("duration from longs")(roundtripCheck(codec, genDurationFromLongs)),
       test("duration from big decimal")(roundtripCheck(codec, genDurationFromBigDecimal)),
       test("duration to longs")(roundtripCheck(codec, genDurationToLongs)),
-      test("duration to long")(roundtripCheck(codec, genDurationToLong)),
       test("duration plus duration")(roundtripCheck(codec, genDurationPlusDuration)),
-      test("duration minus duration")(roundtripCheck(codec, genDurationMinusDuration)),
+      test("duration multiplied by")(roundtripCheck(codec, genDurationMultipledBy)),
       test("iterate")(roundtripCheck(codec, genIterate)),
-      test("some0")(roundtripCheck(codec, genSome0)),
-      test("fold option")(roundtripCheck(codec, genFoldOption)),
-      test("zip option")(roundtripCheck(codec, genZipOption)),
-      test("option contains")(roundtripCheck(codec, genOptionContains))
+      test("remote some")(roundtripCheck(codec, genRemoteSome)),
+      test("fold option")(roundtripCheck(codec, genFoldOption))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =
@@ -194,7 +172,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       },
       test("literal user type wrapped in Some") {
         check(TestCaseClass.gen) { data =>
-          val literal = Remote.Some0(Remote(data))
+          val literal = Remote.RemoteSome(Remote(data))
           roundtripEval(codec, literal).provide(ZLayer(RemoteContext.inMemory))
         }
       }

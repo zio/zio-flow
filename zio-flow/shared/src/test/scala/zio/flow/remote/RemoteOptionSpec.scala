@@ -10,12 +10,12 @@ object RemoteOptionSpec extends RemoteSpecBase {
     suite("RemoteOptionSpec")(
       test("HandleOption for Some") {
         val option: Remote[Option[Int]] = Remote(Option(12))
-        val optionHandled: Remote[Int]  = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled: Remote[Int]  = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
         optionHandled <-> 24
       },
       test("HandleOption for None") {
         val option        = Remote[Option[Int]](None)
-        val optionHandled = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
         optionHandled <-> 0
       },
       test("isSome") {
@@ -103,7 +103,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       },
-      test("OptionSpec") {
+      test("zip") {
         val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         val op3 = Remote(Option(10))

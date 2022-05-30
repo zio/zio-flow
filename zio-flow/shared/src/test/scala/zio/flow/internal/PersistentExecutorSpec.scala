@@ -50,14 +50,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testFlow("foldM - success side") {
       ZFlow
         .succeed(15)
-        .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
+        .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
       assertTrue(result == unit)
     },
     testFlow("foldM - error side") {
       ZFlow
         .fail(15)
-        .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
+        .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
       assertTrue(result == unit)
     },

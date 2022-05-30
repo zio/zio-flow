@@ -3,6 +3,7 @@ package zio.flow.remote
 import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax._
 import zio.flow._
+import zio.flow.remote.numeric._
 import zio.schema.Schema
 import zio.test.{Gen, Spec, TestAspect, TestConfig, TestSuccess, check}
 
@@ -24,7 +25,7 @@ object NumericSpec extends RemoteSpecBase {
       )
     ).provideCustom(ZLayer(RemoteContext.inMemory))
 
-  private def numericTests[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
+  private def numericTests[R, A: Schema: remote.numeric.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
   ): Spec[R with TestConfig with RemoteContext, TestSuccess] =
     suite(name)(
@@ -44,7 +45,7 @@ object NumericSpec extends RemoteSpecBase {
 
   // TODO: BigDecimal fails Log/Root specs.
   //  It also fails Subtraction on 2.11 and 2.12.
-  private def numericTestsWithoutLogOrRoot[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
+  private def numericTestsWithoutLogOrRoot[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
   ) =
     suite(name)(
@@ -64,7 +65,7 @@ object NumericSpec extends RemoteSpecBase {
 //      testOp[R, A]("Root", gen, gen)(_ root _)(ops.root)
     )
 
-  private def testOp[R, A: Schema: remote.Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
+  private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
   )(op: (A, A) => A): Spec[R with TestConfig with RemoteContext, Nothing] =
     test(name) {
@@ -73,7 +74,7 @@ object NumericSpec extends RemoteSpecBase {
       }
     }
 
-  private def testOp[R, A: Schema: remote.Numeric](name: String, gen: Gen[R, A])(
+  private def testOp[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
     numericOp: Remote[A] => Remote[A]
   )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
     test(name) {

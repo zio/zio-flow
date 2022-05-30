@@ -18,16 +18,16 @@ object FractionalSpec extends RemoteSpecBase {
     ).provideCustom(ZLayer(RemoteContext.inMemory))
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: FractionalOps[A])(implicit
-    fractionalA: remote.Fractional[A]
+    fractionalA: remote.numeric.Fractional[A]
   ) =
     suite(name)(
       testOp[R, A]("Sin", gen)(_.sin)(ops.sin),
       testOp[R, A]("Cos", gen)(_.cos)(ops.cos) @@ TestAspect.ignore,
       testOp[R, A]("Tan", gen)(_.tan)(ops.tan) @@ TestAspect.ignore,
-      testOp[R, A]("Tan-Inverse", gen)(_.tanInverse)(ops.inverseTan)
+      testOp[R, A]("Tan-Inverse", gen)(_.atan)(ops.inverseTan)
     )
 
-  private def testOp[R, A: Schema: remote.Fractional](name: String, gen: Gen[R, A])(
+  private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
   )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
     test(name) {

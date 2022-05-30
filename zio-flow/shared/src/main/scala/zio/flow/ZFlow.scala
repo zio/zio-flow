@@ -59,7 +59,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def catchAll[R1 <: R, E1 >: E, A1 >: A: Schema, E2: Schema](
     f: Remote[E1] => ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
-    self.foldM(f, (a: Remote[A1]) => ZFlow(a))
+    self.foldFlow(f, (a: Remote[A1]) => ZFlow(a))
 
   final def ensuring[R1 <: R: Schema, E1 >: E: Schema, A1 >: A: Schema](
     flow: ZFlow[R1, Nothing, Any]
@@ -76,12 +76,12 @@ sealed trait ZFlow[-R, +E, +A] {
   final def flatMap[R1 <: R, E1 >: E: Schema, B: Schema](
     f: Remote[A] => ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
-    foldM(
+    foldFlow(
       (e: Remote[E1]) => ZFlow.Fail(e),
       f
     )
 
-  final def foldM[R1 <: R, E2: Schema, B: Schema](
+  final def foldFlow[R1 <: R, E2: Schema, B: Schema](
     error: Remote[E] => ZFlow[R1, E2, B],
     success: Remote[A] => ZFlow[R1, E2, B]
   ): ZFlow[R1, E2, B] =
@@ -692,15 +692,6 @@ object ZFlow {
       Schema.Case("Iterate", schema[R, E, A], _.asInstanceOf[Iterate[R, E, A]])
   }
 
-  case object GetExecutionEnvironment extends ZFlow[Any, Nothing, ExecutionEnvironment] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = Schema.fail[ExecutionEnvironment]("not serializable")
-
-    val schema: Schema[GetExecutionEnvironment.type] = Schema.singleton(GetExecutionEnvironment)
-    def schemaCase[R, E, A]: Schema.Case[GetExecutionEnvironment.type, ZFlow[R, E, A]] =
-      Schema.Case("GetExecutionEnvironment", schema, _.asInstanceOf[GetExecutionEnvironment.type])
-  }
-
   def apply[A: Schema](a: A): ZFlow[Any, ZNothing, A] = Return(Remote(a))
 
   def apply[A](remote: Remote[A]): ZFlow[Any, ZNothing, A] = Return(remote)
@@ -781,7 +772,7 @@ object ZFlow {
   def succeed[A](value: Remote[A]): ZFlow[Any, ZNothing, A] = ZFlow.Return(value)
 
   def fromEither[E: Schema, A: Schema](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
-    ZFlow.unwrap(either.handleEither((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
+    ZFlow.unwrap(either.fold((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(Remote(message))
 
@@ -796,8 +787,6 @@ object ZFlow {
     resultSchema: Schema[A]
   ): ZFlow.Iterate[R, E, A] =
     ZFlow.Iterate(initial, RemoteFunction(step).evaluated, RemoteFunction(predicate).evaluated)
-
-  val executionEnvironment: ZFlow[Any, Nothing, ExecutionEnvironment] = ZFlow.GetExecutionEnvironment
 
   private def createSchema[R, E, A]: Schema[ZFlow[R, E, A]] =
     Schema.EnumN(
@@ -826,7 +815,6 @@ object ZFlow {
         .:+:(NewVar.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
         .:+:(Iterate.schemaCase[R, E, A])
-        .:+:(GetExecutionEnvironment.schemaCase[R, E, A])
     )
 
   lazy val schemaAny: Schema[ZFlow[Any, Any, Any]]     = createSchema[Any, Any, Any]

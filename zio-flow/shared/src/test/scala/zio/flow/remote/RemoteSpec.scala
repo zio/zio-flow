@@ -3,6 +3,7 @@ package zio.flow.remote
 import zio.ZLayer
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue}
+import zio.flow.remote.numeric._
 import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
@@ -54,7 +55,7 @@ object RemoteSpec extends ZIOSpecDefault {
       ),
       suite("Either")(
         test("evaluates correctly when it is Left") {
-          val remote = Remote.Either0(Left((Remote("test"), Schema[Int])))
+          val remote = Remote.RemoteEither(Left((Remote("test"), Schema[Int])))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -67,7 +68,7 @@ object RemoteSpec extends ZIOSpecDefault {
           test.provide(ZLayer(RemoteContext.inMemory))
         },
         test("evaluates correctly when it is Right") {
-          val remote = Remote.Either0(Right((Schema[Int], (Remote("test")))))
+          val remote = Remote.RemoteEither(Right((Schema[Int], (Remote("test")))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -77,61 +78,13 @@ object RemoteSpec extends ZIOSpecDefault {
               typ == Right("test")
             )
 
-          test.provide(ZLayer(RemoteContext.inMemory))
-        }
-      ),
-      suite("FlatMapEither")(
-        test("evaluates correctly when it is Left") {
-          val remote = Remote.FlatMapEither(
-            Remote.Either0(Left((Remote("test"), Schema[Int]))),
-            Remote
-              .RemoteFunction((a: Remote[Int]) =>
-                Remote.Either0(
-                  Right((Schema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
-                )
-              )
-              .evaluated,
-            Schema[String],
-            Schema[Int]
-          )
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[String, Int]]
-            } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
-              typ == Left("test")
-            )
-          test.provide(ZLayer(RemoteContext.inMemory))
-        },
-        test("evaluates correctly when it is Right") {
-          val remote = Remote.FlatMapEither(
-            Remote.Either0(Right((Schema[String], Remote(10)))),
-            Remote
-              .RemoteFunction((a: Remote[Int]) =>
-                Remote.Either0(
-                  Right((Schema[String], Remote.AddNumeric(a, Remote(1), Numeric.NumericInt)))
-                )
-              )
-              .evaluated,
-            Schema[String],
-            Schema[Int]
-          )
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[String, Int]]
-            } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Right(11)),
-              typ == Right(11)
-            )
           test.provide(ZLayer(RemoteContext.inMemory))
         }
       ),
       suite("SwapEither")(
         test("evaluates correctly when it is Left") {
           val remote =
-            Remote.SwapEither(Remote.Either0(Left((Remote("test"), Schema[Int]))))
+            Remote.SwapEither(Remote.RemoteEither(Left((Remote("test"), Schema[Int]))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -145,7 +98,7 @@ object RemoteSpec extends ZIOSpecDefault {
         },
         test("evaluates correctly when it is Right") {
           val remote =
-            Remote.SwapEither(Remote.Either0(Right((Schema[Int], (Remote("test"))))))
+            Remote.SwapEither(Remote.RemoteEither(Right((Schema[Int], (Remote("test"))))))
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -215,7 +168,12 @@ object RemoteSpec extends ZIOSpecDefault {
             Remote(100),
             Remote
               .RemoteFunction((tuple: Remote[(Int, Int)]) =>
-                Remote.AddNumeric(Remote.TupleAccess(tuple, 0), Remote.TupleAccess(tuple, 1), Numeric.NumericInt)
+                Remote.BinaryNumeric(
+                  Remote.TupleAccess(tuple, 0),
+                  Remote.TupleAccess(tuple, 1),
+                  Numeric.NumericInt,
+                  BinaryNumericOperator.Add
+                )
               )
               .evaluated
           )
@@ -247,59 +205,6 @@ object RemoteSpec extends ZIOSpecDefault {
             } yield assertTrue(
               dyn == SchemaAndValue.fromSchemaAndValue(Schema[TestCaseClass], TestCaseClass("c", 30)),
               typ == TestCaseClass("c", 30)
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory))
-        }
-      ),
-      suite("ZipOption")(
-        test("evaluates correctly with custom types when both are Some") {
-          val remote = Remote.ZipOption(
-            Remote.Some0(Remote(TestCaseClass("a", 10))),
-            Remote.Some0(Remote(20))
-          )
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Option[(TestCaseClass, Int)]]
-            } yield assertTrue(
-              dyn == SchemaAndValue
-                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], Some((TestCaseClass("a", 10), 20))),
-              typ == Some((TestCaseClass("a", 10), 20))
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory))
-        },
-        test("evaluates correctly with custom types when one of them is None") {
-          val remote = Remote.ZipOption(
-            Remote.Some0(Remote(TestCaseClass("a", 10))),
-            Remote[Option[Int]](None)
-          )
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Option[(TestCaseClass, Int)]]
-            } yield assertTrue(
-              dyn == SchemaAndValue
-                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], None),
-              typ == None
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory))
-        },
-        test("evaluates correctly with custom types when both of them are None") {
-          val remote = Remote.ZipOption[TestCaseClass, Int](
-            Remote[Option[TestCaseClass]](None),
-            Remote[Option[Int]](None)
-          )
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Option[(TestCaseClass, Int)]]
-            } yield assertTrue(
-              dyn == SchemaAndValue
-                .fromSchemaAndValue(Schema[Option[(TestCaseClass, Int)]], None),
-              typ == None
             )
 
           test.provide(ZLayer(RemoteContext.inMemory))
