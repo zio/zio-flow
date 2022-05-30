@@ -17,7 +17,6 @@
 package zio.flow.internal
 
 import zio._
-import zio.flow.ExecutingFlow.PersistentExecutingFlow
 import zio.flow.Remote.{EvaluatedRemoteFunction, RemoteFunction}
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
@@ -481,7 +480,7 @@ final case class PersistentExecutor(
                                workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
                              )
             result <- onSuccess(
-                        Remote[ExecutingFlow[Any, Any]](PersistentExecutingFlow(forkId, resultPromise)),
+                        Remote[ExecutingFlow[Any, Any]](ExecutingFlow(forkId, resultPromise)),
                         StateChange.increaseForkCounter
                       )
           } yield result
@@ -494,7 +493,7 @@ final case class PersistentExecutor(
             _             <- ZIO.log("Waiting for result")
             result <-
               executingFlow
-                .asInstanceOf[PersistentExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
+                .asInstanceOf[ExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
                 .result
                 .asInstanceOf[DurablePromise[Either[Throwable, DynamicValue], FlowResult]]
                 .awaitEither
@@ -508,14 +507,14 @@ final case class PersistentExecutor(
                     .fold(
                       die => ZIO.die(new IOException("Awaited flow died", die)),
                       dynamicError =>
-                        ZIO.succeed(Remote.Either0(Left((Remote.Literal(dynamicError, schemaE), schemaA))))
+                        ZIO.succeed(Remote.RemoteEither(Left((Remote.Literal(dynamicError, schemaE), schemaA))))
                     )
                     .flatMap { finishWith =>
                       onSuccess(finishWith)
                     },
                 dynamicSuccess =>
                   onSuccess(
-                    Remote.Either0(Right((schemaE, Remote.Literal(dynamicSuccess.result, schemaA)))),
+                    Remote.RemoteEither(Right((schemaE, Remote.Literal(dynamicSuccess.result, schemaA)))),
                     StateChange.advanceClock(dynamicSuccess.timestamp)
                   )
               )
@@ -591,7 +590,7 @@ final case class PersistentExecutor(
         case Interrupt(remoteExecFlow) =>
           for {
             executingFlow          <- eval(remoteExecFlow)
-            persistentExecutingFlow = executingFlow.asInstanceOf[PersistentExecutingFlow[Any, Any]]
+            persistentExecutingFlow = executingFlow
             interrupted            <- interruptFlow(persistentExecutingFlow.id)
             result <- if (interrupted)
                         onSuccess(Remote.unit)
@@ -668,9 +667,6 @@ final case class PersistentExecutor(
           eval(remoteMessage).flatMap { message =>
             ZIO.log(message) *> onSuccess(())
           }
-
-        case GetExecutionEnvironment =>
-          onSuccess(Remote.InMemoryLiteral(execEnv))
       }
     }
 

@@ -21,7 +21,7 @@ import zio.flow._
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 
-class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
+final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
 
   def isAfter(that: Remote[Instant]): Remote[Boolean]  = self.getEpochSecond > that.getEpochSecond
   def isBefore(that: Remote[Instant]): Remote[Boolean] = self.getEpochSecond < that.getEpochSecond
@@ -47,7 +47,7 @@ class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     self.plus(nanoSecondsToAdd, Remote(ChronoUnit.NANOS))
 
   def minusDuration(duration: Remote[Duration]): Remote[Instant] =
-    Remote.InstantMinusDuration(self, duration)
+    self.plusDuration(duration.multipliedBy(-1L))
 
   def minus(amountToSubtract: Remote[Long], unit: Remote[ChronoUnit]): Remote[Instant] =
     self.minusDuration(Remote.DurationFromAmount(amountToSubtract, unit))

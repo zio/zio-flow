@@ -21,9 +21,9 @@ import zio.flow._
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
 
-class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
+final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
 
-  def handleOption[B](forNone: Remote[B], f: Remote[A] => Remote[B])(implicit
+  def fold[B](forNone: Remote[B], f: Remote[A] => Remote[B])(implicit
     schemaA: Schema[A]
   ): Remote[B] =
     Remote.FoldOption(self, forNone, RemoteFunction(f).evaluated)
@@ -31,30 +31,44 @@ class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
   def isSome(implicit
     schemaA: Schema[A]
   ): Remote[Boolean] =
-    handleOption(Remote(false), _ => Remote(true))
+    fold(Remote(false), _ => Remote(true))
 
   def isNone(implicit
     schemaA: Schema[A]
   ): Remote[Boolean] =
-    handleOption(Remote(true), _ => Remote(false))
+    fold(Remote(true), _ => Remote(false))
 
-  final def isEmpty(implicit
+  def isEmpty(implicit
     schemaA: Schema[A]
   ): Remote[Boolean] = isNone
 
-  final def isDefined(implicit
+  def isDefined(implicit
     schemaA: Schema[A]
   ): Remote[Boolean] = !isEmpty
 
-  final def knownSize(implicit
+  def knownSize(implicit
     schemaA: Schema[A]
-  ): Remote[Int] = handleOption(Remote(0), _ => Remote(1))
+  ): Remote[Int] = fold(Remote(0), _ => Remote(1))
 
-  final def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] = Remote.OptionContains(self, elem)
+  def contains[A1 >: A](elem: Remote[A1])(implicit schemaA: Schema[A]): Remote[Boolean] =
+    self.fold(
+      Remote(false),
+      (value: Remote[A]) => value.widen[A1] === elem
+    )
 
   def orElse[B >: A](alternative: Remote[Option[B]])(implicit
     schemaA: Schema[A]
-  ): Remote[Option[B]] = handleOption(alternative, _ => self)
+  ): Remote[Option[B]] = fold(alternative, _ => self)
 
-  final def zip[A1 >: A, B](that: Remote[Option[B]]): Remote[Option[(A1, B)]] = Remote.ZipOption(self, that)
+  def zip[B](
+    that: Remote[Option[B]]
+  )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Option[(A, B)]] =
+    self.fold(
+      Remote[Option[(A, B)]](None),
+      (a: Remote[A]) =>
+        that.fold(
+          Remote[Option[(A, B)]](None),
+          (b: Remote[B]) => Remote.RemoteSome(Remote.tuple2((a, b)))
+        )
+    )
 }

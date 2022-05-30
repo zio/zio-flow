@@ -18,6 +18,6 @@ package zio.flow.remote
 
 import zio.flow._
 
-class RemoteStringSyntax(self: Remote[String]) {
+final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def length: Remote[Int] = Remote.Length(self)
 }

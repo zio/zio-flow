@@ -17,44 +17,52 @@
 package zio.flow.remote
 
 import zio.flow.Remote.RemoteFunction
-import zio.flow.Remote
+import zio.flow.{Remote, ZFlow}
 import zio.schema.Schema
 
 import scala.util.Try
 
-class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
+final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends AnyVal {
 
-  final def handleEither[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C])(implicit
+  def fold[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C])(implicit
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[C] =
     Remote.FoldEither[A, B, C](self, RemoteFunction(left).evaluated, RemoteFunction(right).evaluated)
 
-//  final def handleEitherM[R, E: Schema, C: Schema](
-//    left: Remote[A] => ZFlow[R, E, C],
-//    right: Remote[B] => ZFlow[R, E, C]
-//  )(implicit
-//    schemaA: Schema[A],
-//    schemaB: Schema[B]
-//  ): ZFlow[R, E, C] = ZFlow.unwrap(handleEither(left.andThen(Remote(_)), right.andThen(Remote(_))))
+  def handleEitherFlow[R, E: Schema, C: Schema](
+    left: Remote[A] => ZFlow[R, E, C],
+    right: Remote[B] => ZFlow[R, E, C]
+  )(implicit
+    schemaA: Schema[A],
+    schemaB: Schema[B]
+  ): ZFlow[R, E, C] = ZFlow.unwrap(fold(left.andThen(Remote(_)), right.andThen(Remote(_))))
 
-  final def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]])(implicit
+  def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]])(implicit
     schemaA: Schema[A1],
     schemaB: Schema[B],
     schemaB1: Schema[B1]
   ): Remote[Either[A1, B1]] =
-    Remote.FlatMapEither(self, f.evaluated, schemaA, schemaB1)
+    Remote.FoldEither[A1, B, Either[A1, B1]](
+      self,
+      RemoteFunction((a: Remote[A1]) => Remote.RemoteEither(Left((a, schemaB1)))).evaluated,
+      f.evaluated
+    )
 
-  final def map[B1](
+  def map[B1](
     f: Remote[B] => Remote[B1]
   )(implicit
     schemaA: Schema[A],
     schemaB: Schema[B],
     schemaB1: Schema[B1]
   ): Remote[Either[A, B1]] =
-    Remote.FlatMapEither(self, ((b: Remote[B]) => Remote.Either0(Right((schemaA, f(b))))).evaluated, schemaA, schemaB1)
+    Remote.FoldEither[A, B, Either[A, B1]](
+      self,
+      RemoteFunction((a: Remote[A]) => Remote.RemoteEither(Left((a, schemaB1)))).evaluated,
+      RemoteFunction((b: Remote[B]) => Remote.RemoteEither(Right((schemaA, f(b))))).evaluated
+    )
 
-  final def flatten[A1 >: A, B1](implicit
+  def flatten[A1 >: A, B1](implicit
     ev: B <:< Either[A1, B1],
     schemaA1: Schema[A1],
     schemaB: Schema[B],
@@ -62,92 +70,92 @@ class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) {
   ): Remote[Either[A1, B1]] =
     flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
 
-  final def merge(implicit ev: Either[A, B] <:< Either[B, B], schemaB: Schema[B]): Remote[B] =
+  def merge(implicit ev: Either[A, B] <:< Either[B, B], schemaB: Schema[B]): Remote[B] =
     Remote.FoldEither[B, B, B](
       self.widen[Either[B, B]],
       RemoteFunction(identity[Remote[B]]).evaluated,
       RemoteFunction(identity[Remote[B]]).evaluated
     )
 
-  final def isLeft(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
-    handleEither(_ => Remote(true), _ => Remote(false))
+  def isLeft(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
+    fold(_ => Remote(true), _ => Remote(false))
 
-  final def isRight(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
-    handleEither(_ => Remote(false), _ => Remote(true))
+  def isRight(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
+    fold(_ => Remote(false), _ => Remote(true))
 
-  final def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
+  def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
 
-  final def joinRight[A1 >: A, B1 >: B, C](implicit
+  def joinRight[A1 >: A, B1 >: B, C](implicit
     ev: B1 <:< Either[A1, C],
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[Either[A1, C]] =
-    handleEither(
+    fold(
       _ => self.asInstanceOf[Remote[Either[A1, C]]],
       r => r.asInstanceOf[Remote[Either[A1, C]]]
     )
 
-  final def joinLeft[A1 >: A, B1 >: B, C](implicit
+  def joinLeft[A1 >: A, B1 >: B, C](implicit
     ev: A1 <:< Either[C, B1],
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[Either[C, B1]] =
-    handleEither(
+    fold(
       l => l.asInstanceOf[Remote[Either[C, B1]]],
       _ => self.asInstanceOf[Remote[Either[C, B1]]]
     )
 
-  final def contains[B1 >: B](
+  def contains[B1 >: B](
     elem: Remote[B1]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
-    handleEither(_ => Remote(false), Remote.Equal(_, elem))
+    fold(_ => Remote(false), Remote.Equal(_, elem))
 
-  final def forall(
+  def forall(
     f: Remote[B] => Remote[Boolean]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
-    handleEither(_ => Remote(true), f)
+    fold(_ => Remote(true), f)
 
-  final def exists(
+  def exists(
     f: Remote[B] => Remote[Boolean]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =
-    handleEither(_ => Remote(false), f)
+    fold(_ => Remote(false), f)
 
-  final def getOrElse(
+  def getOrElse(
     or: => Remote[B]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[B] =
-    handleEither(_ => or, identity)
+    fold(_ => or, identity)
 
-  final def orElse[A1 >: A, B1 >: B](
+  def orElse[A1 >: A, B1 >: B](
     or: => Remote[Either[A1, B1]]
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Either[A1, B1]] =
-    handleEither(_ => or, _ => self)
+    fold(_ => or, _ => self)
 
-  final def filterOrElse[A1 >: A](p: Remote[B] => Remote[Boolean], zero: => Remote[A1])(implicit
+  def filterOrElse[A1 >: A](p: Remote[B] => Remote[Boolean], zero: => Remote[A1])(implicit
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[Either[A1, B]] =
-    handleEither(
+    fold(
       _ => self,
       a =>
         Remote.Branch(
           p(a),
           self,
-          Remote.Either0(Left((zero, schemaB)))
+          Remote.RemoteEither(Left((zero, schemaB)))
         )
     )
 
-  final def toSeq(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Seq[B]] =
-    handleEither(_ => Remote(Nil), b => Remote.Cons(Remote(Nil), b))
+  def toSeq(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Seq[B]] =
+    fold(_ => Remote(Nil), b => Remote.Cons(Remote(Nil), b))
 
-  final def toOption(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Option[B]] =
-    handleEither(_ => Remote[Option[B]](None)(Schema.option(schemaB)), Remote.Some0(_))
+  def toOption(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Option[B]] =
+    fold(_ => Remote[Option[B]](None)(Schema.option(schemaB)), Remote.RemoteSome(_))
 
   def toTry(implicit
     ev: A <:< Throwable,
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[Try[B]] =
-    handleEither(a => Remote.Try(Left(a.widen(ev) -> schemaB)), b => Remote.Try(Right(b)))
+    fold(a => Remote.Try(Left(a.widen(ev) -> schemaB)), b => Remote.Try(Right(b)))
 }
 
 object RemoteEitherSyntax {
@@ -161,28 +169,23 @@ object RemoteEitherSyntax {
       either: RemoteEitherSyntax[E, A]
     ): Remote[Either[E, List[A]]] = {
       implicit val listSchema: Schema[List[A]] = Schema.list(aSchema) // TODO: :((
-      eitherList.handleEither(
+      eitherList.fold(
         _ => eitherList.self,
         remoteList => combine2(either, remoteList).self
       )
     }
 
     def combine2(either: RemoteEitherSyntax[E, A], remoteList: Remote[List[A]]): RemoteEitherSyntax[E, List[A]] =
-      either.handleEither(
-        e => Remote.Either0(Left((e, Schema.list(aSchema)))),
-        a => Remote.Either0(Right((eSchema, Remote.Cons(remoteList, a))))
+      either.fold(
+        e => Remote.RemoteEither(Left((e, Schema.list(aSchema)))),
+        a => Remote.RemoteEither(Right((eSchema, Remote.Cons(remoteList, a))))
       )
 
     def finalize(acc: RemoteEitherSyntax[E, List[A]]): Remote[Either[E, List[A]]] =
-      acc.handleEither(
+      acc.fold(
         _ => acc.self,
-        as => Remote.Either0(Right((eSchema, as.reverse)))
+        as => Remote.RemoteEither(Right((eSchema, as.reverse)))
       )
-
-    implicit val eea: Schema[Either[E, A]] =
-      Schema.either(eSchema, aSchema) // TODO: :((
-    implicit val eela: Schema[Either[E, List[A]]] =
-      Schema.either(eSchema, Schema.list(aSchema)) // TODO: :((
 
     val nil = Remote[Either[E, List[A]]](Right(Nil))
     finalize(values.fold(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))

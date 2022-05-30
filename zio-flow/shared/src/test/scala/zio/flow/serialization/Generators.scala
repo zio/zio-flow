@@ -2,7 +2,13 @@ package zio.flow.serialization
 
 import zio.flow.Remote.RemoteFunction
 import zio.flow.internal.DurablePromise
-import zio.flow.remote.{Fractional, Numeric}
+import zio.flow.remote.numeric.{
+  BinaryNumericOperator,
+  Fractional,
+  Numeric,
+  UnaryFractionalOperator,
+  UnaryNumericOperator
+}
 import zio.flow.{
   Activity,
   ActivityError,
@@ -168,136 +174,64 @@ trait Generators extends DefaultJavaTimeSchemas {
       schemaAndValue <- genPrimitiveSchemaAndValue
     } yield Remote.Variable(name, schemaAndValue.schema)
 
-  lazy val genAddNumeric: Gen[Sized, Remote[Any]] =
+  lazy val genUnaryOperator: Gen[Any, UnaryNumericOperator] =
+    Gen.oneOf(
+      Gen.const(UnaryNumericOperator.Neg),
+      Gen.const(UnaryNumericOperator.Abs),
+      Gen.const(UnaryNumericOperator.Floor),
+      Gen.const(UnaryNumericOperator.Ceil),
+      Gen.const(UnaryNumericOperator.Round)
+    )
+
+  lazy val genBinaryOperator: Gen[Any, BinaryNumericOperator] =
+    Gen.oneOf(
+      Gen.const(BinaryNumericOperator.Add),
+      Gen.const(BinaryNumericOperator.Mul),
+      Gen.const(BinaryNumericOperator.Div),
+      Gen.const(BinaryNumericOperator.Mod),
+      Gen.const(BinaryNumericOperator.Pow),
+      Gen.const(BinaryNumericOperator.Root),
+      Gen.const(BinaryNumericOperator.Log),
+      Gen.const(BinaryNumericOperator.Min),
+      Gen.const(BinaryNumericOperator.Max)
+    )
+
+  lazy val genUnaryFractionalOperator: Gen[Any, UnaryFractionalOperator] =
+    Gen.oneOf(
+      Gen.const(UnaryFractionalOperator.Sin),
+      Gen.const(UnaryFractionalOperator.ArcSin),
+      Gen.const(UnaryFractionalOperator.ArcTan)
+    )
+
+  lazy val genBinaryNumeric: Gen[Sized, Remote[Any]] =
     for {
       pair          <- genNumeric
       (numeric, gen) = pair
       left          <- gen
       right         <- gen
-    } yield Remote.AddNumeric(left, right, numeric)
+      operator      <- genBinaryOperator
+    } yield Remote.BinaryNumeric(left, right, numeric, operator)
 
-  lazy val genDivNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      left          <- gen
-      right         <- gen
-    } yield Remote.DivNumeric(left, right, numeric)
-
-  lazy val genMulNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      left          <- gen
-      right         <- gen
-    } yield Remote.MulNumeric(left, right, numeric)
-
-  lazy val genPowNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      left          <- gen
-      right         <- gen
-    } yield Remote.PowNumeric(left, right, numeric)
-
-  lazy val genNegationNumeric: Gen[Sized, Remote[Any]] =
+  lazy val genUnaryNumeric: Gen[Sized, Remote[Any]] =
     for {
       pair          <- genNumeric
       (numeric, gen) = pair
       value         <- gen
-    } yield Remote.NegationNumeric(value, numeric)
+      operator      <- genUnaryOperator
+    } yield Remote.UnaryNumeric(value, numeric, operator)
 
-  lazy val genRootNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-      n             <- gen
-    } yield Remote.RootNumeric(value, n, numeric)
-
-  lazy val genLogNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-      base          <- gen
-    } yield Remote.LogNumeric(value, base, numeric)
-
-  lazy val genModNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      left  <- Gen.int.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)))
-      right <- Gen.int.map(value => Remote.Literal(SchemaAndValue.fromSchemaAndValue(Schema.primitive[Int], value)))
-    } yield Remote.ModNumeric(left, right)
-
-  lazy val genAbsoluteNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-    } yield Remote.AbsoluteNumeric(value, numeric)
-
-  lazy val genFloorNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-    } yield Remote.FloorNumeric(value, numeric)
-
-  lazy val genCeilNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-    } yield Remote.CeilNumeric(value, numeric)
-
-  lazy val genRoundNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-    } yield Remote.RoundNumeric(value, numeric)
-
-  lazy val genMinNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-      base          <- gen
-    } yield Remote.MinNumeric(value, base, numeric)
-
-  lazy val genMaxNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-      base          <- gen
-    } yield Remote.MaxNumeric(value, base, numeric)
-
-  lazy val genSinFractional: Gen[Sized, Remote[Any]] =
+  lazy val genUnaryFractional: Gen[Sized, Remote[Any]] =
     for {
       pair             <- genFractional
       (fractional, gen) = pair
       value            <- gen
-    } yield Remote.SinFractional(value, fractional)
-
-  lazy val genSinInverseFractional: Gen[Sized, Remote[Any]] =
-    for {
-      pair             <- genFractional
-      (fractional, gen) = pair
-      value            <- gen
-    } yield Remote.SinInverseFractional(value, fractional)
-
-  lazy val genTanInverseFractional: Gen[Sized, Remote[Any]] =
-    for {
-      pair             <- genFractional
-      (fractional, gen) = pair
-      value            <- gen
-    } yield Remote.TanInverseFractional(value, fractional)
+      operator         <- genUnaryFractionalOperator
+    } yield Remote.UnaryFractional(value, fractional, operator)
 
   lazy val genEvaluatedRemoteFunction: Gen[Sized, Remote[Any]] =
     for {
       v <- genRemoteVariable
-      r <- Gen.oneOf(genLiteral, genRemoteVariable, genAddNumeric)
+      r <- Gen.oneOf(genLiteral, genRemoteVariable, genBinaryNumeric)
     } yield Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Variable[Any]], r)
 
   lazy val genEvaluatedRemoteFunctionWithResultSchema: Gen[Sized, (Remote[Any], Schema[Any])] =
@@ -306,7 +240,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       (r, s) <- Gen.oneOf(
                   genLiteral.map(l => (l, l.asInstanceOf[Remote.Literal[Any]].schemaA)),
                   genRemoteVariable.map(l => (l, l.asInstanceOf[Remote.Variable[Any]].schemaA)),
-                  genAddNumeric.map(l => (l, l.asInstanceOf[Remote.AddNumeric[Any]].numeric.schema))
+                  genBinaryNumeric.map(l => (l, l.asInstanceOf[Remote.BinaryNumeric[Any]].numeric.schema))
                 )
     } yield (Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Variable[Any]], r), s)
 
@@ -314,9 +248,9 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       f <- genEvaluatedRemoteFunction
       a <- genLiteral
-    } yield Remote.RemoteApply(f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Any]], a)
+    } yield Remote.ApplyEvaluatedFunction(f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Any]], a)
 
-  lazy val genEither0: Gen[Sized, Remote[Any]] =
+  lazy val genRemoteEither: Gen[Sized, Remote[Any]] =
     for {
       left  <- genPrimitiveSchemaAndValue
       right <- genPrimitiveSchemaAndValue
@@ -324,24 +258,7 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(Left((left.toRemote, right.schema.asInstanceOf[Schema[Any]]))),
                   Gen.const(Right((left.schema.asInstanceOf[Schema[Any]], right.toRemote)))
                 )
-    } yield Remote.Either0(either)
-
-  lazy val genFlatMapEither: Gen[Sized, Remote[Any]] =
-    for {
-      left  <- genPrimitiveSchemaAndValue
-      right <- genPrimitiveSchemaAndValue
-      either <- Gen.oneOf(
-                  Gen.const(Left((left.toRemote, right.schema.asInstanceOf[Schema[Any]]))),
-                  Gen.const(Right((left.schema.asInstanceOf[Schema[Any]], right.toRemote)))
-                )
-      (f, cSchema) <- genEvaluatedRemoteFunctionWithResultSchema
-      aSchema       = left.schema.asInstanceOf[Schema[Any]]
-    } yield Remote.FlatMapEither[Any, Any, Any](
-      Remote.Either0(either),
-      f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]],
-      aSchema,
-      cSchema
-    )
+    } yield Remote.RemoteEither(either)
 
   lazy val genFoldEither: Gen[Sized, Remote[Any]] =
     for {
@@ -354,10 +271,10 @@ trait Generators extends DefaultJavaTimeSchemas {
       // TODO: generate functions compatible with the generated either
       leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
       rightF <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
-    } yield Remote.FoldEither(Remote.Either0(either), leftF, rightF)
+    } yield Remote.FoldEither(Remote.RemoteEither(either), leftF, rightF)
 
   lazy val genSwapEither: Gen[Sized, Remote[Any]] =
-    genEither0.map(r => Remote.SwapEither(r.asInstanceOf[Remote[Either[Any, Any]]]))
+    genRemoteEither.map(r => Remote.SwapEither(r.asInstanceOf[Remote[Either[Any, Any]]]))
 
   lazy val genTry: Gen[Sized, Remote[Any]] =
     for {
@@ -377,13 +294,13 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genTuple2: Gen[Sized, Remote[Any]] =
     for {
       a <- genLiteral
-      b <- genAddNumeric
+      b <- genBinaryNumeric
     } yield Remote.Tuple2(a, b)
 
   lazy val genTuple3: Gen[Sized, Remote[Any]] =
     for {
       a <- genLiteral
-      b <- genAddNumeric
+      b <- genBinaryNumeric
       c <- genRemoteVariable
     } yield Remote.Tuple3(a, b, c)
 
@@ -391,8 +308,8 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       a <- genLiteral
       b <- genEvaluatedRemoteFunction
-      c <- genPowNumeric
-      d <- genEither0
+      c <- genBinaryNumeric
+      d <- genRemoteEither
     } yield Remote.Tuple4(a, b, c, d)
 
   lazy val genTupleAccess: Gen[Sized, Remote[Any]] =
@@ -405,7 +322,8 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       condition <- Gen.boolean.map(Remote(_))
       ifTrue    <- Gen.int.map(Remote(_))
-      ifFalse   <- Gen.int.map(n => Remote.MulNumeric(Remote(10), Remote(n), Numeric.NumericInt))
+      ifFalse <-
+        Gen.int.map(n => Remote.BinaryNumeric(Remote(10), Remote(n), Numeric.NumericInt, BinaryNumericOperator.Mul))
     } yield Remote.Branch(condition, ifTrue, ifFalse)
 
   lazy val genLength: Gen[Sized, Remote[Any]] =
@@ -443,7 +361,12 @@ trait Generators extends DefaultJavaTimeSchemas {
       list    <- Gen.listOf(Gen.double).map(Remote(_))
       initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
       fun = Remote.RemoteFunction((tuple: Remote[(Double, Double)]) =>
-              Remote.AddNumeric(Remote.TupleAccess(tuple, 0), Remote.TupleAccess(tuple, 1), Numeric.NumericDouble)
+              Remote.BinaryNumeric(
+                Remote.TupleAccess(tuple, 0),
+                Remote.TupleAccess(tuple, 1),
+                Numeric.NumericDouble,
+                BinaryNumericOperator.Add
+              )
             )
     } yield Remote.Fold(list, initial, fun.evaluated)
 
@@ -458,17 +381,11 @@ trait Generators extends DefaultJavaTimeSchemas {
       list <- Gen.listOf(Gen.int zip Gen.string).map(Remote(_))
     } yield Remote.UnCons(list)
 
-  lazy val genInstantFromLong: Gen[Sized, Remote[Any]] =
-    Gen.long.map(l => Remote.InstantFromLong(Remote(l)))
-
   lazy val genInstantFromLongs: Gen[Sized, Remote[Any]] =
     for {
       seconds <- Gen.long
       nanos   <- Gen.long
     } yield Remote.InstantFromLongs(Remote(seconds), Remote(nanos))
-
-  lazy val genInstantFromMilli: Gen[Sized, Remote[Any]] =
-    Gen.long.map(l => Remote.InstantFromMilli(Remote(l)))
 
   lazy val genInstantFromString: Gen[Sized, Remote[Any]] =
     Gen.instant.map(i => Remote.InstantFromString(Remote(i.toString)))
@@ -481,12 +398,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       instant  <- Gen.instant
       duration <- Gen.finiteDuration
     } yield Remote.InstantPlusDuration(Remote(instant), Remote(duration))
-
-  lazy val genInstantMinusDuration: Gen[Sized, Remote[Any]] =
-    for {
-      instant  <- Gen.instant
-      duration <- Gen.finiteDuration
-    } yield Remote.InstantMinusDuration(Remote(instant), Remote(duration))
 
   lazy val genSmallChronoUnit: Gen[Any, ChronoUnit] = Gen.oneOf(
     Seq(
@@ -522,11 +433,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       seconds <- Gen.bigDecimal(0, BigDecimal(1000000000))
     } yield Remote.DurationFromBigDecimal(Remote(seconds.bigDecimal))
 
-  lazy val genDurationFromLong: Gen[Any, Remote[Any]] =
-    for {
-      seconds <- Gen.long
-    } yield Remote.DurationFromLong(Remote(seconds))
-
   lazy val genDurationFromLongs: Gen[Any, Remote[Any]] =
     for {
       seconds        <- Gen.long
@@ -542,9 +448,6 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genDurationToLongs: Gen[Any, Remote[Any]] =
     Gen.finiteDuration.map(duration => Remote.DurationToLongs(Remote(duration)))
 
-  lazy val genDurationToLong: Gen[Any, Remote[Any]] =
-    Gen.finiteDuration.map(duration => Remote.DurationToLong(Remote(duration)))
-
   lazy val genDurationPlusDuration: Gen[Any, Remote[Any]] =
     for {
       a              <- Gen.finiteDuration
@@ -552,58 +455,50 @@ trait Generators extends DefaultJavaTimeSchemas {
       nanoAdjustment <- Gen.long
     } yield Remote.DurationPlusDuration(Remote(a), Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment)))
 
-  lazy val genDurationMinusDuration: Gen[Any, Remote[Any]] =
+  lazy val genDurationMultipledBy: Gen[Any, Remote[Any]] =
     for {
       a <- Gen.finiteDuration
-      b <- Gen.finiteDuration
-    } yield Remote.DurationMinusDuration(Remote(a), Remote(b))
+      b <- Gen.long
+    } yield Remote.DurationMultipliedBy(Remote(a), Remote(b))
 
   lazy val genIterate: Gen[Any, Remote[Any]] =
     for {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
-      iterate  = RemoteFunction((a: Remote[Int]) => Remote.AddNumeric(a, Remote(delta), Numeric.NumericInt))
-      limit   <- Gen.int
+      iterate = RemoteFunction((a: Remote[Int]) =>
+                  Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add)
+                )
+      limit <- Gen.int
       predicate = RemoteFunction((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
-                      Remote.AddNumeric(
+                      Remote.BinaryNumeric(
                         initial,
-                        Remote.MulNumeric(Remote(delta), Remote(limit), Numeric.NumericInt),
-                        Numeric.NumericInt
+                        Remote
+                          .BinaryNumeric(Remote(delta), Remote(limit), Numeric.NumericInt, BinaryNumericOperator.Mul),
+                        Numeric.NumericInt,
+                        BinaryNumericOperator.Add
                       )
                     )
                   )
     } yield Remote.Iterate(initial, iterate.evaluated, predicate.evaluated)
 
-  lazy val genSome0: Gen[Sized, Remote[Any]] =
+  lazy val genRemoteSome: Gen[Sized, Remote[Any]] =
     for {
       value <- genLiteral
-    } yield Remote.Some0(value)
+    } yield Remote.RemoteSome(value)
 
   lazy val genFoldOption: Gen[Sized, Remote[Any]] =
     for {
       a <- Gen.int.map(Remote(_))
       b <- genLiteral
-    } yield Remote.FoldOption(Remote.Some0(a), b, Remote.RemoteFunction((_: Remote[Int]) => b).evaluated)
-
-  lazy val genZipOption: Gen[Sized, Remote[Any]] =
-    for {
-      a <- Gen.oneOf(Gen.int.map(int => Remote.Some0(Remote(int))), Gen.const(Remote[Option[Int]](None)))
-      b <- Gen.oneOf(Gen.string.map(str => Remote.Some0(Remote(str))), Gen.const(Remote[Option[String]](None)))
-    } yield Remote.ZipOption(a, b)
-
-  lazy val genOptionContains: Gen[Sized, Remote[Any]] =
-    for {
-      a <- Gen.string.map(Remote(_))
-      b <- Gen.string.map(Remote(_))
-    } yield Remote.OptionContains(Remote.Some0(a), b)
+    } yield Remote.FoldOption(Remote.RemoteSome(a), b, Remote.RemoteFunction((_: Remote[Int]) => b).evaluated)
 
   lazy val genZFlowReturn: Gen[Sized, ZFlow.Return[Any]] =
     Gen
       .oneOf(
         genLiteral,
-        genSome0,
+        genRemoteSome,
         genRemoteApply
       )
       .map(ZFlow.Return(_))
@@ -612,7 +507,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     Gen
       .oneOf(
         genLiteral,
-        genSome0,
+        genRemoteSome,
         genRemoteApply
       )
       .map(ZFlow.Fail(_))
@@ -633,7 +528,10 @@ trait Generators extends DefaultJavaTimeSchemas {
       varName <- genRemoteVariableName
       svar     = RemoteVariableReference[Int](varName)
       f = Remote.RemoteFunction((a: Remote[Int]) =>
-            Remote.Tuple2(Remote("done"), Remote.AddNumeric(a, Remote(1), Numeric.NumericInt))
+            Remote.Tuple2(
+              Remote("done"),
+              Remote.BinaryNumeric(a, Remote(1), Numeric.NumericInt, BinaryNumericOperator.Add)
+            )
           )
     } yield ZFlow.Modify(Remote(svar), f.evaluated)
 
@@ -708,7 +606,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowTimeout: Gen[Sized, ZFlow.Timeout[Any, Any, Any]] =
     for {
       flow     <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
-      duration <- genDurationFromLong
+      duration <- genDurationFromLongs
     } yield ZFlow
       .Timeout(flow, duration.asInstanceOf[Remote[Duration]])
       .asInstanceOf[ZFlow.Timeout[Any, Any, Any]]
@@ -722,8 +620,6 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genZFlowDie: Gen[Any, ZFlow.Die.type]               = Gen.const(ZFlow.Die)
   lazy val genZFlowRetryUntil: Gen[Any, ZFlow.RetryUntil.type] = Gen.const(ZFlow.RetryUntil)
-  lazy val genZFlowGetExecutionEnvironment: Gen[Any, ZFlow.GetExecutionEnvironment.type] =
-    Gen.const(ZFlow.GetExecutionEnvironment)
 
   lazy val genZFlowOrTry: Gen[Sized, ZFlow.OrTry[Any, Any, Any]] =
     for {
@@ -744,7 +640,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
       name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genPowNumeric, genRemoteApply)
+      initial <- Gen.oneOf(genLiteral, genBinaryNumeric, genRemoteApply)
     } yield ZFlow.NewVar(name, initial)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =
@@ -752,16 +648,20 @@ trait Generators extends DefaultJavaTimeSchemas {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
       iterate = RemoteFunction((a: Remote[Int]) =>
-                  Remote.Flow(ZFlow.Return(Remote.AddNumeric(a, Remote(delta), Numeric.NumericInt)))
+                  Remote.Flow(
+                    ZFlow.Return(Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add))
+                  )
                 )
       limit <- Gen.int
       predicate = RemoteFunction((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
-                      Remote.AddNumeric(
+                      Remote.BinaryNumeric(
                         initial,
-                        Remote.MulNumeric(Remote(delta), Remote(limit), Numeric.NumericInt),
-                        Numeric.NumericInt
+                        Remote
+                          .BinaryNumeric(Remote(delta), Remote(limit), Numeric.NumericInt, BinaryNumericOperator.Mul),
+                        Numeric.NumericInt,
+                        BinaryNumericOperator.Add
                       )
                     )
                   )
@@ -811,7 +711,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       id        <- Gen.string1(Gen.asciiChar)
       promiseId <- Gen.string1(Gen.asciiChar)
       promise    = DurablePromise[E, A](promiseId)
-    } yield ExecutingFlow.PersistentExecutingFlow(FlowId(id), promise)
+    } yield ExecutingFlow(FlowId(id), promise)
 }
 
 object Generators {

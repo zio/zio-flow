@@ -19,7 +19,7 @@ package zio.flow.remote
 import zio.flow.{Mappable, Remote, RemoteContext}
 import zio.schema.Schema
 
-class RemoteMappableSyntax[A](self: Remote[A]) {
+final class RemoteMappableSyntax[A](val self: Remote[A]) extends AnyVal {
 
   def filter[F[_], A1: Schema](
     predicate: Remote[A1] => Remote[Boolean]
