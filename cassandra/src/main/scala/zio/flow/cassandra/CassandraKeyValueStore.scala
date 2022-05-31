@@ -14,6 +14,9 @@ import zio.{Chunk, IO, Task, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
 import java.nio.ByteBuffer
+import zio.flow.internal.Timestamp
+import com.datastax.oss.driver.api.core.metadata.schema.ClusteringOrder
+import scala.jdk.CollectionConverters._
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
@@ -33,9 +36,10 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   override def put(
     namespace: String,
     key: Chunk[Byte],
-    value: Chunk[Byte]
+    value: Chunk[Byte],
+    timestamp: Timestamp
   ): IO[IOException, Boolean] = {
-    val insert = toInsert(Item(namespace, key, value))
+    val insert = toInsert(namespace, key, timestamp, value)
 
     executeAsync(insert)
       .mapBoth(
@@ -44,9 +48,14 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       )
   }
 
-  override def get(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Chunk[Byte]]] = {
-    val query = cqlSelect
+  private def getLatestImpl(
+    namespace: String,
+    key: Chunk[Byte],
+    before: Option[Timestamp]
+  ): IO[IOException, Option[(Chunk[Byte], Timestamp)]] = {
+    val queryBuilder = cqlSelect
       .column(valueColumnName)
+      .column(timestampColumnName)
       .whereColumn(namespaceColumnName)
       .isEqualTo(
         literal(namespace)
@@ -55,20 +64,44 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .isEqualTo(
         byteBufferFrom(key)
       )
+      .orderBy(
+        Map(
+          keyColumnName       -> ClusteringOrder.DESC,
+          timestampColumnName -> ClusteringOrder.DESC
+        ).asJava
+      )
+
+    val query = before
+      .fold(queryBuilder)(timestamp =>
+        queryBuilder
+          .whereColumn(timestampColumnName)
+          .isLessThanOrEqualTo(
+            literal(timestamp.value)
+          )
+      )
       .limit(1)
       .build
 
     executeAsync(query).flatMap { result =>
-      if (result.remaining > 0)
+      if (result.remaining > 0) {
+        val element = result.one
         ZIO.attempt {
-          Option(blobValueOf(valueColumnName, result.one))
+          Option((blobValueOf(valueColumnName, element), Timestamp(element.getLong(timestampColumnName))))
         }
-      else
+      } else {
         ZIO.none
+      }
     }.mapError(
       refineToIOException(s"Error retrieving or reading value for <$namespace> namespace")
     )
   }
+
+  override def getLatest(
+    namespace: String,
+    key: Chunk[Byte],
+    before: Option[Timestamp]
+  ): IO[IOException, Option[Chunk[Byte]]] =
+    getLatestImpl(namespace, key, before).map(_.map(_._1))
 
   override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] = {
     val query = cqlSelect
@@ -117,6 +150,12 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .flatten
   }
 
+  override def getLatestTimestamp(
+    namespace: String,
+    key: zio.Chunk[Byte]
+  ): zio.IO[java.io.IOException, Option[zio.flow.internal.Timestamp]] =
+    getLatestImpl(namespace, key, before = None).map(_.map(_._2))
+
   override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] = {
     val delete = cqlDelete
       .column(valueColumnName)
@@ -137,31 +176,23 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       )
   }
 
-  override def putAll(items: Chunk[KeyValueStore.Item]): IO[IOException, Unit] = {
-    val batch = new BatchStatementBuilder(BatchType.LOGGED)
-    batch.addStatements(
-      items.map(toInsert): _*
-    )
-    executeAsync(batch.build())
-      .mapBoth(
-        refineToIOException(s"Error putting multiple key-value pairs"),
-        _ => ()
-      )
-  }
-
-  private def toInsert(item: KeyValueStore.Item): SimpleStatement =
+  private def toInsert(namespace: String, key: Chunk[Byte], timestamp: Timestamp, value: Chunk[Byte]): SimpleStatement =
     cqlInsert
       .value(
         namespaceColumnName,
-        literal(item.namespace)
+        literal(namespace)
       )
       .value(
         keyColumnName,
-        byteBufferFrom(item.key)
+        byteBufferFrom(key)
+      )
+      .value(
+        timestampColumnName,
+        literal(timestamp.value)
       )
       .value(
         valueColumnName,
-        byteBufferFrom(item.value)
+        byteBufferFrom(value)
       )
       .build
 
@@ -188,6 +219,9 @@ object CassandraKeyValueStore {
 
   private[cassandra] val keyColumnName: String =
     withColumnPrefix("key")
+
+  private[cassandra] val timestampColumnName: String =
+    withColumnPrefix("timestamp")
 
   private[cassandra] val valueColumnName: String =
     withColumnPrefix("value")

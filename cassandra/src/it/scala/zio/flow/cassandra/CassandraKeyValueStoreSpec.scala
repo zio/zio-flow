@@ -6,6 +6,7 @@ import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Gen, Spec, assert, assertTrue, checkN, ZIOSpecDefault}
+import zio.flow.internal.Timestamp
 
 object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
 
@@ -38,10 +39,10 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
           byteChunkGen
         ) { (namespace, key, value1, value2) =>
           for {
-            putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
-            retrieved1    <- KeyValueStore.get(namespace, key)
-            putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
-            retrieved2    <- KeyValueStore.get(namespace, key)
+            putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+            retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
+            putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+            retrieved2    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
           } yield assertTrue(
             putSucceeded1,
             retrieved1.get == value1,
@@ -57,7 +58,7 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
           val nonExistentNamespace = newTimeBasedName()
 
           KeyValueStore
-            .get(nonExistentNamespace, key)
+            .getLatest(nonExistentNamespace, key, before = None)
             .map { retrieved =>
               assertTrue(
                 retrieved.isEmpty
@@ -75,8 +76,8 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
             Chunk.fromIterable(newTimeBasedName().getBytes)
 
           for {
-            putSucceeded <- KeyValueStore.put(namespace, key, value)
-            retrieved    <- KeyValueStore.get(namespace, nonExistingKey)
+            putSucceeded <- KeyValueStore.put(namespace, key, value, Timestamp(1L))
+            retrieved    <- KeyValueStore.getLatest(namespace, nonExistingKey, Some(Timestamp(1L)))
           } yield assertTrue(
             retrieved.isEmpty,
             putSucceeded
@@ -109,7 +110,7 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
           putSuccesses <-
             ZIO
               .foreachPar(keyValuePairs) { case (key, value) =>
-                KeyValueStore.put(uniqueNamespace, key, value)
+                KeyValueStore.put(uniqueNamespace, key, value, Timestamp(1L))
               }
           retrieved <-
             KeyValueStore
