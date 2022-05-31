@@ -1,6 +1,6 @@
 package zio.flow.dynamodb
 
-import DynamoDbKeyValueStore.{keyColumnName, namespaceColumnName}
+import DynamoDbKeyValueStore.{keyColumnName, timestampName}
 import LocalStackTestContainerSupport.awsContainer
 import com.dimafeng.testcontainers.LocalStackV2Container
 import zio.aws.core.config.AwsConfig
@@ -45,21 +45,21 @@ object DynamoDbSupport {
         tableName = name,
         attributeDefinitions = Seq(
           AttributeDefinition(
-            KeySchemaAttributeName(namespaceColumnName),
-            ScalarAttributeType.S
-          ),
-          AttributeDefinition(
             KeySchemaAttributeName(keyColumnName),
             ScalarAttributeType.B
+          ),
+          AttributeDefinition(
+            KeySchemaAttributeName(timestampName),
+            ScalarAttributeType.N
           )
         ),
         keySchema = List(
           KeySchemaElement(
-            KeySchemaAttributeName(namespaceColumnName),
+            KeySchemaAttributeName(keyColumnName),
             KeyType.HASH
           ),
           KeySchemaElement(
-            KeySchemaAttributeName(keyColumnName),
+            KeySchemaAttributeName(timestampName),
             KeyType.RANGE
           )
         ),

@@ -8,6 +8,7 @@ import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}
 import zio.flow.internal.Timestamp
+import zio.test.Assertion.isNone
 
 object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
 
@@ -39,8 +40,8 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
             createDynamoDbTable(tableName) *> {
               for {
                 putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
-                retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
                 putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+                retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
                 retrieved2    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
               } yield assertTrue(
                 putSucceeded1,
@@ -48,6 +49,23 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
                 putSucceeded2,
                 retrieved2.get == value2
               )
+            }
+          }
+        }
+      },
+      test("should be able to delete a key-value pair") {
+        checkN(10)(
+          dynamoDbNameGen,
+          nonEmptyByteChunkGen,
+          byteChunkGen
+        ) { (namespace, key, value1) =>
+          ZIO.scoped {
+            createDynamoDbTable(tableName) *> {
+              for {
+                _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+                _      <- KeyValueStore.delete(namespace, key)
+                latest <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1)))
+              } yield assert(latest)(isNone)
             }
           }
         }
