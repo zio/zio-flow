@@ -17,6 +17,7 @@ import zio.aws.dynamodb.model.BatchWriteItemRequest
 import zio.aws.dynamodb.model.WriteRequest
 import zio.prelude.data.Optional
 import zio.aws.dynamodb.model.DeleteRequest
+import scala.util.Try
 
 final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
@@ -89,7 +90,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
             rawTimestamp <- result.get(AttributeName(timestampName))
             byteChunk    <- rawBytes.b.toOption
             timestampStr <- rawTimestamp.n.toOption
-            timestamp    <- timestampStr.toLongOption
+            timestamp    <- Try(timestampStr.toLong).toOption
           } yield (byteChunk, Timestamp(timestamp))
       )
       .flatMap(bytesOption => ZStream.fromIterable(bytesOption))
@@ -160,7 +161,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
           for {
             rawTimestamp <- result.get(AttributeName(timestampName))
             timestampStr <- rawTimestamp.n.toOption
-            timestamp    <- timestampStr.toLongOption
+            timestamp    <- Try(timestampStr.toLong).toOption
           } yield Timestamp(timestamp)
       )
       .flatMap(bytesOption => ZStream.fromIterable(bytesOption))
