@@ -17,6 +17,7 @@
 package zio.flow
 
 import zio.{ZEnvironment, ZIO}
+import zio.flow.Operation.Http
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
@@ -32,3 +33,12 @@ trait OperationExecutor[-R] { self =>
         self.execute(input, operation).provideEnvironment(env)
     }
 }
+
+// case class OperationExecutorImpl() extends OperationExecutor[Any] {
+//   override def execute[I, A](input: I, operation: Operation[I,A]): ZIO[R, ActivityError, A] = {
+//     operation match {
+//       case Http(url, method, headers, inputSchema, resultSchema) => 
+//       case SendEmail(server, port) => ???
+//     }
+//   }
+// }

@@ -61,27 +61,10 @@ object Operation {
       Schema.Case("Http", schema[R, A], _.asInstanceOf[Http[R, A]])
   }
 
-  final case class SendEmail(
-    server: String,
-    port: Int
-  ) extends Operation[EmailRequest, Unit] {
-
-    override val inputSchema  = Schema[EmailRequest]
-    override val resultSchema = Schema[Unit]
-  }
-
-  object SendEmail {
-    val schema: Schema[SendEmail] = DeriveSchema.gen
-
-    def schemaCase[R, A]: Schema.Case[SendEmail, Operation[R, A]] =
-      Schema.Case("SendEmail", schema, _.asInstanceOf[SendEmail])
-  }
-
   implicit def schema[R, A]: Schema[Operation[R, A]] =
     Schema.EnumN(
       CaseSet
         .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
-        .:+:(SendEmail.schemaCase[R, A])
     )
 }
 
