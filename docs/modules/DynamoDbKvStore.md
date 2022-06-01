@@ -16,22 +16,41 @@ dynamodb.create_table (
     TableName = '_zflow_key_value_store',
     AttributeDefinitions = [
          {
-             'AttributeName': 'zflow_kv_namespace',
-             'AttributeType': 'S'
-         },
-         {
              'AttributeName': 'zflow_kv_key',
              'AttributeType': 'B'
+         },
+         {
+             'AttributeName': 'zflow_kv_timestamp',
+             'AttributeType': 'N'
          }
     ],    
     KeySchema = [
         {
-            'AttributeName': 'zflow_kv_namespace',
+            'AttributeName': 'zflow_kv_key',
             'KeyType': 'HASH'
         },
         {
-            'AttributeName': 'zflow_kv_key',
+            'AttributeName': 'zflow_kv_timestamp',
             'KeyType': 'RANGE'
+        }
+    ],
+    GlobalSecondaryIndexes = [
+        {
+            'IndexName': 'namespace_index',
+            'KeySchema': [
+                {
+                    'AttributeName': 'zflow_kv_namespace',
+                    'KeyType': 'HASH'
+                }
+            ],
+            'Projection': {
+                'NonKeyAttributes': ['zflow_kv_value'],
+                'ProjectionType': 'INCLUDE'
+            },
+            'ProvisionedThroughput' = {
+                'ReadCapacityUnits': 1,
+                'WriteCapacityUnits': 1
+            }
         }
     ],
     ProvisionedThroughput = {
@@ -45,4 +64,6 @@ Of course, you can use your favourite AWS tool to create the table (e.g. DynamoD
 
 # Performance/Scaling Considerations:
 
-As you can see from the script above, the primary key is composed of the two columns, `zflow_kv_namespace` and `zflow_kv_key`. In particular, `zflow_kv_namespace` is the partition key and `zflow_kv_key` is the sort key. Data will be partitioned by the hash values of the `zflow_kv_namespace` column. If one small set of namespace values are the majority for all possible values, that will create data skew and can have a big impact to your cluster down the road. Some consideration is needed when deciding the type of values `zflow_kv_namespace` should store.
+As you can see from the script above, the primary key is composed of the two columns, `zflow_kv_key` and `zflow_kv_timestamp`. In particular, `zflow_kv_key` is the partition key and `zflow_kv_timestamp` is the sort key. Internally, zio-flow will store the namespace as part of the `zflow_kv_key` value as well, but it will also
+store it in the `zflow_kv_namespace` attribute for easy access to all values within a namespace. This requires
+a secondary index to be set up on the `zflow_kv_namespace` attribute.
