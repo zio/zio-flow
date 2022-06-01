@@ -66,6 +66,11 @@ object KeyValueStore {
       _.scanAll(namespace)
     )
 
+  def delete(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Unit] =
+    ZIO.serviceWithZIO(
+      _.delete(namespace, key)
+    )
+
   private final case class InMemoryKeyValueEntry(data: Chunk[Byte], timestamp: Timestamp) {
     override def toString: String = s"<entry ($data.size bytes) at $timestamp>"
   }
