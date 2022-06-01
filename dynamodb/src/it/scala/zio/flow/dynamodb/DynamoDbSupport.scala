@@ -1,6 +1,6 @@
 package zio.flow.dynamodb
 
-import DynamoDbKeyValueStore.{keyColumnName, timestampName}
+import DynamoDbKeyValueStore.{keyColumnName, timestampName, namespaceColumnName, valueColumnName}
 import LocalStackTestContainerSupport.awsContainer
 import com.dimafeng.testcontainers.LocalStackV2Container
 import zio.aws.core.config.AwsConfig
@@ -45,6 +45,10 @@ object DynamoDbSupport {
         tableName = name,
         attributeDefinitions = Seq(
           AttributeDefinition(
+            KeySchemaAttributeName(namespaceColumnName),
+            ScalarAttributeType.S
+          ),
+          AttributeDefinition(
             KeySchemaAttributeName(keyColumnName),
             ScalarAttributeType.B
           ),
@@ -61,6 +65,27 @@ object DynamoDbSupport {
           KeySchemaElement(
             KeySchemaAttributeName(timestampName),
             KeyType.RANGE
+          )
+        ),
+        globalSecondaryIndexes = List(
+          GlobalSecondaryIndex(
+            primitives.IndexName("namespace_index"),
+            keySchema = List(
+              KeySchemaElement(
+                KeySchemaAttributeName(namespaceColumnName),
+                KeyType.HASH
+              )
+            ),
+            Projection(
+              projectionType = Option(ProjectionType.INCLUDE),
+              nonKeyAttributes = Some(List(primitives.NonKeyAttributeName(valueColumnName)))
+            ),
+            provisionedThroughput = Option(
+              ProvisionedThroughput(
+                readCapacityUnits = PositiveLongObject(16L),
+                writeCapacityUnits = PositiveLongObject(16L)
+              )
+            )
           )
         ),
         provisionedThroughput = Option(
