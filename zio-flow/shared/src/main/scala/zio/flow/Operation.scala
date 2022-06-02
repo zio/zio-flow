@@ -26,36 +26,15 @@ sealed trait Operation[-R, +A] {
 
 object Operation {
   final case class Http[R, A](
-    url: java.net.URI,
-    method: String = "GET",
-    headers: Map[String, String],
-    inputSchema: Schema[R],
-    resultSchema: Schema[A]
-  ) extends Operation[R, A]
+    host: String,
+    api: zio.flow.operation.http.API[R, A]
+  ) extends Operation[R, A] {
+    override val inputSchema: Schema[_ >: R]  = ???
+    override val resultSchema: Schema[_ <: A] = api.outputSchema
+  }
 
   object Http {
-    def schema[R, A]: Schema[Http[R, A]] =
-      Schema.CaseClass5[java.net.URI, String, Map[String, String], FlowSchemaAst, FlowSchemaAst, Http[R, A]](
-        Schema.Field("url", Schema[java.net.URI]),
-        Schema.Field("method", Schema[String]),
-        Schema.Field("headers", Schema.map[String, String]),
-        Schema.Field("inputSchema", FlowSchemaAst.schema),
-        Schema.Field("outputSchema", FlowSchemaAst.schema),
-        { case (url, method, headers, inputSchemaAst, outputSchemaAst) =>
-          Http(
-            url,
-            method,
-            headers,
-            inputSchemaAst.toSchema[R],
-            outputSchemaAst.toSchema[A]
-          )
-        },
-        _.url,
-        _.method,
-        _.headers,
-        op => FlowSchemaAst.fromSchema(op.inputSchema),
-        op => FlowSchemaAst.fromSchema(op.resultSchema)
-      )
+    def schema[R, A]: Schema[Http[R, A]] = ???
 
     def schemaCase[R, A]: Schema.Case[Http[R, A], Operation[R, A]] =
       Schema.Case("Http", schema[R, A], _.asInstanceOf[Http[R, A]])
