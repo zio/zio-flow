@@ -11,17 +11,13 @@ object MocksForGCExample {
     new OperationExecutor[Console with Clock] {
       override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Console with Clock, ActivityError, A] =
         operation match {
-          case Operation.Http(url, _, _, _, _) =>
+          case Operation.Http(url, _) =>
             Console
-              .printLine(s"Request to : ${url.toString}")
+              .printLine(s"Request to : $url")
               .mapBoth(
                 error => ActivityError("Failed to write to console", Some(error)),
-                _ => map(url).asInstanceOf[A]
+                _ => map(new URI(url)).asInstanceOf[A]
               )
-          case Operation.SendEmail(_, _) =>
-            Console
-              .printLine("Sending email")
-              .mapBoth(error => ActivityError("Failed to write to console", Some(error)), _.asInstanceOf[A])
         }
     }
 
