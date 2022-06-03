@@ -7,16 +7,17 @@ import zio.ZIO
 import scala.collection.mutable
 import zhttp.http.Response
 import zio.Chunk
+import zio.schema.codec.JsonCodec
 
 private[http] object ClientInterpreter {
   def interpret[Input, Output](host: String)(
-      api: API[Input, Output]
+    api: API[Input, Output]
   )(input: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Response] = {
     val method = api.method.toZioHttpMethod
     val state  = new RequestState()
     parseUrl(api.requestInput, state)(input)
     val (url, headers, body) = state.result
-    val data = body.fold(HttpData.empty)(HttpData.fromChunk)
+    val data                 = body.fold(HttpData.empty)(HttpData.fromChunk)
     Client.request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
   }
 
@@ -46,17 +47,17 @@ private[http] object ClientInterpreter {
         else
           ""
 
-      (pathBuilder.result + queryString, headers.toMap, body)
+      (pathBuilder.result() + queryString, headers.toMap, body)
     }
   }
 
   private[http] def parseUrl[Params](
-      requestInput: RequestInput[Params],
-      state: RequestState
+    requestInput: RequestInput[Params],
+    state: RequestState
   )(params: Params): Unit =
     requestInput match {
-      case RequestInput.ZipWith(left, right, g) =>
-        g(params) match {
+      case RequestInput.ZipWith(left, right, zipper) =>
+        zipper.unzip(params) match {
           case (a, b) =>
             parseUrl(left, state)(a)
             parseUrl(right, state)(b)
@@ -69,15 +70,18 @@ private[http] object ClientInterpreter {
 
       case route: Path[_] =>
         parsePath[Params](route, state)(params)
+
+      case body: Body[_] =>
+        parseBody[Params](body, state)(params)
     }
 
   private def parsePath[Params](
-      route: Path[Params],
-      state: RequestState
+    route: Path[Params],
+    state: RequestState
   )(params: Params): Unit =
     route match {
-      case Path.ZipWith(left, right, g) =>
-        g(params) match {
+      case Path.ZipWith(left, right, zipper) =>
+        zipper.unzip(params) match {
           case (a, b) =>
             parsePath(left, state)(a)
             parsePath(right, state)(b)
@@ -89,8 +93,8 @@ private[http] object ClientInterpreter {
     }
 
   private def parseQuery[Params](
-      query: Query[Params],
-      state: RequestState
+    query: Query[Params],
+    state: RequestState
   )(params: Params): Unit =
     query match {
       case Query.SingleParam(name, _) =>
@@ -103,8 +107,8 @@ private[http] object ClientInterpreter {
             ()
         }
 
-      case Query.ZipWith(left, right, g) =>
-        g(params) match {
+      case Query.ZipWith(left, right, zipper) =>
+        zipper.unzip(params) match {
           case (a, b) =>
             parseQuery(left, state)(a)
             parseQuery(right, state)(b)
@@ -112,12 +116,12 @@ private[http] object ClientInterpreter {
     }
 
   private def parseHeaders[Params](
-      headers: Header[Params],
-      state: RequestState
+    headers: Header[Params],
+    state: RequestState
   )(params: Params): Unit =
     headers match {
-      case Header.ZipWith(left, right, g) =>
-        g(params) match {
+      case Header.ZipWith(left, right, zipper) =>
+        zipper.unzip(params) match {
           case (a, b) =>
             parseHeaders(left, state)(a)
             parseHeaders(right, state)(b)
@@ -129,7 +133,13 @@ private[http] object ClientInterpreter {
           case None =>
             ()
         }
-      case Header.SingleHeader(name) =>
+      case Header.SingleHeader(name, _) =>
         state.addHeader(name, params.toString)
     }
+
+  private def parseBody[Params](
+    body: Body[Params],
+    state: RequestState
+  )(params: Params): Unit =
+    state.setBody(JsonCodec.encode(body.schema)(params))
 }

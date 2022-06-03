@@ -1,5 +1,8 @@
 package zio.flow.operation.http
 
+import zio.schema.DeriveSchema
+import zio.schema.Schema
+
 sealed trait HttpMethod extends Product with Serializable { self =>
   def toZioHttpMethod: zhttp.http.Method =
     self match {
@@ -12,6 +15,9 @@ sealed trait HttpMethod extends Product with Serializable { self =>
 }
 
 object HttpMethod {
+
+  val schema: Schema[HttpMethod] = DeriveSchema.gen[HttpMethod]
+
   case object GET    extends HttpMethod
   case object POST   extends HttpMethod
   case object PATCH  extends HttpMethod

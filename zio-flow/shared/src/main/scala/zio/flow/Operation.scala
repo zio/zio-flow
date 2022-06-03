@@ -16,8 +16,8 @@
 
 package zio.flow
 
-import zio.flow.serialization.FlowSchemaAst
 import zio.schema._
+import zio.flow.operation.http.API
 
 sealed trait Operation[-R, +A] {
   val inputSchema: Schema[_ >: R]
@@ -29,12 +29,18 @@ object Operation {
     host: String,
     api: zio.flow.operation.http.API[R, A]
   ) extends Operation[R, A] {
-    override val inputSchema: Schema[_ >: R]  = ???
+    override val inputSchema: Schema[_ >: R]  = api.requestInput.schema
     override val resultSchema: Schema[_ <: A] = api.outputSchema
   }
 
   object Http {
-    def schema[R, A]: Schema[Http[R, A]] = ???
+    def schema[R, A]: Schema[Http[R, A]] = Schema.CaseClass2[String, API[R, A], Http[R, A]](
+      Schema.Field("host", Schema[String]),
+      Schema.Field("api", API.schema[R, A]),
+      (host, api) => Http(host, api),
+      _.host,
+      _.api
+    )
 
     def schemaCase[R, A]: Schema.Case[Http[R, A], Operation[R, A]] =
       Schema.Case("Http", schema[R, A], _.asInstanceOf[Http[R, A]])
