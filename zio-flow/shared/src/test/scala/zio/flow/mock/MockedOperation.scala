@@ -43,10 +43,11 @@ object MockedOperation {
   ) extends MockedOperation {
     override def matchOperation[R1, A1](operation: Operation[R1, A1], input: R1): (Option[Match[A1]], MockedOperation) =
       operation match {
-        case Operation.Http(url, method, headers, _, _) =>
+        case Operation.Http(url, api) =>
           // TODO: check R1 and A1 types too
+          // TODO: check headers as well
           val m =
-            urlMatcher.run(url) && methodMatcher.run(method) && headersMatcher.run(headers) && inputMatcher.run(
+            urlMatcher.run(new URI(url)) && methodMatcher.run(api.method.toString()) && inputMatcher.run(
               input.asInstanceOf[R]
             )
           if (m.isSuccess) {
@@ -54,8 +55,6 @@ object MockedOperation {
           } else {
             (None, this)
           }
-        case Operation.SendEmail(_, _) =>
-          (None, this)
       }
   }
 
