@@ -16,6 +16,7 @@ object Zipper extends ZipperLowPriority1 {
       CaseSet
         .Cons(zipperLeftIdentitySchemaCase[A, B, C], CaseSet.Empty[Zipper.WithOut[A, B, C]]())
         .:+:(zipperRightIdentitySchemaCase[A, B, C])
+        .:+:(zipper2SchemaCase[A, B, C])
         .:+:(zipper3SchemaCase[A, B, C])
         .:+:(zipper4SchemaCase[A, B, C])
         .:+:(zipper5SchemaCase[A, B, C])
@@ -23,10 +24,9 @@ object Zipper extends ZipperLowPriority1 {
 
   type WithOut[A, B, C] = Zipper[A, B] { type Out = C }
 
-  implicit def zipperLeftIdentity[A]: Zipper.WithOut[Unit, A, A] =
-    new ZipperLeftIdentity[A]
+  implicit def zipperLeftIdentity[A]: Zipper.WithOut[Unit, A, A] = ZipperLeftIdentity[A]()
 
-  class ZipperLeftIdentity[A] extends Zipper[Unit, A] {
+  case class ZipperLeftIdentity[A]() extends Zipper[Unit, A] {
     type Out = A
     def zip(left: Unit, right: A): A =
       right
@@ -36,31 +36,33 @@ object Zipper extends ZipperLowPriority1 {
   }
 
   def zipperLeftIdentitySchemaCase[A, B, C]: Schema.Case[ZipperLeftIdentity[Any], Zipper.WithOut[A, B, C]] =
-    Schema.Case("leftIdentity", Schema.singleton(new ZipperLeftIdentity[Any]), _.asInstanceOf[ZipperLeftIdentity[Any]])
+    Schema.Case("leftIdentity", Schema.singleton(ZipperLeftIdentity[Any]()), _.asInstanceOf[ZipperLeftIdentity[Any]])
 
   def zipperRightIdentitySchemaCase[A, B, C]: Schema.Case[ZipperRightIdentity[Any], Zipper.WithOut[A, B, C]] =
-    Schema.Case("rightIdentity", Schema.singleton(new ZipperRightIdentity[Any]), _.asInstanceOf[ZipperRightIdentity[Any]])
+    Schema.Case("rightIdentity", Schema.singleton(ZipperRightIdentity[Any]()), _.asInstanceOf[ZipperRightIdentity[Any]])
+
+  def zipper2SchemaCase[A, B, C]: Schema.Case[Zipper2[Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case("2", Schema.singleton(Zipper2[Any, Any]()), _.asInstanceOf[Zipper2[Any, Any]])
 
   def zipper3SchemaCase[A, B, C]: Schema.Case[Zipper3[Any, Any, Any], Zipper.WithOut[A, B, C]] =
-    Schema.Case("3", Schema.singleton(new Zipper3[Any, Any, Any]), _.asInstanceOf[Zipper3[Any, Any, Any]])
+    Schema.Case("3", Schema.singleton(Zipper3[Any, Any, Any]()), _.asInstanceOf[Zipper3[Any, Any, Any]])
 
   def zipper4SchemaCase[A, B, C]: Schema.Case[Zipper4[Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
-    Schema.Case("4", Schema.singleton(new Zipper4[Any, Any, Any, Any]), _.asInstanceOf[Zipper4[Any, Any, Any, Any]])
+    Schema.Case("4", Schema.singleton(Zipper4[Any, Any, Any, Any]()), _.asInstanceOf[Zipper4[Any, Any, Any, Any]])
 
   def zipper5SchemaCase[A, B, C]: Schema.Case[Zipper5[Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
     Schema.Case(
       "5",
-      Schema.singleton(new Zipper5[Any, Any, Any, Any, Any]),
+      Schema.singleton(Zipper5[Any, Any, Any, Any, Any]()),
       _.asInstanceOf[Zipper5[Any, Any, Any, Any, Any]]
     )
 }
 
 trait ZipperLowPriority1 extends ZipperLowPriority2 {
 
-  implicit def zipperRightIdentity[A]: Zipper.WithOut[A, Unit, A] =
-    new ZipperRightIdentity[A]
+  implicit def zipperRightIdentity[A]: Zipper.WithOut[A, Unit, A] = ZipperRightIdentity[A]()
 
-  class ZipperRightIdentity[A] extends Zipper[A, Unit] {
+  case class ZipperRightIdentity[A]() extends Zipper[A, Unit] {
     type Out = A
     def zip(left: A, right: Unit): A =
       left
@@ -75,7 +77,7 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
   implicit def zipper3[A, B, Z]: Zipper.WithOut[(A, B), Z, (A, B, Z)] =
     new Zipper3[A, B, Z]
 
-  class Zipper3[A, B, Z] extends Zipper[(A, B), Z] {
+  case class Zipper3[A, B, Z]() extends Zipper[(A, B), Z] {
     type Out = (A, B, Z)
     def zip(left: (A, B), right: Z): (A, B, Z) =
       (left._1, left._2, right)
@@ -84,10 +86,9 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
       ((out._1, out._2), out._3)
   }
 
-  implicit def zipper4[A, B, C, Z]: Zipper.WithOut[(A, B, C), Z, (A, B, C, Z)] =
-    new Zipper4[A, B, C, Z]
+  implicit def zipper4[A, B, C, Z]: Zipper.WithOut[(A, B, C), Z, (A, B, C, Z)] = Zipper4[A, B, C, Z]()
 
-  class Zipper4[A, B, C, Z] extends Zipper[(A, B, C), Z] {
+  case class Zipper4[A, B, C, Z]() extends Zipper[(A, B, C), Z] {
     type Out = (A, B, C, Z)
     def zip(left: (A, B, C), right: Z): (A, B, C, Z) =
       (left._1, left._2, left._3, right)
@@ -96,10 +97,9 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
       ((out._1, out._2, out._3), out._4)
   }
 
-  implicit def zipper5[A, B, C, D, Z]: Zipper.WithOut[(A, B, C, D), Z, (A, B, C, D, Z)] =
-    new Zipper5[A, B, C, D, Z]
+  implicit def zipper5[A, B, C, D, Z]: Zipper.WithOut[(A, B, C, D), Z, (A, B, C, D, Z)] = Zipper5[A, B, C, D, Z]()
 
-  class Zipper5[A, B, C, D, Z] extends Zipper[(A, B, C, D), Z] {
+  case class Zipper5[A, B, C, D, Z]() extends Zipper[(A, B, C, D), Z] {
     type Out = (A, B, C, D, Z)
     def zip(left: (A, B, C, D), right: Z): (A, B, C, D, Z) =
       (left._1, left._2, left._3, left._4, right)
@@ -487,12 +487,14 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
 trait ZipperLowPriority3 {
 
-  implicit def Zipper2[A, B]: Zipper.WithOut[A, B, (A, B)] =
-    new Zipper[A, B] {
-      type Out = (A, B)
-      def zip(left: A, right: B): Out = (left, right)
+  implicit def zipper2[A, B]: Zipper.WithOut[A, B, (A, B)] =
+    new Zipper2[A, B]
 
-      override def unzip(out: (A, B)): (A, B) =
-        out
-    }
+  case class Zipper2[A, B]() extends Zipper[A, B] {
+    type Out = (A, B)
+    def zip(left: A, right: B): Out = (left, right)
+
+    override def unzip(out: (A, B)): (A, B) =
+      out
+  }
 }
