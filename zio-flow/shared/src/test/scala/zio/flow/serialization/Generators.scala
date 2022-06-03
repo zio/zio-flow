@@ -29,6 +29,8 @@ import zio.{Duration, ZNothing, flow}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+import zio.flow.operation.http
+
 trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genPrimitiveSchemaAndValue: Gen[Sized, SchemaAndValue[Any]] =
@@ -667,29 +669,45 @@ trait Generators extends DefaultJavaTimeSchemas {
                   )
     } yield ZFlow.Iterate[Any, Nothing, Int](initial, iterate.evaluated, predicate.evaluated)
 
-  lazy val genOperationHttp: Gen[Sized, Operation.Http[Any, Any]] =
-    for {
-      url          <- Gen.oneOf(Gen.const("http://test.com/x"), Gen.const("https://100.0.0.1?test")).map(new java.net.URI(_))
-      method       <- Gen.oneOf(Gen.const("GET"), Gen.const("POST"))
-      headers      <- Gen.mapOf(Gen.string1(Gen.asciiChar), Gen.string)
-      inputSchema  <- genPrimitiveSchemaAndValue.map(_.schema)
-      outputSchema <- genPrimitiveSchemaAndValue.map(_.schema)
-    } yield Operation.Http(
-      url,
-      method,
-      headers,
-      inputSchema.asInstanceOf[Schema[Any]],
-      outputSchema.asInstanceOf[Schema[Any]]
+  lazy val genHttpApiPath: Gen[Sized, http.Path[Any]] =
+    Gen.oneOf(
+      Gen.const(http.string.asInstanceOf[http.Path[Any]]),
+      Gen.const(http.int.asInstanceOf[http.Path[Any]]),
+      Gen.const(http.boolean.asInstanceOf[http.Path[Any]]),
+      Gen.const(http.uuid.asInstanceOf[http.Path[Any]]),
+      Gen.string.map(s => http.stringToPath(s).asInstanceOf[http.Path[Any]])
     )
 
-  lazy val genOperationSendEmail: Gen[Sized, Operation.SendEmail] =
+  lazy val genHttpApiQuery: Gen[Sized, http.Query[Any]] =
+    Gen.string.flatMap { paramName =>
+      Gen.oneOf(
+        Gen.const(http.string(paramName).asInstanceOf[http.Query[Any]]),
+        Gen.const(http.int(paramName).asInstanceOf[http.Query[Any]]),
+        Gen.const(http.boolean(paramName).asInstanceOf[http.Query[Any]])
+      )
+    }
+
+  lazy val genHttpApiHeader: Gen[Sized, http.Header[Any]] =
+    Gen.string.flatMap { paramName =>
+      Gen.oneOf(
+        Gen.const(http.Header.string(paramName).asInstanceOf[http.Header[Any]])
+      )
+    }
+
+  lazy val genOperationHttp: Gen[Sized, Operation.Http[Any, Any]] =
     for {
-      server <- Gen.string1(Gen.asciiChar)
-      port   <- Gen.int
-    } yield Operation.SendEmail(server, port)
+      url    <- Gen.oneOf(Gen.const("http://test.com/x"), Gen.const("https://100.0.0.1?test"))
+      path   <- genHttpApiPath
+      query  <- genHttpApiQuery
+      header <- genHttpApiHeader
+      api     = flow.operation.http.API.post(path).query(query).header(header).input[Int].output[Double]
+    } yield Operation.Http(
+      url,
+      api.asInstanceOf[http.API[Any, Any]]
+    )
 
   lazy val genOperation: Gen[Sized, Operation[Any, Any]] =
-    Gen.oneOf(genOperationHttp, genOperationSendEmail.map(_.asInstanceOf[Operation[Any, Any]]))
+    Gen.oneOf(genOperationHttp).map(_.asInstanceOf[Operation[Any, Any]])
 
   lazy val genActivity: Gen[Sized, Activity[Any, Any]] =
     for {
