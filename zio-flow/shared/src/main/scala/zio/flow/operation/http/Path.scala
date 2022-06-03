@@ -14,7 +14,7 @@ import zio.schema.DeriveSchema
  *   - Body: anything that has a schema
  */
 sealed trait RequestInput[A] extends Product with Serializable { self =>
-  def schema: Schema[A]
+  val schema: Schema[A]
 
   private[http] def ++[B](that: RequestInput[B])(implicit zipper: Zipper[A, B]): RequestInput[zipper.Out] =
     RequestInput.ZipWith[A, B, zipper.Out](self, that, zipper)
@@ -36,7 +36,7 @@ object RequestInput {
     right: RequestInput[B],
     zipper: Zipper.WithOut[A, B, C]
   ) extends RequestInput[C] {
-    override def schema: Schema[C] =
+    lazy val schema: Schema[C] =
       left.schema
         .zip(right.schema)
         .transform(
@@ -49,8 +49,8 @@ object RequestInput {
 
     def schema[A, B, C] =
       Schema.CaseClass3[RequestInput[A], RequestInput[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
-        Schema.Field("left", RequestInput.schema[A]),
-        Schema.Field("right", RequestInput.schema[B]),
+        Schema.Field("left", Schema.defer(RequestInput.schema[A])),
+        Schema.Field("right", Schema.defer(RequestInput.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
         ZipWith(_, _, _),
         _.left,
@@ -113,7 +113,7 @@ object Header {
   private[http] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
       extends Header[C] {
 
-    def schema: Schema[C] =
+    lazy val schema: Schema[C] =
       left.schema
         .zip(right.schema)
         .transform(
@@ -126,8 +126,8 @@ object Header {
 
     def schema[A, B, C] =
       Schema.CaseClass3[Header[A], Header[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
-        Schema.Field("left", Header.schema[A]),
-        Schema.Field("right", Header.schema[B]),
+        Schema.Field("left", Schema.defer(Header.schema[A])),
+        Schema.Field("right", Schema.defer(Header.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
         ZipWith(_, _, _),
         _.left,
@@ -141,13 +141,13 @@ object Header {
   }
 
   private[http] case class Optional[A](headers: Header[A]) extends Header[Option[A]] {
-    def schema: Schema[Option[A]] = Schema.option(headers.schema)
+    lazy val schema: Schema[Option[A]] = Schema.option(headers.schema)
   }
 
   object Optional {
 
     def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
-      Schema.Field("headers", Header.schema[A]),
+      Schema.Field("headers", Schema.defer(Header.schema[A])),
       Optional.apply,
       _.headers
     )
@@ -228,8 +228,8 @@ object Query {
 
     def schema[A, B, C] =
       Schema.CaseClass3[Query[A], Query[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
-        Schema.Field("left", Query.schema[A]),
-        Schema.Field("right", Query.schema[B]),
+        Schema.Field("left", Schema.defer(Query.schema[A])),
+        Schema.Field("right", Schema.defer(Query.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
         ZipWith(_, _, _),
         _.left,
@@ -243,12 +243,12 @@ object Query {
   }
 
   private[http] case class Optional[A](params: Query[A]) extends Query[Option[A]] {
-    def schema: Schema[Option[A]] = Schema.option(params.schema)
+    lazy val schema: Schema[Option[A]] = Schema.option(params.schema)
   }
 
   object Optional {
     def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
-      Schema.Field("params", Query.schema[A]),
+      Schema.Field("params", Schema.defer(Query.schema[A])),
       Optional.apply,
       _.params
     )
@@ -289,7 +289,7 @@ object Path {
     Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]])
 
   private[http] final case class Literal(string: String) extends Path[Any] {
-    def schema: Schema[Any] = Schema.singleton(())
+    lazy val schema: Schema[Any] = Schema.singleton(())
   }
 
   object Literal {
@@ -316,7 +316,7 @@ object Path {
 
   private[http] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
       extends Path[C] {
-    def schema: Schema[C] = left.schema
+    lazy val schema: Schema[C] = left.schema
       .zip(right.schema)
       .transform(
         (zipper.zip _).tupled,
@@ -327,8 +327,8 @@ object Path {
   object ZipWith {
     def schema[A, B, C]: Schema[ZipWith[A, B, C]] =
       Schema.CaseClass3[Path[A], Path[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
-        Schema.Field("left", Path.schema[A]),
-        Schema.Field("right", Path.schema[B]),
+        Schema.Field("left", Schema.defer(Path.schema[A])),
+        Schema.Field("right", Schema.defer(Path.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
         ZipWith(_, _, _),
         _.left,
