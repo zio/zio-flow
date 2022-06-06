@@ -38,9 +38,11 @@ trait OperationExecutor[-R] { self =>
 }
 
 case class OperationExecutorImpl() extends OperationExecutor[EventLoopGroup with ChannelFactory] {
-  override def execute[I, A](input: I, operation: Operation[I,A]): ZIO[EventLoopGroup with ChannelFactory, ActivityError, A] = {
+  override def execute[I, A](
+    input: I,
+    operation: Operation[I, A]
+  ): ZIO[EventLoopGroup with ChannelFactory, ActivityError, A] =
     operation match {
       case Http(host, api) => api.call(host)(input).mapError(e => ActivityError(e.getMessage(), Option(e)))
     }
-  }
 }

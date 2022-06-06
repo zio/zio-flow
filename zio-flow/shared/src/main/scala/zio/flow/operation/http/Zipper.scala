@@ -36,7 +36,7 @@ object Zipper extends ZipperLowPriority1 {
     override def unzip(out: A): (Unit, A) =
       ((), out)
 
-    override def zipSchema(left: Schema[Unit], right: Schema[A]): Schema[A] = 
+    override def zipSchema(left: Schema[Unit], right: Schema[A]): Schema[A] =
       right
   }
 
@@ -91,8 +91,8 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
     override def unzip(out: (A, B, Z)): ((A, B), Z) =
       ((out._1, out._2), out._3)
-    
-    override def zipSchema(left: Schema[(A, B)], right: Schema[Z]): Schema[(A, B, Z)] = 
+
+    override def zipSchema(left: Schema[(A, B)], right: Schema[Z]): Schema[(A, B, Z)] =
       left.zip(right).transform((zip _).tupled, unzip)
   }
 
@@ -106,7 +106,7 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
     override def unzip(out: (A, B, C, Z)): ((A, B, C), Z) =
       ((out._1, out._2, out._3), out._4)
 
-    override def zipSchema(left: Schema[(A, B, C)], right: Schema[Z]): Schema[(A, B, C, Z)] = 
+    override def zipSchema(left: Schema[(A, B, C)], right: Schema[Z]): Schema[(A, B, C, Z)] =
       left.zip(right).transform((zip _).tupled, unzip)
   }
 
@@ -119,8 +119,8 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
     override def unzip(out: (A, B, C, D, Z)): ((A, B, C, D), Z) =
       ((out._1, out._2, out._3, out._4), out._5)
-    
-    override def zipSchema(left: Schema[(A, B, C, D)], right: Schema[Z]): Schema[(A, B, C, D, Z)] = 
+
+    override def zipSchema(left: Schema[(A, B, C, D)], right: Schema[Z]): Schema[(A, B, C, D, Z)] =
       left.zip(right).transform((zip _).tupled, unzip)
   }
 
@@ -513,7 +513,7 @@ trait ZipperLowPriority3 {
     override def unzip(out: (A, B)): (A, B) =
       out
 
-    override def zipSchema(left: Schema[A], right: Schema[B]): Schema[(A, B)] = 
+    override def zipSchema(left: Schema[A], right: Schema[B]): Schema[(A, B)] =
       left.zip(right).transform((zip _).tupled, unzip)
   }
 }
