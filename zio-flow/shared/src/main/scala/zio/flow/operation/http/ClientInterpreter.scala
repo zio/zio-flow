@@ -100,7 +100,7 @@ private[http] object ClientInterpreter {
       case Query.SingleParam(name, _) =>
         state.addQuery(name, params.toString)
       case Query.Optional(p) =>
-        params match {
+        params.asInstanceOf[Option[Any]] match {
           case Some(params) =>
             parseQuery(p, state)(params)
           case None =>
@@ -127,7 +127,7 @@ private[http] object ClientInterpreter {
             parseHeaders(right, state)(b)
         }
       case Header.Optional(headers) =>
-        params match {
+        params.asInstanceOf[Option[Any]] match {
           case Some(params) =>
             parseHeaders(headers, state)(params)
           case None =>

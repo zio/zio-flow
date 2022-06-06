@@ -81,7 +81,7 @@ object API {
   /**
    * Creates an API with the given method and path.
    */
-  private def method[Params](method: HttpMethod, path: Path[Params] = ""): API[Params, Unit] =
+  private def method[Params](method: HttpMethod, path: Path[Params]): API[Params, Unit] =
     API(method, path, Schema[Unit])
 
 }

@@ -1,8 +1,7 @@
 package zio.flow.examples
 
 import zio.flow._
-import zio.schema.{DeriveSchema, Schema}
-import zio.{Scope, ZIO, ZIOAppArgs}
+import zio.schema.Schema
 import zio.flow.operation.http.API
 import zio.flow.operation.http._
 
