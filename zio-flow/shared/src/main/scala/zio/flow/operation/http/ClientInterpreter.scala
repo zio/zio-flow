@@ -28,7 +28,7 @@ private[http] object ClientInterpreter {
     private var body: Option[Chunk[Byte]]            = None
 
     def addPath(path: String): Unit =
-      pathBuilder.addAll(path)
+      pathBuilder ++= path
 
     def addQuery(key: String, value: String): Option[String] =
       query.put(key, value)
