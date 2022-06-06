@@ -1,11 +1,8 @@
 package zio.flow
 
-import zio.flow
 import zio.schema.{DeriveSchema, Schema}
 import zio.ZNothing
 import zio.test._
-
-import java.net.URI
 
 import zio.flow.operation.http
 
