@@ -57,31 +57,31 @@ object API {
   /**
    * Creates an API for DELETE request at the given path.
    */
-  def delete[A](path: Path[A]): API[A, Unit] =
+  def delete[A](path: Path[A] = ""): API[A, Unit] =
     method(HttpMethod.DELETE, path)
 
   /**
    * Creates an API for a GET request at the given path.
    */
-  def get[A](path: Path[A]): API[A, Unit] =
+  def get[A](path: Path[A] = ""): API[A, Unit] =
     method(HttpMethod.GET, path)
 
   /**
    * Creates an API for a POST request at the given path.
    */
-  def post[A](path: Path[A]): API[A, Unit] =
+  def post[A](path: Path[A] = ""): API[A, Unit] =
     method(HttpMethod.POST, path)
 
   /**
    * Creates an API for a PUT request at the given path.
    */
-  def put[A](path: Path[A]): API[A, Unit] =
+  def put[A](path: Path[A] = ""): API[A, Unit] =
     method(HttpMethod.PUT, path)
 
   /**
    * Creates an API with the given method and path.
    */
-  private def method[Params](method: HttpMethod, path: Path[Params]): API[Params, Unit] =
+  private def method[Params](method: HttpMethod, path: Path[Params] = ""): API[Params, Unit] =
     API(method, path, Schema[Unit])
 
 }
