@@ -162,8 +162,7 @@ object Body {
 }
 
 /**
- * QUERY PARAMS
- * ============
+ * =QUERY PARAMS=
  */
 sealed trait Query[A] extends RequestInput[A] { self =>
   def ? : Query[Option[A]] = Query.Optional(self)
