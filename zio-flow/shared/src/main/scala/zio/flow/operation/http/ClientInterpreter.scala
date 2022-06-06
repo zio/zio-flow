@@ -30,10 +30,10 @@ private[http] object ClientInterpreter {
     def addPath(path: String): Unit =
       pathBuilder.addAll(path)
 
-    def addQuery(key: String, value: String): Unit =
+    def addQuery(key: String, value: String): Option[String] =
       query.put(key, value)
 
-    def addHeader(key: String, value: String): Unit =
+    def addHeader(key: String, value: String): Option[String] =
       headers.put(key, value)
 
     def setBody(body: Chunk[Byte]): Unit =
@@ -54,7 +54,7 @@ private[http] object ClientInterpreter {
   private[http] def parseUrl[Params](
     requestInput: RequestInput[Params],
     state: RequestState
-  )(params: Params): Unit =
+  )(params: Params): Any =
     requestInput match {
       case RequestInput.ZipWith(left, right, zipper) =>
         zipper.unzip(params) match {
@@ -95,7 +95,7 @@ private[http] object ClientInterpreter {
   private def parseQuery[Params](
     query: Query[Params],
     state: RequestState
-  )(params: Params): Unit =
+  )(params: Params): Any =
     query match {
       case Query.SingleParam(name, _) =>
         state.addQuery(name, params.toString)
@@ -118,7 +118,7 @@ private[http] object ClientInterpreter {
   private def parseHeaders[Params](
     headers: Header[Params],
     state: RequestState
-  )(params: Params): Unit =
+  )(params: Params): Any =
     headers match {
       case Header.ZipWith(left, right, zipper) =>
         zipper.unzip(params) match {
