@@ -36,13 +36,7 @@ object RequestInput {
     right: RequestInput[B],
     zipper: Zipper.WithOut[A, B, C]
   ) extends RequestInput[C] {
-    lazy val schema: Schema[C] =
-      left.schema
-        .zip(right.schema)
-        .transform(
-          (zipper.zip _).tupled,
-          zipper.unzip
-        )
+    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -113,13 +107,7 @@ object Header {
   private[http] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
       extends Header[C] {
 
-    lazy val schema: Schema[C] =
-      left.schema
-        .zip(right.schema)
-        .transform(
-          (zipper.zip _).tupled,
-          zipper.unzip
-        )
+    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -215,13 +203,7 @@ object Query {
 
   private[http] final case class ZipWith[A, B, C](left: Query[A], right: Query[B], zipper: Zipper.WithOut[A, B, C])
       extends Query[C] {
-    val schema: Schema[C] =
-      left.schema
-        .zip(right.schema)
-        .transform(
-          (zipper.zip _).tupled,
-          zipper.unzip
-        )
+    val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -288,8 +270,8 @@ object Path {
   def schemaCase[A]: Schema.Case[Path[A], RequestInput[A]] =
     Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]])
 
-  private[http] final case class Literal(string: String) extends Path[Any] {
-    lazy val schema: Schema[Any] = Schema.singleton(())
+  private[http] final case class Literal(string: String) extends Path[Unit] {
+    lazy val schema: Schema[Unit] = Schema.singleton(())
   }
 
   object Literal {
@@ -316,12 +298,7 @@ object Path {
 
   private[http] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
       extends Path[C] {
-    lazy val schema: Schema[C] = left.schema
-      .zip(right.schema)
-      .transform(
-        (zipper.zip _).tupled,
-        zipper.unzip
-      )
+    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {

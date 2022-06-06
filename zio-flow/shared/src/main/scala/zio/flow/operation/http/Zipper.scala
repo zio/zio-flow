@@ -7,6 +7,8 @@ trait Zipper[A, B] {
   type Out
   def zip(left: A, right: B): Out
   def unzip(out: Out): (A, B)
+
+  def zipSchema(left: Schema[A], right: Schema[B]): Schema[Out]
 }
 
 object Zipper extends ZipperLowPriority1 {
@@ -33,6 +35,9 @@ object Zipper extends ZipperLowPriority1 {
 
     override def unzip(out: A): (Unit, A) =
       ((), out)
+
+    override def zipSchema(left: Schema[Unit], right: Schema[A]): Schema[A] = 
+      right
   }
 
   def zipperLeftIdentitySchemaCase[A, B, C]: Schema.Case[ZipperLeftIdentity[Any], Zipper.WithOut[A, B, C]] =
@@ -69,6 +74,8 @@ trait ZipperLowPriority1 extends ZipperLowPriority2 {
 
     override def unzip(out: A): (A, Unit) =
       (out, ())
+
+    override def zipSchema(left: Schema[A], right: Schema[Unit]): Schema[A] = left
   }
 }
 
@@ -84,6 +91,9 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
     override def unzip(out: (A, B, Z)): ((A, B), Z) =
       ((out._1, out._2), out._3)
+    
+    override def zipSchema(left: Schema[(A, B)], right: Schema[Z]): Schema[(A, B, Z)] = 
+      left.zip(right).transform((zip _).tupled, unzip)
   }
 
   implicit def zipper4[A, B, C, Z]: Zipper.WithOut[(A, B, C), Z, (A, B, C, Z)] = Zipper4[A, B, C, Z]()
@@ -95,6 +105,9 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
     override def unzip(out: (A, B, C, Z)): ((A, B, C), Z) =
       ((out._1, out._2, out._3), out._4)
+
+    override def zipSchema(left: Schema[(A, B, C)], right: Schema[Z]): Schema[(A, B, C, Z)] = 
+      left.zip(right).transform((zip _).tupled, unzip)
   }
 
   implicit def zipper5[A, B, C, D, Z]: Zipper.WithOut[(A, B, C, D), Z, (A, B, C, D, Z)] = Zipper5[A, B, C, D, Z]()
@@ -106,6 +119,9 @@ trait ZipperLowPriority2 extends ZipperLowPriority3 {
 
     override def unzip(out: (A, B, C, D, Z)): ((A, B, C, D), Z) =
       ((out._1, out._2, out._3, out._4), out._5)
+    
+    override def zipSchema(left: Schema[(A, B, C, D)], right: Schema[Z]): Schema[(A, B, C, D, Z)] = 
+      left.zip(right).transform((zip _).tupled, unzip)
   }
 
   // implicit def Zipper6[A, B, C, D, E, Z]: Zipper.WithOut[(A, B, C, D, E), Z, (A, B, C, D, E, Z)] =
@@ -496,5 +512,8 @@ trait ZipperLowPriority3 {
 
     override def unzip(out: (A, B)): (A, B) =
       out
+
+    override def zipSchema(left: Schema[A], right: Schema[B]): Schema[(A, B)] = 
+      left.zip(right).transform((zip _).tupled, unzip)
   }
 }
