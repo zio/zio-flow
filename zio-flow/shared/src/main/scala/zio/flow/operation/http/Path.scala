@@ -72,10 +72,10 @@ sealed trait Header[A] extends RequestInput[A] {
 }
 
 object Header {
-  def AcceptEncoding: Header[String] = string("Accept-Encoding")
-  def UserAgent: Header[String]      = string("User-Agent")
-  def Host: Header[String]           = string("Host")
-  def Accept: Header[String]         = string("Accept")
+  lazy val AcceptEncoding: Header[String] = string("Accept-Encoding")
+  lazy val UserAgent: Header[String]      = string("User-Agent")
+  lazy val Host: Header[String]           = string("Host")
+  lazy val Accept: Header[String]         = string("Accept")
 
   def string(name: String): Header[String] = SingleHeader(name, Schema[String])
 
