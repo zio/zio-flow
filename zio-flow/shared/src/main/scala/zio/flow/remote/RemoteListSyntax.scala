@@ -36,8 +36,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       Remote
         .UnCons(self.widen[List[A]])
         .widen[Option[(A, List[A])]]
-        .fold(Nil, (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
-    (num > Remote(0)).ifThenElse(ifTrue, Nil)
+        .fold(List.empty[A], (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
+    (num > Remote(0)).ifThenElse(ifTrue, List.empty[A])
   }
 
   def takeWhile(
@@ -49,7 +49,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       .fold(
         Remote[List[A]](Nil),
         (tuple: Remote[(A, List[A])]) =>
-          predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Nil)
+          predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), List.empty[A])
       )
 
   def drop(num: Remote[Int])(implicit schemaA: Schema[A]): Remote[List[A]] = {
@@ -57,7 +57,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       Remote
         .UnCons(self)
         .widen[Option[(A, List[A])]]
-        .fold(Nil, (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
+        .fold(List.empty[A], (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
 
     (num > Remote(0)).ifThenElse(ifTrue, self)
   }
@@ -78,13 +78,13 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def headOption1(implicit schemaA: Schema[A]): Remote[Option[A]] = Remote
     .UnCons(self)
     .widen[Option[(A, List[A])]]
-    .fold[Option[A]](Remote(None), tuple => Remote.RemoteSome(tuple._1))
+    .fold[Option[A]](Remote.none[A], tuple => Remote.RemoteSome(tuple._1))
 
   def headOption(implicit
     schemaA: Schema[A],
     schemaB: Schema[Option[A]]
   ): Remote[Option[A]] =
-    fold[Option[A]](Remote(None))((remoteOptionA, a) =>
+    fold[Option[A]](Remote.none[A])((remoteOptionA, a) =>
       remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.RemoteSome(a))
     )
 

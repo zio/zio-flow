@@ -564,7 +564,6 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { (result: Exit[String, Nothing]) =>
       assert(result)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
     }
-    // TODO: retryUntil, orTry
   )
 
   val suite2 = suite("Restarted flows")(
@@ -673,8 +672,27 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
   )
 
+  val suite3 = suite("ZFlow operators")(
+    testFlow("cons") {
+      ZFlow(Remote(1))
+        .map(Remote.Cons(Remote(List.empty[Int]), _))
+    } { result =>
+      assertTrue(result == List(1))
+    },
+    testFlow("foreach") {
+      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    },
+    testFlow("foreachPar") {
+      ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    }
+  )
+
   override def spec =
-    suite("All tests")(suite1, suite2)
+    suite("All tests")(suite1, suite2, suite3)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,

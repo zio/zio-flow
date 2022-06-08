@@ -145,7 +145,7 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
     )
 
   def toSeq(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Seq[B]] =
-    fold(_ => Remote(Nil), b => Remote.Cons(Remote(Nil), b))
+    fold(_ => Remote(List.empty[B]), b => Remote.Cons(Remote(List.empty[B]), b))
 
   def toOption(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Option[B]] =
     fold(_ => Remote[Option[B]](None)(Schema.option(schemaB)), Remote.RemoteSome(_))
