@@ -88,7 +88,7 @@ private[http] object ClientInterpreter {
         }
       case Path.Literal(literal) =>
         state.addPath("/" + literal)
-      case Path.Match(_, _) =>
+      case Path.Match(_) =>
         state.addPath("/" + params.toString)
     }
 

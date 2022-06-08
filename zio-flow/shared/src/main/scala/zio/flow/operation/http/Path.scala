@@ -280,14 +280,12 @@ object Path {
       Schema.Case("Literal", schema, _.asInstanceOf[Literal])
   }
 
-  private[http] final case class Match[A](name: String, schema: Schema[A]) extends Path[A]
+  private[http] final case class Match[A](schema: Schema[A]) extends Path[A]
 
   object Match {
-    def schema[A]: Schema[Match[A]] = Schema.CaseClass2[String, FlowSchemaAst, Match[A]](
-      Schema.Field("name", Schema[String]),
+    def schema[A]: Schema[Match[A]] = Schema.CaseClass1[FlowSchemaAst, Match[A]](
       Schema.Field("schema", FlowSchemaAst.schema),
-      (name, schema) => Match(name, schema.toSchema[A]),
-      _.name,
+      schema => Match(schema.toSchema[A]),
       m => FlowSchemaAst.fromSchema(m.schema)
     )
 
