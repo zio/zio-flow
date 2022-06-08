@@ -13,10 +13,17 @@ import java.math.BigInteger
 package object http {
 
   // Paths
-  val string: Path[String]   = Path.Match(Schema[String])
-  val int: Path[Int]         = Path.Match(Schema[Int])
-  val boolean: Path[Boolean] = Path.Match(Schema[Boolean])
-  val uuid: Path[UUID]       = Path.Match(Schema[UUID])
+  val string: Path[String]         = Path.Match(Schema[String])
+  val boolean: Path[Boolean]       = Path.Match(Schema[Boolean])
+  val short: Path[Short]           = Path.Match(Schema[Short])
+  val int: Path[Int]               = Path.Match(Schema[Int])
+  val long: Path[Long]             = Path.Match(Schema[Long])
+  val float: Path[Float]           = Path.Match(Schema[Float])
+  val double: Path[Double]         = Path.Match(Schema[Double])
+  val char: Path[Char]             = Path.Match(Schema[Char])
+  val bigDecimal: Path[BigDecimal] = Path.Match(Schema[BigDecimal])
+  val bigInteger: Path[BigInteger] = Path.Match(Schema[BigInteger])
+  val uuid: Path[UUID]             = Path.Match(Schema[UUID])
 
   // Query Params
   def string(name: String): Query[String]         = Query.SingleParam(name, Schema[String])
