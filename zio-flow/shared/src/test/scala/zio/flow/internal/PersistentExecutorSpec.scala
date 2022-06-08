@@ -8,7 +8,6 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.{dies, equalTo, fails, hasMessage, isNone}
 import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue}
 
-import java.net.URI
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -135,7 +134,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }(
       assert = result => assertTrue(result == 12),
       mock = MockedOperation.Http[Int, Int](
-        urlMatcher = equalTo(new URI("testUrlForActivity.com")),
+        urlMatcher = equalTo("testUrlForActivity.com"),
         methodMatcher = equalTo("GET"),
         result = () => 12
       )
@@ -322,14 +321,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         mock =
           // First run (with input=1)
           MockedOperation.Http(
-            urlMatcher = equalTo(new URI("http://activity1")),
+            urlMatcher = equalTo("http://activity1"),
             methodMatcher = equalTo("GET"),
             inputMatcher = equalTo(1),
             result = () => 100,
             duration = 2.seconds
           ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity2")),
+              urlMatcher = equalTo("http://activity2"),
               methodMatcher = equalTo("POST"),
               inputMatcher = equalTo(1),
               result = () => 200,
@@ -337,33 +336,33 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
             ) ++
             // Revert
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity2/undo")),
+              urlMatcher = equalTo("http://activity2/undo"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(200),
               result = () => -2
             ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity1/undo/1")),
+              urlMatcher = equalTo("http://activity1/undo/1"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(100),
               result = () => -1
             ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity1/undo/2")),
+              urlMatcher = equalTo("http://activity1/undo/2"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(100),
               result = () => -11
             ) ++
             // Second run (with input=2)
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity1")),
+              urlMatcher = equalTo("http://activity1"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(2),
               result = () => 100,
               duration = 10.millis
             ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity2")),
+              urlMatcher = equalTo("http://activity2"),
               methodMatcher = equalTo("POST"),
               inputMatcher = equalTo(2),
               result = () => 200,
@@ -421,26 +420,26 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         mock =
           // First run
           MockedOperation.Http(
-            urlMatcher = equalTo(new URI("http://activity1")),
+            urlMatcher = equalTo("http://activity1"),
             methodMatcher = equalTo("GET"),
             inputMatcher = equalTo(1),
             result = () => 100
           ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity2")),
+              urlMatcher = equalTo("http://activity2"),
               methodMatcher = equalTo("POST"),
               inputMatcher = equalTo(1),
               result = () => 200
             ) ++
             // Revert
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity2/undo")),
+              urlMatcher = equalTo("http://activity2/undo"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(200),
               result = () => -2
             ) ++
             MockedOperation.Http(
-              urlMatcher = equalTo(new URI("http://activity1/undo")),
+              urlMatcher = equalTo("http://activity1/undo"),
               methodMatcher = equalTo("GET"),
               inputMatcher = equalTo(100),
               result = () => -1
