@@ -12,7 +12,7 @@ import java.net.URI
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-
+import zio.flow.operation.http.API
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private val unit: Unit = ()
@@ -23,11 +23,8 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       "Test Activity",
       "Mock activity created for test",
       Operation.Http[Int, Int](
-        new URI("testUrlForActivity.com"),
-        "GET",
-        Map.empty[String, String],
-        Schema[Int],
-        Schema[Int]
+        "testUrlForActivity.com",
+        API.get("").input[Int].output[Int]
       ),
       ZFlow.succeed(12),
       ZFlow.unit
@@ -268,21 +265,21 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         val activity1Undo1 = Activity(
           "activity1Undo1",
           "activity1Undo1",
-          Operation.Http(new URI("http://activity1/undo/1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity1/undo/1", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.unit
         )
         val activity1Undo2 = Activity(
           "activity1Undo2",
           "activity1Undo2",
-          Operation.Http(new URI("http://activity1/undo/2"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity1/undo/2", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.unit
         )
         val activity2Undo = Activity(
           "activity2Undo",
           "activity2Undo",
-          Operation.Http(new URI("http://activity2/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.unit
         )
@@ -290,14 +287,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         val activity1 = Activity(
           "activity1",
           "activity1",
-          Operation.Http(new URI("http://activity1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.input[Int].flatMap(n => activity1Undo1(n) *> activity1Undo2(n)).unit
         )
         val activity2 = Activity(
           "activity2",
           "activity2",
-          Operation.Http(new URI("http://activity2"), "POST", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
         )
@@ -381,14 +378,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         val activity1Undo = Activity(
           "activity1Undo",
           "activity1Undo",
-          Operation.Http(new URI("http://activity1/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity1/undo", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.unit
         )
         val activity2Undo = Activity(
           "activity2Undo",
           "activity2Undo",
-          Operation.Http(new URI("http://activity2/undo"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.unit
         )
@@ -396,14 +393,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         val activity1 = Activity(
           "activity1",
           "activity1",
-          Operation.Http(new URI("http://activity1"), "GET", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.input[Int].flatMap(n => activity1Undo(n)).unit
         )
         val activity2 = Activity(
           "activity2",
           "activity2",
-          Operation.Http(new URI("http://activity2"), "POST", Map.empty, Schema[Int], Schema[Int]),
+          Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
           ZFlow.succeed(0),
           ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
         )
