@@ -3,7 +3,7 @@ package zio.flow.serialization
 import zio.flow.{Remote, ZFlow}
 import zio.schema.ast.SchemaAst.{Dynamic, FailNode, Lineage, Value}
 import zio.schema.ast.{NodePath, SchemaAst}
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
+import zio.schema.{CaseSet, DeriveSchema, Schema}
 import zio.{Chunk, ChunkBuilder}
 
 import scala.annotation.{nowarn, tailrec}
