@@ -679,6 +679,16 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == List(1))
     },
+    testFlow("fold") {
+      ZFlow
+        .succeed(1)
+        .foldFlow(
+          (_: Remote[ZNothing]) => ZFlow.succeed("failed"),
+          (_: Remote[Int]) => ZFlow.succeed("succeeded")
+        )
+    } { res =>
+      assertTrue(res == "succeeded")
+    },
     testFlow("foreach") {
       ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
     } { res =>

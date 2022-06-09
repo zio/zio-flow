@@ -3,7 +3,7 @@ package zio.flow.serialization
 import zio.flow.{Remote, ZFlow}
 import zio.schema.ast.SchemaAst.{Dynamic, FailNode, Lineage, Value}
 import zio.schema.ast.{NodePath, SchemaAst}
-import zio.schema.{CaseSet, DeriveSchema, Schema}
+import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 import zio.{Chunk, ChunkBuilder}
 
 import scala.annotation.{nowarn, tailrec}
@@ -281,7 +281,8 @@ object FlowSchemaAst {
         Schema.chunk(materialize(itemAst, refs))
       case FlowSchemaAst.Dictionary(keyAst, valueAst, _, _) =>
         Schema.MapSchema(materialize(keyAst, refs), materialize(valueAst, refs), Chunk.empty)
-      case ast => Schema.Fail(s"AST cannot be materialized to a Schema:\n$ast")
+      case ast =>
+        ast.toSchema
     }
 
     refs += ast.path -> baseSchema
