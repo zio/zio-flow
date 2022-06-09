@@ -3,7 +3,6 @@ package zio.flow.mock
 import zio.flow.Operation
 import zio.test.Assertion.anything
 
-import java.net.URI
 import zio._
 import zio.flow.mock.MockedOperation.Match
 
