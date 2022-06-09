@@ -79,6 +79,12 @@ object API {
     method(HttpMethod.PUT, path)
 
   /**
+   * Creates an API for a PATCH request at the given path.
+   */
+  def patch[A](path: Path[A] = ""): API[A, Unit] =
+    method(HttpMethod.PATCH, path)
+
+  /**
    * Creates an API with the given method and path.
    */
   private def method[Params](method: HttpMethod, path: Path[Params]): API[Params, Unit] =

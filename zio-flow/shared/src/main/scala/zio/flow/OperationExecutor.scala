@@ -43,6 +43,7 @@ case class OperationExecutorImpl() extends OperationExecutor[EventLoopGroup with
     operation: Operation[I, A]
   ): ZIO[EventLoopGroup with ChannelFactory, ActivityError, A] =
     operation match {
-      case Http(host, api) => api.call(host)(input).mapError(e => ActivityError(e.getMessage(), Option(e)))
+      case Http(host, api) =>
+        api.call(host)(input).mapError(e => ActivityError(s"Failed ${api.method} request to $host", Option(e)))
     }
 }

@@ -72,10 +72,10 @@ sealed trait Header[A] extends RequestInput[A] {
 }
 
 object Header {
-  def AcceptEncoding: Header[String] = string("Accept-Encoding")
-  def UserAgent: Header[String]      = string("User-Agent")
-  def Host: Header[String]           = string("Host")
-  def Accept: Header[String]         = string("Accept")
+  lazy val AcceptEncoding: Header[String] = string("Accept-Encoding")
+  lazy val UserAgent: Header[String]      = string("User-Agent")
+  lazy val Host: Header[String]           = string("Host")
+  lazy val Accept: Header[String]         = string("Accept")
 
   def string(name: String): Header[String] = SingleHeader(name, Schema[String])
 
@@ -280,14 +280,12 @@ object Path {
       Schema.Case("Literal", schema, _.asInstanceOf[Literal])
   }
 
-  private[http] final case class Match[A](name: String, schema: Schema[A]) extends Path[A]
+  private[http] final case class Match[A](schema: Schema[A]) extends Path[A]
 
   object Match {
-    def schema[A]: Schema[Match[A]] = Schema.CaseClass2[String, FlowSchemaAst, Match[A]](
-      Schema.Field("name", Schema[String]),
+    def schema[A]: Schema[Match[A]] = Schema.CaseClass1[FlowSchemaAst, Match[A]](
       Schema.Field("schema", FlowSchemaAst.schema),
-      (name, schema) => Match(name, schema.toSchema[A]),
-      _.name,
+      schema => Match(schema.toSchema[A]),
       m => FlowSchemaAst.fromSchema(m.schema)
     )
 
