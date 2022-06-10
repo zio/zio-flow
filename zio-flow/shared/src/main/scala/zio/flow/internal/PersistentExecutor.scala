@@ -27,6 +27,8 @@ import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import scala.annotation.nowarn
+import zio.stm.TMap
+import zio.stm.ZSTM
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
@@ -34,7 +36,7 @@ final case class PersistentExecutor(
   durableLog: DurableLog,
   kvStore: KeyValueStore,
   opExec: OperationExecutor[Any],
-  workflows: Ref[Map[FlowId, PersistentExecutor.RuntimeState[_, _]]]
+  workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]]
 ) extends ZFlowExecutor {
 
   import PersistentExecutor._
@@ -88,8 +90,12 @@ final case class PersistentExecutor(
                               }
                               .runCollect
       _ <- ZIO.foreachDiscard(deserializedStates) { case (id, state) =>
-             ZIO.log(s"Restarting $id") *>
-               run(state).orDie
+             for {
+               promise <- Promise.make[Nothing, PersistentExecutor.RuntimeState]
+               _       <- ZIO.log(s"Restarting $id")
+               _       <- workflows.put(id, promise).commit
+               _       <- run(state, promise)
+             } yield ()
            }
     } yield ()
 
@@ -100,46 +106,51 @@ final case class PersistentExecutor(
     watchPosition: Index,
     flow: ZFlow[Any, E, A]
   ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] =
-    workflows.get.flatMap { runningWorkflows =>
-      runningWorkflows.get(id) match {
-        case Some(runtimeState) =>
-          ZIO.logInfo(s"Flow $id is already running").as(runtimeState.result)
+    for {
+      newPromise <- Promise.make[Nothing, PersistentExecutor.RuntimeState]
+      promise <- workflows
+                   .get(id)
+                   .flatMap(ZSTM.fromOption(_))
+                   .catchAll(_ => workflows.put(id, newPromise).as(newPromise))
+                   .commit
+      result <- if (promise != newPromise) {
+                  ZIO.logInfo(s"Flow $id is already running") *> promise.await.map(_.result)
+                } else {
+                  val durablePromise =
+                    DurablePromise.make[Either[Throwable, DynamicValue], FlowResult](FlowId.unwrap(id + "_result"))
 
-        case None =>
-          val durablePromise =
-            DurablePromise.make[Either[Throwable, DynamicValue], FlowResult](FlowId.unwrap(id + "_result"))
-
-          loadState(id)
-            .map(
-              _.getOrElse(
-                State(
-                  id = id,
-                  parentStack = parentStack,
-                  lastTimestamp = lastTimestamp,
-                  current = flow,
-                  stack = Nil,
-                  result = durablePromise,
-                  envStack = Nil,
-                  transactionStack = Nil,
-                  tempVarCounter = 0,
-                  promiseIdCounter = 0,
-                  forkCounter = 0,
-                  transactionCounter = 0,
-                  status = PersistentWorkflowStatus.Running,
-                  watchedVariables = Set.empty,
-                  watchPosition = watchPosition
-                )
-              ).asInstanceOf[State[E, A]]
-            )
-            .flatMap { state =>
-              run(state)
-            }
-      }
-    }
+                  loadState(id)
+                    .map(
+                      _.getOrElse(
+                        State(
+                          id = id,
+                          parentStack = parentStack,
+                          lastTimestamp = lastTimestamp,
+                          current = flow,
+                          stack = Nil,
+                          result = durablePromise,
+                          envStack = Nil,
+                          transactionStack = Nil,
+                          tempVarCounter = 0,
+                          promiseIdCounter = 0,
+                          forkCounter = 0,
+                          transactionCounter = 0,
+                          status = PersistentWorkflowStatus.Running,
+                          watchedVariables = Set.empty,
+                          watchPosition = watchPosition
+                        )
+                      ).asInstanceOf[State[E, A]]
+                    )
+                    .flatMap { state =>
+                      run(state, promise)
+                    }
+                }
+    } yield result
 
   private def run[E, A](
-    state: State[E, A]
-  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] = {
+    state: State[E, A],
+    promise: Promise[_, PersistentExecutor.RuntimeState]
+  ): ZIO[Any, Nothing, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] = {
     import zio.flow.ZFlow._
 
     def step(
@@ -766,9 +777,9 @@ final case class PersistentExecutor(
                               .unit
                         }
                  _ <- deleteState(state.id).orDie
-               } yield ()).ensuring(workflows.update(_ - state.id)).fork
+               } yield ()).ensuring(workflows.delete(state.id).commit).fork
       runtimeState = PersistentExecutor.RuntimeState(state.result, fiber)
-      _           <- workflows.update(_ + (state.id -> runtimeState))
+      _           <- promise.succeed(runtimeState)
       _           <- startGate.succeed(())
     } yield state.result
   }
@@ -898,11 +909,11 @@ final case class PersistentExecutor(
 
   private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
     for {
-      _           <- ZIO.log(s"Interrupting flow $id")
-      workflowMap <- workflows.get
-      result <- workflowMap.get(id) match {
+      _     <- ZIO.log(s"Interrupting flow $id")
+      state <- workflows.get(id).commit
+      result <- state match {
                   case Some(runtimeState) =>
-                    runtimeState.fiber.interrupt.as(true)
+                    runtimeState.await.flatMap(_.fiber.interrupt.as(true))
                   case None =>
                     ZIO.succeed(false)
                 }
@@ -990,7 +1001,7 @@ object PersistentExecutor {
       for {
         durableLog <- ZIO.service[DurableLog]
         kvStore    <- ZIO.service[KeyValueStore]
-        ref        <- Ref.make[Map[FlowId, PersistentExecutor.RuntimeState[_, _]]](Map.empty)
+        ref        <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
         execEnv     = ExecutionEnvironment(serializer, deserializer)
       } yield PersistentExecutor(execEnv, durableLog, kvStore, opEx, ref)
     }
@@ -1362,7 +1373,7 @@ object PersistentExecutor {
       )
   }
 
-  final case class RuntimeState[E, A](
+  final case class RuntimeState(
     result: DurablePromise[Either[Throwable, DynamicValue], FlowResult],
     fiber: Fiber[Nothing, Unit]
   )
