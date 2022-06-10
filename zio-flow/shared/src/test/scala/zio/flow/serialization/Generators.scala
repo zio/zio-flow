@@ -669,7 +669,7 @@ trait Generators extends DefaultJavaTimeSchemas {
                   )
     } yield ZFlow.Iterate[Any, Nothing, Int](initial, iterate.evaluated, predicate.evaluated)
 
-  lazy val genHttpApiPath: Gen[Sized, http.Path[Any]] =
+  lazy val genHttpApiSinglePath: Gen[Sized, http.Path[Any]] =
     Gen.oneOf(
       Gen.const(http.string.asInstanceOf[http.Path[Any]]),
       Gen.const(http.int.asInstanceOf[http.Path[Any]]),
@@ -678,7 +678,14 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.string.map(s => http.stringToPath(s).asInstanceOf[http.Path[Any]])
     )
 
-  lazy val genHttpApiQuery: Gen[Sized, http.Query[Any]] =
+  lazy val genHttpApiPath: Gen[Sized, http.Path[(Any, Any, Any)]] =
+    for {
+      a <- genHttpApiSinglePath
+      b <- genHttpApiSinglePath
+      c <- genHttpApiSinglePath
+    } yield a / b / c
+
+  lazy val genHttpApiSingleQuery: Gen[Sized, http.Query[Any]] =
     Gen.string.flatMap { paramName =>
       Gen.oneOf(
         Gen.const(http.string(paramName).asInstanceOf[http.Query[Any]]),
@@ -687,12 +694,26 @@ trait Generators extends DefaultJavaTimeSchemas {
       )
     }
 
-  lazy val genHttpApiHeader: Gen[Sized, http.Header[Any]] =
+  lazy val genHttpApiQuery: Gen[Sized, http.Query[(Any, Any, Any)]] =
+    for {
+      a <- genHttpApiSingleQuery
+      b <- genHttpApiSingleQuery
+      c <- genHttpApiSingleQuery
+    } yield a ++ b ++ c
+
+  lazy val genHttpApiSingleHeader: Gen[Sized, http.Header[Any]] =
     Gen.string.flatMap { paramName =>
       Gen.oneOf(
         Gen.const(http.Header.string(paramName).asInstanceOf[http.Header[Any]])
       )
     }
+
+  lazy val genHttpApiHeader: Gen[Sized, http.Header[(Any, Any, Any)]] =
+    for {
+      a <- genHttpApiSingleHeader
+      b <- genHttpApiSingleHeader
+      c <- genHttpApiSingleHeader
+    } yield a ++ b ++ c
 
   lazy val genOperationHttp: Gen[Sized, Operation.Http[Any, Any]] =
     for {
