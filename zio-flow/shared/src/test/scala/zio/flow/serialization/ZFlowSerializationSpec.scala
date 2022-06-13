@@ -4,15 +4,15 @@ import zio.ZIO
 import zio.flow.ZFlow
 import zio.schema.Schema
 import zio.schema.ast.SchemaAst
-import zio.schema.codec.{Codec, JsonCodec}
+import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
 
 object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
   override def spec: Spec[TestEnvironment, Any] =
     suite("ZFlow serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec)
-        // equalityWithCodec(ProtobufCodec) // TODO: fix
+        equalityWithCodec(JsonCodec),
+        equalityWithCodec(ProtobufCodec)
       ),
       test("ZFlow schema is serializable") {
         val schema             = ZFlow.schema[Any, Any, Any]

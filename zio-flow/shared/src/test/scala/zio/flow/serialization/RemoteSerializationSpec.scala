@@ -2,7 +2,7 @@ package zio.flow.serialization
 
 import zio.flow._
 import zio.schema.ast.SchemaAst
-import zio.schema.codec.{Codec, JsonCodec}
+import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 import zio.{ZIO, ZLayer, ZNothing}
@@ -13,12 +13,12 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
   override def spec: Spec[TestEnvironment, Any] =
     suite("Remote serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec)
-        // equalityWithCodec(ProtobufCodec) // TODO: fix
+        equalityWithCodec(JsonCodec),
+        equalityWithCodec(ProtobufCodec)
       ),
       suite("roundtrip evaluation")(
-        evalWithCodec(JsonCodec)
-        //      evalWithCodec(ProtobufCodec) // TODO: fix
+        evalWithCodec(JsonCodec),
+        evalWithCodec(ProtobufCodec)
       ),
       test("Remote schema is serializable") {
         val schema             = Remote.schemaAny

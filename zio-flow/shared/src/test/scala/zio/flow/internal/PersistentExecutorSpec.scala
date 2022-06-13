@@ -499,6 +499,26 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == 100)
     },
+    testFlow("unwrap twice") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.succeed(ZFlow.succeed(10)))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
+    },
+    testFlow("nested unwrap") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.unwrap(ZFlow.succeed(ZFlow.succeed(10))))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
+    },
     test("fork/await") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
@@ -679,7 +699,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == List(1))
     },
-    testFlow("fold") {
+    testFlow("zflow fold") {
       ZFlow
         .succeed(1)
         .foldFlow(
@@ -689,16 +709,65 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { res =>
       assertTrue(res == "succeeded")
     },
-    testFlow("foreach") {
-      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
+    testFlow("list fold") {
+      ZFlow.succeed(
+        Remote(List(1, 2, 3))
+          .fold(Remote(0))(_ + _)
+      )
     } { res =>
-      assertTrue(res == List.range(1, 10))
+      assertTrue(res == 6)
     },
-    testFlow("foreachPar") {
-      ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
+    testFlow("list fold zflows, ignore accumulator") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (_, n) =>
+            ZFlow.succeed(n)
+          }
+      }
     } { res =>
-      assertTrue(res == List.range(1, 10))
-    }
+      assertTrue(res == 3)
+    },
+    testFlow("list fold zflows, ignore elem") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (acc, _) =>
+            acc
+          }
+      }
+    } { res =>
+      assertTrue(res == 0)
+    },
+    testFlow("XX unwrap list fold zflows") {
+      val foldedFlow = Remote(List(1, 2))
+        .fold(ZFlow.succeed(0)) { case (flow, n) =>
+          flow.flatMap { prevFlow =>
+            ZFlow.unwrap(prevFlow).map(_ + n)
+          }
+        }
+      println(new String(zio.schema.codec.JsonCodec.encode(Remote.schemaAny)(foldedFlow).toArray))
+      ZFlow.unwrap {
+        foldedFlow
+      }
+    } { res =>
+      assertTrue(res == 6)
+    },
+    testFlow("unwrap list manually fold zflows") {
+      ZFlow.unwrap {
+        ZFlow.unwrap(Remote(ZFlow.unwrap(Remote(ZFlow.succeed(0))).map(_ + 1))).map(_ + 2)
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+//    testFlow("foreach") {
+//      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
+//    } { res =>
+//      assertTrue(res == List.range(1, 10))
+//    },
+//    testFlow("foreachPar") {
+//      ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
+//    } { res =>
+//      assertTrue(res == List.range(1, 10))
+//    }
   )
 
   override def spec =

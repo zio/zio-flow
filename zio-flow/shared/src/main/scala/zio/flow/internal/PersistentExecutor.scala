@@ -162,7 +162,7 @@ final case class PersistentExecutor(
 
         val scope         = updatedState.scope
         val remoteContext = ZLayer(RemoteContext.persistent(scope))
-        ZIO.logDebug(s"onSuccess in scope ${scope} with value ${value}") *>
+        ZIO.logDebug(s"onSuccess in scope ${scope} with value {value}") *> // TODO: restore
           remoteContext {
             updatedState.stack match {
               case Nil =>
@@ -849,12 +849,13 @@ final case class PersistentExecutor(
             ZIO.succeed(Chunk.empty)
         }
 
-      _ <-
-        ZIO
-          .logInfo(
-            s"Persisting changes to ${modifiedVariables.size} remote variables\n(${modifiedVariables.mkString(", ")})"
-          )
-          .when(modifiedVariables.nonEmpty)
+      // TODO: restore
+//      _ <-
+//        ZIO
+//          .logInfo(
+//            s"Persisting changes to ${modifiedVariables.size} remote variables\n(${modifiedVariables.mkString(", ")})"
+//          )
+//          .when(modifiedVariables.nonEmpty)
 
       remoteContext = recordingContext.commitContext
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (name, value) =>
