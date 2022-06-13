@@ -34,7 +34,11 @@ object Mappable {
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[B]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.RemoteSome(ab(a))).evaluated)
+      Remote.FoldOption(
+        fa,
+        Remote[Option[B]](None),
+        RemoteFunction((a: Remote[A]) => Remote.RemoteSome(ab(a))).evaluated
+      )
 
     override def performFilter[A: Schema](
       fa: Remote[Option[A]],
@@ -42,15 +46,15 @@ object Mappable {
     ): Remote[Option[A]] =
       Remote.FoldOption(
         fa,
-        Remote(None),
-        RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote(None))).evaluated
+        Remote[Option[A]](None),
+        RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote[Option[A]](None))).evaluated
       )
 
     override def performFlatmap[A: Schema, B: Schema](
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[Option[B]]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), RemoteFunction(ab).evaluated)
+      Remote.FoldOption(fa, Remote[Option[B]](None), RemoteFunction(ab).evaluated)
   }
 
   implicit case object MappableList extends Mappable[List] {
@@ -58,7 +62,7 @@ object Mappable {
     override def performMap[A: Schema, B: Schema](fa: Remote[List[A]], ab: Remote[A] => Remote[B]): Remote[List[B]] =
       Remote.Fold(
         fa,
-        Remote(Nil),
+        Remote[List[B]](Nil),
         RemoteFunction((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2))).evaluated
       )
 
@@ -68,7 +72,7 @@ object Mappable {
     ): Remote[List[A]] =
       Remote.Fold(
         fa,
-        Remote(Nil),
+        Remote[List[A]](Nil),
         RemoteFunction((tuple: Remote[(List[A], A)]) =>
           predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
         ).evaluated
@@ -78,7 +82,11 @@ object Mappable {
       fa: Remote[List[A]],
       ab: Remote[A] => Remote[List[B]]
     ): Remote[List[B]] =
-      Remote.Fold(fa, Remote(Nil), RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)).evaluated)
+      Remote.Fold(
+        fa,
+        Remote[List[B]](Nil),
+        RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)).evaluated
+      )
   }
 
 }
