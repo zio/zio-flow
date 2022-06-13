@@ -8,17 +8,18 @@ import zio.test._
 import zio.{ZIO, ZLayer, ZNothing}
 
 import scala.util.{Failure, Success, Try}
+import zio.schema.codec.ProtobufCodec
 
 object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
   override def spec: Spec[TestEnvironment, Any] =
     suite("Remote serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec)
-        // equalityWithCodec(ProtobufCodec) // TODO: fix
+        equalityWithCodec(JsonCodec),
+        equalityWithCodec(ProtobufCodec)
       ),
       suite("roundtrip evaluation")(
-        evalWithCodec(JsonCodec)
-        //      evalWithCodec(ProtobufCodec) // TODO: fix
+        evalWithCodec(JsonCodec),
+        evalWithCodec(ProtobufCodec)
       ),
       test("Remote schema is serializable") {
         val schema             = Remote.schemaAny
