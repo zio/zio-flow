@@ -73,6 +73,29 @@ final case class DurablePromise[E, A](promiseId: String) {
           .append(Topics.promise(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value)))
           .map(_ == 0L)
     }
+
+  def poll(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Option[Either[E, A]]] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      ZIO.log(s"Polling durable promise $promiseId") *>
+        DurableLog
+          .getAllAvailable(Topics.promise(promiseId), Index(0L))
+          .runHead
+          .flatMap(optData =>
+            ZIO.foreach(optData)(data =>
+              ZIO.log(s"Got durable promise result for $promiseId") *>
+                ZIO
+                  .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
+                  .mapError(msg =>
+                    new IOException(
+                      s"Could not deserialize durable promise [$promiseId]: $msg (from ${new String(data.toArray)})"
+                    )
+                  )
+            )
+          )
+    }
 }
 
 object DurablePromise {
