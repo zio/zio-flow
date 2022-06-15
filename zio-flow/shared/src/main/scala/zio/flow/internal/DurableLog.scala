@@ -25,6 +25,7 @@ import java.io.IOException
 trait DurableLog {
   def append(topic: String, value: Chunk[Byte]): IO[IOException, Index]
   def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
+  def getAllAvailable(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
 }
 
 object DurableLog {
@@ -33,6 +34,9 @@ object DurableLog {
 
   def subscribe(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.subscribe(topic, position))
+
+  def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
+    ZStream.serviceWithStream(_.getAllAvailable(topic, position))
 
   val live: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.scoped {
@@ -74,6 +78,13 @@ object DurableLog {
                 }
             }
           }
+        }
+      }
+
+    def getAllAvailable(topic: String, position: IndexedStore.Index): ZStream[Any, IOException, Chunk[Byte]] =
+      ZStream.unwrap {
+        indexedStore.position(topic).map { current =>
+          indexedStore.scan(topic, position, current)
         }
       }
 
