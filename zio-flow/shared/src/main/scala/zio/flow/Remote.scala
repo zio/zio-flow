@@ -2149,6 +2149,123 @@ object Remote {
       Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
   }
 
+  final case class AsString[A, A1 >: A: Schema](initial: ZIO[RemoteContext, String, A1])(f: A1 => SchemaAndValue[String]) extends Remote[String] {
+    override val schema =
+      Schema.Primitive(StandardType.StringType)
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+      initial.map(f)
+  }
+
+  def asRawString[A, A1 >: A: Schema](initial: ZIO[RemoteContext, String, A1])(f: A1 => String): Remote[String] =
+    AsString(initial)(a => SchemaAndValue.of(f(a)))
+
+  def instantStringRemote[A, A1 >: A: Schema](rem: Remote[A1]): Remote[String] =
+    instantString[A, A1](remoteToString)(rem)
+
+  def instantString[A, A1 >: A: Schema](els: Remote[A1] => Remote[String])(rem: Remote[A1]): Remote[String] =
+    rem match {
+      case InstantFromLongs(s, n) =>
+        asRawString(s.eval[Long] zip n.eval[Long]) {
+          case (ss, nn) =>
+            "(" + ss.toString + " seconds," + nn.toString + " nanoseconds)"
+        }
+      case InstantFromString(s) =>
+        asRawString(s.eval[String])(identity)
+      case InstantToTuple(i) =>
+        asRawString(i.eval[Instant])(i => {
+          "(" + i.getEpochSecond.toString + " epoch seconds," + i.getNano.toString + " nanoseconds)"
+        })
+      case InstantPlusDuration(i, d) =>
+        asRawString(i.eval[Instant] zip d.eval[Duration]) {
+          case (ii, dd) => {
+            val n = ii.plusSeconds(dd.getSeconds).plusNanos(dd.getNano.toLong)
+            "(" + n.getEpochSecond.toString + " epoch seconds," + n.getNano.toString + " nanoseconds)"
+          }
+        }
+      case InstantTruncate(i, t) =>
+        asRawString(i.eval[Instant] zip t.eval[ChronoUnit]) {
+          case (ii, tt) => {
+            val n = ii.truncatedTo(tt)
+            "(" + n.getEpochSecond.toString + " epoch seconds," + n.getNano.toString + " nanoseconds)"
+          }
+        }
+      case _ =>
+        els(rem)
+    }
+
+  def durationStringRemote[A, A1 >: A: Schema](rem: Remote[A1]): Remote[String] =
+    durationString[A, A1](remoteToString)(rem)
+
+  def durationString[A, A1 >: A: Schema](els: Remote[A1] => Remote[String])(rem: Remote[A1]): Remote[String] =
+    rem match {
+      case DurationFromString(s) =>
+        asRawString(s.eval[String])(identity)
+      case DurationBetweenInstants(s, e) =>
+        asRawString(s.eval[Instant] zip e.eval[Instant]) {
+          case (ss, ee) =>
+            "(" + ss.getEpochSecond.toString + " epoch seconds," + ss.getNano.toString + " nanoseconds)" +
+            " <-> " +
+            "(" + ee.getEpochSecond.toString + " epoch seconds," + ee.getNano.toString + " nanoseconds)"
+        }
+      case DurationFromBigDecimal(s) =>
+        asRawString(s.eval[BigDecimal])(_.toString + " seconds")
+      case DurationFromLongs(s, n) =>
+        asRawString(s.eval[Long] zip n.eval[Long]) {
+          case (ss, nn) =>
+            "(" + ss.toString + " seconds," + nn.toString + " nanosecond adjustment)"
+        }
+      case DurationFromAmount(a, t) =>
+        asRawString(a.eval[Long] zip t.eval[ChronoUnit]) {
+          case (aa, tt) =>
+            "(" + aa.toString + " amount," + tt.toString + " temporal unit)"
+        }
+      case DurationToLongs(d) =>
+        asRawString(d.eval[Duration])(d => "duration " + d.toString)
+      case DurationPlusDuration(l, r) =>
+        asRawString(l.eval[Duration] zip r.eval[Duration]) {
+          case (ll, rr) =>
+            "DurationPlusDuration(" + ll.toString + "," + rr.toString + ")"
+        }
+      case DurationMultipliedBy(l, r) =>
+        asRawString(l.eval[Duration] zip r.eval[Long]) {
+          case (ll, rr) =>
+            "DurationMultipliedBy(" + ll.toString + "," + rr.toString + ")"
+        }
+      case _ =>
+        els(rem)
+    }
+
+  def fractionalStringRemote[A, A1 >: A: Schema](rem: Remote[A1]): Remote[String] =
+    fractionalString[A, A1](remoteToString)(rem)
+
+  def fractionalString[A, A1 >: A: Schema](els: Remote[A1] => Remote[String])(rem: Remote[A1]): Remote[String] =
+    rem match {
+      case UnaryFractional(v, _, o) =>
+        asRawString(v.eval[A1])(a => o.show(a.toString))
+      case _ =>
+        els(rem)
+    }
+
+  def numericStringRemote[A, A1 >: A: Schema](rem: Remote[A1]): Remote[String] =
+    numericString[A, A1](remoteToString)(rem)
+
+  def numericString[A, A1 >: A: Schema](els: Remote[A1] => Remote[String])(rem: Remote[A1]): Remote[String] =
+    rem match {
+      case UnaryNumeric(v, _, o) =>
+        asRawString(v.eval[A1])(a => o.show(a.toString))
+      case BinaryNumeric(l, r, _, o) =>
+        asRawString(l.eval[A1] zip r.eval[A1]) {
+          case (a1, a2) =>
+            o.show(a1.toString, a2.toString)
+        }
+      case _ =>
+        els(rem)
+    }
+
+  def remoteToString[A, A1 >: A: Schema](rem: Remote[A1]): Remote[String] =
+    asRawString(rem.eval[A1])(_.toString)
+
   final case class RemoteSome[A](value: Remote[A]) extends Remote[Option[A]] {
     override val schema = Schema.option(value.schema)
 
