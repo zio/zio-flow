@@ -1,9 +1,11 @@
 package zio.flow.remote
 
-import zio.ZLayer
+import zio.{ZIO, ZLayer}
+import zio.flow._
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
-import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue}
+import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue, ZFlow}
 import zio.flow.remote.numeric._
+import zio.prelude.DebugInterpolator
 import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
@@ -206,6 +208,23 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn == SchemaAndValue.fromSchemaAndValue(Schema[TestCaseClass], TestCaseClass("c", 30)),
               typ == TestCaseClass("c", 30)
             )
+
+          test.provide(ZLayer(RemoteContext.inMemory))
+        },
+        test("folded flow") {
+          val remote = Remote(List(1, 2))
+            .fold(ZFlow.succeed(0)) { case (flow, n) =>
+              flow.flatMap { prevFlow =>
+                ZFlow.unwrap(prevFlow).map(_ + n)
+              }
+            }
+
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[ZFlow[Any, Nothing, Int]]
+              _   <- ZIO.debug(ZFlow.prettyPrint(typ))
+            } yield assertTrue(true == true)
 
           test.provide(ZLayer(RemoteContext.inMemory))
         }

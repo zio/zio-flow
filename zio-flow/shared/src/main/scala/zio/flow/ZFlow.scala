@@ -20,8 +20,10 @@ import zio.flow.Remote._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, Schema}
 import zio.ZNothing
+import zio.prelude.{Debug, DebugOps}
 
 import java.time.{Duration, Instant}
+import scala.collection.mutable
 
 // ZFlow - models a workflow
 //  - terminate, either error or value
@@ -819,4 +821,114 @@ object ZFlow {
 
   lazy val schemaAny: Schema[ZFlow[Any, Any, Any]]     = createSchema[Any, Any, Any]
   implicit def schema[R, E, A]: Schema[ZFlow[R, E, A]] = schemaAny.asInstanceOf[Schema[ZFlow[R, E, A]]]
+
+  def prettyPrint[R, E, A](flow: ZFlow[R, E, A]): String = {
+    val builder = new StringBuilder()
+    prettyPrint(flow, builder, indent = 0)
+    builder.toString
+  }
+
+  def prettyPrint[R, E, A](flow: ZFlow[R, E, A], builder: mutable.StringBuilder, indent: Int): Unit = {
+    def nl(i: Int) = {
+      builder.append("\n")
+      builder.append(" " * i)
+    }
+
+    nl(indent)
+    flow match {
+      case Return(value) =>
+        builder.append("return (")
+        Remote.prettyPrint(value, builder, indent)
+        builder.append(")")
+      case Now =>
+        builder.append("now")
+      case WaitTill(time) =>
+        builder.append("waitTill (")
+        Remote.prettyPrint(time, builder, indent)
+        builder.append(")")
+      case Read(svar, schema) =>
+        builder.append("read (")
+        Remote.prettyPrint(svar, builder, indent)
+        builder.append(")")
+      case Modify(svar, f) =>
+        builder.append("modify ")
+        Remote.prettyPrint(svar, builder, indent)
+        builder.append(" with ")
+        Remote.prettyPrint(f, builder, indent)
+      case Fold(value, ifError, ifSuccess) =>
+        builder.append("fold\n")
+        prettyPrint(value, builder, indent + 2)
+        nl(indent + 2)
+        builder.append("ifError ")
+        Remote.prettyPrint(ifError, builder, indent + 2)
+        nl(indent + 2)
+        builder.append("ifSuccess ")
+        Remote.prettyPrint(ifSuccess, builder, indent + 2)
+      case Log(message) =>
+        builder.append("log ")
+        Remote.prettyPrint(message, builder, indent)
+      case RunActivity(input, activity) =>
+        builder.append("run ")
+        builder.append(activity.toString)
+        builder.append(" with ")
+        Remote.prettyPrint(input, builder, indent)
+      case Transaction(workflow) =>
+        builder.append("transaction")
+        prettyPrint(workflow, builder, indent + 2)
+      case Input() =>
+        builder.append("input")
+      case Ensuring(flow, finalizer) =>
+        builder.append("ensuring")
+        prettyPrint(flow, builder, indent + 2)
+        builder.append("with finalizer")
+        prettyPrint(finalizer, builder, indent + 2)
+      case Unwrap(remote) =>
+        builder.append("unwrap ")
+        Remote.prettyPrint(remote, builder, indent)
+      case UnwrapRemote(remote) =>
+        builder.append("unwrap remote")
+        Remote.prettyPrint(remote, builder, indent)
+      case Fork(flow) =>
+        builder.append("fork")
+        prettyPrint(flow, builder, indent + 2)
+      case Timeout(flow, duration) =>
+        builder.append("timeout ")
+        Remote.prettyPrint(duration, builder, indent)
+        prettyPrint(flow, builder, indent + 2)
+      case Provide(value, flow) =>
+        builder.append("provide ")
+        Remote.prettyPrint(value, builder, indent)
+        prettyPrint(flow, builder, indent + 2)
+      case Die =>
+        builder.append("die")
+      case RetryUntil =>
+        builder.append("retry")
+      case OrTry(left, right) =>
+        builder.append("try")
+        prettyPrint(left, builder, indent + 2)
+        builder.append("or")
+        prettyPrint(right, builder, indent + 2)
+      case Await(exFlow) =>
+        builder.append("await ")
+        Remote.prettyPrint(exFlow, builder, indent)
+      case Interrupt(exFlow) =>
+        builder.append("interrupt ")
+        Remote.prettyPrint(exFlow, builder, indent)
+      case Fail(error) =>
+        builder.append("fail ")
+        Remote.prettyPrint(error, builder, indent)
+      case NewVar(name, initial) =>
+        builder.append("newvar ")
+        builder.append(name)
+        builder.append(" with initial value ")
+        Remote.prettyPrint(initial, builder, indent)
+      case Iterate(initial, step, predicate) =>
+        builder.append("iterate from ")
+        Remote.prettyPrint(initial, builder, indent)
+        builder.append(" by ")
+        Remote.prettyPrint(step, builder, indent)
+        builder.append(" while ")
+        Remote.prettyPrint(predicate, builder, indent)
+    }
+  }
 }

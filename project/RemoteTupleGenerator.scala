@@ -85,7 +85,7 @@ object RemoteTupleGenerator extends AutoPlugin {
                        )
             } yield result
 
-            ..${model.paramVals}
+          ..${model.paramVals}
           }
        """
     }
@@ -156,12 +156,19 @@ object RemoteTupleGenerator extends AutoPlugin {
       val constructStaticType        = Type.Select(implName, Type.Name("ConstructStatic"))
       val appliedConstructType       = Type.Apply(constructType, model.typeParamTypes)
       val appliedConstructStaticType = Type.Apply(constructStaticType, List(typ))
+      val substitutions = model.typeParamTypes.zipWithIndex.map { case (t, i) =>
+        q"""${Term.Name(s"t${i + 1}")}.substitute(variable, value)"""
+      }
 
       List(
         q"""
       final case class $typ[..${model.typeParams}](..${model.paramDefs})
         extends Remote[${model.appliedTupleType}]
-        with ${Init(appliedConstructType, Name.Anonymous(), Nil)}
+        with ${Init(appliedConstructType, Name.Anonymous(), Nil)} {
+        
+          def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[${model.appliedTupleType}] =
+            $name(..$substitutions)
+        }
       """,
         q"""
       object $name extends ${Init(appliedConstructStaticType, Name.Anonymous(), Nil)} {

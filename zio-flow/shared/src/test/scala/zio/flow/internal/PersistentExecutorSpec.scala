@@ -757,7 +757,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       }
     } { res =>
       assertTrue(res == 3)
-    },
+    }
 //    testFlow("foreach") {
 //      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
 //    } { res =>
