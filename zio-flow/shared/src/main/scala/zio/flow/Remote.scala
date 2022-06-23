@@ -1540,6 +1540,34 @@ object Remote {
       Schema.Case("Length", schema, _.asInstanceOf[Length])
   }
 
+  case class CharAt(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Char]] {
+    override val schema: Schema[Option[Char]] =
+      Schema[Option[Char]]
+
+    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Char]]] = {
+      for {
+        s <- remoteString.eval
+        i <- ix.eval
+      } yield SchemaAndValue.of[Option[Char]](if(i < s.length) Some(s.charAt(i)) else None)
+    }
+  }
+
+  object CharAt {
+    val schema: Schema[CharAt] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[String], Remote[Int], CharAt](
+          Schema.Field("string", Remote.schema[String]),
+          Schema.Field("index", Remote.schema[Int]),
+          { case (str, ix) => CharAt(str, ix) },
+          _.remoteString,
+          _.ix
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[CharAt, Remote[A]] =
+      Schema.Case("CharAt", schema, _.asInstanceOf[CharAt])
+  }
+
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
     override val schema: Schema[Boolean] = Schema[Boolean]
 
@@ -2381,6 +2409,7 @@ object Remote {
       .:+:(TupleAccess.schemaCase[A])
       .:+:(Branch.schemaCase[A])
       .:+:(Length.schemaCase[A])
+      .:+:(CharAt.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])

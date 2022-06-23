@@ -20,4 +20,6 @@ import zio.flow._
 
 final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def length: Remote[Int] = Remote.Length(self)
+
+  def charAt(ix: Remote[Int]): Remote[Option[Char]] = Remote.CharAt(self, ix)
 }
