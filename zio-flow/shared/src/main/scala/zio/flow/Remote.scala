@@ -1517,55 +1517,903 @@ object Remote {
       Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]])
   }
 
-  case class Length(remoteString: Remote[String]) extends Remote[Int] {
-    override val schema: Schema[Int] = Schema[Int]
+  object StringRemote {
+    case class CharAt(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Char]] {
+      override val schema: Schema[Option[Char]] =
+        Schema[Option[Char]]
 
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
-      remoteString.eval.map { value =>
-        SchemaAndValue.of(value.length)
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Char]]] = {
+        for {
+          s <- remoteString.eval
+          i <- ix.eval
+        } yield SchemaAndValue.of[Option[Char]](if (i >= 0 && i < s.length) Some(s.charAt(i)) else None)
       }
-  }
-
-  object Length {
-    val schema: Schema[Length] = Schema.defer(
-      Remote
-        .schema[String]
-        .transform(
-          Length.apply,
-          _.remoteString
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[Length, Remote[A]] =
-      Schema.Case("Length", schema, _.asInstanceOf[Length])
-  }
-
-  case class CharAt(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Char]] {
-    override val schema: Schema[Option[Char]] =
-      Schema[Option[Char]]
-
-    override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Char]]] = {
-      for {
-        s <- remoteString.eval
-        i <- ix.eval
-      } yield SchemaAndValue.of[Option[Char]](if(i < s.length) Some(s.charAt(i)) else None)
     }
-  }
 
-  object CharAt {
-    val schema: Schema[CharAt] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[String], Remote[Int], CharAt](
-          Schema.Field("string", Remote.schema[String]),
-          Schema.Field("index", Remote.schema[Int]),
-          { case (str, ix) => CharAt(str, ix) },
-          _.remoteString,
-          _.ix
+    object CharAt {
+      val schema: Schema[CharAt] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Int], CharAt](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("index", Remote.schema[Int]),
+            { case (str, ix) => CharAt(str, ix) },
+            _.remoteString,
+            _.ix
+          )
         )
+
+      def schemaCase[A]: Schema.Case[CharAt, Remote[A]] =
+        Schema.Case("CharAt", schema, _.asInstanceOf[CharAt])
+    }
+
+    case class CodePointAt(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Int]] {
+      override val schema: Schema[Option[Int]] =
+        Schema[Option[Int]]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Int]]] = {
+        for {
+          s <- remoteString.eval
+          i <- ix.eval
+        } yield SchemaAndValue.of[Option[Int]](if (i >= 0 && i < s.length) Some(s.codePointAt(i)) else None)
+      }
+    }
+
+    object CodePointAt {
+      val schema: Schema[CodePointAt] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Int], CodePointAt](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("index", Remote.schema[Int]),
+            { case (str, ix) => CodePointAt(str, ix) },
+            _.remoteString,
+            _.ix
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[CodePointAt, Remote[A]] =
+        Schema.Case("CodePointAt", schema, _.asInstanceOf[CodePointAt])
+    }
+
+    case class CodePointBefore(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Int]] {
+      override val schema: Schema[Option[Int]] =
+        Schema[Option[Int]]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Int]]] = {
+        for {
+          s <- remoteString.eval
+          i <- ix.eval
+        } yield SchemaAndValue.of[Option[Int]](if (i >= 0 && i <= s.length) Some(s.codePointBefore(i)) else None)
+      }
+    }
+
+    object CodePointBefore {
+      val schema: Schema[CodePointBefore] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Int], CodePointBefore](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("index", Remote.schema[Int]),
+            { case (str, ix) => CodePointBefore(str, ix) },
+            _.remoteString,
+            _.ix
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[CodePointBefore, Remote[A]] =
+        Schema.Case("CodePointBefore", schema, _.asInstanceOf[CodePointBefore])
+    }
+
+    case class CompareTo(remoteString: Remote[String], other: Remote[String]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Int](s.compareTo(t))
+      }
+    }
+
+    object CompareTo {
+      val schema: Schema[CompareTo] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], CompareTo](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => CompareTo(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[CompareTo, Remote[A]] =
+        Schema.Case("CompareTo", schema, _.asInstanceOf[CompareTo])
+    }
+
+    case class CompareToIgnoreCase(remoteString: Remote[String], other: Remote[String]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Int](s.compareToIgnoreCase(t))
+      }
+    }
+
+    object CompareToIgnoreCase {
+      val schema: Schema[CompareToIgnoreCase] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], CompareToIgnoreCase](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => CompareToIgnoreCase(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[CompareToIgnoreCase, Remote[A]] =
+        Schema.Case("CompareToIgnoreCase", schema, _.asInstanceOf[CompareToIgnoreCase])
+    }
+
+    case class Concat(remoteString: Remote[String], other: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[String](s.concat(t))
+      }
+    }
+
+    object Concat {
+      val schema: Schema[Concat] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Concat](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => Concat(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Concat, Remote[A]] =
+        Schema.Case("CompareToIgnoreCase", schema, _.asInstanceOf[Concat])
+    }
+
+    case class Contains(remoteString: Remote[String], other: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Boolean](s.contains(t))
+      }
+    }
+
+    object Contains {
+      val schema: Schema[Contains] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Contains](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => Contains(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Contains, Remote[A]] =
+        Schema.Case("Contains", schema, _.asInstanceOf[Contains])
+    }
+
+    case class ContentEquals(remoteString: Remote[String], other: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Boolean](s.contentEquals(t))
+      }
+    }
+
+    object ContentEquals {
+      val schema: Schema[ContentEquals] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], ContentEquals](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => ContentEquals(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[ContentEquals, Remote[A]] =
+        Schema.Case("ContentEquals", schema, _.asInstanceOf[ContentEquals])
+    }
+
+    case class EndsWith(remoteString: Remote[String], other: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Boolean](s.endsWith(t))
+      }
+    }
+
+    object EndsWith {
+      val schema: Schema[EndsWith] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], EndsWith](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => EndsWith(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[EndsWith, Remote[A]] =
+        Schema.Case("EndsWith", schema, _.asInstanceOf[EndsWith])
+    }
+
+    case class Equal(remoteString: Remote[String], other: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Boolean](s.equals(t))
+      }
+    }
+
+    object Equal {
+      val schema: Schema[Equal] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Equal](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => Equal(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Equal, Remote[A]] =
+        Schema.Case("Equal", schema, _.asInstanceOf[Equal])
+    }
+
+    case class EqualsIgnoreCase(remoteString: Remote[String], other: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Boolean](s.equalsIgnoreCase(t))
+      }
+    }
+
+    object EqualsIgnoreCase {
+      val schema: Schema[EqualsIgnoreCase] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], EqualsIgnoreCase](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => EqualsIgnoreCase(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[EqualsIgnoreCase, Remote[A]] =
+        Schema.Case("EqualsIgnoreCase", schema, _.asInstanceOf[EqualsIgnoreCase])
+    }
+
+    case class IndexOf(remoteString: Remote[String], character: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- character.eval
+        } yield SchemaAndValue.of[Int](s.indexOf(t))
+      }
+    }
+
+    object IndexOf {
+      val schema: Schema[IndexOf] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Int], IndexOf](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("character", Remote.schema[Int]),
+            { case (str, character) => IndexOf(str, character) },
+            _.remoteString,
+            _.character
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[IndexOf, Remote[A]] =
+        Schema.Case("IndexOf", schema, _.asInstanceOf[IndexOf])
+    }
+
+    case class IndexOfFromIndex(remoteString: Remote[String], character: Remote[Int], fromIndex: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- character.eval
+          f <- fromIndex.eval
+        } yield SchemaAndValue.of[Int](s.indexOf(t, f))
+      }
+    }
+
+    object IndexOfFromIndex {
+      val schema: Schema[IndexOfFromIndex] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[Int], Remote[Int], IndexOfFromIndex](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("character", Remote.schema[Int]),
+            Schema.Field("fromIndex", Remote.schema[Int]),
+            { case (str, character, fi) => IndexOfFromIndex(str, character, fi) },
+            _.remoteString,
+            _.character,
+            _.fromIndex
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[IndexOfFromIndex, Remote[A]] =
+        Schema.Case("IndexOfFromIndex", schema, _.asInstanceOf[IndexOfFromIndex])
+    }
+
+    case class IndexOfString(remoteString: Remote[String], other: Remote[String]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Int](s.indexOf(t))
+      }
+    }
+
+    object IndexOfString {
+      val schema: Schema[IndexOfString] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], IndexOfString](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => IndexOfString(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[IndexOfString, Remote[A]] =
+        Schema.Case("IndexOfString", schema, _.asInstanceOf[IndexOfString])
+    }
+
+    case class IndexOfStringFromIndex(remoteString: Remote[String], other: Remote[String], fromIndex: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+          f <- fromIndex.eval
+        } yield SchemaAndValue.of[Int](s.indexOf(t, f))
+      }
+    }
+
+    object IndexOfStringFromIndex {
+      val schema: Schema[IndexOfStringFromIndex] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[Int], IndexOfStringFromIndex](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            Schema.Field("fromIndex", Remote.schema[Int]),
+            { case (str, other, fr) => IndexOfStringFromIndex(str, other, fr) },
+            _.remoteString,
+            _.other,
+            _.fromIndex
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[IndexOfStringFromIndex, Remote[A]] =
+        Schema.Case("IndexOfStringFromIndex", schema, _.asInstanceOf[IndexOfStringFromIndex])
+    }
+
+    case class IsEmpty(remoteString: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+        } yield SchemaAndValue.of[Boolean](s.isEmpty)
+      }
+    }
+
+    object IsEmpty {
+      val schema: Schema[IsEmpty] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            IsEmpty.apply,
+            _.remoteString
+          )
       )
 
-    def schemaCase[A]: Schema.Case[CharAt, Remote[A]] =
-      Schema.Case("CharAt", schema, _.asInstanceOf[CharAt])
+      def schemaCase[A]: Schema.Case[IsEmpty, Remote[A]] =
+        Schema.Case("IsEmpty", schema, _.asInstanceOf[IsEmpty])
+    }
+
+    case class LastIndexOf(remoteString: Remote[String], character: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- character.eval
+        } yield SchemaAndValue.of[Int](s.lastIndexOf(t))
+      }
+    }
+
+    object LastIndexOf {
+      val schema: Schema[LastIndexOf] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Int], LastIndexOf](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("character", Remote.schema[Int]),
+            { case (str, character) => LastIndexOf(str, character) },
+            _.remoteString,
+            _.character
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[LastIndexOf, Remote[A]] =
+        Schema.Case("LastIndexOf", schema, _.asInstanceOf[LastIndexOf])
+    }
+
+    case class LastIndexOfFromIndex(remoteString: Remote[String], character: Remote[Int], fromIndex: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- character.eval
+          f <- fromIndex.eval
+        } yield SchemaAndValue.of[Int](s.lastIndexOf(t, f))
+      }
+    }
+
+    object LastIndexOfFromIndex {
+      val schema: Schema[LastIndexOfFromIndex] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[Int], Remote[Int], LastIndexOfFromIndex](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("character", Remote.schema[Int]),
+            Schema.Field("fromIndex", Remote.schema[Int]),
+            { case (str, character, fi) => LastIndexOfFromIndex(str, character, fi) },
+            _.remoteString,
+            _.character,
+            _.fromIndex
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[LastIndexOfFromIndex, Remote[A]] =
+        Schema.Case("LastIndexOfFromIndex", schema, _.asInstanceOf[LastIndexOfFromIndex])
+    }
+
+    case class LastIndexOfString(remoteString: Remote[String], other: Remote[String]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+        } yield SchemaAndValue.of[Int](s.lastIndexOf(t))
+      }
+    }
+
+    object LastIndexOfString {
+      val schema: Schema[LastIndexOfString] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], LastIndexOfString](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, other) => LastIndexOfString(str, other) },
+            _.remoteString,
+            _.other
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[LastIndexOfString, Remote[A]] =
+        Schema.Case("LastIndexOfString", schema, _.asInstanceOf[LastIndexOfString])
+    }
+
+    case class LastIndexOfStringFromIndex(remoteString: Remote[String], other: Remote[String], fromIndex: Remote[Int]) extends Remote[Int] {
+      override val schema: Schema[Int] =
+        Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] = {
+        for {
+          s <- remoteString.eval
+          t <- other.eval
+          f <- fromIndex.eval
+        } yield SchemaAndValue.of[Int](s.lastIndexOf(t, f))
+      }
+    }
+
+    object LastIndexOfStringFromIndex {
+      val schema: Schema[LastIndexOfStringFromIndex] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[Int], LastIndexOfStringFromIndex](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            Schema.Field("fromIndex", Remote.schema[Int]),
+            { case (str, other, fr) => LastIndexOfStringFromIndex(str, other, fr) },
+            _.remoteString,
+            _.other,
+            _.fromIndex
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[LastIndexOfStringFromIndex, Remote[A]] =
+        Schema.Case("LastIndexOfStringFromIndex", schema, _.asInstanceOf[LastIndexOfStringFromIndex])
+    }
+
+    case class Length(remoteString: Remote[String]) extends Remote[Int] {
+      override val schema: Schema[Int] = Schema[Int]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Int]] =
+        remoteString.eval.map { value =>
+          SchemaAndValue.of(value.length)
+        }
+    }
+
+    object Length {
+      val schema: Schema[Length] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            Length.apply,
+            _.remoteString
+          )
+      )
+
+      def schemaCase[A]: Schema.Case[Length, Remote[A]] =
+        Schema.Case("Length", schema, _.asInstanceOf[Length])
+    }
+
+    case class Matches(remoteString: Remote[String], regex: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] = {
+        for {
+          s <- remoteString.eval
+          t <- regex.eval
+        } yield SchemaAndValue.of[Boolean](s.matches(t))
+      }
+    }
+
+    object Matches {
+      val schema: Schema[Matches] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Matches](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("regex", Remote.schema[String]),
+            { case (str, rx) => Matches(str, rx) },
+            _.remoteString,
+            _.regex
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Matches, Remote[A]] =
+        Schema.Case("Matches", schema, _.asInstanceOf[Matches])
+    }
+
+    case class OffsetByCodePoints(remoteString: Remote[String], ix: Remote[Int], cpo: Remote[Int]) extends Remote[Option[Int]] {
+      override val schema: Schema[Option[Int]] =
+        Schema[Option[Int]]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Option[Int]]] = {
+        for {
+          s <- remoteString.eval
+          t <- ix.eval
+          c <- cpo.eval
+          r = try {
+            Some(s.offsetByCodePoints(t, c))
+          } catch {
+            case e: IndexOutOfBoundsException =>
+              None
+          }
+        } yield SchemaAndValue.of[Option[Int]](r)
+      }
+    }
+
+    object OffsetByCodePoints {
+      val schema: Schema[OffsetByCodePoints] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[Int], Remote[Int], OffsetByCodePoints](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("index", Remote.schema[Int]),
+            Schema.Field("codePointOffset", Remote.schema[Int]),
+            { case (str, i, c) => OffsetByCodePoints(str, i, c) },
+            _.remoteString,
+            _.ix,
+            _.cpo
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[OffsetByCodePoints, Remote[A]] =
+        Schema.Case("OffsetByCodePoints", schema, _.asInstanceOf[OffsetByCodePoints])
+    }
+
+    case class RegionMatches(remoteString: Remote[String], ignoreCase: Remote[Boolean], toffset: Remote[Int], other: Remote[String], ooffset: Remote[Int], len: Remote[Int]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+        for {
+          s <- remoteString.eval
+          i <- ignoreCase.eval
+          t <- toffset.eval
+          r <- other.eval
+          o <- ooffset.eval
+          l <- len.eval
+        } yield SchemaAndValue.of[Boolean](s.regionMatches(i, t, r, o, l))
+    }
+
+    object RegionMatches {
+      val schema: Schema[RegionMatches] =
+        Schema.defer(
+          Schema.CaseClass6[Remote[String], Remote[Boolean], Remote[Int], Remote[String], Remote[Int], Remote[Int], RegionMatches](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("ignoreCase", Remote.schema[Boolean]),
+            Schema.Field("toffset", Remote.schema[Int]),
+            Schema.Field("other", Remote.schema[String]),
+            Schema.Field("ooffset", Remote.schema[Int]),
+            Schema.Field("len", Remote.schema[Int]),
+            { case (str, i, t, r, o, l) => RegionMatches(str, i, t, r, o, l) },
+            _.remoteString,
+            _.ignoreCase,
+            _.toffset,
+            _.other,
+            _.ooffset,
+            _.len
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[RegionMatches, Remote[A]] =
+        Schema.Case("RegionMatches", schema, _.asInstanceOf[RegionMatches])
+    }
+
+    case class ReplaceChar(remoteString: Remote[String], oldChar: Remote[Char], newChar: Remote[Char]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          o <- oldChar.eval
+          n <- newChar.eval
+        } yield SchemaAndValue.of[String](s.replace(o, n))
+    }
+
+    object ReplaceChar {
+      val schema: Schema[ReplaceChar] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[Char], Remote[Char], ReplaceChar](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("oldChar", Remote.schema[Char]),
+            Schema.Field("newChar", Remote.schema[Char]),
+            { case (str, o, n) => ReplaceChar(str, o, n) },
+            _.remoteString,
+            _.oldChar,
+            _.newChar
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[ReplaceChar, Remote[A]] =
+        Schema.Case("ReplaceChar", schema, _.asInstanceOf[ReplaceChar])
+    }
+
+    case class ReplaceString(remoteString: Remote[String], target: Remote[String], replacement: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          t <- target.eval
+          r <- replacement.eval
+        } yield SchemaAndValue.of[String](s.replace(t, r))
+    }
+
+    object ReplaceString {
+      val schema: Schema[ReplaceString] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[String], ReplaceString](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("target", Remote.schema[String]),
+            Schema.Field("replacement", Remote.schema[String]),
+            { case (str, t, r) => ReplaceString(str, t, r) },
+            _.remoteString,
+            _.target,
+            _.replacement
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[ReplaceString, Remote[A]] =
+        Schema.Case("ReplaceString", schema, _.asInstanceOf[ReplaceString])
+    }
+
+    case class ReplaceAll(remoteString: Remote[String], regex: Remote[String], replacement: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          t <- regex.eval
+          r <- replacement.eval
+        } yield SchemaAndValue.of[String](s.replaceAll(t, r))
+    }
+
+    object ReplaceAll {
+      val schema: Schema[ReplaceAll] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[String], ReplaceAll](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("regex", Remote.schema[String]),
+            Schema.Field("replacement", Remote.schema[String]),
+            { case (str, t, r) => ReplaceAll(str, t, r) },
+            _.remoteString,
+            _.regex,
+            _.replacement
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[ReplaceAll, Remote[A]] =
+        Schema.Case("ReplaceAll", schema, _.asInstanceOf[ReplaceAll])
+    }
+
+    case class ReplaceFirst(remoteString: Remote[String], regex: Remote[String], replacement: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          t <- regex.eval
+          r <- replacement.eval
+        } yield SchemaAndValue.of[String](s.replaceFirst(t, r))
+    }
+
+    object ReplaceFirst {
+      val schema: Schema[ReplaceFirst] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[String], ReplaceFirst](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("regex", Remote.schema[String]),
+            Schema.Field("replacement", Remote.schema[String]),
+            { case (str, t, r) => ReplaceFirst(str, t, r) },
+            _.remoteString,
+            _.regex,
+            _.replacement
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[ReplaceFirst, Remote[A]] =
+        Schema.Case("ReplaceFirst", schema, _.asInstanceOf[ReplaceFirst])
+    }
+
+    case class StartsWith(remoteString: Remote[String], prefix: Remote[String]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+        for {
+          s <- remoteString.eval
+          r <- prefix.eval
+        } yield SchemaAndValue.of[Boolean](s.startsWith(r))
+    }
+
+    object StartsWith {
+      val schema: Schema[StartsWith] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], StartsWith](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("prefix", Remote.schema[String]),
+            { case (str, r) => StartsWith(str, r) },
+            _.remoteString,
+            _.prefix,
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[StartsWith, Remote[A]] =
+        Schema.Case("StartsWith", schema, _.asInstanceOf[StartsWith])
+    }
+
+    case class StartsWithOffset(remoteString: Remote[String], prefix: Remote[String], toffset: Remote[Int]) extends Remote[Boolean] {
+      override val schema: Schema[Boolean] =
+        Schema[Boolean]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[Boolean]] =
+        for {
+          s <- remoteString.eval
+          r <- prefix.eval
+          o <- toffset.eval
+        } yield SchemaAndValue.of[Boolean](s.startsWith(r, o))
+    }
+
+    object StartsWithOffset {
+      val schema: Schema[StartsWithOffset] =
+        Schema.defer(
+          Schema.CaseClass3[Remote[String], Remote[String], Remote[Int], StartsWithOffset](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("prefix", Remote.schema[String]),
+            Schema.Field("toffset", Remote.schema[Int]),
+            { case (str, r, o) => StartsWithOffset(str, r, o) },
+            _.remoteString,
+            _.prefix,
+            _.toffset
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[StartsWithOffset, Remote[A]] =
+        Schema.Case("StartsWithOffset", schema, _.asInstanceOf[StartsWithOffset])
+    }
+
+    case class Trim(remoteString: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] = Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        remoteString.eval.map { value =>
+          SchemaAndValue.of(value.trim)
+        }
+    }
+
+    object Trim {
+      val schema: Schema[Trim] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            Trim.apply,
+            _.remoteString
+          )
+      )
+
+      def schemaCase[A]: Schema.Case[Trim, Remote[A]] =
+        Schema.Case("Trim", schema, _.asInstanceOf[Trim])
+    }
+
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
@@ -2408,8 +3256,8 @@ object Remote {
       .:+:(Tuple22.schemaCase[A])
       .:+:(TupleAccess.schemaCase[A])
       .:+:(Branch.schemaCase[A])
-      .:+:(Length.schemaCase[A])
-      .:+:(CharAt.schemaCase[A])
+      .:+:(StringRemote.Length.schemaCase[A])
+      .:+:(StringRemote.CharAt.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])

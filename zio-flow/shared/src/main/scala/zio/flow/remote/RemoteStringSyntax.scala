@@ -19,7 +19,95 @@ package zio.flow.remote
 import zio.flow._
 
 final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
-  def length: Remote[Int] = Remote.Length(self)
+  import Remote.StringRemote._
 
-  def charAt(ix: Remote[Int]): Remote[Option[Char]] = Remote.CharAt(self, ix)
+  def charAt(ix: Remote[Int]): Remote[Option[Char]] =
+    CharAt(self, ix)
+
+  def codePointAt(ix: Remote[Int]): Remote[Option[Int]] =
+    CodePointAt(self, ix)
+
+  def codepointBefore(ix: Remote[Int]): Remote[Option[Int]] =
+    CodePointBefore(self, ix)
+
+  def compareTo(other: Remote[String]): Remote[Int] =
+    CompareTo(self, other)
+
+  def compareToIgnoreCase(other: Remote[String]): Remote[Int] =
+    CompareToIgnoreCase(self, other)
+
+  def concat(other: Remote[String]): Remote[String] =
+    Concat(self, other)
+
+  def contains(other: Remote[String]): Remote[Boolean] =
+    Contains(self, other)
+
+  def contentEquals(other: Remote[String]): Remote[Boolean] =
+    ContentEquals(self, other)
+
+  def endsWith(other: Remote[String]): Remote[Boolean] =
+    EndsWith(self, other)
+
+  def equal(other: Remote[String]): Remote[Boolean] =
+    Equal(self, other)
+
+  def equalsIgnoreCase(other: Remote[String]): Remote[Boolean] =
+    EqualsIgnoreCase(self, other)
+
+  def indexOf(ch: Remote[Int]): Remote[Int] =
+    IndexOf(self, ch)
+
+  def indexOfFromIndex(ch: Remote[Int], fr: Remote[Int]): Remote[Int] =
+    IndexOfFromIndex(self, ch, fr)
+
+  def indexOfString(st: Remote[String]): Remote[Int] =
+    IndexOfString(self, st)
+
+  def indexOfStringFromIndex(st: Remote[String], fr: Remote[Int]): Remote[Int] =
+    IndexOfStringFromIndex(self, st, fr)
+
+  def isEmpty: Remote[Boolean] =
+    IsEmpty(self)
+
+  def lastIndexOf(ch: Remote[Int]): Remote[Int] =
+    LastIndexOf(self, ch)
+
+  def lastIndexOfFromIndex(ch: Remote[Int], fr: Remote[Int]): Remote[Int] =
+    LastIndexOfFromIndex(self, ch, fr)
+
+  def lastIndexOfStringFromIndex(st: Remote[String], fr: Remote[Int]): Remote[Int] =
+    LastIndexOfStringFromIndex(self, st, fr)
+
+  def length: Remote[Int] =
+    Length(self)
+
+  def matches(rx: Remote[String]): Remote[Boolean] =
+    Matches(self, rx)
+
+  def offsetByCodePoints(ix: Remote[Int], cpo: Remote[Int]): Remote[Option[Int]] =
+    OffsetByCodePoints(self, ix, cpo)
+
+  def regionMatches(ignoreCase: Remote[Boolean], toffset: Remote[Int], other: Remote[String], ooffset: Remote[Int], len: Remote[Int]): Remote[Boolean] =
+    RegionMatches(self, ignoreCase, toffset, other, ooffset, len)
+
+  def replaceChar(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
+    ReplaceChar(self, oldChar, newChar)
+
+  def replaceString(target: Remote[String], replacement: Remote[String]): Remote[String] =
+    ReplaceString(self, target, replacement)
+
+  def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    ReplaceAll(self, regex, replacement)
+
+  def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    ReplaceAll(self, regex, replacement)
+
+  def startsWith(prefix: Remote[String]): Remote[Boolean] =
+    StartsWith(self, prefix)
+
+  def startsWithOffset(prefix: Remote[String], toffset: Remote[Int]): Remote[Boolean] =
+    StartsWithOffset(self, prefix, toffset)
+
+  def trim: Remote[String] =
+    Trim(self)
 }
