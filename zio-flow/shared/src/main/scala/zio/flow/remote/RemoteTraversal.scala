@@ -41,20 +41,20 @@ sealed trait RemoteTraversal[S, A] { self =>
   /**
    * Gets the elements of the specified collection type.
    */
-  def get(s: Remote[S]): Remote[Chunk[A]] =
+  final def get(s: Remote[S]): Remote[Chunk[A]] =
     Remote.TraversalGet(s, self)
 
   /**
    * Sets the elements of the specified collection type to the specified values.
    */
-  def set(s: Remote[S])(as: Remote[Chunk[A]]): Remote[S] =
+  final def set(s: Remote[S])(as: Remote[Chunk[A]]): Remote[S] =
     Remote.TraversalSet(s, as, self)
 
   /**
    * Updates the values of the elements of the specified collection type with
    * the specified function.
    */
-  def update(s: Remote[S])(f: Remote[Chunk[A]] => Remote[Chunk[A]]): Remote[S] =
+  final def update(s: Remote[S])(f: Remote[Chunk[A]] => Remote[Chunk[A]]): Remote[S] =
     set(s)(f(get(s)))
 
   /**
@@ -92,10 +92,10 @@ object RemoteTraversal {
     element: Schema[A]
   ) extends RemoteTraversal[S, A] {
 
-    val schemaPiece: Schema[A] = element
-    val schemaWhole: Schema[S] = collection
+    override val schemaPiece: Schema[A] = element
+    override val schemaWhole: Schema[S] = collection
 
-    def unsafeGet(s: S): Chunk[A] =
+    override def unsafeGet(s: S): Chunk[A] =
       collection.asInstanceOf[Schema.Collection[_, _]] match {
         case sequence @ Schema.Sequence(_, _, _, _, _) =>
           sequence.asInstanceOf[Schema.Sequence[S, A, _]].toChunk(s)
@@ -105,7 +105,7 @@ object RemoteTraversal {
           Chunk.fromIterable(s.asInstanceOf[Set[_]]).asInstanceOf[Chunk[A]]
       }
 
-    def unsafeSet(s: S)(as: Chunk[A]): S =
+    override def unsafeSet(s: S)(as: Chunk[A]): S =
       collection.asInstanceOf[Schema.Collection[_, _]] match {
 
         case sequence @ Schema.Sequence(_, _, _, _, _) =>

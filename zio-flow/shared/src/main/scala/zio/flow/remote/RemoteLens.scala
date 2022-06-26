@@ -42,20 +42,20 @@ sealed trait RemoteLens[S, A] { self =>
   /**
    * Gets the value of the field of the specified product type.
    */
-  def get(s: Remote[S]): Remote[A] =
+  final def get(s: Remote[S]): Remote[A] =
     Remote.LensGet(s, self)
 
   /**
    * Sets the field of the specified product type to the specified value.
    */
-  def set(s: Remote[S])(a: Remote[A]): Remote[S] =
+  final def set(s: Remote[S])(a: Remote[A]): Remote[S] =
     Remote.LensSet(s, a, self)
 
   /**
    * Updates the value of the field of the specified product type with the
    * specified function.
    */
-  def update(s: Remote[S])(f: Remote[A] => Remote[A]): Remote[S] =
+  final def update(s: Remote[S])(f: Remote[A] => Remote[A]): Remote[S] =
     set(s)(f(get(s)))
 
   /**
@@ -93,10 +93,10 @@ object RemoteLens {
     field: Schema.Field[A]
   ) extends RemoteLens[S, A] {
 
-    val schemaPiece: Schema[A] = field.schema
-    val schemaWhole: Schema[S] = product
+    override val schemaPiece: Schema[A] = field.schema
+    override val schemaWhole: Schema[S] = product
 
-    def unsafeGet(s: S): A =
+    override def unsafeGet(s: S): A =
       product.toDynamic(s) match {
         case DynamicValue.Record(values) =>
           values
@@ -112,7 +112,7 @@ object RemoteLens {
           throw new IllegalStateException("Unexpected dynamic value for product type")
       }
 
-    def unsafeSet(a: A)(s: S): S =
+    override def unsafeSet(a: A)(s: S): S =
       product.toDynamic(s) match {
         case DynamicValue.Record(values) =>
           val updated = spliceRecord(values, field.label, field.label -> field.schema.toDynamic(a))

@@ -41,13 +41,13 @@ sealed trait RemotePrism[S, A] { self =>
    * Gets the case of the specified sum type if it exists or returns `None`
    * otherwise.
    */
-  def get(s: Remote[S]): Remote[Option[A]] =
+  final def get(s: Remote[S]): Remote[Option[A]] =
     Remote.PrismGet(s, self)
 
   /**
    * Views the specified case as an instance of the sum type.
    */
-  def set(a: Remote[A]): Remote[S] =
+  final def set(a: Remote[A]): Remote[S] =
     Remote.PrismSet(a, self)
 
   /**
@@ -85,13 +85,13 @@ object RemotePrism {
     term: Schema.Case[A, S]
   ) extends RemotePrism[S, A] {
 
-    val schemaPiece: Schema[A]      = term.codec
-    val schemaWhole: Schema.Enum[S] = product
+    override val schemaPiece: Schema[A]      = term.codec
+    override val schemaWhole: Schema.Enum[S] = product
 
-    def unsafeGet(s: S): Option[A] =
+    override def unsafeGet(s: S): Option[A] =
       term.deconstruct(s)
 
-    def unsafeSet(a: A): S =
+    override def unsafeSet(a: A): S =
       a.asInstanceOf[S]
   }
 }
