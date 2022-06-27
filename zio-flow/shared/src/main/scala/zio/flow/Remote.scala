@@ -2199,6 +2199,12 @@ object Remote {
                             (a: Remote[Int) => Nested(a)
                               -> this cannot be evaluated without an Apply()
                               -> if it has an Apply around then its ok
+
+
+                              other ideas:
+                                - also have a local stack within eval
+                                - support moving out to remote from local on eval boundary if substitution is not done
+                                - do this automatically based on substitution effort? (number of steps, or estimate in Fold(list)?
                            */
 
                           ZIO.debug(s"appliedBody") *>
