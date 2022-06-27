@@ -108,22 +108,42 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def startsWithOffset(prefix: Remote[String], toffset: Remote[Int]): Remote[Boolean] =
     StartsWithOffset(self, prefix, toffset)
 
-  // subSequence/substring/substringEndIndex
-  // toLowerCase(Locale), toUpperCase(Locale)
+  def subsequence(beginIndex: Remote[Int], endIndex: Remote[Int]): Remote[String] =
+    Subsequence(self, beginIndex, endIndex)
+
+  def substring(beginIndex: Remote[Int]): Remote[String] =
+    Substring(self, beginIndex)
+
+  def substringEndIndex(beginIndex: Remote[Int], endIndex: Remote[Int]): Remote[String] =
+    SubstringEndIndex(self, beginIndex, endIndex)
 
   def trim: Remote[String] =
     Trim(self)
 
+  def toList: Remote[List[Char]] =
+    ToList(self)
+
+  def head: Remote[Option[Char]] =
+    Head(self)
+
+  def tail: Remote[Option[String]] =
+    Tail(self)
+
+  def last: Remote[Option[Char]] =
+    Last(self)
+
+  def init: Remote[Option[String]] =
+    Init(self)
+
+  def drop(dropped: Remote[Int]): Remote[String] =
+    Drop(self, dropped)
+
+  def take(taken: Remote[Int]): Remote[String] =
+    Take(self, taken)
+
   /*
   TODO
 
-  toList: String => List[Char]
-  head: String => Option[Char]
-  tail: String => Option[String]
-  init: String => Option[Char]
-  last: String => Option[String]
-
-  drop/take
   dropWhile/takeWhile (?)
   repeat/replicate/iterate
   span/break
