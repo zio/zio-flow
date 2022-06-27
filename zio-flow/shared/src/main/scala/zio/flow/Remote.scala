@@ -2676,6 +2676,52 @@ object Remote {
         Schema.Case("Init", schema, _.asInstanceOf[Init])
     }
 
+    case class Tails(remoteString: Remote[String]) extends Remote[List[String]] {
+      override val schema: Schema[List[String]] = Schema[List[String]]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[String]]] =
+        remoteString.eval.map { value =>
+          SchemaAndValue.of(value.tails.toList)
+        }
+    }
+
+    object Tails {
+      val schema: Schema[Tails] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            Tails.apply,
+            _.remoteString
+          )
+      )
+
+      def schemaCase[A]: Schema.Case[Tails, Remote[A]] =
+        Schema.Case("Tails", schema, _.asInstanceOf[Tails])
+    }
+
+    case class Inits(remoteString: Remote[String]) extends Remote[List[String]] {
+      override val schema: Schema[List[String]] = Schema[List[String]]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[String]]] =
+        remoteString.eval.map { value =>
+          SchemaAndValue.of(value.inits.toList)
+        }
+    }
+
+    object Inits {
+      val schema: Schema[Inits] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            Inits.apply,
+            _.remoteString
+          )
+      )
+
+      def schemaCase[A]: Schema.Case[Inits, Remote[A]] =
+        Schema.Case("Inits", schema, _.asInstanceOf[Inits])
+    }
+
     case class Drop(remoteString: Remote[String], dropped: Remote[Int]) extends Remote[String] {
       override val schema: Schema[String] =
         Schema[String]
@@ -2730,32 +2776,57 @@ object Remote {
         Schema.Case("Take", schema, _.asInstanceOf[Take])
     }
 
-    case class DropWhile(remoteString: Remote[String], predicate: EvaluatedRemoteFunction[Char, Boolean]) extends Remote[String] {
-      override val schema: Schema[String] =
-        Schema[String]
+    case class Zip(remoteString: Remote[String], other: Remote[String]) extends Remote[List[(Char, Char)]] {
+      override val schema: Schema[List[(Char, Char)]] =
+        Schema[List[(Char, Char)]]
 
-      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
-        ???
-        
-        /*
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[(Char, Char)]]] =
         for {
           s <- remoteString.eval
-          r = s.dropWhile(c => predicate.applyRaw(c).eval)
-          t = predicate.applyRaw[Char](???)
-
-        } yield ???
-        */
-
-      /*{
-        remoteString.eval.flatMap { (s: String) =>
-          val g = s.schema
-          val t: Remote[Boolean] = predicate.applyRaw[Char](??? )
-          val rr = Remote.apply[Char](???)
-          val sss: ZIO[RemoteContext,String,SchemaAndValue[String]] = remoteString.evalDynamic
-          ???
-        }
-        */
+          o <- other.eval
+        } yield SchemaAndValue.of[List[(Char, Char)]](s.zip(o).toList)
     }
+
+    object Zip {
+      val schema: Schema[Zip] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Zip](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("other", Remote.schema[String]),
+            { case (str, d) => Zip(str, d) },
+            _.remoteString,
+            _.other,
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Zip, Remote[A]] =
+        Schema.Case("Zip", schema, _.asInstanceOf[Zip])
+    }
+
+    case class Reverse(remoteString: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] = Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        remoteString.eval.map { value =>
+          SchemaAndValue.of[String](value.reverse)
+        }
+    }
+
+    object Reverse {
+      val schema: Schema[Reverse] = Schema.defer(
+        Remote
+          .schema[String]
+          .transform(
+            Reverse.apply,
+            _.remoteString
+          )
+      )
+
+      def schemaCase[A]: Schema.Case[Reverse, Remote[A]] =
+        Schema.Case("Reverse", schema, _.asInstanceOf[Reverse])
+    }
+
+
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {

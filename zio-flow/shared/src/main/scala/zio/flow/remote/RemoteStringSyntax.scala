@@ -135,11 +135,23 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def init: Remote[Option[String]] =
     Init(self)
 
+  def tails: Remote[List[String]] =
+    Tails(self)
+
+  def inits: Remote[List[String]] =
+    Inits(self)
+
   def drop(dropped: Remote[Int]): Remote[String] =
     Drop(self, dropped)
 
   def take(taken: Remote[Int]): Remote[String] =
     Take(self, taken)
+
+  def zip(other: Remote[String]): Remote[List[(Char, Char)]] =
+    Zip(self, other)
+
+  def reverse: Remote[String] =
+    Reverse(self)
 
   /*
   TODO
@@ -147,12 +159,9 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   dropWhile/takeWhile (?)
   repeat/replicate/iterate
   span/break
-  inits/tails
   partition :: (Char => Bool) => String => (String, String)
-  zip :: String => String => List[(String, String)]
   lines/unlines/words/unwords
   intersect
-  reverse
   over: (Char => Char) => String => String
   filter: (Char => Bool) => String => String
   intersperse :: Char => String => String
