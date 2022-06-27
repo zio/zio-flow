@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 import zio.schema.Schema
@@ -26,7 +26,7 @@ final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
   def fold[B](forNone: Remote[B], f: Remote[A] => Remote[B])(implicit
     schemaA: Schema[A]
   ): Remote[B] =
-    Remote.FoldOption(self, forNone, RemoteFunction(f).evaluated)
+    Remote.FoldOption(self, forNone, EvaluatedRemoteFunction.make(f))
 
   def isSome(implicit
     schemaA: Schema[A]

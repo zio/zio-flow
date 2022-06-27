@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.schema.Schema
 
 sealed trait Mappable[F[_]] {
@@ -37,7 +37,7 @@ object Mappable {
       Remote.FoldOption(
         fa,
         Remote[Option[B]](None),
-        RemoteFunction((a: Remote[A]) => Remote.RemoteSome(ab(a))).evaluated
+        EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.RemoteSome(ab(a)))
       )
 
     override def performFilter[A: Schema](
@@ -47,14 +47,14 @@ object Mappable {
       Remote.FoldOption(
         fa,
         Remote[Option[A]](None),
-        RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote.none[A])).evaluated
+        EvaluatedRemoteFunction.make((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote.none[A]))
       )
 
     override def performFlatmap[A: Schema, B: Schema](
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[Option[B]]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote.none[B], RemoteFunction(ab).evaluated)
+      Remote.FoldOption(fa, Remote.none[B], EvaluatedRemoteFunction.make(ab))
   }
 
   implicit case object MappableList extends Mappable[List] {
@@ -63,7 +63,7 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote(List.empty[B]),
-        RemoteFunction((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2))).evaluated
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2)))
       )
 
     override def performFilter[A: Schema](
@@ -73,9 +73,9 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote(List.empty[A]),
-        RemoteFunction((tuple: Remote[(List[A], A)]) =>
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[A], A)]) =>
           predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
-        ).evaluated
+        )
       )
 
     override def performFlatmap[A: Schema, B: Schema](
@@ -85,7 +85,7 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote(List.empty[B]),
-        RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)).evaluated
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2))
       )
   }
 

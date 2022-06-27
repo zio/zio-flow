@@ -2,7 +2,7 @@ package zio.flow
 
 import zio.flow.internal._
 import zio.schema.DynamicValue
-import zio.stm.TMap
+import zio.stm.{TMap, ZSTM}
 import zio.{UIO, ZIO}
 
 import java.io.IOException
@@ -15,16 +15,17 @@ trait RemoteContext {
 }
 
 object RemoteContext {
-  // TODO: mark these variables as temporary and do not persist them
-  def generateFreshVariableName: RemoteVariableName =
-    RemoteVariableName(s"fresh_${UUID.randomUUID()}")
+  def generateFreshVariableName: LocalVariableName =
+    LocalVariableName(UUID.randomUUID())
 
   def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))
   def getVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Option[DynamicValue]] =
     ZIO.serviceWithZIO(_.getVariable(name))
 
-  private final case class InMemory(store: TMap[RemoteVariableName, DynamicValue]) extends RemoteContext {
+  private final case class InMemory(
+    store: TMap[RemoteVariableName, DynamicValue]
+  ) extends RemoteContext {
     override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
       store.put(name, value).commit
 
@@ -38,7 +39,9 @@ object RemoteContext {
   }
 
   def inMemory: ZIO[Any, Nothing, RemoteContext] =
-    TMap.empty[RemoteVariableName, DynamicValue].commit.map(InMemory.apply)
+    (for {
+      vars <- TMap.empty[RemoteVariableName, DynamicValue]
+    } yield InMemory(vars)).commit
 
   private final case class Persistent(
     virtualClock: VirtualClock,

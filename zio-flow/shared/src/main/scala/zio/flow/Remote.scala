@@ -116,7 +116,7 @@ object Remote {
     override def schema = ZFlow.schema[R, E, A]
 
     override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[ZFlow[R, E, A]] =
-      this // TODO: substitute in flow
+      Flow(flow.substitute(variable, value))
   }
 
   object Flow {
@@ -143,7 +143,7 @@ object Remote {
 
     override def schema = Remote.schema[A]
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[ZFlow[A]] =
+    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Remote[A]] =
       Nested(remote.substitute(variable, value))
   }
 
@@ -194,7 +194,7 @@ object Remote {
   object Variable {
     def schema[A]: Schema[Variable[A]] =
       Schema.CaseClass2[RemoteVariableName, FlowSchemaAst, Variable[A]](
-        Schema.Field("identifier", Schema.primitive[String]),
+        Schema.Field("identifier", Schema[RemoteVariableName]),
         Schema.Field("schema", FlowSchemaAst.schema),
         construct = (identifier: RemoteVariableName, s: FlowSchemaAst) =>
           Variable(identifier, s.toSchema.asInstanceOf[Schema[A]]),
@@ -210,7 +210,7 @@ object Remote {
     override val schema: Schema[A] = schemaA
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[A]] =
-      ???
+      ZIO.fail(s"Cannot evaluate local variable ${LocalVariableName.unwrap(identifier)}, it has to be substituted")
 
     override def equals(that: Any): Boolean =
       that match {
@@ -224,18 +224,18 @@ object Remote {
   }
 
   object Local {
-    def schema[A]: Schema[Variable[A]] =
-      Schema.CaseClass2[LocalVariableName, FlowSchemaAst, Variable[A]](
+    def schema[A]: Schema[Local[A]] =
+      Schema.CaseClass2[LocalVariableName, FlowSchemaAst, Local[A]](
         Schema.Field("identifier", Schema[LocalVariableName]),
         Schema.Field("schema", FlowSchemaAst.schema),
         construct =
-          (identifier: LocalVariableName, s: FlowSchemaAst) => Variable(identifier, s.toSchema.asInstanceOf[Schema[A]]),
-        extractField1 = (variable: Variable[A]) => variable.identifier,
-        extractField2 = (variable: Variable[A]) => FlowSchemaAst.fromSchema(variable.schemaA)
+          (identifier: LocalVariableName, s: FlowSchemaAst) => Local(identifier, s.toSchema.asInstanceOf[Schema[A]]),
+        extractField1 = (variable: Local[A]) => variable.identifier,
+        extractField2 = (variable: Local[A]) => FlowSchemaAst.fromSchema(variable.schemaA)
       )
 
-    def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
-      Schema.Case("Local", schema, _.asInstanceOf[Variable[A]])
+    def schemaCase[A]: Schema.Case[Local[A], Remote[A]] =
+      Schema.Case("Local", schema, _.asInstanceOf[Local[A]])
   }
 
   final case class EvaluatedRemoteFunction[A, B] private[flow] (
@@ -258,11 +258,19 @@ object Remote {
   }
 
   object EvaluatedRemoteFunction {
+    def make[A: Schema, B](fn: Remote[A] => Remote[B]): EvaluatedRemoteFunction[A, B] = {
+      val input = Local[A](RemoteContext.generateFreshVariableName, Schema[A])
+      EvaluatedRemoteFunction(
+        input,
+        fn(input)
+      )
+    }
+
     def schema[A, B]: Schema[EvaluatedRemoteFunction[A, B]] =
       Schema.CaseClass2[Local[A], Remote[B], EvaluatedRemoteFunction[A, B]](
         Schema.Field("variable", Local.schema[A]),
         Schema.Field("result", Schema.defer(Remote.schema[B])),
-        EvaluatedRemoteFunction.apply,
+        EvaluatedRemoteFunction.apply(_, _),
         _.input,
         _.result
       )
@@ -277,10 +285,7 @@ object Remote {
     override val schema = f.schema
 
     override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[B]] =
-      a.evalDynamic.flatMap { value =>
-        RemoteContext.setVariable(f.input.identifier, value.value) *>
-          f.evalDynamic
-      }
+      f.substitute(f.input, a).evalDynamic
 
     override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[B] =
       ApplyEvaluatedFunction(
@@ -2945,8 +2950,8 @@ object Remote {
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
-  implicit def capturedRemoteToRemote[A: Schema, B](f: Remote[A] => Remote[B]): RemoteFunction[A, B] =
-    RemoteFunction((a: Remote[A]) => f(a))
+  implicit def capturedRemoteToRemote[A: Schema, B](f: Remote[A] => Remote[B]): EvaluatedRemoteFunction[A, B] =
+    EvaluatedRemoteFunction.make((a: Remote[A]) => f(a))
 
   val unit: Remote[Unit] = Remote.Ignore()
 
@@ -3053,8 +3058,12 @@ object Remote {
       case Ignore() =>
         builder.append("ignore")
       case Variable(identifier, schemaA) =>
-        builder.append("[")
+        builder.append("[[")
         builder.append(RemoteVariableName.unwrap(identifier))
+        builder.append("]]")
+      case Local(identifier, schemaA) =>
+        builder.append("[")
+        builder.append(LocalVariableName.unwrap(identifier))
         builder.append("]")
       case EvaluatedRemoteFunction(input, result) =>
         prettyPrint(input, builder, indent)

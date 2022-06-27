@@ -17,7 +17,7 @@
 package zio.flow.internal
 
 import zio._
-import zio.flow.Remote.{EvaluatedRemoteFunction, RemoteFunction}
+import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
@@ -438,20 +438,20 @@ final case class PersistentExecutor(
             ensuring.resultSchema.asInstanceOf[Schema[ensuring.ValueA]]
           val cont =
             Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
-              RemoteFunction { (e: Remote[ensuring.ValueE]) =>
+              EvaluatedRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
                 (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])(
                   schemaE,
                   Schema[Unit],
                   schemaA
                 )
-              }(schemaE).evaluated,
-              RemoteFunction { (a: Remote[ensuring.ValueA]) =>
+              }(schemaE),
+              EvaluatedRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
                 (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])(
                   schemaE,
                   Schema[Unit],
                   schemaA
                 )
-              }(schemaA).evaluated
+              }(schemaA)
             )
 
           ZIO.succeed(
@@ -1074,10 +1074,12 @@ object PersistentExecutor {
             val compensateAndFail: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                RemoteFunction((error: Remote[ActivityError]) =>
+                EvaluatedRemoteFunction.make((error: Remote[ActivityError]) =>
                   ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
-                ).evaluated,
-                RemoteFunction((_: Remote[Unit]) => ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]).evaluated
+                ),
+                EvaluatedRemoteFunction.make((_: Remote[Unit]) =>
+                  ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]
+                )
               )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
             state.copy(
               current = compensateAndFail
@@ -1093,10 +1095,10 @@ object PersistentExecutor {
             val compensateAndRun: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                RemoteFunction((error: Remote[ActivityError]) =>
+                EvaluatedRemoteFunction.make((error: Remote[ActivityError]) =>
                   ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
-                ).evaluated,
-                RemoteFunction((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]]).evaluated
+                ),
+                EvaluatedRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
               )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
             state.copy(
               current = compensateAndRun,

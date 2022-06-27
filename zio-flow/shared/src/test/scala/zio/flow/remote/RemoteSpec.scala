@@ -168,16 +168,14 @@ object RemoteSpec extends ZIOSpecDefault {
           val remote = Remote.Fold(
             Remote(List(10, 20, 30)),
             Remote(100),
-            Remote
-              .RemoteFunction((tuple: Remote[(Int, Int)]) =>
-                Remote.BinaryNumeric(
-                  Remote.TupleAccess(tuple, 0),
-                  Remote.TupleAccess(tuple, 1),
-                  Numeric.NumericInt,
-                  BinaryNumericOperator.Add
-                )
+            Remote.EvaluatedRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
+              Remote.BinaryNumeric(
+                Remote.TupleAccess(tuple, 0),
+                Remote.TupleAccess(tuple, 1),
+                Numeric.NumericInt,
+                BinaryNumericOperator.Add
               )
-              .evaluated
+            )
           )
           val test =
             for {
@@ -194,11 +192,9 @@ object RemoteSpec extends ZIOSpecDefault {
           val remote = Remote.Fold(
             Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
             Remote(TestCaseClass("d", 40)),
-            Remote
-              .RemoteFunction((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
-                Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
-              )
-              .evaluated
+            Remote.EvaluatedRemoteFunction.make((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
+              Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
+            )
           )
           val test =
             for {

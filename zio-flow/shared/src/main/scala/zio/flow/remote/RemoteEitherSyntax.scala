@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.flow.{Remote, ZFlow}
 import zio.schema.Schema
 
@@ -28,7 +28,7 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
     schemaA: Schema[A],
     schemaB: Schema[B]
   ): Remote[C] =
-    Remote.FoldEither[A, B, C](self, RemoteFunction(left).evaluated, RemoteFunction(right).evaluated)
+    Remote.FoldEither[A, B, C](self, EvaluatedRemoteFunction.make(left), EvaluatedRemoteFunction.make(right))
 
   def handleEitherFlow[R, E: Schema, C: Schema](
     left: Remote[A] => ZFlow[R, E, C],
@@ -45,8 +45,8 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   ): Remote[Either[A1, B1]] =
     Remote.FoldEither[A1, B, Either[A1, B1]](
       self,
-      RemoteFunction((a: Remote[A1]) => Remote.RemoteEither(Left((a, schemaB1)))).evaluated,
-      f.evaluated
+      EvaluatedRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left((a, schemaB1)))),
+      f
     )
 
   def map[B1](
@@ -58,8 +58,8 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   ): Remote[Either[A, B1]] =
     Remote.FoldEither[A, B, Either[A, B1]](
       self,
-      RemoteFunction((a: Remote[A]) => Remote.RemoteEither(Left((a, schemaB1)))).evaluated,
-      RemoteFunction((b: Remote[B]) => Remote.RemoteEither(Right((schemaA, f(b))))).evaluated
+      EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left((a, schemaB1)))),
+      EvaluatedRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right((schemaA, f(b)))))
     )
 
   def flatten[A1 >: A, B1](implicit
@@ -73,8 +73,8 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   def merge(implicit ev: Either[A, B] <:< Either[B, B], schemaB: Schema[B]): Remote[B] =
     Remote.FoldEither[B, B, B](
       self.widen[Either[B, B]],
-      RemoteFunction(identity[Remote[B]]).evaluated,
-      RemoteFunction(identity[Remote[B]]).evaluated
+      EvaluatedRemoteFunction.make(identity[Remote[B]]),
+      EvaluatedRemoteFunction.make(identity[Remote[B]])
     )
 
   def isLeft(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[Boolean] =

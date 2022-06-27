@@ -1,6 +1,6 @@
 package zio.flow.internal
 
-import zio.flow.{RemoteContext, RemoteVariableName}
+import zio.flow.{LocalVariableName, RemoteContext, RemoteVariableName}
 import zio.schema.DynamicValue
 import zio.stm.TMap
 import zio.{Chunk, UIO, ZIO}

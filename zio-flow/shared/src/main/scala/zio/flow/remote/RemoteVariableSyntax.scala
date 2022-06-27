@@ -19,6 +19,7 @@ package zio.flow.remote
 import zio.flow._
 import zio.schema.Schema
 import zio.ZNothing
+import zio.flow.Remote.EvaluatedRemoteFunction
 
 class RemoteVariableSyntax[A](val self: Remote[RemoteVariableReference[A]]) extends AnyVal {
   def get(implicit schema: Schema[A]): ZFlow[Any, ZNothing, A] =
@@ -30,7 +31,7 @@ class RemoteVariableSyntax[A](val self: Remote[RemoteVariableReference[A]]) exte
   def modify[B](
     f: Remote[A] => (Remote[B], Remote[A])
   )(implicit schemaA: Schema[A], schemaB: Schema[B]): ZFlow[Any, ZNothing, B] =
-    ZFlow.Modify(self, Remote.RemoteFunction((a: Remote[A]) => Remote.tuple2(f(a))).evaluated)
+    ZFlow.Modify(self, EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.tuple2(f(a))))
 
   def updateAndGet(f: Remote[A] => Remote[A])(implicit schema: Schema[A]): ZFlow[Any, ZNothing, A] =
     self.modify { (a: Remote[A]) =>
