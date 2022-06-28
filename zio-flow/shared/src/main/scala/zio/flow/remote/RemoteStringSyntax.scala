@@ -153,6 +153,15 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def reverse: Remote[String] =
     Reverse(self)
 
+  def breakOn(o: Char): Remote[List[String]] =
+    BreakOn(self, o)
+
+  def intersperse(o: Char): Remote[String] =
+    Intersperse(self, o)
+
+  def intercalate(o: String): Remote[String] =
+    Intercalate(self, o)
+
   /*
   TODO
 
@@ -160,12 +169,17 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   repeat/replicate/iterate
   span/break
   partition :: (Char => Bool) => String => (String, String)
-  lines/unlines/words/unwords
   intersect
   over: (Char => Char) => String => String
   filter: (Char => Bool) => String => String
-  intersperse :: Char => String => String
-  intercalate :: Char => String => String
 
   */
+
+
+  // derived
+  def lines: Remote[List[String]] =
+    breakOn('\n')
+
+  def words: Remote[List[String]] =
+    breakOn(' ')
 }

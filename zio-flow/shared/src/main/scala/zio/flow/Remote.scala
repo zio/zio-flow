@@ -27,6 +27,7 @@ import java.math.BigDecimal
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 import scala.language.implicitConversions
+import scala.collection.mutable.ListBuffer
 
 /**
  * A `Remote[A]` is a blueprint for constructing a value of type `A` on a remote
@@ -2826,7 +2827,139 @@ object Remote {
         Schema.Case("Reverse", schema, _.asInstanceOf[Reverse])
     }
 
+    case class BreakOn(remoteString: Remote[String], on: Remote[Char]) extends Remote[List[String]] {
+      override val schema: Schema[List[String]] =
+        Schema[List[String]]
 
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[List[String]]] =
+        for {
+          s <- remoteString.eval
+          o <- on.eval
+        } yield SchemaAndValue.of[List[String]]({
+          val b: ListBuffer[String] = new ListBuffer()
+
+          var i = 0
+          var j = 0
+
+          while(i < s.length) {
+            val c = s(i)
+
+            if(c == o) {
+              var br = false
+              val ss = s.substring(j, i)
+              b.append(ss)
+              while(!br && (i < s.length)) {
+                if(s(i) == o) {
+                  i = i + 1
+                } else {
+                  br = true
+                }
+              }
+              j = i
+            } else
+              i = i + 1
+          }
+
+          if(j != s.length)
+            b.append(s.substring(j, i))
+
+          b.toList
+        })
+    }
+
+    object BreakOn {
+      val schema: Schema[BreakOn] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Char], BreakOn](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("on", Remote.schema[Char]),
+            { case (str, d) => BreakOn(str, d) },
+            _.remoteString,
+            _.on,
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[BreakOn, Remote[A]] =
+        Schema.Case("BreakOn", schema, _.asInstanceOf[BreakOn])
+    }
+
+    private def interspercalate(on: Either[Char, String], s: String): String = {
+      val b = new StringBuilder
+
+      var i = 0
+      while(i < s.length) {
+        val c = s(i)
+
+        b.append(c)
+
+        if(i != s.length - 1) {
+          on match {
+            case Left(c) =>
+              b.append(c)
+            case Right(s) =>
+              b.append(s)
+          }
+        }
+
+        i = i + 1
+      }
+
+      b.toString
+    }
+
+    case class Intersperse(remoteString: Remote[String], on: Remote[Char]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          o <- on.eval
+        } yield SchemaAndValue.of[String](interspercalate(Left(o), s))
+    }
+
+    object Intersperse {
+      val schema: Schema[Intersperse] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[Char], Intersperse](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("on", Remote.schema[Char]),
+            { case (str, d) => Intersperse(str, d) },
+            _.remoteString,
+            _.on,
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Intersperse, Remote[A]] =
+        Schema.Case("Intersperse", schema, _.asInstanceOf[Intersperse])
+    }
+
+    case class Intercalate(remoteString: Remote[String], on: Remote[String]) extends Remote[String] {
+      override val schema: Schema[String] =
+        Schema[String]
+
+      override def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[String]] =
+        for {
+          s <- remoteString.eval
+          o <- on.eval
+        } yield SchemaAndValue.of[String](interspercalate(Right(o), s))
+    }
+
+    object Intercalate {
+      val schema: Schema[Intercalate] =
+        Schema.defer(
+          Schema.CaseClass2[Remote[String], Remote[String], Intercalate](
+            Schema.Field("string", Remote.schema[String]),
+            Schema.Field("on", Remote.schema[String]),
+            { case (str, d) => Intercalate(str, d) },
+            _.remoteString,
+            _.on,
+          )
+        )
+
+      def schemaCase[A]: Schema.Case[Intercalate, Remote[A]] =
+        Schema.Case("Intercalate", schema, _.asInstanceOf[Intercalate])
+    }
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
