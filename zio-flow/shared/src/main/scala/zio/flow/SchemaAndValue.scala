@@ -9,6 +9,18 @@ trait SchemaAndValue[+A] { self =>
 
   def value: DynamicValue
 
+  def transform[B](f: A => B, g: B => Subtype): SchemaAndValue[B] =
+    SchemaAndValue(
+      schema.transform[B](f, g),
+      value
+    )
+
+  def overSchema(f: Schema[Subtype] => Schema[Subtype]): SchemaAndValue[A] =
+    SchemaAndValue(f(schema), value)
+
+  def overValue(f: DynamicValue => DynamicValue): SchemaAndValue[A] =
+    SchemaAndValue(schema, f(value))
+
   def toRemote: Remote[A] = Remote.Literal(value, schema)
 
   def toTyped: Either[String, Subtype] = value.toTypedValue(schema)
