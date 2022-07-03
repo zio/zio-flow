@@ -705,9 +705,9 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      context: Map[FiberRef[_], Any],
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun(logQueue.offer(message()).unit)
+                     runtime.unsafe.run(logQueue.offer(message()).unit).getOrThrowFiberFailure()
                      msg
                    }
                  }
@@ -772,14 +772,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      context: Map[FiberRef[_], Any],
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun {
+                     runtime.unsafe.run {
                        msg match {
                          case "!!!BREAK!!!" => breakPromise.succeed(())
                          case _             => logQueue.offer(msg).unit
                        }
-                     }
+                     }.getOrThrowFiberFailure()
                      msg
                    }
                  }
