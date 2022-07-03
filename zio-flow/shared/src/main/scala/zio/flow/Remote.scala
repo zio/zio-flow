@@ -73,6 +73,7 @@ object Remote {
 //    schema.schema.makeAccessors(RemoteAccessorBuilder)
 
   final case class Literal[A](value: DynamicValue, schemaA: Schema[A]) extends Remote[A] {
+    assert((schemaA ne ZFlow.schemaAny) && (schemaA ne Remote.schemaAny))
 
     override val schema: Schema[A] = schemaA
 
@@ -2135,8 +2136,8 @@ object Remote {
                               .apply(
                                 Remote
                                   .Tuple2(
-                                    Remote.Literal(b, initialDyn.schema),
-                                    Remote.Literal(a, elemSchema.asInstanceOf[Schema[A]])
+                                    Remote.fromDynamic(b, initialDyn.schema),
+                                    Remote.fromDynamic(a, elemSchema.asInstanceOf[Schema[A]])
                                   )
                               )
 
@@ -2207,16 +2208,17 @@ object Remote {
                                 - do this automatically based on substitution effort? (number of steps, or estimate in Fold(list)?
                            */
 
-                          ZIO.debug(s"appliedBody") *>
-                            ZIO.debug(Remote.prettyPrint(appliedBody)) *>
-                            ZIO.debug("---") *>
-                            appliedBody.evalDynamic.flatMap { schemaAndValue =>
-                              ZIO.debug(s"evaluated to") *>
-                                ZIO.debug(Remote.prettyPrint(appliedBody)) *>
-                                ZIO.debug("---") *> ZIO.succeed(
-                                  schemaAndValue.value
-                                )
-                            }
+//                          ZIO.debug(s"appliedBody") *>
+//                            ZIO.debug(Remote.prettyPrint(appliedBody)) *>
+//                            ZIO.debug("---") *>
+                          appliedBody.evalDynamic.flatMap { schemaAndValue =>
+//                              ZIO.debug(s"evaluated to") *>
+//                                ZIO.debug(Remote.prettyPrint(appliedBody)) *>
+//                                ZIO.debug("---") *>
+                            ZIO.succeed(
+                              schemaAndValue.value
+                            )
+                          }
                         }
                       case _ =>
                         ZIO.fail(s"Fold's list did not evaluate into a sequence")
@@ -2905,6 +2907,15 @@ object Remote {
         Nested(remote).asInstanceOf[Remote[A]]
       case _ =>
         Literal(DynamicValue.fromSchemaAndValue(Schema[A], value), Schema[A])
+    }
+
+  def fromDynamic[A](dynamicValue: DynamicValue, schema: Schema[A]): Remote[A] =
+    if (schema eq ZFlow.schemaAny) {
+      Flow(dynamicValue.toTypedValue[ZFlow[Any, Any, Any]](ZFlow.schemaAny).toOption.get).asInstanceOf[Remote[A]]
+    } else if (schema eq Remote.schemaAny) {
+      Nested(dynamicValue.toTypedValue[Remote[Any]](Remote.schemaAny).toOption.get).asInstanceOf[Remote[A]]
+    } else {
+      Literal(dynamicValue, schema)
     }
 
   def sequenceEither[A, B](

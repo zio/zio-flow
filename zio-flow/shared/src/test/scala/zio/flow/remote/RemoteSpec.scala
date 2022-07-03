@@ -6,6 +6,7 @@ import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.{Remote, RemoteContext, RemoteVariableName, SchemaAndValue, ZFlow}
 import zio.flow.remote.numeric._
 import zio.prelude.DebugInterpolator
+import zio.schema.codec.JsonCodec
 import zio.schema.{DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
@@ -207,7 +208,7 @@ object RemoteSpec extends ZIOSpecDefault {
 
           test.provide(ZLayer(RemoteContext.inMemory))
         },
-        test("folded flow") {
+        test("XXX folded flow") {
           val remote = Remote(List(1, 2))
             .fold(ZFlow.succeed(0)) { case (flow, n) =>
               flow.flatMap { prevFlow =>
@@ -218,9 +219,20 @@ object RemoteSpec extends ZIOSpecDefault {
           val test =
             for {
               dyn <- remote.evalDynamic
-              typ <- remote.eval[ZFlow[Any, Nothing, Int]]
-              _   <- ZIO.debug(ZFlow.prettyPrint(typ))
+//              typ <- remote.eval[ZFlow[Any, Nothing, Int]]
+//              _   <- ZIO.debug(ZFlow.prettyPrint(typ))
             } yield assertTrue(true == true)
+
+          test.provide(ZLayer(RemoteContext.inMemory))
+        }
+      ),
+      suite("Flow")(
+        test("flow containing schema of flow") {
+          val flow = ZFlow.succeed(ZFlow.succeed(1))
+          val test = for {
+            dyn <- Remote.Flow(flow).evalDynamic
+            rs   = dyn.schema.asInstanceOf[Schema[_]]
+          } yield assertTrue(rs eq ZFlow.schemaAny)
 
           test.provide(ZLayer(RemoteContext.inMemory))
         }
