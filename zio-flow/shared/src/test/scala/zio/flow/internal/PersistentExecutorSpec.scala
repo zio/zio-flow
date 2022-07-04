@@ -737,19 +737,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { res =>
       assertTrue(res == 0)
     },
-    testFlow("XX unwrap list fold zflows") {
+    testFlow("unwrap list fold zflows") {
       val foldedFlow = Remote(List(1, 2))
         .fold(ZFlow.succeed(0)) { case (flow, n) =>
           flow.flatMap { prevFlow =>
             ZFlow.unwrap(prevFlow).map(_ + n)
           }
         }
-      println(new String(zio.schema.codec.JsonCodec.encode(Remote.schemaAny)(foldedFlow).toArray))
       ZFlow.unwrap {
         foldedFlow
       }
     } { res =>
-      assertTrue(res == 6)
+      assertTrue(res == 3)
     },
     testFlow("unwrap list manually fold zflows") {
       ZFlow.unwrap {
@@ -758,6 +757,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { res =>
       assertTrue(res == 3)
     }
+    // TODO
 //    testFlow("foreach") {
 //      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
 //    } { res =>
