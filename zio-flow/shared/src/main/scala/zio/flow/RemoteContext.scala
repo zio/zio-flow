@@ -2,7 +2,7 @@ package zio.flow
 
 import zio.flow.internal._
 import zio.schema.DynamicValue
-import zio.stm.{TMap, ZSTM}
+import zio.stm.TMap
 import zio.{UIO, ZIO}
 
 import java.io.IOException
