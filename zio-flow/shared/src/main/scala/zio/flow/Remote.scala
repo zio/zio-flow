@@ -466,7 +466,7 @@ object Remote {
 
     override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[Either[A, B]] =
       RemoteEither(either match {
-        case Left((valueA, schemaB))  => Left(valueA.substitute(variable, value), schemaB)
+        case Left((valueA, schemaB))  => Left((valueA.substitute(variable, value), schemaB))
         case Right((schemaA, valueB)) => Right((schemaA, valueB.substitute(variable, value)))
       })
   }
@@ -2141,84 +2141,7 @@ object Remote {
                                   )
                               )
 
-                          // TODO: either we have to generate fresh clones of the body with fresh variable names
-                          // TODO: OR we have to eliminate the input in the tree
-                          // TODO: => but: it may contain ZFlows with references
-                          // TODO:  => make elimination an explicit step, and do it here (and see where else) ?
-
-                          /*
-                          RemoteVariable:
-                            - created with flow NewVar
-                            - can be updated anywhere
-                            - scoped by transaction/fiber/flow
-                            - can be read with Remote.Variable
-
-                          Reusing this for function application has problems:
-                            - produces lot of garbage
-                            - lack of in-remote scoping
-
-                          So if we introduce a LocalVariable:
-                            - stacked in the evaluation of remote so recursion works
-                            - accessed by a different Remote.LocalVariable, not confused with the remote variables
-                            - only used by EvaluatedRemoteFunction and Apply
-
-                          Problem?:
-                          What if it leaves the scope of a single evaluation?
-                          Can be:
-                            - Evaluating to a ZFlow that contains another Remote referring to the same thing
-
-                            Example:
-
-                            List(1, 2, 3).fold(ZFlow.success(0)) { case (flow, n) =>
-                              unwrap(flow) *> ZFlow.log(n)
-                            }
-                            -> Fold(
-                              Literal(1, 2, 3),
-                              RemoteFlow(Success(0)),
-                              EvaluatedRemoteFunction(
-                                tup,
-                                RemoteFlow(FlatMap(Unwrap(Access(Local(tup), 0)), Log(Access(Local(tup), 1)))
-
-                            Here we may evaluate to a ZFlow which contains Local(tup) which is outside of the evaluation
-                              -> but we evaluate the body in the implementation of Fold#eval and there we apply it
-                              -> so in each fold step it becomes:
-
-                              Apply(tup, (x, 0), RemoteFlow(FlatMap(Unwrap(Access(Local(tup), 0)), Log(Access(Local(tup), 1)))
-                              -> but that still evaluates to RemoteFlow with its contents untouched
-                              -> RemoteFlow#eval must substitute Local-s and leave RemoteVariables
-                                -> we may need to support this in ZFlow and Remote models to track what Locals are accessed in which subtree to avoid
-                                   unnecessary traverse
-
-                            - Evaluating to a nested Remote
-
-                            Example:
-
-                            Nested((a: Remote[Int]) => a + 1)(0)) =>
-                              Nested(Apply(a, Literal(0), Binary(plus, LocalVariable(a), Literal(1))
-                              -> this is ok because the Apply eliminates it, but:
-
-                            (a: Remote[Int) => Nested(a)
-                              -> this cannot be evaluated without an Apply()
-                              -> if it has an Apply around then its ok
-
-
-                              other ideas:
-                                - also have a local stack within eval
-                                - support moving out to remote from local on eval boundary if substitution is not done
-                                - do this automatically based on substitution effort? (number of steps, or estimate in Fold(list)?
-                           */
-
-//                          ZIO.debug(s"appliedBody") *>
-//                            ZIO.debug(Remote.prettyPrint(appliedBody)) *>
-//                            ZIO.debug("---") *>
-                          appliedBody.evalDynamic.flatMap { schemaAndValue =>
-//                              ZIO.debug(s"evaluated to") *>
-//                                ZIO.debug(Remote.prettyPrint(appliedBody)) *>
-//                                ZIO.debug("---") *>
-                            ZIO.succeed(
-                              schemaAndValue.value
-                            )
-                          }
+                          appliedBody.evalDynamic.map(_.value)
                         }
                       case _ =>
                         ZIO.fail(s"Fold's list did not evaluate into a sequence")
@@ -2897,7 +2820,7 @@ object Remote {
 //  }
 
   implicit def apply[A: Schema](value: A): Remote[A] =
-    // TODO: do this on type level instead
+    // TODO: can we do this on type level instead?
     value match {
       case dynamicValue: DynamicValue =>
         Literal(dynamicValue, Schema[A])
@@ -3041,185 +2964,4 @@ object Remote {
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
   def schema[A]: Schema[Remote[A]]            = schemaAny.asInstanceOf[Schema[Remote[A]]]
-
-  def prettyPrint[A](remote: Remote[A]): String = {
-    val builder = new StringBuilder()
-    prettyPrint(remote, builder, indent = 0)
-    builder.toString
-  }
-
-  def prettyPrint[A](remote: Remote[A], builder: StringBuilder, indent: Int): Unit = {
-    def nl(i: Int) = {
-      builder.append("\n")
-      builder.append(" " * i)
-    }
-
-    remote match {
-      case Literal(value, schemaA) =>
-        if (schemaA eq ZFlow.schemaAny) {
-          value.toTypedValue(ZFlow.schemaAny) match {
-            case Left(value) =>
-              builder.append(s"!! $value")
-            case Right(flow) =>
-              ZFlow.prettyPrint(flow, builder, indent)
-          }
-        } else {
-          builder.append(value.toString)
-        }
-      case Flow(flow) =>
-        builder.append("flow")
-        ZFlow.prettyPrint(flow, builder, indent + 2)
-      case Nested(remote) =>
-        builder.append("nested ")
-        prettyPrint(remote, builder, indent)
-      case Ignore() =>
-        builder.append("ignore")
-      case Variable(identifier, schemaA) =>
-        builder.append("[[")
-        builder.append(RemoteVariableName.unwrap(identifier))
-        builder.append("]]")
-      case Local(identifier, schemaA) =>
-        builder.append("[")
-        builder.append(LocalVariableName.unwrap(identifier))
-        builder.append("]")
-      case EvaluatedRemoteFunction(input, result) =>
-        prettyPrint(input, builder, indent)
-        builder.append(" => ")
-        prettyPrint(result, builder, indent)
-      case ApplyEvaluatedFunction(f, a) =>
-        prettyPrint(f, builder, indent)
-        builder.append(" called with ")
-        prettyPrint(a, builder, indent)
-      case UnaryNumeric(value, numeric, operator) =>
-        builder.append(operator)
-        prettyPrint(value, builder, indent)
-      case BinaryNumeric(left, right, numeric, operator) =>
-        prettyPrint(left, builder, indent)
-        builder.append(operator)
-        prettyPrint(right, builder, indent)
-      case UnaryFractional(value, fractional, operator) =>
-        builder.append(operator)
-        prettyPrint(value, builder, indent)
-      case RemoteEither(either) =>
-        either match {
-          case Left((value, _)) =>
-            builder.append("left[")
-            prettyPrint(value, builder, indent)
-            builder.append("]")
-          case Right((_, value)) =>
-            builder.append("right[")
-            prettyPrint(value, builder, indent)
-            builder.append("]")
-        }
-      case FoldEither(either, left, right) =>
-        builder.append("either ")
-        nl(indent + 2)
-        prettyPrint(either, builder, indent + 2)
-        nl(indent + 2)
-        builder.append("on left: ")
-        prettyPrint(left, builder, indent + 2)
-        nl(indent + 2)
-        builder.append("on right: ")
-        prettyPrint(right, builder, indent + 2)
-      case SwapEither(either) =>
-        builder.append("swap ")
-        prettyPrint(either, builder, indent + 2)
-      case Try(either) =>
-        either match {
-          case Left((value, _)) =>
-            builder.append("failure[")
-            prettyPrint(value, builder, indent)
-            builder.append("]")
-          case Right(value) =>
-            builder.append("success[")
-            prettyPrint(value, builder, indent)
-            builder.append("]")
-        }
-      case Tuple2(t1, t2) =>
-        builder.append("(")
-        nl(indent + 2)
-//        builder.append(s"!! ${t1.getClass.getSimpleName} !!")
-        prettyPrint(t1, builder, indent + 2)
-        nl(indent + 2)
-        prettyPrint(t2, builder, indent + 2)
-        builder.append(")")
-      case Tuple3(t1, t2, t3)                                                                                 => ???
-      case Tuple4(t1, t2, t3, t4)                                                                             => ???
-      case Tuple5(t1, t2, t3, t4, t5)                                                                         => ???
-      case Tuple6(t1, t2, t3, t4, t5, t6)                                                                     => ???
-      case Tuple7(t1, t2, t3, t4, t5, t6, t7)                                                                 => ???
-      case Tuple8(t1, t2, t3, t4, t5, t6, t7, t8)                                                             => ???
-      case Tuple9(t1, t2, t3, t4, t5, t6, t7, t8, t9)                                                         => ???
-      case Tuple10(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)                                                   => ???
-      case Tuple11(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)                                              => ???
-      case Tuple12(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12)                                         => ???
-      case Tuple13(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13)                                    => ???
-      case Tuple14(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14)                               => ???
-      case Tuple15(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15)                          => ???
-      case Tuple16(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16)                     => ???
-      case Tuple17(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17)                => ???
-      case Tuple18(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18)           => ???
-      case Tuple19(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19)      => ???
-      case Tuple20(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20) => ???
-      case Tuple21(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21) =>
-        ???
-      case Tuple22(
-            t1,
-            t2,
-            t3,
-            t4,
-            t5,
-            t6,
-            t7,
-            t8,
-            t9,
-            t10,
-            t11,
-            t12,
-            t13,
-            t14,
-            t15,
-            t16,
-            t17,
-            t18,
-            t19,
-            t20,
-            t21,
-            t22
-          ) =>
-        ???
-      case TupleAccess(tuple, n) =>
-        prettyPrint(tuple, builder, indent)
-        builder.append("(")
-        builder.append(n)
-        builder.append(")")
-      case Branch(predicate, ifTrue, ifFalse)                    => ???
-      case Length(remoteString)                                  => ???
-      case LessThanEqual(left, right)                            => ???
-      case Equal(left, right)                                    => ???
-      case Not(value)                                            => ???
-      case And(left, right)                                      => ???
-      case Fold(list, initial, body)                             => ???
-      case Cons(list, head)                                      => ???
-      case UnCons(list)                                          => ???
-      case InstantFromLongs(seconds, nanos)                      => ???
-      case InstantFromString(charSeq)                            => ???
-      case InstantToTuple(instant)                               => ???
-      case InstantPlusDuration(instant, duration)                => ???
-      case InstantTruncate(instant, temporalUnit)                => ???
-      case DurationFromString(charSeq)                           => ???
-      case DurationBetweenInstants(startInclusive, endExclusive) => ???
-      case DurationFromBigDecimal(seconds)                       => ???
-      case DurationFromLongs(seconds, nanoAdjustment)            => ???
-      case DurationFromAmount(amount, temporalUnit)              => ???
-      case DurationToLongs(duration)                             => ???
-      case DurationPlusDuration(left, right)                     => ???
-      case DurationMultipliedBy(left, right)                     => ???
-      case Iterate(initial, iterate, predicate)                  => ???
-      case Lazy(value) =>
-        prettyPrint(value(), builder, indent)
-      case RemoteSome(value)                       => ???
-      case FoldOption(option, ifEmpty, ifNonEmpty) => ???
-    }
-  }
 }
