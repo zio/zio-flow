@@ -13,7 +13,9 @@ case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends
           _ <- ZIO.logInfo(s"Simulating operation $operation with input $input")
           _ <- Clock.sleep(duration)
         } yield result
-      case None => ZIO.fail(ActivityError(s"Operation $operation not found", None))
+      case None =>
+        ZIO.logWarning(s"Mocked operation $operation with input $input was not found") *>
+          ZIO.fail(ActivityError(s"Operation $operation not found", None))
     }
 }
 

@@ -790,7 +790,7 @@ final case class PersistentExecutor(
               val latestTimestamp = optLatestTimestamp.getOrElse(Timestamp(0L))
               if (latestTimestamp > access.previousTimestamp) {
                 ZIO.logWarning(
-                  s"Variable ${name} in ${transactionState.id} latest: $latestTimestamp previous: ${access.previousTimestamp}"
+                  s"Variable ${name} changed outside the transaction ${transactionState.id}; latest: $latestTimestamp previous: ${access.previousTimestamp}"
                 ) *>
                   ZIO.fail(None)
               } else {
@@ -872,8 +872,8 @@ final case class PersistentExecutor(
                  .recordAccessedVariables(readVariablesWithTimestamps)
                  .recordReadVariables(readVariables)
       persistedState = execEnv.serializer.serialize(state2)
-      _             <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
-      _             <- kvStore.put(Namespaces.workflowState, key, persistedState, currentTimestamp)
+//      _             <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
+      _ <- kvStore.put(Namespaces.workflowState, key, persistedState, currentTimestamp)
     } yield state2
   }
 
@@ -1102,12 +1102,19 @@ object PersistentExecutor {
                 ),
                 EvaluatedRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
               )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
+
+            // TODO: we need to assign a new transaction ID because we are not cleaning up persisted variables yet
+            val newTransactionId = TransactionId("tx" + state.transactionCounter.toString)
             state.copy(
               current = compensateAndRun,
-              transactionStack =
-                txState.copy(accessedVariables = Map.empty, readVariables = Set.empty) :: state.transactionStack.tail,
+              transactionStack = txState.copy(
+                id = newTransactionId,
+                accessedVariables = Map.empty,
+                readVariables = Set.empty
+              ) :: state.transactionStack.tail,
               status = if (suspend) PersistentWorkflowStatus.Suspended else PersistentWorkflowStatus.Running,
-              watchedVariables = txState.readVariables
+              watchedVariables = txState.readVariables,
+              transactionCounter = state.transactionCounter + 1
             )
           case None => state
         }

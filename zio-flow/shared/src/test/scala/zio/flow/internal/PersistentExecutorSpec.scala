@@ -303,6 +303,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           var1 <- ZFlow.newVar[Int]("var1", 1)
           fib1 <- ZFlow.transaction { _ =>
                     for {
+                      _  <- ZFlow.log(s"Starting transaction")
                       v1 <- var1.get
                       _  <- ZFlow.log(s"Got value of var1")
                       _  <- activity1(v1)
@@ -354,18 +355,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
               inputMatcher = equalTo(100),
               result = () => -11
             ) ++
-            // Second run (with input=2)
+            // Second run (with input=10)
             MockedOperation.Http(
               urlMatcher = equalTo(new URI("http://activity1")),
               methodMatcher = equalTo("GET"),
-              inputMatcher = equalTo(2),
+              inputMatcher = equalTo(10),
               result = () => 100,
               duration = 10.millis
             ) ++
             MockedOperation.Http(
               urlMatcher = equalTo(new URI("http://activity2")),
               methodMatcher = equalTo("POST"),
-              inputMatcher = equalTo(2),
+              inputMatcher = equalTo(10),
               result = () => 200,
               duration = 10.millis
             )

@@ -60,8 +60,8 @@ final case class RemoteVariableKeyValueStore(
   ): IO[IOException, Option[(Timestamp, RemoteVariableScope)]] =
     keyValueStore.getLatestTimestamp(Namespaces.variables, key(getScopePrefix(scope), name)).flatMap {
       case Some(value) =>
-        ZIO.logDebug(s"Read latest timestamp of variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
-          ZIO.some((value, scope))
+//        ZIO.logDebug(s"Read latest timestamp of variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
+        ZIO.some((value, scope))
       case None =>
         scope.parentScope match {
           case Some(parentScope) =>
