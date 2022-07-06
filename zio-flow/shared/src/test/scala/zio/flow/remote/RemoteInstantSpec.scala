@@ -76,7 +76,7 @@ object RemoteInstantSpec extends RemoteSpecBase {
         Remote(i).minusNanos(Remote(ns)) <-> i.minusNanos(ns)
       }
     }
-  ).provideCustom(ZLayer(RemoteContext.inMemory))
+  ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   implicit val chronoFieldSchema: Schema[ChronoField] =
     Schema[String].transform(ChronoField.valueOf, _.name())

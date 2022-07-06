@@ -6,7 +6,6 @@ import zio.stm.TMap
 import zio.{UIO, ZIO}
 
 import java.io.IOException
-import java.util.UUID
 
 trait RemoteContext {
   def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit]
@@ -15,8 +14,6 @@ trait RemoteContext {
 }
 
 object RemoteContext {
-  def generateFreshVariableName: LocalVariableName =
-    LocalVariableName(UUID.randomUUID())
 
   def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))

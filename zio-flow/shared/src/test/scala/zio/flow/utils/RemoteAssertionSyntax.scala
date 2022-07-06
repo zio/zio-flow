@@ -9,7 +9,7 @@ import zio.test.{TestResult, assertZIO}
 object RemoteAssertionSyntax {
 
   implicit final class RemoteAssertionOps[A: Schema](private val self: Remote[A]) {
-    def <->[A1 <: A](that: A1): ZIO[RemoteContext, Nothing, TestResult] =
+    def <->[A1 <: A](that: A1): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
       assertZIO(self.eval[A].exit)(succeeds(equalTo(that)))
   }
 }

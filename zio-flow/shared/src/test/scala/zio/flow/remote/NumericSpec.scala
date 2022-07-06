@@ -23,11 +23,11 @@ object NumericSpec extends RemoteSpecBase {
       )(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(ZLayer(RemoteContext.inMemory))
+    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   private def numericTests[R, A: Schema: remote.numeric.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
-  ): Spec[R with TestConfig with RemoteContext, TestSuccess] =
+  ): Spec[R with TestConfig with RemoteContext with LocalContext, TestSuccess] =
     suite(name)(
       testOp[R, A]("Addition", gen, gen)(_ + _)(ops.addition),
       testOp[R, A]("Subtraction", gen, gen)(_ - _)(ops.subtraction),
@@ -67,7 +67,7 @@ object NumericSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
-  )(op: (A, A) => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: (A, A) => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(genX, genY) { case (x, y) =>
         numericOp(x, y) <-> op(x, y)
@@ -76,7 +76,7 @@ object NumericSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
     numericOp: Remote[A] => Remote[A]
-  )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: A => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(gen) { x =>
         numericOp(x) <-> op(x)

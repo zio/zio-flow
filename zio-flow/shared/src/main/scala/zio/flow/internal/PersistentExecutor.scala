@@ -47,10 +47,15 @@ final case class PersistentExecutor(
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
   private def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, IOException, A] =
-    remote.eval[A].mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
+    remote
+      .eval[A]
+      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
+      .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
 
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
-    remote.evalDynamic.mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
+    remote.evalDynamic
+      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
+      .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
 
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {

@@ -74,7 +74,7 @@ object RemoteTupleGenerator extends AutoPlugin {
           lazy val schema: Schema[_ <: ${model.appliedTupleType}] =
             Schema.${model.schemaTupleMethod}(..$schemaFromParamVals)
 
-          def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[${model.appliedTupleType}]] =
+          def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[${model.appliedTupleType}]] =
             for {
               ..$evalDynamic
               ..$toTyped
