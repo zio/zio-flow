@@ -39,6 +39,15 @@ object RemoteListSpec extends RemoteSpecBase {
         val uncons = Remote.UnCons(l1)
         uncons <-> Some((1, 2 :: 3 :: Nil))
       },
+      /*
+      // java.lang.StackOverflowError
+      // takeWhile calls itself forever
+      test("takeWhile") {
+        val l1     = Remote(1 :: 2 :: 3 :: Nil)
+        val uncons = l1.takeWhile(_ => true)
+        uncons <-> 1 :: 2 :: 3 :: Nil
+      },
+       */
       test("Fold") {
         val l1                = Remote(1 :: 2 :: 3 :: Nil)
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)

@@ -19,8 +19,11 @@ package zio.flow.remote
 import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.flow._
 import zio.flow.remote.numeric._
+import zio.schema.Schema
 
 final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
+  def ::(a: Remote[A]): Remote[List[A]] =
+    Remote.Cons(self, a)
 
   def ++(other: Remote[List[A]]): Remote[List[A]] = {
     val reversedSelf: Remote[List[A]] = reverse
@@ -32,8 +35,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def take(num: Remote[Int]): Remote[List[A]] = {
     val ifTrue: Remote[List[A]] =
-      Remote
-        .UnCons(self.widen[List[A]])
+      self
+        .widen[List[A]]
+        .uncons
         .widen[Option[(A, List[A])]]
         .fold(Remote.nil[A], (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
     (num > Remote(0)).ifThenElse(ifTrue, Remote.nil[A])
@@ -53,8 +57,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def drop(num: Remote[Int]): Remote[List[A]] = {
     val ifTrue =
-      Remote
-        .UnCons(self)
+      uncons
         .widen[Option[(A, List[A])]]
         .fold(Remote.nil, (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
 
@@ -79,6 +82,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     .widen[Option[(A, List[A])]]
     .fold[Option[A]](Remote.none[A], tuple => Remote.RemoteSome(tuple._1))
 
+  def uncons: Remote[Option[(A, List[A])]] =
+    Remote.UnCons(self)
+
   def headOption: Remote[Option[A]] =
     fold[Option[A]](Remote.none[A])((remoteOptionA, a) =>
       remoteOptionA.isSome.ifThenElse(remoteOptionA.self, Remote.RemoteSome(a))
@@ -102,4 +108,26 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def isEmpty: Remote[Boolean] =
     self.headOption.isNone.ifThenElse(Remote(true), Remote(false))
+
+  // def zip[B](y: Remote[List[B]])(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[List[(A, B)]] =
+  //   y.reverse
+  //     .fold[(List[(A, B)], List[A])]((Remote(Nil: List[(A, B)]), self)) {
+  //       case (q, x) => {
+  //         val zs: Remote[List[(A, B)]] = q._1
+  //         val ys: Remote[List[A]]      = q._2
+  //         ys.uncons.fold(
+  //           (zs, ys),
+  //           ht => {
+  //             val h = ht._1
+  //             val t = ht._2
+  //             (Remote.Tuple2(h, x) :: zs, t)
+  //           }
+  //         )
+  //         (zs, ys)
+  //       }
+  //     }
+  //     ._1
+
+  def each[B](f: Remote[A] => Remote[List[B]])(implicit schemaA: Schema[A], schemaB: Schema[B]): Remote[List[B]] =
+    reverse.fold(Remote(Nil: List[B]))((b, c) => f(c) ++ b)
 }
