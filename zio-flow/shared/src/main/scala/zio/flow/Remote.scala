@@ -1740,10 +1740,10 @@ object Remote {
       list.evalDynamic.flatMap { listDyn =>
         val listSchema = listDyn.schema.asInstanceOf[Schema.Sequence[List[A], A, _]]
         val elemSchema = listSchema.schemaA
-        ZIO.fromEither(listDyn.toTyped).map { lst =>
-          val head  = lst.headOption
-          val tuple = head.map((_, lst))
-          SchemaAndValue.fromSchemaAndValue(Schema.option(Schema.tuple2(elemSchema, listDyn.schema)), tuple)
+
+        ZIO.fromEither[String, listDyn.Subtype](listDyn.toTyped).map { lst =>
+          val tuple = lst.headOption map ((_, lst.tail))
+          SchemaAndValue.fromSchemaAndValue(Schema.option(Schema.tuple2(elemSchema, Schema.list(elemSchema))), tuple)
         }
       }
   }
