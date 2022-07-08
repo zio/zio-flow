@@ -34,6 +34,11 @@ object RemoteListSpec extends RemoteSpecBase {
         val cons = Remote.Cons(l1, Remote(4))
         cons <-> (4 :: 1 :: 2 :: 3 :: Nil)
       },
+      test("UnCons") {
+        val l1     = Remote(1 :: 2 :: 3 :: Nil)
+        val uncons = Remote.UnCons(l1)
+        uncons <-> Some((1, 2 :: 3 :: Nil))
+      },
       test("Fold") {
         val l1                = Remote(1 :: 2 :: 3 :: Nil)
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
