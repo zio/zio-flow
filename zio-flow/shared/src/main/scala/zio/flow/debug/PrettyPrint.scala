@@ -1,8 +1,6 @@
 package zio.flow.debug
 
-import zio.flow.Remote
-import zio.flow.ZFlow
-import zio.flow.{LocalVariableName, RemoteVariableName}
+import zio.flow.{BindingName, LocalVariableName, Remote, RemoteVariableName, ZFlow}
 
 import scala.collection.mutable
 
@@ -54,6 +52,10 @@ object PrettyPrint {
         builder.append("[")
         builder.append(LocalVariableName.unwrap(identifier))
         builder.append("]")
+      case Remote.Unbound(identifier, schemaA) =>
+        builder.append("<")
+        builder.append(BindingName.unwrap(identifier))
+        builder.append(">")
       case Remote.EvaluatedRemoteFunction(input, result) =>
         prettyPrintRemote(input, builder, indent)
         builder.append(" => ")
@@ -187,14 +189,22 @@ object PrettyPrint {
         builder.append("(")
         builder.append(n)
         builder.append(")")
-      case Remote.Branch(predicate, ifTrue, ifFalse)                    => ???
-      case Remote.Length(remoteString)                                  => ???
-      case Remote.LessThanEqual(left, right)                            => ???
-      case Remote.Equal(left, right)                                    => ???
-      case Remote.Not(value)                                            => ???
-      case Remote.And(left, right)                                      => ???
-      case Remote.Fold(list, initial, body)                             => ???
-      case Remote.Cons(list, head)                                      => ???
+      case Remote.Branch(predicate, ifTrue, ifFalse) => ???
+      case Remote.Length(remoteString)               => ???
+      case Remote.LessThanEqual(left, right)         => ???
+      case Remote.Equal(left, right)                 => ???
+      case Remote.Not(value)                         => ???
+      case Remote.And(left, right)                   => ???
+      case Remote.Fold(list, initial, body) =>
+        builder.append("RemoteFold[")
+        prettyPrintRemote(list, builder, indent + 2)
+        prettyPrintRemote(initial, builder, indent + 2)
+        prettyPrintRemote(body, builder, indent + 2)
+        builder.append("]")
+      case Remote.Cons(list, head) =>
+        prettyPrintRemote(head, builder, indent)
+        builder.append(" :: ")
+        prettyPrintRemote(list, builder, indent)
       case Remote.UnCons(list)                                          => ???
       case Remote.InstantFromLongs(seconds, nanos)                      => ???
       case Remote.InstantFromString(charSeq)                            => ???

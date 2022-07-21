@@ -12,6 +12,7 @@ import zio.flow.remote.numeric.{
 import zio.flow.{
   Activity,
   ActivityError,
+  BindingName,
   ExecutingFlow,
   FlowId,
   LocalVariableName,
@@ -46,6 +47,9 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genLocalVariableName: Gen[Sized, flow.LocalVariableName.Type] =
     Gen.uuid.map(LocalVariableName.apply(_))
+
+  lazy val genBindingName: Gen[Sized, flow.BindingName.Type] =
+    Gen.uuid.map(BindingName.apply(_))
 
   lazy val genNumeric: Gen[Any, (Numeric[Any], Gen[Any, Remote[Any]])] =
     Gen.oneOf(
@@ -185,6 +189,12 @@ trait Generators extends DefaultJavaTimeSchemas {
       schemaAndValue <- genPrimitiveSchemaAndValue
     } yield Remote.Local(name, schemaAndValue.schema)
 
+  lazy val genUnbound: Gen[Sized, Remote[Any]] =
+    for {
+      name           <- genBindingName
+      schemaAndValue <- genPrimitiveSchemaAndValue
+    } yield Remote.Unbound(name, schemaAndValue.schema)
+
   lazy val genUnaryOperator: Gen[Any, UnaryNumericOperator] =
     Gen.oneOf(
       Gen.const(UnaryNumericOperator.Neg),
@@ -241,19 +251,19 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genEvaluatedRemoteFunction: Gen[Sized, Remote[Any]] =
     for {
-      v <- genLocal
+      v <- genUnbound
       r <- Gen.oneOf(genLiteral, genRemoteVariable, genBinaryNumeric)
-    } yield Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Local[Any]], r)
+    } yield Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
 
   lazy val genEvaluatedRemoteFunctionWithResultSchema: Gen[Sized, (Remote[Any], Schema[Any])] =
     for {
-      v <- genLocal
+      v <- genUnbound
       (r, s) <- Gen.oneOf(
                   genLiteral.map(l => (l, l.asInstanceOf[Remote.Literal[Any]].schemaA)),
                   genRemoteVariable.map(l => (l, l.asInstanceOf[Remote.Variable[Any]].schemaA)),
                   genBinaryNumeric.map(l => (l, l.asInstanceOf[Remote.BinaryNumeric[Any]].numeric.schema))
                 )
-    } yield (Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Local[Any]], r), s)
+    } yield (Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r), s)
 
   lazy val genRemoteApply: Gen[Sized, Remote[Any]] =
     for {

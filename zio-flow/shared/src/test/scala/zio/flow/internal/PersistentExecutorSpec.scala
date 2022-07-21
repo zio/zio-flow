@@ -758,16 +758,16 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { res =>
       assertTrue(res == 3)
     },
-    testFlow("Xforeach") {
+    testFlow("foreach") {
       ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
     } { res =>
       assertTrue(res == List.range(1, 10))
-    },
+    } @@ TestAspect.ignore, // TODO
     testFlow("foreachPar") {
       ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
     } { res =>
       assertTrue(res == List.range(1, 10))
-    }
+    } @@ TestAspect.ignore, // TODO
   )
 
   override def spec =

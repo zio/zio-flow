@@ -58,7 +58,13 @@ sealed trait Remote[+A] { self =>
 
   final def unit: Remote[Unit] = Remote.Ignore()
 
-  def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A]
+  def substitute[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    f(this.asInstanceOf[Remote[B]]) match {
+      case Some(value) => value.substitute(f).asInstanceOf[Remote[A]]
+      case None        => substituteRec(f)
+    }
+
+  protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A]
 }
 
 object Remote {
@@ -90,8 +96,7 @@ object Remote {
         case _ => false
       }
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
-      this
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] = this
   }
 
   object Literal {
@@ -116,8 +121,8 @@ object Remote {
 
     override def schema = ZFlow.schema[R, E, A]
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[ZFlow[R, E, A]] =
-      Flow(flow.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[ZFlow[R, E, A]] =
+      Flow(flow.substitute(f))
   }
 
   object Flow {
@@ -144,8 +149,8 @@ object Remote {
 
     override def schema = Remote.schema[A]
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Remote[A]] =
-      Nested(remote.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Remote[A]] =
+      Nested(remote.substitute(f))
   }
 
   object Nested {
@@ -162,7 +167,7 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Unit]] =
       ZIO.succeed(SchemaAndValue(Schema.primitive[Unit], DynamicValue.Primitive((), StandardType.UnitType)))
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Unit] =
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Unit] =
       this
   }
   object Ignore {
@@ -188,7 +193,7 @@ object Remote {
         case _ => false
       }
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
       this
   }
 
@@ -207,11 +212,48 @@ object Remote {
       Schema.Case("Variable", schema, _.asInstanceOf[Variable[A]])
   }
 
+  final case class Unbound[A](identifier: BindingName, schemaA: Schema[A]) extends Remote[A] {
+    override val schema: Schema[A] = schemaA
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
+      ZIO.fail(s"Cannot evaluate binding ${BindingName.unwrap(identifier)}, it has to be substituted")
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Unbound(otherIdentifier, otherSchema) =>
+          otherIdentifier == identifier && Schema.structureEquality.equal(schemaA, otherSchema)
+        case _ => false
+      }
+
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      this
+  }
+
+  object Unbound {
+    def schema[A]: Schema[Unbound[A]] =
+      Schema.CaseClass2[BindingName, FlowSchemaAst, Unbound[A]](
+        Schema.Field("identifier", Schema[BindingName]),
+        Schema.Field("schema", FlowSchemaAst.schema),
+        construct =
+          (identifier: BindingName, s: FlowSchemaAst) => Unbound(identifier, s.toSchema.asInstanceOf[Schema[A]]),
+        extractField1 = (variable: Unbound[A]) => variable.identifier,
+        extractField2 = (variable: Unbound[A]) => FlowSchemaAst.fromSchema(variable.schemaA)
+      )
+
+    def schemaCase[A]: Schema.Case[Unbound[A], Remote[A]] =
+      Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]])
+  }
+
   final case class Local[A](identifier: LocalVariableName, schemaA: Schema[A]) extends Remote[A] {
     override val schema: Schema[A] = schemaA
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
-      ZIO.fail(s"Cannot evaluate local variable ${LocalVariableName.unwrap(identifier)}, it has to be substituted")
+      LocalContext.getVariable(this).flatMap {
+        case Some(value) =>
+          ZIO.succeed(SchemaAndValue(schemaA, value))
+        case None =>
+          ZIO.fail(s"Cannot evaluate local variable ${LocalVariableName.unwrap(identifier)}, it has no stored value")
+      }
 
     override def equals(that: Any): Boolean =
       that match {
@@ -220,8 +262,8 @@ object Remote {
         case _ => false
       }
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
-      if (variable == this) value.asInstanceOf[Remote[A]] else this
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      this
   }
 
   object Local {
@@ -240,7 +282,7 @@ object Remote {
   }
 
   final case class EvaluatedRemoteFunction[A, B] private[flow] (
-    input: Local[A],
+    input: Unbound[A],
     result: Remote[B]
   ) extends Remote[B] {
     override val schema = result.schema
@@ -254,13 +296,13 @@ object Remote {
     def apply(a: Remote[A]): Remote[B] =
       ApplyEvaluatedFunction(this, a)
 
-    override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[B] =
-      EvaluatedRemoteFunction(input, result.substitute(variable, value))
+    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
+      EvaluatedRemoteFunction(input, result.substitute(f))
   }
 
   object EvaluatedRemoteFunction {
     def make[A: Schema, B](fn: Remote[A] => Remote[B]): EvaluatedRemoteFunction[A, B] = {
-      val input = Local[A](LocalContext.generateFreshVariableName, Schema[A])
+      val input = Unbound[A](LocalContext.generateFreshBinding, Schema[A])
       EvaluatedRemoteFunction(
         input,
         fn(input)
@@ -268,8 +310,8 @@ object Remote {
     }
 
     def schema[A, B]: Schema[EvaluatedRemoteFunction[A, B]] =
-      Schema.CaseClass2[Local[A], Remote[B], EvaluatedRemoteFunction[A, B]](
-        Schema.Field("variable", Local.schema[A]),
+      Schema.CaseClass2[Unbound[A], Remote[B], EvaluatedRemoteFunction[A, B]](
+        Schema.Field("variable", Unbound.schema[A]),
         Schema.Field("result", Schema.defer(Remote.schema[B])),
         EvaluatedRemoteFunction.apply(_, _),
         _.input,
@@ -287,35 +329,18 @@ object Remote {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[B]] =
       for {
-        input  <- a.evalDynamic
-        output <- LocalContext.withVariable(f.input.identifier, input.value)(f.evalDynamic)
-        result <-
-          // TODO: think how this could be expressed better
-          if (output.schema eq ZFlow.schemaAny) {
-            ZIO.fromEither(output.toTyped).flatMap { flow =>
-              Flow(
-                flow
-                  .asInstanceOf[ZFlow[Any, Any, Any]]
-                  .substitute(f.input, Remote.fromDynamic(input.value, input.schema))
-              ).evalDynamic
-            }
-          } else if (output.schema eq Remote.schemaAny) {
-            ZIO.fromEither(output.toTyped).flatMap { remote =>
-              Nested(
-                remote.asInstanceOf[Remote[Any]].substitute(f.input, Remote.fromDynamic(input.value, input.schema))
-              ).evalDynamic
-            }
-          } else {
-            ZIO.succeed(output)
-          }
+        input      <- a.evalDynamic
+        localName   = LocalContext.generateFreshVariableName
+        local       = Local(localName, f.input.schemaA)
+        _          <- LocalContext.storeVariable(local, input.value)
+        appliedBody = f.result.substitute((r: Remote[A]) => if (r == f.input) Some(local) else None)
+        result     <- appliedBody.evalDynamic
       } yield result.asInstanceOf[SchemaAndValue[B]]
 
-    f.substitute(f.input, a).evalDynamic
-
-    override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[B] =
+    override protected def substituteRec[C](fn: Remote[C] => Option[Remote[C]]): Remote[B] =
       ApplyEvaluatedFunction(
-        f.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[A, B]],
-        a.substitute(variable, value)
+        f.substitute(fn).asInstanceOf[EvaluatedRemoteFunction[A, B]],
+        a.substitute(fn)
       )
   }
 
@@ -349,8 +374,8 @@ object Remote {
 
     override def schema: Schema[_ <: A] = numeric.schema
 
-    override def substitute[B](variable: Remote.Local[B], replacement: Remote[B]): Remote[A] =
-      UnaryNumeric(value.substitute(variable, replacement), numeric, operator)
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      UnaryNumeric(value.substitute(f), numeric, operator)
   }
 
   object UnaryNumeric {
@@ -383,8 +408,8 @@ object Remote {
 
     override def schema: Schema[_ <: A] = numeric.schema
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
-      BinaryNumeric(left.substitute(variable, value), right.substitute(variable, value), numeric, operator)
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      BinaryNumeric(left.substitute(f), right.substitute(f), numeric, operator)
   }
 
   object BinaryNumeric {
@@ -417,8 +442,8 @@ object Remote {
         DynamicValue.fromSchemaAndValue(fractional.schema, fractional.unary(operator, v))
       )
 
-    override def substitute[B](variable: Remote.Local[B], replacement: Remote[B]): Remote[A] =
-      UnaryFractional(value.substitute(variable, replacement), fractional, operator)
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      UnaryFractional(value.substitute(f), fractional, operator)
   }
 
   object UnaryFractional {
@@ -488,10 +513,10 @@ object Remote {
         case _ => false
       }
 
-    override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[Either[A, B]] =
+    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[Either[A, B]] =
       RemoteEither(either match {
-        case Left((valueA, schemaB))  => Left((valueA.substitute(variable, value), schemaB))
-        case Right((schemaA, valueB)) => Right((schemaA, valueB.substitute(variable, value)))
+        case Left((valueA, schemaB))  => Left((valueA.substitute(f), schemaB))
+        case Right((schemaA, valueB)) => Right((schemaA, valueB.substitute(f)))
       })
   }
 
@@ -546,11 +571,11 @@ object Remote {
           right(Remote(b)(right.input.schemaA)).evalDynamic
       }
 
-    override def substitute[D](variable: Remote.Local[D], value: Remote[D]): Remote[C] =
+    override protected def substituteRec[D](f: Remote[D] => Option[Remote[D]]): Remote[C] =
       FoldEither(
-        either.substitute(variable, value),
-        left.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[A, C]],
-        right.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[B, C]]
+        either.substitute(f),
+        left.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, C]],
+        right.substitute(f).asInstanceOf[EvaluatedRemoteFunction[B, C]]
       )
   }
 
@@ -599,8 +624,8 @@ object Remote {
         }
       }
 
-    override def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[Either[B, A]] =
-      SwapEither(either.substitute(variable, value))
+    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[Either[B, A]] =
+      SwapEither(either.substitute(f))
   }
 
   object SwapEither {
@@ -668,10 +693,10 @@ object Remote {
         case _ => false
       }
 
-    override def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[scala.util.Try[A]] =
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[scala.util.Try[A]] =
       Try(either match {
-        case Left((throwable, schemaA)) => Left((throwable.substitute(variable, value), schemaA))
-        case Right(success)             => Right(success.substitute(variable, value))
+        case Left((throwable, schemaA)) => Left((throwable.substitute(f), schemaA))
+        case Right(success)             => Right(success.substitute(f))
       })
   }
 
@@ -706,8 +731,8 @@ object Remote {
   final case class Tuple2[T1, T2](t1: Remote[T1], t2: Remote[T2])
       extends Remote[(T1, T2)]
       with RemoteTuple2.Construct[T1, T2] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2)] =
-      Tuple2(t1.substitute(variable, value), t2.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2)] =
+      Tuple2(t1.substitute(f), t2.substitute(f))
   }
 
   object Tuple2 extends RemoteTuple2.ConstructStatic[Tuple2] {
@@ -717,8 +742,8 @@ object Remote {
   final case class Tuple3[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3])
       extends Remote[(T1, T2, T3)]
       with RemoteTuple3.Construct[T1, T2, T3] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3)] =
-      Tuple3(t1.substitute(variable, value), t2.substitute(variable, value), t3.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3)] =
+      Tuple3(t1.substitute(f), t2.substitute(f), t3.substitute(f))
   }
 
   object Tuple3 extends RemoteTuple3.ConstructStatic[Tuple3] {
@@ -728,12 +753,13 @@ object Remote {
   final case class Tuple4[T1, T2, T3, T4](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3], t4: Remote[T4])
       extends Remote[(T1, T2, T3, T4)]
       with RemoteTuple4.Construct[T1, T2, T3, T4] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4)] = Tuple4(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value)
-    )
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4)] =
+      Tuple4(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f)
+      )
   }
 
   object Tuple4 extends RemoteTuple4.ConstructStatic[Tuple4] {
@@ -753,13 +779,14 @@ object Remote {
     t5: Remote[T5]
   ) extends Remote[(T1, T2, T3, T4, T5)]
       with RemoteTuple5.Construct[T1, T2, T3, T4, T5] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5)] = Tuple5(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value)
-    )
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5)] =
+      Tuple5(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f)
+      )
   }
 
   object Tuple5 extends RemoteTuple5.ConstructStatic[Tuple5] {
@@ -781,14 +808,15 @@ object Remote {
     t6: Remote[T6]
   ) extends Remote[(T1, T2, T3, T4, T5, T6)]
       with RemoteTuple6.Construct[T1, T2, T3, T4, T5, T6] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5, T6)] = Tuple6(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value)
-    )
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5, T6)] =
+      Tuple6(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f)
+      )
   }
 
   object Tuple6 extends RemoteTuple6.ConstructStatic[Tuple6] {
@@ -812,15 +840,16 @@ object Remote {
     t7: Remote[T7]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7)]
       with RemoteTuple7.Construct[T1, T2, T3, T4, T5, T6, T7] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5, T6, T7)] = Tuple7(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value)
-    )
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
+      Tuple7(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f)
+      )
   }
 
   object Tuple7 extends RemoteTuple7.ConstructStatic[Tuple7] {
@@ -846,16 +875,19 @@ object Remote {
     t8: Remote[T8]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8)]
       with RemoteTuple8.Construct[T1, T2, T3, T4, T5, T6, T7, T8] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] = Tuple8(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] =
+      Tuple8(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f)
+      )
   }
 
   object Tuple8 extends RemoteTuple8.ConstructStatic[Tuple8] {
@@ -883,17 +915,19 @@ object Remote {
     t9: Remote[T9]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)]
       with RemoteTuple9.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] =
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] =
       Tuple9(
-        t1.substitute(variable, value),
-        t2.substitute(variable, value),
-        t3.substitute(variable, value),
-        t4.substitute(variable, value),
-        t5.substitute(variable, value),
-        t6.substitute(variable, value),
-        t7.substitute(variable, value),
-        t8.substitute(variable, value),
-        t9.substitute(variable, value)
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f)
       )
   }
 
@@ -924,18 +958,20 @@ object Remote {
     t10: Remote[T10]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)]
       with RemoteTuple10.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] {
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] =
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] =
       Tuple10(
-        t1.substitute(variable, value),
-        t2.substitute(variable, value),
-        t3.substitute(variable, value),
-        t4.substitute(variable, value),
-        t5.substitute(variable, value),
-        t6.substitute(variable, value),
-        t7.substitute(variable, value),
-        t8.substitute(variable, value),
-        t9.substitute(variable, value),
-        t10.substitute(variable, value)
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f)
       )
   }
 
@@ -968,22 +1004,22 @@ object Remote {
     t11: Remote[T11]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)]
       with RemoteTuple11.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] = Tuple11(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] =
+      Tuple11(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f)
+      )
   }
 
   object Tuple11 extends RemoteTuple11.ConstructStatic[Tuple11] {
@@ -1017,22 +1053,21 @@ object Remote {
     t12: Remote[T12]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)]
       with RemoteTuple12.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)] = Tuple12(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value)
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f)
     )
   }
 
@@ -1070,24 +1105,24 @@ object Remote {
     t13: Remote[T13]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)]
       with RemoteTuple13.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] = Tuple13(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] =
+      Tuple13(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f)
+      )
   }
 
   object Tuple13 extends RemoteTuple13.ConstructStatic[Tuple13] {
@@ -1126,25 +1161,25 @@ object Remote {
     t14: Remote[T14]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)]
       with RemoteTuple14.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] = Tuple14(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] =
+      Tuple14(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f)
+      )
   }
 
   object Tuple14 extends RemoteTuple14.ConstructStatic[Tuple14] {
@@ -1185,26 +1220,26 @@ object Remote {
     t15: Remote[T15]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)]
       with RemoteTuple15.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] = Tuple15(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] =
+      Tuple15(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f)
+      )
   }
 
   object Tuple15 extends RemoteTuple15.ConstructStatic[Tuple15] {
@@ -1247,27 +1282,27 @@ object Remote {
     t16: Remote[T16]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)]
       with RemoteTuple16.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] = Tuple16(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value),
-      t16.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] =
+      Tuple16(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f)
+      )
   }
 
   object Tuple16 extends RemoteTuple16.ConstructStatic[Tuple16] {
@@ -1312,28 +1347,28 @@ object Remote {
     t17: Remote[T17]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)]
       with RemoteTuple17.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] = Tuple17(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value),
-      t16.substitute(variable, value),
-      t17.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] =
+      Tuple17(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f)
+      )
   }
 
   object Tuple17 extends RemoteTuple17.ConstructStatic[Tuple17] {
@@ -1380,29 +1415,29 @@ object Remote {
     t18: Remote[T18]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)]
       with RemoteTuple18.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] = Tuple18(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value),
-      t16.substitute(variable, value),
-      t17.substitute(variable, value),
-      t18.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] =
+      Tuple18(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f)
+      )
   }
 
   object Tuple18 extends RemoteTuple18.ConstructStatic[Tuple18] {
@@ -1471,30 +1506,30 @@ object Remote {
         T18,
         T19
       ] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] = Tuple19(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value),
-      t16.substitute(variable, value),
-      t17.substitute(variable, value),
-      t18.substitute(variable, value),
-      t19.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] =
+      Tuple19(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f)
+      )
   }
 
   object Tuple19 extends RemoteTuple19.ConstructStatic[Tuple19] {
@@ -1566,31 +1601,31 @@ object Remote {
         T19,
         T20
       ] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] = Tuple20(
-      t1.substitute(variable, value),
-      t2.substitute(variable, value),
-      t3.substitute(variable, value),
-      t4.substitute(variable, value),
-      t5.substitute(variable, value),
-      t6.substitute(variable, value),
-      t7.substitute(variable, value),
-      t8.substitute(variable, value),
-      t9.substitute(variable, value),
-      t10.substitute(variable, value),
-      t11.substitute(variable, value),
-      t12.substitute(variable, value),
-      t13.substitute(variable, value),
-      t14.substitute(variable, value),
-      t15.substitute(variable, value),
-      t16.substitute(variable, value),
-      t17.substitute(variable, value),
-      t18.substitute(variable, value),
-      t19.substitute(variable, value),
-      t20.substitute(variable, value)
-    )
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] =
+      Tuple20(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f),
+        t20.substitute(f)
+      )
   }
 
   object Tuple20 extends RemoteTuple20.ConstructStatic[Tuple20] {
@@ -1687,32 +1722,31 @@ object Remote {
         T20,
         T21
       ] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)] =
       Tuple21(
-        t1.substitute(variable, value),
-        t2.substitute(variable, value),
-        t3.substitute(variable, value),
-        t4.substitute(variable, value),
-        t5.substitute(variable, value),
-        t6.substitute(variable, value),
-        t7.substitute(variable, value),
-        t8.substitute(variable, value),
-        t9.substitute(variable, value),
-        t10.substitute(variable, value),
-        t11.substitute(variable, value),
-        t12.substitute(variable, value),
-        t13.substitute(variable, value),
-        t14.substitute(variable, value),
-        t15.substitute(variable, value),
-        t16.substitute(variable, value),
-        t17.substitute(variable, value),
-        t18.substitute(variable, value),
-        t19.substitute(variable, value),
-        t20.substitute(variable, value),
-        t21.substitute(variable, value)
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f),
+        t20.substitute(f),
+        t21.substitute(f)
       )
   }
 
@@ -1816,33 +1850,32 @@ object Remote {
         T21,
         T22
       ] {
-    def substitute[B](
-      variable: Remote.Local[B],
-      value: Remote[B]
+    override protected def substituteRec[B](
+      f: Remote[B] => Option[Remote[B]]
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)] =
       Tuple22(
-        t1.substitute(variable, value),
-        t2.substitute(variable, value),
-        t3.substitute(variable, value),
-        t4.substitute(variable, value),
-        t5.substitute(variable, value),
-        t6.substitute(variable, value),
-        t7.substitute(variable, value),
-        t8.substitute(variable, value),
-        t9.substitute(variable, value),
-        t10.substitute(variable, value),
-        t11.substitute(variable, value),
-        t12.substitute(variable, value),
-        t13.substitute(variable, value),
-        t14.substitute(variable, value),
-        t15.substitute(variable, value),
-        t16.substitute(variable, value),
-        t17.substitute(variable, value),
-        t18.substitute(variable, value),
-        t19.substitute(variable, value),
-        t20.substitute(variable, value),
-        t21.substitute(variable, value),
-        t22.substitute(variable, value)
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f),
+        t20.substitute(f),
+        t21.substitute(f),
+        t22.substitute(f)
       )
   }
 
@@ -1886,8 +1919,8 @@ object Remote {
         value     = TupleAccess.findValueIn(dynTuple.value, n)
       } yield SchemaAndValue(schema, value)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
-      TupleAccess(tuple.substitute(variable, value), n)
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      TupleAccess(tuple.substitute(f), n)
   }
 
   object TupleAccess {
@@ -1970,11 +2003,11 @@ object Remote {
         case true  => ifTrue.evalDynamic
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
       Branch(
-        predicate.substitute(variable, value),
-        ifTrue.substitute(variable, value),
-        ifFalse.substitute(variable, value)
+        predicate.substitute(f),
+        ifTrue.substitute(f),
+        ifFalse.substitute(f)
       )
   }
 
@@ -2004,8 +2037,8 @@ object Remote {
         SchemaAndValue.of(value.length)
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Int] =
-      Length(remoteString.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Int] =
+      Length(remoteString.substitute(f))
   }
 
   object Length {
@@ -2035,8 +2068,8 @@ object Remote {
         compareResult = ordering.compare(leftVal, rightVal.asInstanceOf[leftDyn.Subtype])
       } yield SchemaAndValue.of(compareResult <= 0)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Boolean] =
-      LessThanEqual(left.substitute(variable, value), right.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+      LessThanEqual(left.substitute(f), right.substitute(f))
   }
 
   object LessThanEqual {
@@ -2065,8 +2098,8 @@ object Remote {
         result    = leftDyn.value == rightDyn.value && Schema.structureEquality.equal(leftDyn.schema, rightDyn.schema)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Boolean] =
-      Equal(left.substitute(variable, value), right.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+      Equal(left.substitute(f), right.substitute(f))
   }
 
   object Equal {
@@ -2093,8 +2126,8 @@ object Remote {
         SchemaAndValue.of(!boolValue)
       }
 
-    def substitute[B](variable: Remote.Local[B], replacement: Remote[B]): Remote[Boolean] =
-      Not(value.substitute(variable, replacement))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+      Not(value.substitute(f))
   }
 
   object Not {
@@ -2120,8 +2153,8 @@ object Remote {
         rval <- right.eval
       } yield SchemaAndValue.of(lval && rval)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Boolean] =
-      And(left.substitute(variable, value), right.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+      And(left.substitute(f), right.substitute(f))
   }
 
   object And {
@@ -2173,11 +2206,11 @@ object Remote {
         } yield SchemaAndValue(initialDyn.schema, result)
       }
 
-    def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[B] =
+    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
       Fold(
-        list.substitute(variable, value),
-        initial.substitute(variable, value),
-        body.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[(B, A), B]]
+        list.substitute(f),
+        initial.substitute(f),
+        body.substitute(f).asInstanceOf[EvaluatedRemoteFunction[(B, A), B]]
       )
   }
 
@@ -2214,8 +2247,8 @@ object Remote {
         }
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[List[A]] =
-      Cons(list.substitute(variable, value), head.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[List[A]] =
+      Cons(list.substitute(f), head.substitute(f))
   }
 
   object Cons {
@@ -2252,8 +2285,8 @@ object Remote {
         }
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Option[(A, List[A])]] =
-      UnCons(list.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Option[(A, List[A])]] =
+      UnCons(list.substitute(f))
   }
 
   object UnCons {
@@ -2279,8 +2312,8 @@ object Remote {
         n <- nanos.eval[Long]
       } yield SchemaAndValue.of(Instant.ofEpochSecond(s, n))
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Instant] =
-      InstantFromLongs(seconds.substitute(variable, value), nanos.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+      InstantFromLongs(seconds.substitute(f), nanos.substitute(f))
   }
 
   object InstantFromLongs {
@@ -2306,8 +2339,8 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Instant]] =
       charSeq.eval[String].map(s => SchemaAndValue.of(Instant.parse(s)))
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Instant] =
-      InstantFromString(charSeq.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+      InstantFromString(charSeq.substitute(f))
   }
 
   object InstantFromString {
@@ -2333,8 +2366,8 @@ object Remote {
           .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Int]), (instant.getEpochSecond, instant.getNano))
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(Long, Int)] =
-      InstantToTuple(instant.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(Long, Int)] =
+      InstantToTuple(instant.substitute(f))
   }
 
   object InstantToTuple {
@@ -2361,8 +2394,8 @@ object Remote {
         result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Instant] =
-      InstantPlusDuration(instant.substitute(variable, value), duration.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+      InstantPlusDuration(instant.substitute(f), duration.substitute(f))
   }
 
   object InstantPlusDuration {
@@ -2391,8 +2424,8 @@ object Remote {
         result        = instant.truncatedTo(temporalUnit)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Instant] =
-      InstantTruncate(instant.substitute(variable, value), temporalUnit.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+      InstantTruncate(instant.substitute(f), temporalUnit.substitute(f))
   }
 
   object InstantTruncate {
@@ -2417,8 +2450,8 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Duration]] =
       charSeq.eval[String].map(s => SchemaAndValue.of(Duration.parse(s)))
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationFromString(charSeq.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationFromString(charSeq.substitute(f))
   }
 
   object DurationFromString {
@@ -2446,8 +2479,11 @@ object Remote {
         result = Duration.between(start, end)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationBetweenInstants(startInclusive.substitute(variable, value), endExclusive.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationBetweenInstants(
+        startInclusive.substitute(f),
+        endExclusive.substitute(f)
+      )
   }
 
   object DurationBetweenInstants {
@@ -2478,8 +2514,8 @@ object Remote {
         result  = Duration.ofSeconds(seconds, nanos.toLong)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationFromBigDecimal(seconds.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationFromBigDecimal(seconds.substitute(f))
   }
 
   object DurationFromBigDecimal {
@@ -2508,8 +2544,8 @@ object Remote {
         result          = Duration.ofSeconds(seconds, nanoAdjustment)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationFromLongs(seconds.substitute(variable, value), nanoAdjustment.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationFromLongs(seconds.substitute(f), nanoAdjustment.substitute(f))
   }
 
   object DurationFromLongs {
@@ -2538,8 +2574,8 @@ object Remote {
         result        = Duration.of(amount, temporalUnit)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationFromAmount(amount.substitute(variable, value), temporalUnit.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationFromAmount(amount.substitute(f), temporalUnit.substitute(f))
   }
 
   object DurationFromAmount {
@@ -2567,8 +2603,8 @@ object Remote {
           .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Long]), (duration.getSeconds, duration.getNano.toLong))
       }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[(Long, Long)] =
-      DurationToLongs(duration.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(Long, Long)] =
+      DurationToLongs(duration.substitute(f))
   }
 
   object DurationToLongs {
@@ -2595,8 +2631,8 @@ object Remote {
         result = left.plus(right)
       } yield SchemaAndValue.of(result)
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationPlusDuration(left.substitute(variable, value), right.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationPlusDuration(left.substitute(f), right.substitute(f))
   }
 
   object DurationPlusDuration {
@@ -2625,8 +2661,8 @@ object Remote {
 
     override def schema: Schema[_ <: Duration] = Schema[Duration]
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[Duration] =
-      DurationMultipliedBy(left.substitute(variable, value), right.substitute(variable, value))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+      DurationMultipliedBy(left.substitute(f), right.substitute(f))
   }
 
   object DurationMultipliedBy {
@@ -2662,11 +2698,11 @@ object Remote {
       loop(initial)
     }
 
-    def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[A] =
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
       Iterate(
-        initial.substitute(variable, value),
-        iterate.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[A, A]],
-        predicate.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[A, Boolean]]
+        initial.substitute(f),
+        iterate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, A]],
+        predicate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, Boolean]]
       )
   }
 
@@ -2694,8 +2730,8 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
       value().evalDynamic
 
-    def substitute[B](variable: Remote.Local[B], replacement: Remote[B]): Remote[A] =
-      Lazy(() => value().substitute(variable, replacement))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+      Lazy(() => value().substitute(f))
   }
 
   object Lazy {
@@ -2714,8 +2750,8 @@ object Remote {
         schemaAndValue <- value.evalDynamic
       } yield SchemaAndValue(Schema.option(schemaAndValue.schema), DynamicValue.SomeValue(schemaAndValue.value))
 
-    def substitute[B](variable: Remote.Local[B], replacement: Remote[B]): Remote[Option[A]] =
-      RemoteSome(value.substitute(variable, replacement))
+    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Option[A]] =
+      RemoteSome(value.substitute(f))
   }
 
   object RemoteSome {
@@ -2742,11 +2778,11 @@ object Remote {
         }
       }
 
-    def substitute[C](variable: Remote.Local[C], value: Remote[C]): Remote[B] =
+    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
       FoldOption(
-        option.substitute(variable, value),
-        ifEmpty.substitute(variable, value),
-        ifNonEmpty.substitute(variable, value).asInstanceOf[EvaluatedRemoteFunction[A, B]]
+        option.substitute(f),
+        ifEmpty.substitute(f),
+        ifNonEmpty.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, B]]
       )
   }
 
@@ -2857,10 +2893,19 @@ object Remote {
     }
 
   def fromDynamic[A](dynamicValue: DynamicValue, schema: Schema[A]): Remote[A] =
+    // TODO: either avoid this or do it nicer
     if (schema eq ZFlow.schemaAny) {
       Flow(dynamicValue.toTypedValue[ZFlow[Any, Any, Any]](ZFlow.schemaAny).toOption.get).asInstanceOf[Remote[A]]
     } else if (schema eq Remote.schemaAny) {
       Nested(dynamicValue.toTypedValue[Remote[Any]](Remote.schemaAny).toOption.get).asInstanceOf[Remote[A]]
+    } else if (dynamicValue.isInstanceOf[DynamicValue.Tuple]) {
+      val dynamicTuple = dynamicValue.asInstanceOf[DynamicValue.Tuple]
+      val schemaTuple  = schema.asInstanceOf[Schema.Tuple[_, _]]
+      Tuple2(
+        Remote.fromDynamic(dynamicTuple.left, schemaTuple.left),
+        Remote.fromDynamic(dynamicTuple.right, schemaTuple.right)
+      ).asInstanceOf[Remote[A]]
+      // TODO: flatten tuple
     } else {
       Literal(dynamicValue, schema)
     }
@@ -2927,6 +2972,7 @@ object Remote {
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
       .:+:(Local.schemaCase[A])
+      .:+:(Unbound.schemaCase[A])
       .:+:(UnaryNumeric.schemaCase[A])
       .:+:(BinaryNumeric.schemaCase[A])
       .:+:(UnaryFractional.schemaCase[A])

@@ -18,6 +18,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.debug.PrettyPrint
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
@@ -47,15 +48,40 @@ final case class PersistentExecutor(
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
   private def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, IOException, A] =
-    remote
-      .eval[A]
-      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
-      .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
+    evalDynamic(remote).flatMap(dyn =>
+      ZIO
+        .fromEither(dyn.value.toTypedValue(implicitly[Schema[A]]))
+        .mapError(msg => new IOException(s"Failed to convert remote to typed value: $msg"))
+    )
 
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
-    remote.evalDynamic
-      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
+    (for {
+      dyn    <- remote.evalDynamic
+      locals <- LocalContext.getAllVariables
+      substitution = (r: Remote[_]) =>
+                       r match {
+                         case local: Remote.Local[_] => locals.get(local).map(dyn => Remote.fromDynamic(dyn, r.schema))
+                         case _                      => None
+                       }
+
+      substituted <-
+        if (dyn.schema eq ZFlow.schemaAny) {
+          ZIO.fromEither(dyn.toTyped).flatMap { flow =>
+            val substitutedFlow = flow.asInstanceOf[ZFlow[Any, Any, Any]].substitute(substitution)
+//            println(PrettyPrint.prettyPrintFlow(substitutedFlow))
+            Remote.Flow(substitutedFlow).evalDynamic
+          }
+        } else if (dyn.schema eq Remote.schemaAny) {
+          ZIO.fromEither(dyn.toTyped).flatMap { remote =>
+            val substitutedRemote = remote.asInstanceOf[Remote[Any]].substitute(substitution)
+            Remote.Nested(substitutedRemote).evalDynamic
+          }
+        } else {
+          ZIO.succeed(dyn)
+        }
+    } yield substituted.asInstanceOf[SchemaAndValue[A]])
       .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
+      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {

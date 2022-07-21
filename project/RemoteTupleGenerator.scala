@@ -166,7 +166,7 @@ object RemoteTupleGenerator extends AutoPlugin {
         extends Remote[${model.appliedTupleType}]
         with ${Init(appliedConstructType, Name.Anonymous(), Nil)} {
         
-          def substitute[B](variable: Remote.Local[B], value: Remote[B]): Remote[${model.appliedTupleType}] =
+          override protected def substituteRec[B](variable: Remote[B], value: Remote[B]): Remote[${model.appliedTupleType}] =
             $name(..$substitutions)
         }
       """,
