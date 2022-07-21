@@ -58,13 +58,17 @@ sealed trait Remote[+A] { self =>
 
   final def unit: Remote[Unit] = Remote.Ignore()
 
-  def substitute[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
-    f(this.asInstanceOf[Remote[B]]) match {
-      case Some(value) => value.substitute(f).asInstanceOf[Remote[A]]
-      case None        => substituteRec(f)
-    }
+  private[flow] def variableUsage: VariableUsage
 
-  protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A]
+  final def substitute[B](f: Remote.Substitutions): Remote[A] =
+    if (f.cut(variableUsage)) this
+    else
+      f.matches(this) match {
+        case Some(value) => value.substitute(f).asInstanceOf[Remote[A]]
+        case None        => substituteRec(f)
+      }
+
+  protected def substituteRec[B](f: Remote.Substitutions): Remote[A]
 }
 
 object Remote {
@@ -96,7 +100,9 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] = this
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] = this
+
+    override private[flow] val variableUsage = VariableUsage.none
   }
 
   object Literal {
@@ -121,8 +127,10 @@ object Remote {
 
     override def schema = ZFlow.schema[R, E, A]
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[ZFlow[R, E, A]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[ZFlow[R, E, A]] =
       Flow(flow.substitute(f))
+
+    override private[flow] val variableUsage = flow.variableUsage
   }
 
   object Flow {
@@ -149,8 +157,10 @@ object Remote {
 
     override def schema = Remote.schema[A]
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Remote[A]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Remote[A]] =
       Nested(remote.substitute(f))
+
+    override private[flow] val variableUsage = remote.variableUsage
   }
 
   object Nested {
@@ -167,8 +177,10 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Unit]] =
       ZIO.succeed(SchemaAndValue(Schema.primitive[Unit], DynamicValue.Primitive((), StandardType.UnitType)))
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Unit] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Unit] =
       this
+
+    override private[flow] val variableUsage = VariableUsage.none
   }
   object Ignore {
     val schema: Schema[Ignore] = Schema[Unit].transform(_ => Ignore(), _ => ())
@@ -193,8 +205,10 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       this
+
+    override private[flow] val variableUsage = VariableUsage.variable(identifier)
   }
 
   object Variable {
@@ -225,8 +239,10 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       this
+
+    override private[flow] val variableUsage = VariableUsage.binding(identifier)
   }
 
   object Unbound {
@@ -262,8 +278,10 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       this
+
+    override private[flow] val variableUsage = VariableUsage.local(identifier)
   }
 
   object Local {
@@ -296,8 +314,10 @@ object Remote {
     def apply(a: Remote[A]): Remote[B] =
       ApplyEvaluatedFunction(this, a)
 
-    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
       EvaluatedRemoteFunction(input, result.substitute(f))
+
+    override private[flow] val variableUsage = input.variableUsage.union(result.variableUsage)
   }
 
   object EvaluatedRemoteFunction {
@@ -329,19 +349,26 @@ object Remote {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[B]] =
       for {
-        input      <- a.evalDynamic
-        localName   = LocalContext.generateFreshVariableName
-        local       = Local(localName, f.input.schemaA)
-        _          <- LocalContext.storeVariable(local, input.value)
-        appliedBody = f.result.substitute((r: Remote[A]) => if (r == f.input) Some(local) else None)
-        result     <- appliedBody.evalDynamic
+        input    <- a.evalDynamic
+        localName = LocalContext.generateFreshVariableName
+        local     = Local(localName, f.input.schemaA)
+        _        <- LocalContext.storeVariable(local, input.value)
+        appliedBody = f.result.substitute(
+                        Remote.Substitutions(
+                          bindings = Map(f.input -> local),
+                          locals = Map.empty
+                        )
+                      )
+        result <- appliedBody.evalDynamic
       } yield result.asInstanceOf[SchemaAndValue[B]]
 
-    override protected def substituteRec[C](fn: Remote[C] => Option[Remote[C]]): Remote[B] =
+    override protected def substituteRec[C](fn: Remote.Substitutions): Remote[B] =
       ApplyEvaluatedFunction(
         f.substitute(fn).asInstanceOf[EvaluatedRemoteFunction[A, B]],
         a.substitute(fn)
       )
+
+    override private[flow] val variableUsage = f.variableUsage.union(a.variableUsage).removeBinding(f.input.identifier)
   }
 
   object ApplyEvaluatedFunction {
@@ -374,8 +401,10 @@ object Remote {
 
     override def schema: Schema[_ <: A] = numeric.schema
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       UnaryNumeric(value.substitute(f), numeric, operator)
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
   object UnaryNumeric {
@@ -408,8 +437,10 @@ object Remote {
 
     override def schema: Schema[_ <: A] = numeric.schema
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       BinaryNumeric(left.substitute(f), right.substitute(f), numeric, operator)
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object BinaryNumeric {
@@ -442,8 +473,10 @@ object Remote {
         DynamicValue.fromSchemaAndValue(fractional.schema, fractional.unary(operator, v))
       )
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       UnaryFractional(value.substitute(f), fractional, operator)
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
   object UnaryFractional {
@@ -513,11 +546,16 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[Either[A, B]] =
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[Either[A, B]] =
       RemoteEither(either match {
         case Left((valueA, schemaB))  => Left((valueA.substitute(f), schemaB))
         case Right((schemaA, valueB)) => Right((schemaA, valueB.substitute(f)))
       })
+
+    override private[flow] val variableUsage = either match {
+      case Left((valueA, _))  => valueA.variableUsage
+      case Right((_, valueB)) => valueB.variableUsage
+    }
   }
 
   object RemoteEither {
@@ -571,12 +609,14 @@ object Remote {
           right(Remote(b)(right.input.schemaA)).evalDynamic
       }
 
-    override protected def substituteRec[D](f: Remote[D] => Option[Remote[D]]): Remote[C] =
+    override protected def substituteRec[D](f: Remote.Substitutions): Remote[C] =
       FoldEither(
         either.substitute(f),
         left.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, C]],
         right.substitute(f).asInstanceOf[EvaluatedRemoteFunction[B, C]]
       )
+
+    override private[flow] val variableUsage = either.variableUsage.union(left.variableUsage).union(right.variableUsage)
   }
 
   object FoldEither {
@@ -624,8 +664,10 @@ object Remote {
         }
       }
 
-    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[Either[B, A]] =
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[Either[B, A]] =
       SwapEither(either.substitute(f))
+
+    override private[flow] val variableUsage = either.variableUsage
   }
 
   object SwapEither {
@@ -693,11 +735,16 @@ object Remote {
         case _ => false
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[scala.util.Try[A]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[scala.util.Try[A]] =
       Try(either match {
         case Left((throwable, schemaA)) => Left((throwable.substitute(f), schemaA))
         case Right(success)             => Right(success.substitute(f))
       })
+
+    override private[flow] val variableUsage = either match {
+      case Left((throwable, _)) => throwable.variableUsage
+      case Right(success)       => success.variableUsage
+    }
   }
 
   object Try {
@@ -731,8 +778,9 @@ object Remote {
   final case class Tuple2[T1, T2](t1: Remote[T1], t2: Remote[T2])
       extends Remote[(T1, T2)]
       with RemoteTuple2.Construct[T1, T2] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2)] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2)] =
       Tuple2(t1.substitute(f), t2.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage)
   }
 
   object Tuple2 extends RemoteTuple2.ConstructStatic[Tuple2] {
@@ -742,8 +790,10 @@ object Remote {
   final case class Tuple3[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3])
       extends Remote[(T1, T2, T3)]
       with RemoteTuple3.Construct[T1, T2, T3] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3)] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3)] =
       Tuple3(t1.substitute(f), t2.substitute(f), t3.substitute(f))
+    override private[flow] val variableUsage =
+      VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage).union(t3.variableUsage)
   }
 
   object Tuple3 extends RemoteTuple3.ConstructStatic[Tuple3] {
@@ -753,13 +803,10 @@ object Remote {
   final case class Tuple4[T1, T2, T3, T4](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3], t4: Remote[T4])
       extends Remote[(T1, T2, T3, T4)]
       with RemoteTuple4.Construct[T1, T2, T3, T4] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4)] =
-      Tuple4(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f)
-      )
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4)] =
+      Tuple4(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f))
+    override private[flow] val variableUsage =
+      VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage).union(t3.variableUsage).union(t4.variableUsage)
   }
 
   object Tuple4 extends RemoteTuple4.ConstructStatic[Tuple4] {
@@ -779,14 +826,14 @@ object Remote {
     t5: Remote[T5]
   ) extends Remote[(T1, T2, T3, T4, T5)]
       with RemoteTuple5.Construct[T1, T2, T3, T4, T5] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5)] =
-      Tuple5(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f)
-      )
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5)] =
+      Tuple5(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f), t5.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
   }
 
   object Tuple5 extends RemoteTuple5.ConstructStatic[Tuple5] {
@@ -808,15 +855,15 @@ object Remote {
     t6: Remote[T6]
   ) extends Remote[(T1, T2, T3, T4, T5, T6)]
       with RemoteTuple6.Construct[T1, T2, T3, T4, T5, T6] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5, T6)] =
-      Tuple6(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f)
-      )
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6)] =
+      Tuple6(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f), t5.substitute(f), t6.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
   }
 
   object Tuple6 extends RemoteTuple6.ConstructStatic[Tuple6] {
@@ -840,7 +887,7 @@ object Remote {
     t7: Remote[T7]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7)]
       with RemoteTuple7.Construct[T1, T2, T3, T4, T5, T6, T7] {
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
       Tuple7(
         t1.substitute(f),
         t2.substitute(f),
@@ -850,6 +897,14 @@ object Remote {
         t6.substitute(f),
         t7.substitute(f)
       )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
   }
 
   object Tuple7 extends RemoteTuple7.ConstructStatic[Tuple7] {
@@ -876,18 +931,26 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8)]
       with RemoteTuple8.Construct[T1, T2, T3, T4, T5, T6, T7, T8] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] =
-      Tuple8(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] = Tuple8(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
   }
 
   object Tuple8 extends RemoteTuple8.ConstructStatic[Tuple8] {
@@ -916,19 +979,28 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)]
       with RemoteTuple9.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] =
-      Tuple9(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] = Tuple9(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
   }
 
   object Tuple9 extends RemoteTuple9.ConstructStatic[Tuple9] {
@@ -959,20 +1031,30 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)]
       with RemoteTuple10.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] =
-      Tuple10(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] = Tuple10(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
   }
 
   object Tuple10 extends RemoteTuple10.ConstructStatic[Tuple10] {
@@ -1005,21 +1087,32 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)]
       with RemoteTuple11.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] =
-      Tuple11(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] = Tuple11(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
   }
 
   object Tuple11 extends RemoteTuple11.ConstructStatic[Tuple11] {
@@ -1054,7 +1147,7 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)]
       with RemoteTuple12.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
+      f: Remote.Substitutions
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)] = Tuple12(
       t1.substitute(f),
       t2.substitute(f),
@@ -1069,6 +1162,19 @@ object Remote {
       t11.substitute(f),
       t12.substitute(f)
     )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
   }
 
   object Tuple12 extends RemoteTuple12.ConstructStatic[Tuple12] {
@@ -1106,23 +1212,36 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)]
       with RemoteTuple13.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] =
-      Tuple13(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] = Tuple13(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
   }
 
   object Tuple13 extends RemoteTuple13.ConstructStatic[Tuple13] {
@@ -1162,24 +1281,38 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)]
       with RemoteTuple14.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] =
-      Tuple14(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] = Tuple14(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
   }
 
   object Tuple14 extends RemoteTuple14.ConstructStatic[Tuple14] {
@@ -1221,25 +1354,40 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)]
       with RemoteTuple15.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] =
-      Tuple15(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] = Tuple15(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
   }
 
   object Tuple15 extends RemoteTuple15.ConstructStatic[Tuple15] {
@@ -1283,26 +1431,42 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)]
       with RemoteTuple16.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] =
-      Tuple16(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f),
-        t16.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] = Tuple16(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
   }
 
   object Tuple16 extends RemoteTuple16.ConstructStatic[Tuple16] {
@@ -1348,27 +1512,44 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)]
       with RemoteTuple17.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] =
-      Tuple17(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f),
-        t16.substitute(f),
-        t17.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] = Tuple17(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
   }
 
   object Tuple17 extends RemoteTuple17.ConstructStatic[Tuple17] {
@@ -1416,28 +1597,46 @@ object Remote {
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)]
       with RemoteTuple18.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] =
-      Tuple18(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f),
-        t16.substitute(f),
-        t17.substitute(f),
-        t18.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] = Tuple18(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
   }
 
   object Tuple18 extends RemoteTuple18.ConstructStatic[Tuple18] {
@@ -1507,29 +1706,48 @@ object Remote {
         T19
       ] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] =
-      Tuple19(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f),
-        t16.substitute(f),
-        t17.substitute(f),
-        t18.substitute(f),
-        t19.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] = Tuple19(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f),
+      t19.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
   }
 
   object Tuple19 extends RemoteTuple19.ConstructStatic[Tuple19] {
@@ -1602,30 +1820,50 @@ object Remote {
         T20
       ] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] =
-      Tuple20(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f),
-        t8.substitute(f),
-        t9.substitute(f),
-        t10.substitute(f),
-        t11.substitute(f),
-        t12.substitute(f),
-        t13.substitute(f),
-        t14.substitute(f),
-        t15.substitute(f),
-        t16.substitute(f),
-        t17.substitute(f),
-        t18.substitute(f),
-        t19.substitute(f),
-        t20.substitute(f)
-      )
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] = Tuple20(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f),
+      t19.substitute(f),
+      t20.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
   }
 
   object Tuple20 extends RemoteTuple20.ConstructStatic[Tuple20] {
@@ -1723,7 +1961,7 @@ object Remote {
         T21
       ] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
+      f: Remote.Substitutions
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)] =
       Tuple21(
         t1.substitute(f),
@@ -1748,6 +1986,28 @@ object Remote {
         t20.substitute(f),
         t21.substitute(f)
       )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
+      .union(t21.variableUsage)
   }
 
   object Tuple21 extends RemoteTuple21.ConstructStatic[Tuple21] {
@@ -1851,7 +2111,7 @@ object Remote {
         T22
       ] {
     override protected def substituteRec[B](
-      f: Remote[B] => Option[Remote[B]]
+      f: Remote.Substitutions
     ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)] =
       Tuple22(
         t1.substitute(f),
@@ -1877,6 +2137,29 @@ object Remote {
         t21.substitute(f),
         t22.substitute(f)
       )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
+      .union(t21.variableUsage)
+      .union(t22.variableUsage)
   }
 
   object Tuple22 extends RemoteTuple22.ConstructStatic[Tuple22] {
@@ -1919,8 +2202,10 @@ object Remote {
         value     = TupleAccess.findValueIn(dynTuple.value, n)
       } yield SchemaAndValue(schema, value)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       TupleAccess(tuple.substitute(f), n)
+
+    override private[flow] val variableUsage = tuple.variableUsage
   }
 
   object TupleAccess {
@@ -2003,12 +2288,15 @@ object Remote {
         case true  => ifTrue.evalDynamic
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       Branch(
         predicate.substitute(f),
         ifTrue.substitute(f),
         ifFalse.substitute(f)
       )
+
+    override private[flow] val variableUsage =
+      predicate.variableUsage.union(ifTrue.variableUsage).union(ifFalse.variableUsage)
   }
 
   object Branch {
@@ -2037,8 +2325,10 @@ object Remote {
         SchemaAndValue.of(value.length)
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Int] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Int] =
       Length(remoteString.substitute(f))
+
+    override private[flow] val variableUsage = remoteString.variableUsage
   }
 
   object Length {
@@ -2068,8 +2358,10 @@ object Remote {
         compareResult = ordering.compare(leftVal, rightVal.asInstanceOf[leftDyn.Subtype])
       } yield SchemaAndValue.of(compareResult <= 0)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
       LessThanEqual(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object LessThanEqual {
@@ -2098,8 +2390,10 @@ object Remote {
         result    = leftDyn.value == rightDyn.value && Schema.structureEquality.equal(leftDyn.schema, rightDyn.schema)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
       Equal(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object Equal {
@@ -2126,8 +2420,10 @@ object Remote {
         SchemaAndValue.of(!boolValue)
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
       Not(value.substitute(f))
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
   object Not {
@@ -2153,8 +2449,10 @@ object Remote {
         rval <- right.eval
       } yield SchemaAndValue.of(lval && rval)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Boolean] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
       And(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object And {
@@ -2206,12 +2504,14 @@ object Remote {
         } yield SchemaAndValue(initialDyn.schema, result)
       }
 
-    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
       Fold(
         list.substitute(f),
         initial.substitute(f),
         body.substitute(f).asInstanceOf[EvaluatedRemoteFunction[(B, A), B]]
       )
+
+    override private[flow] val variableUsage = list.variableUsage.union(initial.variableUsage).union(body.variableUsage)
   }
 
   object Fold {
@@ -2247,8 +2547,10 @@ object Remote {
         }
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[List[A]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[List[A]] =
       Cons(list.substitute(f), head.substitute(f))
+
+    override private[flow] val variableUsage = list.variableUsage.union(head.variableUsage)
   }
 
   object Cons {
@@ -2285,8 +2587,10 @@ object Remote {
         }
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Option[(A, List[A])]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[(A, List[A])]] =
       UnCons(list.substitute(f))
+
+    override private[flow] val variableUsage = list.variableUsage
   }
 
   object UnCons {
@@ -2312,8 +2616,10 @@ object Remote {
         n <- nanos.eval[Long]
       } yield SchemaAndValue.of(Instant.ofEpochSecond(s, n))
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
       InstantFromLongs(seconds.substitute(f), nanos.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage.union(nanos.variableUsage)
   }
 
   object InstantFromLongs {
@@ -2339,8 +2645,10 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Instant]] =
       charSeq.eval[String].map(s => SchemaAndValue.of(Instant.parse(s)))
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
       InstantFromString(charSeq.substitute(f))
+
+    override private[flow] val variableUsage = charSeq.variableUsage
   }
 
   object InstantFromString {
@@ -2366,8 +2674,10 @@ object Remote {
           .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Int]), (instant.getEpochSecond, instant.getNano))
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(Long, Int)] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(Long, Int)] =
       InstantToTuple(instant.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage
   }
 
   object InstantToTuple {
@@ -2394,8 +2704,10 @@ object Remote {
         result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
       InstantPlusDuration(instant.substitute(f), duration.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage.union(duration.variableUsage)
   }
 
   object InstantPlusDuration {
@@ -2424,8 +2736,10 @@ object Remote {
         result        = instant.truncatedTo(temporalUnit)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Instant] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
       InstantTruncate(instant.substitute(f), temporalUnit.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage.union(temporalUnit.variableUsage)
   }
 
   object InstantTruncate {
@@ -2450,8 +2764,10 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[Duration]] =
       charSeq.eval[String].map(s => SchemaAndValue.of(Duration.parse(s)))
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationFromString(charSeq.substitute(f))
+
+    override private[flow] val variableUsage = charSeq.variableUsage
   }
 
   object DurationFromString {
@@ -2479,11 +2795,13 @@ object Remote {
         result = Duration.between(start, end)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationBetweenInstants(
         startInclusive.substitute(f),
         endExclusive.substitute(f)
       )
+
+    override private[flow] val variableUsage = startInclusive.variableUsage.union(endExclusive.variableUsage)
   }
 
   object DurationBetweenInstants {
@@ -2514,8 +2832,10 @@ object Remote {
         result  = Duration.ofSeconds(seconds, nanos.toLong)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationFromBigDecimal(seconds.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage
   }
 
   object DurationFromBigDecimal {
@@ -2544,8 +2864,10 @@ object Remote {
         result          = Duration.ofSeconds(seconds, nanoAdjustment)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationFromLongs(seconds.substitute(f), nanoAdjustment.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage.union(nanoAdjustment.variableUsage)
   }
 
   object DurationFromLongs {
@@ -2574,8 +2896,10 @@ object Remote {
         result        = Duration.of(amount, temporalUnit)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationFromAmount(amount.substitute(f), temporalUnit.substitute(f))
+
+    override private[flow] val variableUsage = amount.variableUsage.union(temporalUnit.variableUsage)
   }
 
   object DurationFromAmount {
@@ -2603,8 +2927,10 @@ object Remote {
           .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Long]), (duration.getSeconds, duration.getNano.toLong))
       }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[(Long, Long)] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(Long, Long)] =
       DurationToLongs(duration.substitute(f))
+
+    override private[flow] val variableUsage = duration.variableUsage
   }
 
   object DurationToLongs {
@@ -2631,8 +2957,10 @@ object Remote {
         result = left.plus(right)
       } yield SchemaAndValue.of(result)
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationPlusDuration(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object DurationPlusDuration {
@@ -2661,8 +2989,10 @@ object Remote {
 
     override def schema: Schema[_ <: Duration] = Schema[Duration]
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Duration] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
       DurationMultipliedBy(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
   object DurationMultipliedBy {
@@ -2698,12 +3028,15 @@ object Remote {
       loop(initial)
     }
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       Iterate(
         initial.substitute(f),
         iterate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, A]],
         predicate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, Boolean]]
       )
+
+    override private[flow] val variableUsage =
+      initial.variableUsage.union(iterate.variableUsage).union(predicate.variableUsage)
   }
 
   object Iterate {
@@ -2730,8 +3063,10 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
       value().evalDynamic
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[A] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       Lazy(() => value().substitute(f))
+
+    override private[flow] lazy val variableUsage = value().variableUsage
   }
 
   object Lazy {
@@ -2750,8 +3085,10 @@ object Remote {
         schemaAndValue <- value.evalDynamic
       } yield SchemaAndValue(Schema.option(schemaAndValue.schema), DynamicValue.SomeValue(schemaAndValue.value))
 
-    override protected def substituteRec[B](f: Remote[B] => Option[Remote[B]]): Remote[Option[A]] =
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[A]] =
       RemoteSome(value.substitute(f))
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
   object RemoteSome {
@@ -2778,12 +3115,15 @@ object Remote {
         }
       }
 
-    override protected def substituteRec[C](f: Remote[C] => Option[Remote[C]]): Remote[B] =
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
       FoldOption(
         option.substitute(f),
         ifEmpty.substitute(f),
         ifNonEmpty.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, B]]
       )
+
+    override private[flow] val variableUsage =
+      option.variableUsage.union(ifEmpty.variableUsage).union(ifNonEmpty.variableUsage)
   }
 
   object FoldOption {
@@ -2879,6 +3219,25 @@ object Remote {
 //      }
 //  }
 
+  case class Substitutions(
+    bindings: Map[Remote.Unbound[_], Remote[_]],
+    locals: Map[Remote.Local[_], Remote[_]]
+  ) {
+    def matches(remote: Remote[_]): Option[Remote[_]] =
+      remote match {
+        case unbound: Remote.Unbound[_] => bindings.get(unbound)
+        case local: Remote.Local[_]     => locals.get(local)
+        case _                          => None
+      }
+
+    lazy val bindingNames: Set[BindingName]     = bindings.keySet.map(_.identifier)
+    lazy val localNames: Set[LocalVariableName] = locals.keySet.map(_.identifier)
+
+    def cut(usage: VariableUsage): Boolean =
+      usage.bindings.intersect(bindingNames).isEmpty &&
+        usage.locals.intersect(localNames).isEmpty
+  }
+
   implicit def apply[A: Schema](value: A): Remote[A] =
     // TODO: can we do this on type level instead?
     value match {
@@ -2900,7 +3259,12 @@ object Remote {
       Nested(dynamicValue.toTypedValue[Remote[Any]](Remote.schemaAny).toOption.get).asInstanceOf[Remote[A]]
     } else if (dynamicValue.isInstanceOf[DynamicValue.Tuple]) {
       val dynamicTuple = dynamicValue.asInstanceOf[DynamicValue.Tuple]
-      val schemaTuple  = schema.asInstanceOf[Schema.Tuple[_, _]]
+      val schemaTuple =
+        schema match {
+          case st: Schema.Tuple[_, _]        => st
+          case tr: Schema.Transform[_, _, _] => tr.codec.asInstanceOf[Schema.Tuple[_, _]]
+        }
+
       Tuple2(
         Remote.fromDynamic(dynamicTuple.left, schemaTuple.left),
         Remote.fromDynamic(dynamicTuple.right, schemaTuple.right)

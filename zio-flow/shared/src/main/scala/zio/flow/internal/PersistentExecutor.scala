@@ -18,7 +18,6 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.Remote.EvaluatedRemoteFunction
-import zio.flow.debug.PrettyPrint
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
@@ -58,11 +57,11 @@ final case class PersistentExecutor(
     (for {
       dyn    <- remote.evalDynamic
       locals <- LocalContext.getAllVariables
-      substitution = (r: Remote[_]) =>
-                       r match {
-                         case local: Remote.Local[_] => locals.get(local).map(dyn => Remote.fromDynamic(dyn, r.schema))
-                         case _                      => None
-                       }
+      substitution =
+        Remote.Substitutions(
+          bindings = Map.empty,
+          locals = locals.map { case (key, value) => key -> Remote.fromDynamic(value, key.schema) }
+        )
 
       substituted <-
         if (dyn.schema eq ZFlow.schemaAny) {
