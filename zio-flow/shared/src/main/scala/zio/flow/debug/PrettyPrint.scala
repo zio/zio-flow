@@ -1,6 +1,6 @@
 package zio.flow.debug
 
-import zio.flow.{BindingName, LocalVariableName, Remote, RemoteVariableName, ZFlow}
+import zio.flow.{BindingName, Remote, RemoteVariableName, ZFlow}
 
 import scala.collection.mutable
 
@@ -48,10 +48,6 @@ object PrettyPrint {
         builder.append("[[")
         builder.append(RemoteVariableName.unwrap(identifier))
         builder.append("]]")
-      case Remote.Local(identifier, schemaA) =>
-        builder.append("[")
-        builder.append(LocalVariableName.unwrap(identifier))
-        builder.append("]")
       case Remote.Unbound(identifier, schemaA) =>
         builder.append("<")
         builder.append(BindingName.unwrap(identifier))

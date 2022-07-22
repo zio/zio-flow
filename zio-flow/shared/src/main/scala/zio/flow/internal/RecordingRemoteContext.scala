@@ -36,6 +36,9 @@ object RecordingRemoteContext {
 
                 override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
                   outerRemoteContext.getLatestTimestamp(name)
+
+                override def dropVariable(name: RemoteVariableName): UIO[Unit] =
+                  cache.delete(name).commit
               }
 
             override def virtualClock: VirtualClock = vclock

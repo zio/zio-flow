@@ -18,6 +18,7 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.debug.PrettyPrint
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
@@ -55,30 +56,15 @@ final case class PersistentExecutor(
 
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
     (for {
-      dyn    <- remote.evalDynamic
-      locals <- LocalContext.getAllVariables
-      substitution =
-        Remote.Substitutions(
-          bindings = Map.empty,
-          locals = locals.map { case (key, value) => key -> Remote.fromDynamic(value, key.schema) }
-        )
-
-      substituted <-
-        if (dyn.schema eq ZFlow.schemaAny) {
-          ZIO.fromEither(dyn.toTyped).flatMap { flow =>
-            val substitutedFlow = flow.asInstanceOf[ZFlow[Any, Any, Any]].substitute(substitution)
-//            println(PrettyPrint.prettyPrintFlow(substitutedFlow))
-            Remote.Flow(substitutedFlow).evalDynamic
-          }
-        } else if (dyn.schema eq Remote.schemaAny) {
-          ZIO.fromEither(dyn.toTyped).flatMap { remote =>
-            val substitutedRemote = remote.asInstanceOf[Remote[Any]].substitute(substitution)
-            Remote.Nested(substitutedRemote).evalDynamic
-          }
-        } else {
-          ZIO.succeed(dyn)
-        }
-    } yield substituted.asInstanceOf[SchemaAndValue[A]])
+      vars0   <- LocalContext.getAllVariables
+      dyn     <- remote.evalDynamic
+      vars1   <- LocalContext.getAllVariables
+      vars     = vars1.diff(vars0).map(_.identifier)
+      remote   = Remote.fromDynamic(dyn.value, dyn.schema)
+      toRemove = vars.diff(remote.variableUsage.variables)
+      _       <- ZIO.logDebug(s"Evaluation generated variables: $vars but dropping $toRemove")
+      _       <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable(_))
+    } yield dyn)
       .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
@@ -367,6 +353,8 @@ final case class PersistentExecutor(
           stateChange
         )
 
+//      println("----")
+//      println(PrettyPrint.prettyPrintFlow(state.current))
       state.current match {
         case Return(value) =>
           onSuccess(value)

@@ -36,9 +36,14 @@ trait KeyValueStore {
 
 object KeyValueStore {
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
-    ZLayer {
+    ZLayer.scoped {
       for {
         namespaces <- Ref.make(Map.empty[String, Map[Chunk[Byte], List[InMemoryKeyValueEntry]]])
+        _ <- ZIO.addFinalizer(
+               namespaces.get.flatMap { map =>
+                 ZIO.debug(map.values.map(_.size).sum.toString + " items left in kv store")
+               }
+             )
       } yield InMemoryKeyValueStore(namespaces)
     }
 

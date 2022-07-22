@@ -29,11 +29,6 @@ package object flow extends Syntax with Schemas {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
   }
 
-  type LocalVariableName = LocalVariableName.Type
-  object LocalVariableName extends Newtype[UUID] {
-    implicit val schema: Schema[LocalVariableName] = Schema[UUID].transform(apply(_), unwrap)
-  }
-
   type BindingName = BindingName.Type
   object BindingName extends Newtype[UUID] {
     implicit val schema: Schema[BindingName] = Schema[UUID].transform(apply(_), unwrap)

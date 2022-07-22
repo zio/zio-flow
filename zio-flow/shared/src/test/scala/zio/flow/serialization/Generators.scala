@@ -15,7 +15,6 @@ import zio.flow.{
   BindingName,
   ExecutingFlow,
   FlowId,
-  LocalVariableName,
   Operation,
   Remote,
   RemoteVariableName,
@@ -44,9 +43,6 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genRemoteVariableName: Gen[Sized, flow.RemoteVariableName.Type] =
     Gen.string1(Gen.alphaNumericChar).map(RemoteVariableName.apply(_))
-
-  lazy val genLocalVariableName: Gen[Sized, flow.LocalVariableName.Type] =
-    Gen.uuid.map(LocalVariableName.apply(_))
 
   lazy val genBindingName: Gen[Sized, flow.BindingName.Type] =
     Gen.uuid.map(BindingName.apply(_))
@@ -182,12 +178,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       name           <- genRemoteVariableName
       schemaAndValue <- genPrimitiveSchemaAndValue
     } yield Remote.Variable(name, schemaAndValue.schema)
-
-  lazy val genLocal: Gen[Sized, Remote[Any]] =
-    for {
-      name           <- genLocalVariableName
-      schemaAndValue <- genPrimitiveSchemaAndValue
-    } yield Remote.Local(name, schemaAndValue.schema)
 
   lazy val genUnbound: Gen[Sized, Remote[Any]] =
     for {

@@ -2,13 +2,11 @@ package zio.flow
 
 case class VariableUsage(
   variables: Set[RemoteVariableName],
-  locals: Set[LocalVariableName],
   bindings: Set[BindingName]
 ) {
   def union(other: VariableUsage): VariableUsage =
     VariableUsage(
       variables union other.variables,
-      locals union other.locals,
       bindings union other.bindings
     )
 
@@ -17,9 +15,8 @@ case class VariableUsage(
 }
 
 object VariableUsage {
-  val none: VariableUsage = VariableUsage(Set.empty, Set.empty, Set.empty)
+  val none: VariableUsage = VariableUsage(Set.empty, Set.empty)
 
-  def variable(name: RemoteVariableName): VariableUsage = VariableUsage(Set(name), Set.empty, Set.empty)
-  def local(name: LocalVariableName): VariableUsage     = VariableUsage(Set.empty, Set(name), Set.empty)
-  def binding(name: BindingName): VariableUsage         = VariableUsage(Set.empty, Set.empty, Set(name))
+  def variable(name: RemoteVariableName): VariableUsage = VariableUsage(Set(name), Set.empty)
+  def binding(name: BindingName): VariableUsage         = VariableUsage(Set.empty, Set(name))
 }

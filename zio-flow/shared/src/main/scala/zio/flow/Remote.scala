@@ -230,12 +230,15 @@ object Remote {
     override val schema: Schema[A] = schemaA
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
-      ZIO.fail(s"Cannot evaluate binding ${BindingName.unwrap(identifier)}, it has to be substituted")
+      LocalContext.getBinding(this).flatMap {
+        case Some(variable) => variable.evalDynamic.map(_.asInstanceOf[SchemaAndValue[A]])
+        case None           => ZIO.fail(s"Cannot evaluate binding ${BindingName.unwrap(identifier)}, it has to be substituted")
+      }
 
     override def equals(that: Any): Boolean =
       that match {
         case Unbound(otherIdentifier, otherSchema) =>
-          otherIdentifier == identifier && Schema.structureEquality.equal(schemaA, otherSchema)
+          otherIdentifier == identifier
         case _ => false
       }
 
@@ -258,45 +261,6 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Unbound[A], Remote[A]] =
       Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]])
-  }
-
-  final case class Local[A](identifier: LocalVariableName, schemaA: Schema[A]) extends Remote[A] {
-    override val schema: Schema[A] = schemaA
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
-      LocalContext.getVariable(this).flatMap {
-        case Some(value) =>
-          ZIO.succeed(SchemaAndValue(schemaA, value))
-        case None =>
-          ZIO.fail(s"Cannot evaluate local variable ${LocalVariableName.unwrap(identifier)}, it has no stored value")
-      }
-
-    override def equals(that: Any): Boolean =
-      that match {
-        case Local(otherIdentifier, otherSchema) =>
-          otherIdentifier == identifier && Schema.structureEquality.equal(schemaA, otherSchema)
-        case _ => false
-      }
-
-    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
-      this
-
-    override private[flow] val variableUsage = VariableUsage.local(identifier)
-  }
-
-  object Local {
-    def schema[A]: Schema[Local[A]] =
-      Schema.CaseClass2[LocalVariableName, FlowSchemaAst, Local[A]](
-        Schema.Field("identifier", Schema[LocalVariableName]),
-        Schema.Field("schema", FlowSchemaAst.schema),
-        construct =
-          (identifier: LocalVariableName, s: FlowSchemaAst) => Local(identifier, s.toSchema.asInstanceOf[Schema[A]]),
-        extractField1 = (variable: Local[A]) => variable.identifier,
-        extractField2 = (variable: Local[A]) => FlowSchemaAst.fromSchema(variable.schemaA)
-      )
-
-    def schemaCase[A]: Schema.Case[Local[A], Remote[A]] =
-      Schema.Case("Local", schema, _.asInstanceOf[Local[A]])
   }
 
   final case class EvaluatedRemoteFunction[A, B] private[flow] (
@@ -349,18 +313,20 @@ object Remote {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[B]] =
       for {
-        input    <- a.evalDynamic
-        localName = LocalContext.generateFreshVariableName
-        local     = Local(localName, f.input.schemaA)
-        _        <- LocalContext.storeVariable(local, input.value)
-        appliedBody = f.result.substitute(
-                        Remote.Substitutions(
-                          bindings = Map(f.input -> local),
-                          locals = Map.empty
-                        )
-                      )
-        result <- appliedBody.evalDynamic
-      } yield result.asInstanceOf[SchemaAndValue[B]]
+        input       <- a.evalDynamic
+        paramName    = RemoteContext.generateFreshVariableName
+        variable     = Remote.Variable(paramName, f.input.schemaA)
+        _           <- RemoteContext.setVariable(paramName, input.value)
+        _           <- LocalContext.pushBinding(f.input, variable)
+        result      <- f.result.evalDynamic
+        _           <- LocalContext.popBinding(f.input)
+        resultRemote = Remote.fromDynamic(result.value, result.schema)
+        finalResult <-
+          if (resultRemote.variableUsage.bindings.contains(f.input.identifier)) {
+            val substituted = resultRemote.substitute(Substitutions(Map(f.input -> variable)))
+            substituted.evalDynamic
+          } else ZIO.succeed(result)
+      } yield finalResult
 
     override protected def substituteRec[C](fn: Remote.Substitutions): Remote[B] =
       ApplyEvaluatedFunction(
@@ -3220,22 +3186,18 @@ object Remote {
 //  }
 
   case class Substitutions(
-    bindings: Map[Remote.Unbound[_], Remote[_]],
-    locals: Map[Remote.Local[_], Remote[_]]
+    bindings: Map[Remote.Unbound[_], Remote[_]]
   ) {
     def matches(remote: Remote[_]): Option[Remote[_]] =
       remote match {
         case unbound: Remote.Unbound[_] => bindings.get(unbound)
-        case local: Remote.Local[_]     => locals.get(local)
         case _                          => None
       }
 
-    lazy val bindingNames: Set[BindingName]     = bindings.keySet.map(_.identifier)
-    lazy val localNames: Set[LocalVariableName] = locals.keySet.map(_.identifier)
+    lazy val bindingNames: Set[BindingName] = bindings.keySet.map(_.identifier)
 
     def cut(usage: VariableUsage): Boolean =
-      usage.bindings.intersect(bindingNames).isEmpty &&
-        usage.locals.intersect(localNames).isEmpty
+      usage.bindings.intersect(bindingNames).isEmpty
   }
 
   implicit def apply[A: Schema](value: A): Remote[A] =
@@ -3335,7 +3297,6 @@ object Remote {
       .:+:(Nested.schemaCase[A])
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
-      .:+:(Local.schemaCase[A])
       .:+:(Unbound.schemaCase[A])
       .:+:(UnaryNumeric.schemaCase[A])
       .:+:(BinaryNumeric.schemaCase[A])

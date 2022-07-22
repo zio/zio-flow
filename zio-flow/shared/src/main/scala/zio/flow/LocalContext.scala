@@ -1,49 +1,76 @@
 package zio.flow
 
 import zio.schema.DynamicValue
-import zio.stm.TMap
+import zio.stm.{TMap, TSet, ZSTM}
 import zio.{UIO, ZIO, ZLayer}
 
 import java.util.UUID
 
 trait LocalContext {
-  def storeVariable(name: Remote.Local[_], value: DynamicValue): UIO[Unit]
-  def getVariable(name: Remote.Local[_]): UIO[Option[DynamicValue]]
-  def getAllVariables: UIO[Map[Remote.Local[_], DynamicValue]]
+  def pushBinding(unbound: Remote.Unbound[_], variable: Remote.Variable[_]): ZIO[Any, Nothing, Unit]
+  def popBinding(unbound: Remote.Unbound[_]): ZIO[Any, Nothing, Unit]
+  def getBinding(unbound: Remote.Unbound[_]): ZIO[Any, Nothing, Option[Remote.Variable[_]]]
+  def getAllVariables: ZIO[Any, Nothing, Set[Remote.Variable[_]]]
 }
 
 object LocalContext {
-  def generateFreshVariableName: LocalVariableName =
-    LocalVariableName(UUID.randomUUID())
-
   def generateFreshBinding: BindingName =
     BindingName(UUID.randomUUID())
 
-  def storeVariable(name: Remote.Local[_], value: DynamicValue): ZIO[LocalContext, Nothing, Unit] =
-    ZIO.serviceWithZIO(_.storeVariable(name, value))
-  def getVariable(name: Remote.Local[_]): ZIO[LocalContext, Nothing, Option[DynamicValue]] =
-    ZIO.serviceWithZIO(_.getVariable(name))
-  def getAllVariables: ZIO[LocalContext, Nothing, Map[Remote.Local[_], DynamicValue]] =
+  def pushBinding(unbound: Remote.Unbound[_], variable: Remote.Variable[_]): ZIO[LocalContext, Nothing, Unit] =
+    ZIO.serviceWithZIO(_.pushBinding(unbound, variable))
+  def popBinding(unbound: Remote.Unbound[_]): ZIO[LocalContext, Nothing, Unit] =
+    ZIO.serviceWithZIO(_.popBinding(unbound))
+  def getBinding(unbound: Remote.Unbound[_]): ZIO[LocalContext, Nothing, Option[Remote.Variable[_]]] =
+    ZIO.serviceWithZIO(_.getBinding(unbound))
+  def getAllVariables: ZIO[LocalContext, Nothing, Set[Remote.Variable[_]]] =
     ZIO.serviceWithZIO(_.getAllVariables)
 
   private final case class InMemory(
-    store: TMap[Remote.Local[_], DynamicValue]
+    store: TMap[Remote.Unbound[_], List[Remote.Variable[_]]],
+    all: TSet[Remote.Variable[_]]
   ) extends LocalContext {
-    override def storeVariable(name: Remote.Local[_], value: DynamicValue): UIO[Unit] =
-      store.put(name, value).commit
+    override def pushBinding(unbound: Remote.Unbound[_], variable: Remote.Variable[_]): ZIO[Any, Nothing, Unit] =
+      (store
+        .get(unbound)
+        .flatMap {
+          case None =>
+            store.put(unbound, List(variable))
+          case Some(list) =>
+            store.put(unbound, variable :: list)
+        }
+        .zipRight(all.put(variable)))
+        .commit
 
-    override def getVariable(name: Remote.Local[_]): UIO[Option[DynamicValue]] =
-      store.get(name).commit
+    override def popBinding(unbound: Remote.Unbound[_]): ZIO[Any, Nothing, Unit] =
+      (store
+        .get(unbound)
+        .flatMap {
+          case None            => ZSTM.unit
+          case Some(_ :: rest) => store.put(unbound, rest)
+          case Some(_)         => store.delete(unbound)
+        })
+        .commit
 
-    override def getAllVariables: UIO[Map[Remote.Local[_], DynamicValue]] =
-      store.toMap.commit
+    override def getBinding(unbound: Remote.Unbound[_]): ZIO[Any, Nothing, Option[Remote.Variable[_]]] =
+      (store
+        .get(unbound)
+        .flatMap {
+          case Some(head :: _) => ZSTM.succeed(Some(head))
+          case _               => ZSTM.succeed(None)
+        })
+        .commit
+
+    override def getAllVariables: ZIO[Any, Nothing, Set[Remote.Variable[_]]] =
+      all.toSet.commit
   }
 
   def inMemory: ZLayer[Any, Nothing, LocalContext] =
     ZLayer {
       for {
-        vars <- TMap.empty[Remote.Local[_], DynamicValue].commit
-      } yield InMemory(vars)
+        vars <- TMap.empty[Remote.Unbound[_], List[Remote.Variable[_]]].commit
+        all  <- TSet.empty[Remote.Variable[_]].commit
+      } yield InMemory(vars, all)
     }
 
 }
