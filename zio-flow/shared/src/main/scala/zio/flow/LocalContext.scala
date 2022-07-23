@@ -55,8 +55,8 @@ object LocalContext {
       (store
         .get(unbound)
         .flatMap {
-          case Some(head :: _) => ZSTM.succeed(Some(head))
-          case _               => ZSTM.succeed(None)
+          case Some(head :: _) => ZSTM.succeed[Option[Remote.Variable[_]]](Some(head))
+          case _               => ZSTM.succeed[Option[Remote.Variable[_]]](None)
         })
         .commit
 

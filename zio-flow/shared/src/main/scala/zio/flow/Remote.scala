@@ -237,7 +237,7 @@ object Remote {
 
     override def equals(that: Any): Boolean =
       that match {
-        case Unbound(otherIdentifier, otherSchema) =>
+        case Unbound(otherIdentifier, _) =>
           otherIdentifier == identifier
         case _ => false
       }
