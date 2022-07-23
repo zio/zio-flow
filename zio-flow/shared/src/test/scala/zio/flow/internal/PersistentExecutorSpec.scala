@@ -799,7 +799,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
                    ): String = Unsafe.unsafeCompat { implicit u =>
@@ -828,7 +828,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
     testFlowAndLogsExit(label, periodicAdjustClock)(flow)(
       { case (exit, logs) =>
-        exit.fold(cause => throw FiberFailure(cause), result => assert(result, logs))
+        exit.foldExit(cause => throw FiberFailure(cause), result => assert(result, logs))
       },
       mock
     )
@@ -866,7 +866,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
                    ): String = Unsafe.unsafeCompat { implicit u =>
@@ -919,14 +919,8 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     adjustment: Duration
   )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
-      _ <- ZIO.logDebug(s"Waiting for $description")
-      liveClockLayer = ZLayer.scoped {
-                         for {
-                           clock <- Live.live(ZIO.clock)
-                           _     <- ZEnv.services.locallyScopedWith(_.add(clock))
-                         } yield ()
-                       }
-      maybeResult <- wait.timeout(1.second).provideSomeLayer[Live](liveClockLayer)
+      _           <- ZIO.logDebug(s"Waiting for $description")
+      maybeResult <- wait.timeout(1.second).withClock(Clock.ClockLive)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None =>
