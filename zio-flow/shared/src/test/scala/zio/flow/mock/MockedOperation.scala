@@ -3,7 +3,6 @@ package zio.flow.mock
 import zio.flow.Operation
 import zio.test.Assertion.anything
 
-import java.net.URI
 import zio._
 import zio.flow.mock.MockedOperation.Match
 
@@ -34,7 +33,7 @@ object MockedOperation {
       (None, Empty)
   }
   final case class Http[R, A](
-    urlMatcher: zio.test.Assertion[URI] = anything,
+    urlMatcher: zio.test.Assertion[String] = anything,
     methodMatcher: zio.test.Assertion[String] = anything,
     headersMatcher: zio.test.Assertion[Map[String, String]] = anything,
     inputMatcher: zio.test.Assertion[R] = anything,
@@ -47,7 +46,7 @@ object MockedOperation {
           // TODO: check R1 and A1 types too
           // TODO: check headers as well
           val m =
-            urlMatcher.run(new URI(url)) && methodMatcher.run(api.method.toString()) && inputMatcher.run(
+            urlMatcher.run(url) && methodMatcher.run(api.method.toString()) && inputMatcher.run(
               input.asInstanceOf[R]
             )
           if (m.isSuccess) {

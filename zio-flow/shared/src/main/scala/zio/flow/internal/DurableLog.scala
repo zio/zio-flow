@@ -25,6 +25,7 @@ import java.io.IOException
 trait DurableLog {
   def append(topic: String, value: Chunk[Byte]): IO[IOException, Index]
   def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
+  def getAllAvailable(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
 }
 
 object DurableLog {
@@ -33,6 +34,9 @@ object DurableLog {
 
   def subscribe(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.subscribe(topic, position))
+
+  def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
+    ZStream.serviceWithStream(_.getAllAvailable(topic, position))
 
   val live: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.scoped {
@@ -77,6 +81,13 @@ object DurableLog {
         }
       }
 
+    def getAllAvailable(topic: String, position: IndexedStore.Index): ZStream[Any, IOException, Chunk[Byte]] =
+      ZStream.unwrap {
+        indexedStore.position(topic).map { current =>
+          indexedStore.scan(topic, position, current)
+        }
+      }
+
     private def collectFrom(
       stream: ZStream[Any, IOException, (Chunk[Byte], Index)],
       position: Index
@@ -89,9 +100,10 @@ object DurableLog {
           case Some(Topic(hub, semaphore)) =>
             Topic(hub, semaphore) -> topics
           case None =>
-            val hub       = unsafeMakeHub[(Chunk[Byte], Index)]()
-            val semaphore = unsafeMakeSemaphore(1)
-            Topic(hub, semaphore) -> topics.updated(topic, Topic(hub, semaphore))
+            Unsafe.unsafeCompat { implicit u =>
+              val topic = Topic.make
+              topic -> topics.updated(topic, topic)
+            }
         }
       }
   }
@@ -99,13 +111,13 @@ object DurableLog {
   private final case class Topic(hub: Hub[(Chunk[Byte], Index)], semaphore: Semaphore)
 
   private object Topic {
-    def unsafeMake(): Topic =
-      Topic(unsafeMakeHub[(Chunk[Byte], Index)](), unsafeMakeSemaphore(1))
+    def make(implicit unsafe: Unsafe): Topic =
+      Topic(makeHub[(Chunk[Byte], Index)], makeSemaphore(1))
   }
 
-  private def unsafeMakeHub[A](): Hub[A] =
-    Runtime.default.unsafeRun(Hub.unbounded[A])
+  private def makeHub[A](implicit unsafe: Unsafe): Hub[A] =
+    Runtime.default.unsafe.run(Hub.unbounded[A]).getOrThrowFiberFailure()
 
-  private def unsafeMakeSemaphore(permits: Long): Semaphore =
-    Runtime.default.unsafeRun(Semaphore.make(permits))
+  private def makeSemaphore(permits: Long)(implicit unsafe: Unsafe): Semaphore =
+    Runtime.default.unsafe.run(Semaphore.make(permits)).getOrThrowFiberFailure()
 }

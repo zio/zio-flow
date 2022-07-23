@@ -4,6 +4,7 @@ import zio._
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.internal.{DurableLog, IndexedStore}
 import zio.test._
+import zio.test.Assertion.isEmpty
 
 object DurableLogSpec extends ZIOSpecDefault {
 
@@ -32,6 +33,16 @@ object DurableLogSpec extends ZIOSpecDefault {
             out    <- reader.join
           } yield assertTrue(out == in)).provideLayer(durableLog)
         }
+      },
+      test("read available items") {
+        (for {
+          before <- DurableLog.getAllAvailable("partition", Index(0L)).runCollect
+          _      <- DurableLog.append("partition", Chunk(0))
+          _      <- DurableLog.append("partition", Chunk(1))
+          _      <- DurableLog.append("partition", Chunk(2))
+          after  <- DurableLog.getAllAvailable("partition", Index(1L)).runCollect
+        } yield assert(before)(isEmpty) && assertTrue(after == Chunk(Chunk(1.toByte), Chunk(2.toByte))))
+          .provideLayer(durableLog)
       }
     )
 }
