@@ -13,14 +13,9 @@ object BuildHelper {
     "-encoding",
     "UTF-8",
     "-feature",
-    "-unchecked"
-  ) ++ {
-    if (sys.env.contains("CI")) {
-      Seq("-Xfatal-warnings")
-    } else {
-      Nil
-    }
-  }
+    "-unchecked",
+    "-Xfatal-warnings"
+  )
 
   private val std2xOptions = Seq(
     "-language:higherKinds",

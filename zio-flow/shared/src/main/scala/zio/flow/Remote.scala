@@ -3225,6 +3225,7 @@ object Remote {
         schema match {
           case st: Schema.Tuple[_, _]        => st
           case tr: Schema.Transform[_, _, _] => tr.codec.asInstanceOf[Schema.Tuple[_, _]]
+          case _                             => throw new IllegalArgumentException(s"Dynamic tuple's schema could not be inferred")
         }
 
       Tuple2(
