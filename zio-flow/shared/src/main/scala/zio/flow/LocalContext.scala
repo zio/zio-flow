@@ -1,8 +1,7 @@
 package zio.flow
 
-import zio.schema.DynamicValue
 import zio.stm.{TMap, TSet, ZSTM}
-import zio.{UIO, ZIO, ZLayer}
+import zio.{ZIO, ZLayer}
 
 import java.util.UUID
 
