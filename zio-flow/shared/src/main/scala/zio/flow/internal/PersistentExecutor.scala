@@ -18,7 +18,6 @@ package zio.flow.internal
 
 import zio._
 import zio.flow.Remote.EvaluatedRemoteFunction
-import zio.flow.debug.PrettyPrint
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
@@ -56,14 +55,29 @@ final case class PersistentExecutor(
 
   private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
     (for {
-      vars0   <- LocalContext.getAllVariables
-      dyn     <- remote.evalDynamic
-      vars1   <- LocalContext.getAllVariables
-      vars     = vars1.diff(vars0).map(_.identifier)
-      remote   = Remote.fromDynamic(dyn.value, dyn.schema)
-      toRemove = vars.diff(remote.variableUsage.variables)
-      _       <- ZIO.logDebug(s"Evaluation generated variables: $vars but dropping $toRemove")
-      _       <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable(_))
+      vars0 <- LocalContext.getAllVariables
+      dyn   <- remote.evalDynamic
+      vars1 <- LocalContext.getAllVariables
+      vars   = vars1.diff(vars0)
+
+      remote       = Remote.fromDynamic(dyn.value, dyn.schema)
+      usedByResult = remote.variableUsage.variables
+
+      usedByVars <- ZIO.foldLeft(vars)(Set.empty[RemoteVariableName]) { case (set, variable) =>
+                      for {
+                        optDynVar <- RemoteContext.getVariable(variable.identifier)
+                        result = optDynVar match {
+                                   case Some(dynVar) =>
+                                     val remoteVar = Remote.fromDynamic(dynVar, variable.schema)
+                                     set union remoteVar.variableUsage.variables
+                                   case None =>
+                                     set
+                                 }
+                      } yield result
+                    }
+      toRemove = vars.map(_.identifier).diff(usedByResult union usedByVars)
+
+      _ <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable(_))
     } yield dyn)
       .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
