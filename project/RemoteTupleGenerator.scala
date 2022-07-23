@@ -159,8 +159,9 @@ object RemoteTupleGenerator extends AutoPlugin {
       val substitutions = model.typeParamTypes.zipWithIndex.map { case (t, i) =>
         q"""${Term.Name(s"t${i + 1}")}.substitute(f)"""
       }
-      val variableUsageUnion = model.typeParamTypes.zipWithIndex.foldLeft[Term](q"""VariableUsage.none""") { case (expr, (t, i)) =>
-        q"""$expr.union(${Term.Name(s"t${i + 1}")}.variableUsage)"""
+      val variableUsageUnion = model.typeParamTypes.zipWithIndex.foldLeft[Term](q"""VariableUsage.none""") {
+        case (expr, (t, i)) =>
+          q"""$expr.union(${Term.Name(s"t${i + 1}")}.variableUsage)"""
       }
 
       List(
