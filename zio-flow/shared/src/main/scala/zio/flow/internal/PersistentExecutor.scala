@@ -81,7 +81,7 @@ final case class PersistentExecutor(
 
       _ <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable(_))
     } yield dyn)
-      .mapError(msg => new IOException(s"Failed to evaluate remote: $msg"))
+      .mapErrorCause(cause => cause.map(msg => new IOException(s"Failed to evaluate remote: $msg")))
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
@@ -798,12 +798,10 @@ final case class PersistentExecutor(
                           ZLayer(VirtualClock.make(state.lastTimestamp)),
                           RemoteVariableKeyValueStore.live
                         )
-                        .absorb
-                        .catchAll { error =>
-                          ZIO.logError(s"Persistent executor ${state.id} failed") *>
-                            ZIO.logErrorCause(Cause.die(error)) *>
+                        .catchAllCause { error =>
+                          ZIO.logErrorCause(s"Persistent executor ${state.id} failed", error) *>
                             state.result
-                              .fail(Left(error))
+                              .fail(Left(error.squash))
                               .provideEnvironment(promiseEnv)
                               .absorb
                               .catchAll { error2 =>

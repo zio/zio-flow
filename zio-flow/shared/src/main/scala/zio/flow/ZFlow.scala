@@ -843,10 +843,12 @@ object ZFlow {
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
     for {
-      executingFlows <- ZFlow.foreach[R, ZNothing, A, ExecutingFlow[ActivityError, B]](values)((remoteA: Remote[A]) =>
+      executingFlows <- ZFlow.foreach[R, ZNothing, A, ExecutingFlow[ActivityError, B]](values) { (remoteA: Remote[A]) =>
                           body(remoteA).fork
-                        )
-      eithers <- ZFlow.foreach(executingFlows)(remote => ZFlow.Await(remote))
+                        }
+      _       <- log("Awaiting results")
+      eithers <- ZFlow.foreach(executingFlows)(remote => remote.await)
+      _       <- log("Got results from all forked fibers")
       bs      <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers))
     } yield bs
 

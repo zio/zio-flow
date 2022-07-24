@@ -84,6 +84,7 @@ object Remote {
 
   final case class Literal[A](value: DynamicValue, schemaA: Schema[A]) extends Remote[A] {
     assert((schemaA ne ZFlow.schemaAny) && (schemaA ne Remote.schemaAny))
+    assert(value.toTypedValue(schemaA).isRight)
 
     override val schema: Schema[A] = schemaA
 
@@ -230,7 +231,7 @@ object Remote {
     override val schema: Schema[A] = schemaA
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[A]] =
-      LocalContext.getBinding(this).flatMap {
+      LocalContext.getBinding(identifier).flatMap {
         case Some(variable) => variable.evalDynamic.map(_.asInstanceOf[SchemaAndValue[A]])
         case None           => ZIO.fail(s"Cannot evaluate binding ${BindingName.unwrap(identifier)}, it has to be substituted")
       }
@@ -317,9 +318,9 @@ object Remote {
         paramName    = RemoteContext.generateFreshVariableName
         variable     = Remote.Variable(paramName, f.input.schemaA)
         _           <- RemoteContext.setVariable(paramName, input.value)
-        _           <- LocalContext.pushBinding(f.input, variable)
+        _           <- LocalContext.pushBinding(f.input.identifier, variable)
         result      <- f.result.evalDynamic
-        _           <- LocalContext.popBinding(f.input)
+        _           <- LocalContext.popBinding(f.input.identifier)
         resultRemote = Remote.fromDynamic(result.value, result.schema)
         finalResult <-
           if (resultRemote.variableUsage.bindings.contains(f.input.identifier)) {
