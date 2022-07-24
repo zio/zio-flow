@@ -21,11 +21,17 @@ import zio.prelude.Newtype
 import zio.schema.Schema
 
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 package object flow extends Syntax with Schemas {
   type RemoteVariableName = RemoteVariableName.Type
   object RemoteVariableName extends Newtype[String] {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(apply(_), unwrap)
+  }
+
+  type BindingName = BindingName.Type
+  object BindingName extends Newtype[UUID] {
+    implicit val schema: Schema[BindingName] = Schema[UUID].transform(apply(_), unwrap)
   }
 
   type FlowId = FlowId.Type

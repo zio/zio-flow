@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.schema.Schema
 
 sealed trait Mappable[F[_]] {
@@ -34,7 +34,11 @@ object Mappable {
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[B]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), RemoteFunction((a: Remote[A]) => Remote.RemoteSome(ab(a))).evaluated)
+      Remote.FoldOption(
+        fa,
+        Remote[Option[B]](None),
+        EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.RemoteSome(ab(a)))
+      )
 
     override def performFilter[A: Schema](
       fa: Remote[Option[A]],
@@ -42,15 +46,15 @@ object Mappable {
     ): Remote[Option[A]] =
       Remote.FoldOption(
         fa,
-        Remote(None),
-        RemoteFunction((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote(None))).evaluated
+        Remote[Option[A]](None),
+        EvaluatedRemoteFunction.make((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote.none[A]))
       )
 
     override def performFlatmap[A: Schema, B: Schema](
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[Option[B]]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote(None), RemoteFunction(ab).evaluated)
+      Remote.FoldOption(fa, Remote.none[B], EvaluatedRemoteFunction.make(ab))
   }
 
   implicit case object MappableList extends Mappable[List] {
@@ -58,8 +62,8 @@ object Mappable {
     override def performMap[A: Schema, B: Schema](fa: Remote[List[A]], ab: Remote[A] => Remote[B]): Remote[List[B]] =
       Remote.Fold(
         fa,
-        Remote(Nil),
-        RemoteFunction((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2))).evaluated
+        Remote(List.empty[B]),
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2)))
       )
 
     override def performFilter[A: Schema](
@@ -68,17 +72,21 @@ object Mappable {
     ): Remote[List[A]] =
       Remote.Fold(
         fa,
-        Remote(Nil),
-        RemoteFunction((tuple: Remote[(List[A], A)]) =>
+        Remote(List.empty[A]),
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[A], A)]) =>
           predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
-        ).evaluated
+        )
       )
 
     override def performFlatmap[A: Schema, B: Schema](
       fa: Remote[List[A]],
       ab: Remote[A] => Remote[List[B]]
     ): Remote[List[B]] =
-      Remote.Fold(fa, Remote(Nil), RemoteFunction((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2)).evaluated)
+      Remote.Fold(
+        fa,
+        Remote(List.empty[B]),
+        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2))
+      )
   }
 
 }

@@ -302,6 +302,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
           var1 <- ZFlow.newVar[Int]("var1", 1)
           fib1 <- ZFlow.transaction { _ =>
                     for {
+                      _  <- ZFlow.log(s"Starting transaction")
                       v1 <- var1.get
                       _  <- ZFlow.log(s"Got value of var1")
                       _  <- activity1(v1)
@@ -353,18 +354,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
               inputMatcher = equalTo(100),
               result = () => -11
             ) ++
-            // Second run (with input=2)
+            // Second run (with input=10)
             MockedOperation.Http(
               urlMatcher = equalTo("http://activity1"),
               methodMatcher = equalTo("GET"),
-              inputMatcher = equalTo(2),
+              inputMatcher = equalTo(10),
               result = () => 100,
               duration = 10.millis
             ) ++
             MockedOperation.Http(
               urlMatcher = equalTo("http://activity2"),
               methodMatcher = equalTo("POST"),
-              inputMatcher = equalTo(2),
+              inputMatcher = equalTo(10),
               result = () => 200,
               duration = 10.millis
             )
@@ -498,6 +499,26 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { result =>
       assertTrue(result == 100)
     },
+    testFlow("unwrap twice") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.succeed(ZFlow.succeed(10)))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
+    },
+    testFlow("nested unwrap") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.unwrap(ZFlow.succeed(ZFlow.succeed(10))))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
+    },
     test("fork/await") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
@@ -563,7 +584,6 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { (result: Exit[String, Nothing]) =>
       assert(result)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
     }
-    // TODO: retryUntil, orTry
   )
 
   val suite2 = suite("Restarted flows")(
@@ -672,8 +692,85 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
   )
 
+  val suite3 = suite("ZFlow operators")(
+    testFlow("cons") {
+      ZFlow(Remote(1))
+        .map(Remote.Cons(Remote(List.empty[Int]), _))
+    } { result =>
+      assertTrue(result == List(1))
+    },
+    testFlow("zflow fold") {
+      ZFlow
+        .succeed(1)
+        .foldFlow(
+          (_: Remote[ZNothing]) => ZFlow.succeed("failed"),
+          (_: Remote[Int]) => ZFlow.succeed("succeeded")
+        )
+    } { res =>
+      assertTrue(res == "succeeded")
+    },
+    testFlow("list fold") {
+      ZFlow.succeed(
+        Remote(List(1, 2, 3))
+          .fold(Remote(0))(_ + _)
+      )
+    } { res =>
+      assertTrue(res == 6)
+    },
+    testFlow("list fold zflows, ignore accumulator") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (_, n) =>
+            ZFlow.succeed(n)
+          }
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("list fold zflows, ignore elem") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (acc, _) =>
+            acc
+          }
+      }
+    } { res =>
+      assertTrue(res == 0)
+    },
+    testFlow("unwrap list fold zflows") {
+      val foldedFlow = Remote(List(1, 2))
+        .fold(ZFlow.succeed(0)) { case (flow, n) =>
+          flow.flatMap { prevFlow =>
+            ZFlow.unwrap(prevFlow).map(_ + n)
+          }
+        }
+      ZFlow.unwrap {
+        foldedFlow
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("unwrap list manually fold zflows") {
+      ZFlow.unwrap {
+        ZFlow.unwrap(Remote(ZFlow.unwrap(Remote(ZFlow.succeed(0))).map(_ + 1))).map(_ + 2)
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("foreach") {
+      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    },
+    testFlow("foreachPar") {
+      ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    }
+  )
+
   override def spec =
-    suite("All tests")(suite1, suite2)
+    suite("All tests")(suite1, suite2, suite3)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,
@@ -702,12 +799,12 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun(logQueue.offer(message()).unit)
+                     runtime.unsafe.run(logQueue.offer(message()).unit).getOrThrowFiberFailure()
                      msg
                    }
                  }
@@ -731,7 +828,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
     testFlowAndLogsExit(label, periodicAdjustClock)(flow)(
       { case (exit, logs) =>
-        exit.fold(cause => throw FiberFailure(cause), result => assert(result, logs))
+        exit.foldExit(cause => throw FiberFailure(cause), result => assert(result, logs))
       },
       mock
     )
@@ -769,17 +866,17 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun {
+                     runtime.unsafe.run {
                        msg match {
                          case "!!!BREAK!!!" => breakPromise.succeed(())
                          case _             => logQueue.offer(msg).unit
                        }
-                     }
+                     }.getOrThrowFiberFailure()
                      msg
                    }
                  }
@@ -822,14 +919,8 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     adjustment: Duration
   )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
-      _ <- ZIO.logDebug(s"Waiting for $description")
-      liveClockLayer = ZLayer.scoped {
-                         for {
-                           clock <- Live.live(ZIO.clock)
-                           _     <- ZEnv.services.locallyScopedWith(_.add(clock))
-                         } yield ()
-                       }
-      maybeResult <- wait.timeout(1.second).provideSomeLayer[Live](liveClockLayer)
+      _           <- ZIO.logDebug(s"Waiting for $description")
+      maybeResult <- wait.timeout(1.second).withClock(Clock.ClockLive)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None =>

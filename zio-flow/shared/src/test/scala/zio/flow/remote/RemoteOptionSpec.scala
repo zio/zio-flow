@@ -2,8 +2,8 @@ package zio.flow.remote
 
 import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow.{Remote, RemoteContext}
-import zio.test.{TestResult, Spec, TestEnvironment}
+import zio.flow.{LocalContext, Remote, RemoteContext}
+import zio.test.{Spec, TestEnvironment, TestResult}
 
 object RemoteOptionSpec extends RemoteSpecBase {
   val suite1: Spec[TestEnvironment, Any] =
@@ -117,7 +117,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       }
-    ).provide(ZLayer(RemoteContext.inMemory))
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   override def spec = suite("OptionSpec")(suite1)
 }

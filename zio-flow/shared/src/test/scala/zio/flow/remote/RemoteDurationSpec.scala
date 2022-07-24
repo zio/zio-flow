@@ -3,8 +3,8 @@ package zio.flow.remote
 import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
-import zio.flow.{Remote, RemoteContext}
-import zio.test.{TestResult, Gen, check}
+import zio.flow.{LocalContext, Remote, RemoteContext}
+import zio.test.{Gen, TestResult, check}
 
 import java.time.temporal.ChronoUnit
 
@@ -124,5 +124,5 @@ object RemoteDurationSpec extends RemoteSpecBase {
         Remote(d).isNegative <-> d.isNegative
       }
     }
-  ).provideCustom(ZLayer(RemoteContext.inMemory))
+  ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 }

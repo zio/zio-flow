@@ -12,19 +12,23 @@ trait RemoteContext {
   def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit]
   def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]]
   def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]]
+  def dropVariable(name: RemoteVariableName): UIO[Unit]
 }
 
 object RemoteContext {
-  // TODO: mark these variables as temporary and do not persist them
   def generateFreshVariableName: RemoteVariableName =
-    RemoteVariableName(s"fresh_${UUID.randomUUID()}")
+    RemoteVariableName(s"p_${UUID.randomUUID()}")
 
   def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))
   def getVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Option[DynamicValue]] =
     ZIO.serviceWithZIO(_.getVariable(name))
+  def dropVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Unit] =
+    ZIO.serviceWithZIO(_.dropVariable(name))
 
-  private final case class InMemory(store: TMap[RemoteVariableName, DynamicValue]) extends RemoteContext {
+  private final case class InMemory(
+    store: TMap[RemoteVariableName, DynamicValue]
+  ) extends RemoteContext {
     override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
       store.put(name, value).commit
 
@@ -35,10 +39,15 @@ object RemoteContext {
 
     override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
       store.get(name).commit.map(_.map(_ => Timestamp(0L)))
+
+    override def dropVariable(name: RemoteVariableName): UIO[Unit] =
+      store.delete(name).commit
   }
 
   def inMemory: ZIO[Any, Nothing, RemoteContext] =
-    TMap.empty[RemoteVariableName, DynamicValue].commit.map(InMemory.apply)
+    (for {
+      vars <- TMap.empty[RemoteVariableName, DynamicValue]
+    } yield InMemory(vars)).commit
 
   private final case class Persistent(
     virtualClock: VirtualClock,
@@ -91,6 +100,9 @@ object RemoteContext {
             scopeMap.put(name, variableScope).commit.as(Some(timestamp))
           case None => ZIO.none
         }
+
+    override def dropVariable(name: RemoteVariableName): UIO[Unit] =
+      remoteVariableStore.delete(name, scope).orDie // TODO: rethink/cleanup error handling
   }
 
   def persistent(

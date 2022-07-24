@@ -133,7 +133,8 @@ object RemoteEitherSpec extends RemoteSpecBase {
       test("toTry") {
         check(Gen.either(Gen.throwable, Gen.int)) { either =>
           assertZIO(
-            Remote(either).toTry.eval.exit.map(_.map(_.fold(err => Left(err.getMessage), success => Right(success))))
+            Remote(either).toTry.eval.exit
+              .map(_.mapExit(_.fold(err => Left(err.getMessage), success => Right(success))))
           )(
             succeeds(
               equalTo(
@@ -143,7 +144,7 @@ object RemoteEitherSpec extends RemoteSpecBase {
           )
         }
       }
-    ).provideCustom(ZLayer(RemoteContext.inMemory))
+    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   // TODO: fix tests using partialLift
   //  private def partialLift[A: Schema, B: Schema](runtime: Runtime[RemoteContext], f: A => B): Remote[A] => Remote[B] =

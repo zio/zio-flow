@@ -19,7 +19,9 @@ trait SchemaAndValue[+A] { self =>
 }
 
 object SchemaAndValue {
-  def apply[A](schema0: Schema[A], value0: DynamicValue): SchemaAndValue[A] =
+  def apply[A](schema0: Schema[A], value0: DynamicValue): SchemaAndValue[A] = {
+    assert(value0.toTypedValue(schema0).isRight)
+
     new SchemaAndValue[A] {
       override type Subtype = A
 
@@ -37,6 +39,7 @@ object SchemaAndValue {
       override final def hashCode(): Int =
         value.hashCode() ^ schema.ast.hashCode()
     }
+  }
 
   def of[A: Schema](value: A): SchemaAndValue[A] =
     fromSchemaAndValue(Schema[A], value)

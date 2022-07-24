@@ -74,7 +74,7 @@ object RemoteTupleGenerator extends AutoPlugin {
           lazy val schema: Schema[_ <: ${model.appliedTupleType}] =
             Schema.${model.schemaTupleMethod}(..$schemaFromParamVals)
 
-          def evalDynamic: ZIO[RemoteContext, String, SchemaAndValue[${model.appliedTupleType}]] =
+          def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[${model.appliedTupleType}]] =
             for {
               ..$evalDynamic
               ..$toTyped
@@ -85,7 +85,7 @@ object RemoteTupleGenerator extends AutoPlugin {
                        )
             } yield result
 
-            ..${model.paramVals}
+          ..${model.paramVals}
           }
        """
     }
@@ -156,12 +156,25 @@ object RemoteTupleGenerator extends AutoPlugin {
       val constructStaticType        = Type.Select(implName, Type.Name("ConstructStatic"))
       val appliedConstructType       = Type.Apply(constructType, model.typeParamTypes)
       val appliedConstructStaticType = Type.Apply(constructStaticType, List(typ))
+      val substitutions = model.typeParamTypes.zipWithIndex.map { case (t, i) =>
+        q"""${Term.Name(s"t${i + 1}")}.substitute(f)"""
+      }
+      val variableUsageUnion = model.typeParamTypes.zipWithIndex.foldLeft[Term](q"""VariableUsage.none""") {
+        case (expr, (t, i)) =>
+          q"""$expr.union(${Term.Name(s"t${i + 1}")}.variableUsage)"""
+      }
 
       List(
         q"""
       final case class $typ[..${model.typeParams}](..${model.paramDefs})
         extends Remote[${model.appliedTupleType}]
-        with ${Init(appliedConstructType, Name.Anonymous(), Nil)}
+        with ${Init(appliedConstructType, Name.Anonymous(), Nil)} {
+        
+          override protected def substituteRec[B](f: Remote.Substitutions): Remote[${model.appliedTupleType}] =
+            $name(..$substitutions)
+
+          override private[flow] val variableUsage = $variableUsageUnion
+        }
       """,
         q"""
       object $name extends ${Init(appliedConstructStaticType, Name.Anonymous(), Nil)} {

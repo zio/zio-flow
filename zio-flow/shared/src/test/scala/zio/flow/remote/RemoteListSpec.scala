@@ -44,7 +44,7 @@ object RemoteListSpec extends RemoteSpecBase {
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
         fold <-> 6
       }
-    ).provide(ZLayer(RemoteContext.inMemory))
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   override def spec = suite("RemoteListSpec")(suite1)
 }

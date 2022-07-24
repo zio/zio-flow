@@ -2,9 +2,9 @@ package zio.flow.remote
 
 import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow.{Remote, RemoteContext, remote}
+import zio.flow.{LocalContext, Remote, RemoteContext, remote}
 import zio.schema.Schema
-import zio.test.{Gen, TestAspect, TestConfig, Spec, check}
+import zio.test.{Gen, Spec, TestAspect, TestConfig, check}
 
 object FractionalSpec extends RemoteSpecBase {
 
@@ -15,7 +15,7 @@ object FractionalSpec extends RemoteSpecBase {
       fractionalTests("BigDecimal", Gen.bigDecimal(BigDecimal(Double.MinValue), BigDecimal(Double.MaxValue)))(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(ZLayer(RemoteContext.inMemory))
+    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: FractionalOps[A])(implicit
     fractionalA: remote.numeric.Fractional[A]
@@ -29,7 +29,7 @@ object FractionalSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
-  )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: A => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(gen) { x =>
         fractionalOp(x) <-> op(x)

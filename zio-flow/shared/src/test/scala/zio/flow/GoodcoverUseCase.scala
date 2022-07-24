@@ -109,7 +109,7 @@ object GoodcoverUseCase extends ZIOSpecDefault {
         "createRenewedPolicy.com",
         http.API.get("").input[(Boolean, Double)].output[Option[Policy]]
       ),
-      ZFlow.succeed(None),
+      ZFlow.succeed(Remote.none[Policy]),
       ZFlow.unit
     )
 
