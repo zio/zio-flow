@@ -115,8 +115,12 @@ object DurableLog {
   }
 
   private def unsafeMakeHub[A](): Hub[A] =
-    Runtime.default.unsafeRun(Hub.unbounded[A])
+    Unsafe.unsafeCompat { implicit unsafe =>
+      Runtime.default.unsafe.run(Hub.unbounded[A]).getOrThrowFiberFailure()
+    }
 
   private def unsafeMakeSemaphore(permits: Long): Semaphore =
-    Runtime.default.unsafeRun(Semaphore.make(permits))
+    Unsafe.unsafeCompat { implicit unsafe =>
+      Runtime.default.unsafe.run(Semaphore.make(permits)).getOrThrowFiberFailure()
+    }
 }
