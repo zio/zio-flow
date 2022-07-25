@@ -159,6 +159,41 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
             }
           }
         }
+      },
+      test("should return all keys for a `scanAllKeys` call.") {
+        val uniqueTableName = newTimeBasedName()
+        val keyValuePairs =
+          Chunk
+            .fromIterable(1 to 1001)
+            .map { n =>
+              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
+            }
+        val expectedLength = keyValuePairs.length
+
+        ZIO.scoped {
+          createDynamoDbTable(tableName) *> {
+            for {
+              putSuccesses <-
+                ZIO
+                  .foreach(keyValuePairs) { case (key, value) =>
+                    KeyValueStore.put(uniqueTableName, key, value, Timestamp(1L))
+                  }
+              retrieved <-
+                KeyValueStore
+                  .scanAllKeys(uniqueTableName)
+                  .runCollect
+            } yield {
+              assertTrue(
+                putSuccesses.length == expectedLength,
+                putSuccesses.toSet == Set(true),
+                retrieved.length == expectedLength
+              ) &&
+              assert(retrieved)(
+                hasSameElements(keyValuePairs.map(_._1))
+              )
+            }
+          }
+        }
       }
     ).provideCustomLayerShared(dynamoDbKeyValueStore) @@ nondeterministic @@ sequential
 

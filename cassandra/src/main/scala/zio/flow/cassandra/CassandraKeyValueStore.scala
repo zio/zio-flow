@@ -150,6 +150,52 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .flatten
   }
 
+  override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] = {
+    val query = cqlSelect
+      .column(keyColumnName)
+      .whereColumn(namespaceColumnName)
+      .isEqualTo(
+        literal(namespace)
+      )
+      .build
+
+    lazy val errorContext =
+      s"Error scanning all key-value pairs for <$namespace> namespace"
+
+    ZStream
+      .paginateZIO(
+        executeAsync(query)
+      )(_.map { result =>
+        val keys =
+          ZStream
+            .fromJavaIterator(
+              result.currentPage.iterator
+            )
+            .mapZIO { row =>
+              ZIO.attempt {
+                blobValueOf(keyColumnName, row)
+              }
+            }
+            .mapError(
+              refineToIOException(errorContext)
+            )
+
+        val nextPage =
+          if (result.hasMorePages)
+            Option(
+              ZIO.fromCompletionStage(result.fetchNextPage())
+            )
+          else
+            None
+
+        (keys, nextPage)
+      })
+      .mapError(
+        refineToIOException(errorContext)
+      )
+      .flatten
+  }
+
   override def getLatestTimestamp(
     namespace: String,
     key: zio.Chunk[Byte]

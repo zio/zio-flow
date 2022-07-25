@@ -10,6 +10,12 @@ case class VariableUsage(
       bindings union other.bindings
     )
 
+  def unionAll(others: Seq[VariableUsage]): VariableUsage =
+    VariableUsage(
+      others.foldLeft(variables)(_ union _.variables),
+      others.foldLeft(bindings)(_ union _.bindings)
+    )
+
   def removeBinding(name: BindingName): VariableUsage =
     this.copy(bindings = this.bindings - name)
 }

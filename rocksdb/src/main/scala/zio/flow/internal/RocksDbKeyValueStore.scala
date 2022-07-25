@@ -91,6 +91,26 @@ final case class RocksDbKeyValueStore(
       } yield result
     }
 
+  def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] =
+    ZStream.unwrap {
+      for {
+        versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
+        result = rocksDB
+                   .newIterator(versionNamespace)
+                   .refineToOrDie[IOException]
+                   .mapZIO { case (key, value) =>
+                     val keyChunk = Chunk.fromArray(key)
+                     getLastTimestamp(Some(value), None).flatMap {
+                       case None =>
+                         ZIO.succeed(Chunk.empty)
+                       case Some(timestamp) =>
+                         ZIO.succeed(Chunk(keyChunk))
+                     }
+                   }
+                   .flattenChunks
+      } yield result
+    }
+
   override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
     (for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))

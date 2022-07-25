@@ -27,8 +27,7 @@ import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import scala.annotation.nowarn
-import zio.stm.TMap
-import zio.stm.ZSTM
+import zio.stm.{TMap, TPromise, ZSTM}
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
@@ -378,8 +377,6 @@ final case class PersistentExecutor(
           stateChange
         )
 
-//      println("----")
-//      println(PrettyPrint.prettyPrintFlow(state.current))
       state.current match {
         case Return(value) =>
           onSuccess(value)
@@ -951,6 +948,52 @@ final case class PersistentExecutor(
                     ZIO.succeed(false)
                 }
     } yield result
+
+  private def recursiveGetReferencedVariables(
+    variables: Set[RemoteVariableName]
+  ): ZIO[Any, IOException, Set[RemoteVariableName]] =
+    variables // TODO
+
+  // TODO: this implementation is incorrect because remote variables are scoped
+  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
+    (for {
+      allStoredVariables <- kvStore
+                              .scanAllKeys(Namespaces.variables)
+                              .map(bytes => RemoteVariableName(new String(bytes.toArray, StandardCharsets.UTF_8)))
+                              .runCollect
+                              .map(_.toSet)
+      allWorkflows <- workflows.keys.commit
+      allStates    <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
+      allTopLevelReferencedVariables =
+        allStates.foldLeft(Set.empty[RemoteVariableName]) { case (vars, state) =>
+          state.current.variableUsage
+            .unionAll(
+              state.envStack.map(_.variableUsage)
+            )
+            .unionAll(
+              state.stack.map {
+                case Instruction.PopEnv       => VariableUsage.none
+                case Instruction.PushEnv(env) => env.variableUsage
+                case Instruction.Continuation(onError, onSuccess) =>
+                  onError.variableUsage.union(onSuccess.variableUsage)
+                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
+                case Instruction.CommitTransaction     => VariableUsage.none
+              }
+            )
+            .variables union vars
+        }
+      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
+      unusedVariables         = allStoredVariables.diff(allReferencedVariables)
+      _ <-
+        ZIO.logDebug(
+          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(RemoteVariableName.unwrap).mkString(", ")}"
+        )
+      _ <- ZIO.foreachDiscard(unusedVariables) {
+        kvStore.delete(Namespaces.variables, )
+      }
+    } yield ()).catchAllCause { cause =>
+      ZIO.logErrorCause(s"Garbage collection failed", cause)
+    }
 }
 
 object PersistentExecutor {
