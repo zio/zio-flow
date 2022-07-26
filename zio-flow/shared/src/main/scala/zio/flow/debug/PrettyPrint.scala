@@ -24,16 +24,12 @@ object PrettyPrint {
     }
 
     val _ = remote match {
-      case Remote.Literal(value, schemaA) =>
-        if (schemaA eq ZFlow.schemaAny) {
-          value.toTypedValue(ZFlow.schemaAny) match {
-            case Left(value) =>
-              builder.append(s"!! $value")
-            case Right(flow) =>
-              prettyPrintFlow(flow, builder, indent)
-          }
-        } else {
-          builder.append(value.toString)
+      case Remote.Literal(value) =>
+        value.toTypedValue(ZFlow.schemaAny) match {
+          case Left(value) =>
+            builder.append(value.toString)
+          case Right(flow) =>
+            prettyPrintFlow(flow, builder, indent)
         }
       case Remote.Flow(flow) =>
         builder.append("flow")
@@ -43,11 +39,11 @@ object PrettyPrint {
         prettyPrintRemote(remote, builder, indent)
       case Remote.Ignore() =>
         builder.append("ignore")
-      case Remote.Variable(identifier, _) =>
+      case Remote.Variable(identifier) =>
         builder.append("[[")
         builder.append(RemoteVariableName.unwrap(identifier))
         builder.append("]]")
-      case Remote.Unbound(identifier, _) =>
+      case Remote.Unbound(identifier) =>
         builder.append("<")
         builder.append(BindingName.unwrap(identifier))
         builder.append(">")
@@ -71,11 +67,11 @@ object PrettyPrint {
         prettyPrintRemote(value, builder, indent)
       case Remote.RemoteEither(either) =>
         either match {
-          case Left((value, _)) =>
+          case Left(value) =>
             builder.append("left[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
-          case Right((_, value)) =>
+          case Right(value) =>
             builder.append("right[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
@@ -95,7 +91,7 @@ object PrettyPrint {
         prettyPrintRemote(either, builder, indent + 2)
       case Remote.Try(either) =>
         either match {
-          case Left((value, _)) =>
+          case Left(value) =>
             builder.append("failure[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
@@ -787,7 +783,7 @@ object PrettyPrint {
         builder.append("waitTill (")
         prettyPrintRemote(time, builder, indent)
         builder.append(")")
-      case ZFlow.Read(svar, _) =>
+      case ZFlow.Read(svar) =>
         builder.append("read (")
         prettyPrintRemote(svar, builder, indent)
         builder.append(")")

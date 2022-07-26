@@ -16,52 +16,41 @@
 
 package zio.flow
 
-import zio.flow.Remote._
-import zio.flow.serialization.FlowSchemaAst
-import zio.schema.{CaseSet, Schema}
 import zio.ZNothing
+import zio.flow.Remote._
+import zio.schema.{CaseSet, Schema}
 
 import java.time.{Duration, Instant}
 
 sealed trait ZFlow[-R, +E, +A] {
   self =>
 
-  val errorSchema: Schema[_ <: E]
-  val resultSchema: Schema[_ <: A]
-
   private[flow] val variableUsage: VariableUsage
 
-  final def *>[R1 <: R, E1 >: E: Schema, A1 >: A: Schema, B: Schema](
+  final def *>[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
     self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._2)
 
-  final def <*[R1 <: R, E1 >: E: Schema, A1 >: A: Schema, B: Schema](
+  final def <*[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, A1] =
     self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._1)
 
-  final def as[B: Schema](b: => Remote[B]): ZFlow[R, E, B] =
+  final def as[B](b: => Remote[B]): ZFlow[R, E, B] =
     self.map[B](_ => b)
 
-  final def catchAll[R1 <: R, E1 >: E, A1 >: A: Schema, E2: Schema](
+  final def catchAll[R1 <: R, E1 >: E, A1 >: A, E2](
     f: Remote[E1] => ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
     self.foldFlow(f, (a: Remote[A1]) => ZFlow(a))
 
-  final def ensuring[R1 <: R: Schema, E1 >: E: Schema, A1 >: A: Schema](
-    flow: ZFlow[R1, Nothing, Any]
-  ): ZFlow[R1, E1, A1] =
-    ZFlow
-      .input[R1]
-      .flatMap[R1, E1, A1]((r: Remote[R1]) => ZFlow.Ensuring(self, flow.unit.provide(r)))
-
-  final def ensuring[E1 >: E: Schema, A1 >: A: Schema](
+  final def ensuring[E1 >: E, A1 >: A](
     flow: ZFlow[Any, ZNothing, Any]
   ): ZFlow[R, E1, A1] =
     ZFlow.Ensuring[R, E1, A1](self, flow.unit)
 
-  final def flatMap[R1 <: R, E1 >: E: Schema, B: Schema](
+  final def flatMap[R1 <: R, E1 >: E, B](
     f: Remote[A] => ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
     foldFlow(
@@ -69,24 +58,20 @@ sealed trait ZFlow[-R, +E, +A] {
       f
     )
 
-  final def foldFlow[R1 <: R, E2: Schema, B: Schema](
+  final def foldFlow[R1 <: R, E2, B](
     error: Remote[E] => ZFlow[R1, E2, B],
     success: Remote[A] => ZFlow[R1, E2, B]
   ): ZFlow[R1, E2, B] =
     ZFlow.Fold(
       self,
-      EvaluatedRemoteFunction.make(error.andThen(_.toRemote))(
-        errorSchema.asInstanceOf[Schema[E]]
-      ),
-      EvaluatedRemoteFunction.make(success.andThen(_.toRemote))(
-        resultSchema.asInstanceOf[Schema[A]]
-      )
+      EvaluatedRemoteFunction.make(error.andThen(_.toRemote)),
+      EvaluatedRemoteFunction.make(success.andThen(_.toRemote))
     )
 
   final def fork: ZFlow[R, ZNothing, ExecutingFlow[E, A]] =
     ZFlow.Fork(self)
 
-  final def ifThenElse[R1 <: R, E1 >: E: Schema, B: Schema](
+  final def ifThenElse[R1 <: R, E1 >: E, B](
     ifTrue: ZFlow[R1, E1, B],
     ifFalse: ZFlow[R1, E1, B]
   )(implicit
@@ -98,29 +83,29 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]
-  )(implicit schemaA: Schema[A1], schemaE: Schema[E1]): ZFlow[R1, E1, A1] =
+  ): ZFlow[R1, E1, A1] =
     self.flatMap((remoteA: Remote[A1]) =>
       ZFlow.Iterate(
         remoteA,
-        EvaluatedRemoteFunction.make((a1: Remote[A1]) => step(a1).toRemote)(schemaA),
-        EvaluatedRemoteFunction.make(predicate)(schemaA)
+        EvaluatedRemoteFunction.make((a1: Remote[A1]) => step(a1).toRemote),
+        EvaluatedRemoteFunction.make(predicate)
       )
     )
 
-  final def map[B: Schema](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
-    self.flatMap[R, E, B](a => ZFlow(f(a)))(errorSchema.asInstanceOf[Schema[E]], Schema[B])
+  final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
+    self.flatMap[R, E, B](a => ZFlow(f(a)))
 
-  final def orDie[R1 <: R, E1 >: E, A1 >: A: Schema]: ZFlow[R1, ZNothing, A1] =
+  final def orDie[R1 <: R, E1 >: E, A1 >: A]: ZFlow[R1, ZNothing, A1] =
     self.catchAll[R1, E1, A1, ZNothing]((_: Remote[E1]) => ZFlow.Die)
 
-  final def orElse[R1 <: R, E1 >: E, E2: Schema, A1 >: A: Schema](
+  final def orElse[R1 <: R, E1 >: E, E2, A1 >: A](
     that: ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
     self.catchAll((_: Remote[E1]) => that)
 
-  final def orElseEither[R1 <: R, A1 >: A, E2: Schema, B](
+  final def orElseEither[R1 <: R, A1 >: A, E2, B](
     that: ZFlow[R1, E2, B]
-  )(implicit schemaA: Schema[A1], schemaB: Schema[B]): ZFlow[R1, E2, Either[A1, B]] =
+  ): ZFlow[R1, E2, Either[A1, B]] =
     self
       .map[Either[A1, B]](a => Remote.sequenceEither[A1, B](Left(a)))
       .catchAll((_: Remote[E]) => that.map((b: Remote[B]) => Remote.sequenceEither[A1, B](Right(b))))
@@ -146,7 +131,7 @@ sealed trait ZFlow[-R, +E, +A] {
 
   final def unit: ZFlow[R, E, Unit] = as(())
 
-  final def zip[R1 <: R, E1 >: E: Schema, A1 >: A: Schema, B: Schema](
+  final def zip[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, (A1, B)] =
     self.flatMap((a: Remote[A1]) => that.map((b: Remote[B]) => a -> b))
@@ -166,9 +151,6 @@ sealed trait ZFlow[-R, +E, +A] {
 object ZFlow {
 
   final case class Return[A](value: Remote[A]) extends ZFlow[Any, Nothing, A] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = value.schema
-
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, A] =
       Return(value.substitute(f))
 
@@ -189,9 +171,6 @@ object ZFlow {
   }
 
   case object Now extends ZFlow[Any, Nothing, Instant] {
-    val errorSchema                   = Schema[ZNothing]
-    val resultSchema: Schema[Instant] = Schema[Instant]
-
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, Instant] =
       Now
 
@@ -203,9 +182,6 @@ object ZFlow {
   }
 
   final case class WaitTill(time: Remote[Instant]) extends ZFlow[Any, Nothing, Unit] {
-    val errorSchema                = Schema[ZNothing]
-    val resultSchema: Schema[Unit] = Schema[Unit]
-
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, Unit] =
       WaitTill(time.substitute(f))
 
@@ -225,24 +201,19 @@ object ZFlow {
       Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
-  final case class Read[A](svar: Remote[RemoteVariableReference[A]], schema: Schema[A]) extends ZFlow[Any, Nothing, A] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = schema
-
+  final case class Read[A](svar: Remote[RemoteVariableReference[A]]) extends ZFlow[Any, Nothing, A] {
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, A] =
-      Read(svar.substitute(f), schema)
+      Read(svar.substitute(f))
 
     override private[flow] val variableUsage = svar.variableUsage
   }
 
   object Read {
     def schema[A]: Schema[Read[A]] =
-      Schema.CaseClass2[Remote[RemoteVariableReference[A]], FlowSchemaAst, Read[A]](
+      Schema.CaseClass1[Remote[RemoteVariableReference[A]], Read[A]](
         Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
-        Schema.Field("schema", FlowSchemaAst.schema),
-        { case (svar, schema) => Read(svar, schema.toSchema[A]) },
-        _.svar,
-        read => FlowSchemaAst.fromSchema(read.schema)
+        { case (svar) => Read(svar) },
+        _.svar
       )
 
     def schemaCase[R, E, A]: Schema.Case[Read[A], ZFlow[R, E, A]] =
@@ -251,9 +222,6 @@ object ZFlow {
 
   final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])
       extends ZFlow[Any, Nothing, B] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = f.schema.asInstanceOf[Schema.Tuple[B, A]].left
-
     override def substituteRec[C](fn: Remote.Substitutions): ZFlow[Any, Nothing, B] =
       Modify(
         svar.substitute(fn),
@@ -286,9 +254,6 @@ object ZFlow {
     value: ZFlow[R, E, A],
     ifError: EvaluatedRemoteFunction[E, ZFlow[R, E2, B]],
     ifSuccess: EvaluatedRemoteFunction[A, ZFlow[R, E2, B]]
-  )(implicit
-    val errorSchema: Schema[E2],
-    val resultSchema: Schema[B]
   ) extends ZFlow[R, E2, B] {
     type ValueE  = E
     type ValueE2 = E2
@@ -310,26 +275,17 @@ object ZFlow {
   object Fold {
     def schema[R, E, E2, A, B]: Schema[Fold[R, E, E2, A, B]] =
       Schema.defer(
-        Schema.CaseClass5[ZFlow[R, E, A], EvaluatedRemoteFunction[E, ZFlow[R, E2, B]], EvaluatedRemoteFunction[
+        Schema.CaseClass3[ZFlow[R, E, A], EvaluatedRemoteFunction[E, ZFlow[R, E2, B]], EvaluatedRemoteFunction[
           A,
           ZFlow[R, E2, B]
-        ], FlowSchemaAst, FlowSchemaAst, Fold[R, E, E2, A, B]](
+        ], Fold[R, E, E2, A, B]](
           Schema.Field("value", ZFlow.schema[R, E, A]),
           Schema.Field("ifError", EvaluatedRemoteFunction.schema[E, ZFlow[R, E2, B]]),
           Schema.Field("ifSuccess", EvaluatedRemoteFunction.schema[A, ZFlow[R, E2, B]]),
-          Schema.Field("errorSchema", FlowSchemaAst.schema),
-          Schema.Field("resultSchema", FlowSchemaAst.schema),
-          { case (value, ifError, ifSuccess, errorSchema, resultSchema) =>
-            Fold(value, ifError, ifSuccess)(
-              errorSchema.toSchema[E2],
-              resultSchema.toSchema[B]
-            )
-          },
+          (value, ifError, ifSuccess) => Fold(value, ifError, ifSuccess),
           _.value,
           _.ifError,
-          _.ifSuccess,
-          flow => FlowSchemaAst.fromSchema(flow.errorSchema),
-          flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+          _.ifSuccess
         )
       )
 
@@ -338,8 +294,6 @@ object ZFlow {
   }
 
   final case class Log(message: Remote[String]) extends ZFlow[Any, Nothing, Unit] {
-    val errorSchema                = Schema[ZNothing]
-    val resultSchema: Schema[Unit] = Schema[Unit]
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, Unit] =
       Log(message.substitute(f))
@@ -358,8 +312,6 @@ object ZFlow {
   }
 
   final case class RunActivity[R, A](input: Remote[R], activity: Activity[R, A]) extends ZFlow[Any, ActivityError, A] {
-    val errorSchema  = Schema[ActivityError]
-    val resultSchema = activity.resultSchema
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, ActivityError, A] =
       RunActivity(input.substitute(f), activity)
@@ -385,8 +337,6 @@ object ZFlow {
 
   final case class Transaction[R, E, A](workflow: ZFlow[R, E, A]) extends ZFlow[R, E, A] {
     type ValueR = R
-    override val errorSchema  = workflow.errorSchema
-    override val resultSchema = workflow.resultSchema
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, A] =
       Transaction(workflow.substitute(f))
@@ -409,8 +359,7 @@ object ZFlow {
       Schema.Case("Transaction", schema[R, E, A], _.asInstanceOf[Transaction[R, E, A]])
   }
 
-  final case class Input[R]()(implicit val resultSchema: Schema[R]) extends ZFlow[R, Nothing, R] {
-    val errorSchema = Schema[ZNothing]
+  final case class Input[R]() extends ZFlow[R, Nothing, R] {
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, Nothing, R] =
       this
@@ -420,9 +369,9 @@ object ZFlow {
 
   object Input {
     def schema[R]: Schema[Input[R]] =
-      FlowSchemaAst.schema.transform(
-        ast => Input()(ast.toSchema[R]),
-        flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+      Schema[Unit].transform(
+        _ => Input(),
+        _ => ()
       )
 
     def schemaCase[R, E, A]: Schema.Case[Input[R], ZFlow[R, E, A]] =
@@ -433,9 +382,6 @@ object ZFlow {
       extends ZFlow[R, E, A] {
     type ValueE = E
     type ValueA = A
-
-    val errorSchema  = flow.errorSchema
-    val resultSchema = flow.resultSchema
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, A] =
       Ensuring(flow.substitute(f), finalizer.substitute(f))
@@ -459,10 +405,7 @@ object ZFlow {
       Schema.Case("Ensuring", schema[R, E, A], _.asInstanceOf[Ensuring[R, E, A]])
   }
 
-  final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]])(implicit
-    val errorSchema: Schema[E],
-    val resultSchema: Schema[A]
-  ) extends ZFlow[R, E, A] {
+  final case class Unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]) extends ZFlow[R, E, A] {
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, A] =
       Unwrap(remote.substitute(f))
 
@@ -471,29 +414,19 @@ object ZFlow {
 
   object Unwrap {
     def schema[R, E, A]: Schema[Unwrap[R, E, A]] =
-      Schema.CaseClass3[Remote[ZFlow[R, E, A]], FlowSchemaAst, FlowSchemaAst, Unwrap[R, E, A]](
+      Schema.CaseClass1[Remote[ZFlow[R, E, A]], Unwrap[R, E, A]](
         Schema.Field("remote", Remote.schema[ZFlow[R, E, A]]),
-        Schema.Field("errorSchema", FlowSchemaAst.schema),
-        Schema.Field("resultSchema", FlowSchemaAst.schema),
-        { case (remote, errorSchemaAst, resultSchemaAst) =>
-          Unwrap(remote)(
-            errorSchemaAst.toSchema[E],
-            resultSchemaAst.toSchema[A]
-          )
+        { case (remote) =>
+          Unwrap(remote)
         },
-        _.remote,
-        flow => FlowSchemaAst.fromSchema(flow.errorSchema),
-        flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+        _.remote
       )
 
     def schemaCase[R, E, A]: Schema.Case[Unwrap[R, E, A], ZFlow[R, E, A]] =
       Schema.Case("Unwrap", schema[R, E, A], _.asInstanceOf[Unwrap[R, E, A]])
   }
 
-  final case class UnwrapRemote[A](remote: Remote[Remote[A]])(implicit
-    val resultSchema: Schema[A]
-  ) extends ZFlow[Any, Nothing, A] {
-    val errorSchema = Schema[ZNothing]
+  final case class UnwrapRemote[A](remote: Remote[Remote[A]]) extends ZFlow[Any, Nothing, A] {
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, A] =
       UnwrapRemote(remote.substitute(f))
@@ -503,16 +436,12 @@ object ZFlow {
 
   object UnwrapRemote {
     def schema[A]: Schema[UnwrapRemote[A]] =
-      Schema.CaseClass2[Remote[Remote[A]], FlowSchemaAst, UnwrapRemote[A]](
+      Schema.CaseClass1[Remote[Remote[A]], UnwrapRemote[A]](
         Schema.Field("remote", Remote.schema[Remote[A]]),
-        Schema.Field("resultSchema", FlowSchemaAst.schema),
-        { case (remote, resultSchemaAst) =>
-          UnwrapRemote(remote)(
-            resultSchemaAst.toSchema[A]
-          )
+        { case (remote) =>
+          UnwrapRemote(remote)
         },
-        _.remote,
-        flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+        _.remote
       )
 
     def schemaCase[R, E, A]: Schema.Case[UnwrapRemote[A], ZFlow[R, E, A]] =
@@ -522,9 +451,6 @@ object ZFlow {
   final case class Fork[R, E, A](flow: ZFlow[R, E, A]) extends ZFlow[R, Nothing, ExecutingFlow[E, A]] {
     type ValueE = E
     type ValueA = A
-    val errorSchema = Schema[ZNothing]
-    val resultSchema: Schema[ExecutingFlow[E, A]] =
-      Schema[ExecutingFlow[E, A]](ExecutingFlow.schema)
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, Nothing, ExecutingFlow[E, A]] =
       Fork(flow.substitute(f))
@@ -550,8 +476,6 @@ object ZFlow {
   final case class Timeout[R, E, A](flow: ZFlow[R, E, A], duration: Remote[Duration]) extends ZFlow[R, E, Option[A]] {
     type ValueA = A
     type ValueE = E
-    val errorSchema  = flow.errorSchema
-    val resultSchema = Schema.option(flow.resultSchema)
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, Option[A]] =
       Timeout(flow.substitute(f), duration.substitute(f))
@@ -580,8 +504,6 @@ object ZFlow {
   final case class Provide[R, E, A](value: Remote[R], flow: ZFlow[R, E, A]) extends ZFlow[Any, E, A] {
     type ValueE = E
     type ValueA = A
-    val errorSchema  = flow.errorSchema
-    val resultSchema = flow.resultSchema
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, E, A] =
       Provide(value.substitute(f), flow.substitute(f))
@@ -606,8 +528,6 @@ object ZFlow {
   }
 
   case object Die extends ZFlow[Any, Nothing, Nothing] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = Schema[ZNothing]
 
     val schema: Schema[Die.type] = Schema.singleton(Die)
     def schemaCase[R, E, A]: Schema.Case[Die.type, ZFlow[R, E, A]] =
@@ -620,8 +540,6 @@ object ZFlow {
   }
 
   case object RetryUntil extends ZFlow[Any, Nothing, Nothing] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = Schema[ZNothing]
 
     val schema: Schema[RetryUntil.type] = Schema.singleton(RetryUntil)
     def schemaCase[R, E, A]: Schema.Case[RetryUntil.type, ZFlow[R, E, A]] =
@@ -634,8 +552,6 @@ object ZFlow {
   }
 
   final case class OrTry[R, E, A](left: ZFlow[R, E, A], right: ZFlow[R, E, A]) extends ZFlow[R, E, A] {
-    val errorSchema  = left.errorSchema
-    val resultSchema = left.resultSchema
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, A] =
       OrTry(left.substitute(f), right.substitute(f))
@@ -659,14 +575,9 @@ object ZFlow {
       Schema.Case("OrTry", schema[R, E, A], _.asInstanceOf[OrTry[R, E, A]])
   }
 
-  final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]])(implicit
-    val schemaE: Schema[E],
-    val schemaA: Schema[A]
-  ) extends ZFlow[Any, ActivityError, Either[E, A]] {
+  final case class Await[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Either[E, A]] {
     type ValueE = E
     type ValueA = A
-    val errorSchema  = Schema[ActivityError]
-    val resultSchema = Schema[Either[E, A]]
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, ActivityError, Either[E, A]] =
       Await(exFlow.substitute(f))
@@ -676,19 +587,12 @@ object ZFlow {
 
   object Await {
     def schema[E, A]: Schema[Await[E, A]] =
-      Schema.CaseClass3[Remote[ExecutingFlow[E, A]], FlowSchemaAst, FlowSchemaAst, Await[E, A]](
+      Schema.CaseClass1[Remote[ExecutingFlow[E, A]], Await[E, A]](
         Schema.Field("exFlow", Remote.schema[ExecutingFlow[E, A]]),
-        Schema.Field("schemaE", FlowSchemaAst.schema),
-        Schema.Field("schemaA", FlowSchemaAst.schema),
-        { case (exFlow, schemaAstE, schemaAstA) =>
-          Await(exFlow)(
-            schemaAstE.toSchema[E],
-            schemaAstA.toSchema[A]
-          )
+        { case (exFlow) =>
+          Await(exFlow)
         },
-        _.exFlow,
-        flow => FlowSchemaAst.fromSchema(flow.schemaE),
-        flow => FlowSchemaAst.fromSchema(flow.schemaA)
+        _.exFlow
       )
 
     def schemaCase[R, E, A]: Schema.Case[Await[E, A], ZFlow[R, E, A]] =
@@ -696,8 +600,6 @@ object ZFlow {
   }
 
   final case class Interrupt[E, A](exFlow: Remote[ExecutingFlow[E, A]]) extends ZFlow[Any, ActivityError, Unit] {
-    val errorSchema  = Schema[ActivityError]
-    val resultSchema = Schema[Unit]
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, ActivityError, Unit] =
       Interrupt(exFlow.substitute(f))
@@ -719,8 +621,6 @@ object ZFlow {
   }
 
   final case class Fail[E](error: Remote[E]) extends ZFlow[Any, E, Nothing] {
-    override val errorSchema  = error.schema
-    override val resultSchema = Schema[ZNothing]
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, E, Nothing] =
       Fail(error.substitute(f))
@@ -742,8 +642,6 @@ object ZFlow {
   }
 
   final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, RemoteVariableReference[A]] {
-    val errorSchema  = Schema[ZNothing]
-    val resultSchema = RemoteVariableReference.schema[A]
 
     override def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, RemoteVariableReference[A]] =
       NewVar(name, initial.substitute(f))
@@ -769,9 +667,6 @@ object ZFlow {
     initial: Remote[A],
     step: EvaluatedRemoteFunction[A, ZFlow[R, E, A]],
     predicate: EvaluatedRemoteFunction[A, Boolean]
-  )(implicit
-    val errorSchema: Schema[E],
-    val resultSchema: Schema[A]
   ) extends ZFlow[R, E, A] {
     type ValueE = E
     type ValueA = A
@@ -790,26 +685,19 @@ object ZFlow {
   object Iterate {
     def schema[R, E, A]: Schema[Iterate[R, E, A]] =
       Schema.defer(
-        Schema.CaseClass5[Remote[A], EvaluatedRemoteFunction[A, ZFlow[R, E, A]], EvaluatedRemoteFunction[
+        Schema.CaseClass3[Remote[A], EvaluatedRemoteFunction[A, ZFlow[R, E, A]], EvaluatedRemoteFunction[
           A,
           Boolean
-        ], FlowSchemaAst, FlowSchemaAst, Iterate[R, E, A]](
+        ], Iterate[R, E, A]](
           Schema.Field("initial", Remote.schema[A]),
           Schema.Field("step", EvaluatedRemoteFunction.schema[A, ZFlow[R, E, A]]),
           Schema.Field("predicate", EvaluatedRemoteFunction.schema[A, Boolean]),
-          Schema.Field("errorSchema", FlowSchemaAst.schema),
-          Schema.Field("resultSchema", FlowSchemaAst.schema),
-          { case (initial, step, predicate, errorSchema, resultSchema) =>
-            Iterate(initial, step, predicate)(
-              errorSchema.toSchema[E],
-              resultSchema.toSchema[A]
-            )
+          { case (initial, step, predicate) =>
+            Iterate(initial, step, predicate)
           },
           _.initial,
           _.step,
-          _.predicate,
-          flow => FlowSchemaAst.fromSchema(flow.errorSchema),
-          flow => FlowSchemaAst.fromSchema(flow.resultSchema)
+          _.predicate
         )
       )
 
@@ -821,13 +709,13 @@ object ZFlow {
 
   def apply[A](remote: Remote[A]): ZFlow[Any, ZNothing, A] = Return(remote)
 
-  def doUntil[R, E: Schema](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
+  def doUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
 
-  def doWhile[R, E: Schema](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
+  def doWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
-  def foreach[R, E: Schema, A: Schema, B: Schema](
+  def foreach[R, E, A, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     ZFlow.unwrap {
@@ -839,7 +727,7 @@ object ZFlow {
       }
     }.map(_.reverse)
 
-  def foreachPar[R, A: Schema, B: Schema](
+  def foreachPar[R, A, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
     for {
@@ -852,12 +740,12 @@ object ZFlow {
       bs      <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers))
     } yield bs
 
-  def ifThenElse[R, E: Schema, A: Schema](
+  def ifThenElse[R, E, A](
     p: Remote[Boolean]
   )(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
-  def input[R: Schema]: ZFlow[R, ZNothing, R] = Input[R]()
+  def input[R]: ZFlow[R, ZNothing, R] = Input[R]()
 
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, ZNothing, RemoteVariableReference[A]] =
     NewVar(name, initial)
@@ -874,31 +762,31 @@ object ZFlow {
       }
     }
 
-  def transaction[R, E: Schema, A: Schema](
+  def transaction[R, E, A](
     make: ZFlowTransaction => ZFlow[R, E, A]
   ): ZFlow[R, E, A] =
     Transaction(make(ZFlowTransaction.instance))
 
   val unit: ZFlow[Any, ZNothing, Unit] = ZFlow(Remote.unit)
 
-  def unwrap[R, E: Schema, A: Schema](remote: Remote[ZFlow[R, E, A]]): ZFlow[R, E, A] =
+  def unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]): ZFlow[R, E, A] =
     Unwrap(remote)
 
-  def unwrapRemote[A: Schema](remote: Remote[Remote[A]]): ZFlow[Any, ZNothing, A] =
+  def unwrapRemote[A](remote: Remote[Remote[A]]): ZFlow[Any, ZNothing, A] =
     UnwrapRemote(remote)
 
   def waitTill(instant: Remote[Instant]): ZFlow[Any, ZNothing, Unit] = WaitTill(instant)
 
-  def when[R, E: Schema, A: Schema](predicate: Remote[Boolean])(
+  def when[R, E, A](predicate: Remote[Boolean])(
     flow: ZFlow[R, E, A]
   ): ZFlow[R, E, Unit] =
     ZFlow.ifThenElse[R, E, Unit](predicate)(flow.unit, ZFlow.unit)
 
-  def fail[E: Schema](error: Remote[E]): ZFlow[Any, E, ZNothing] = ZFlow.Fail(error)
+  def fail[E](error: Remote[E]): ZFlow[Any, E, ZNothing] = ZFlow.Fail(error)
 
   def succeed[A](value: Remote[A]): ZFlow[Any, ZNothing, A] = ZFlow.Return(value)
 
-  def fromEither[E: Schema, A: Schema](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
+  def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.fold((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
   def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(Remote(message))
@@ -909,9 +797,6 @@ object ZFlow {
     initial: Remote[A],
     step: Remote[A] => Remote[ZFlow[R, E, A]],
     predicate: Remote[A] => Remote[Boolean]
-  )(implicit
-    errorSchema: Schema[E],
-    resultSchema: Schema[A]
   ): ZFlow.Iterate[R, E, A] =
     ZFlow.Iterate(initial, EvaluatedRemoteFunction.make(step), EvaluatedRemoteFunction.make(predicate))
 

@@ -19,6 +19,7 @@ package zio.flow.internal
 import zio._
 import zio.flow.Remote.EvaluatedRemoteFunction
 import zio.flow.internal.IndexedStore.Index
+import zio.flow.remote.DynamicValueHelpers
 import zio.flow.serialization._
 import zio.flow.{Remote, _}
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
@@ -51,18 +52,18 @@ final case class PersistentExecutor(
   private def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, IOException, A] =
     evalDynamic(remote).flatMap(dyn =>
       ZIO
-        .fromEither(dyn.value.toTypedValue(implicitly[Schema[A]]))
+        .fromEither(dyn.toTypedValue(implicitly[Schema[A]]))
         .mapError(msg => new IOException(s"Failed to convert remote to typed value: $msg"))
     )
 
-  private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, SchemaAndValue[A]] =
+  private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, DynamicValue] =
     (for {
       vars0 <- LocalContext.getAllVariables
       dyn   <- remote.evalDynamic
       vars1 <- LocalContext.getAllVariables
       vars   = vars1.diff(vars0)
 
-      remote       = Remote.fromDynamic(dyn.value, dyn.schema)
+      remote       = Remote.fromDynamic(dyn)
       usedByResult = remote.variableUsage.variables
 
       usedByVars <- ZIO.foldLeft(vars)(Set.empty[RemoteVariableName]) { case (set, variable) =>
@@ -70,7 +71,7 @@ final case class PersistentExecutor(
                         optDynVar <- RemoteContext.getVariable(variable.identifier)
                         result = optDynVar match {
                                    case Some(dynVar) =>
-                                     val remoteVar = Remote.fromDynamic(dynVar, variable.schema)
+                                     val remoteVar = Remote.fromDynamic(dynVar)
                                      set union remoteVar.variableUsage.variables
                                    case None =>
                                      set
@@ -209,7 +210,7 @@ final case class PersistentExecutor(
             case Nil =>
               evalDynamic(value).flatMap { result =>
                 state.result
-                  .succeed(FlowResult(result.value, updatedState.lastTimestamp))
+                  .succeed(FlowResult(result, updatedState.lastTimestamp))
                   .unit
                   .provideEnvironment(promiseEnv)
               }.as(
@@ -283,9 +284,9 @@ final case class PersistentExecutor(
         remoteContext {
           updatedState.stack match {
             case Nil =>
-              evalDynamic(value).flatMap { schemaAndValue =>
+              evalDynamic(value).flatMap { dyn =>
                 state.result
-                  .fail(Right(schemaAndValue.value))
+                  .fail(Right(dyn))
                   .unit
                   .provideEnvironment(promiseEnv)
               }.as(
@@ -369,7 +370,7 @@ final case class PersistentExecutor(
         }
       }
 
-      def failWith(error: SchemaAndValue[_], stateChange: StateChange = StateChange.none) =
+      def failWith(error: DynamicValue, stateChange: StateChange = StateChange.none) =
         onError(
           if (state.isInTransaction)
             Remote.Literal(TransactionFailure.wrapDynamic(error))
@@ -403,10 +404,10 @@ final case class PersistentExecutor(
             result  <- onSuccess(())
           } yield result
 
-        case Read(svar, schema) =>
+        case Read(svar) =>
           for {
             variableReference <- eval(svar)
-            variable           = Remote.Variable(variableReference.name, schema)
+            variable           = Remote.Variable(variableReference.name)
             stepResult        <- onSuccess(variable, StateChange.none)
           } yield stepResult
 
@@ -414,10 +415,10 @@ final case class PersistentExecutor(
           val f = f0.asInstanceOf[EvaluatedRemoteFunction[Any, (A, Any)]]
           for {
             variableReference <- eval(svar)
-            variable           = Remote.Variable(variableReference.name, f.input.schema)
+            variable           = Remote.Variable(variableReference.name)
             //            _                                      <- ZIO.debug(s"Modify: ${variable.identifier}'s previous value was $value")
             dynTuple <- evalDynamic(f(variable))
-            tuple <- dynTuple.value match {
+            tuple <- dynTuple match {
                        case DynamicValue.Tuple(dynResult, newValue) => ZIO.succeed((dynResult, newValue))
                        case _                                       => ZIO.fail(new IOException(s"Modify's result was not a tuple"))
                      }
@@ -429,7 +430,7 @@ final case class PersistentExecutor(
               ) // NOTE: this is needed for variable access tracking to work properly, as f0 may not access the variable at all
             _ <- RemoteContext.setVariable(variable.identifier, newValue)
             //            _                                      <- ZIO.debug(s"Modify: changed value of ${variable.identifier} to $newValue")
-            result = Remote.Literal(dynResult, modify.resultSchema)
+            result = Remote.Literal(dynResult)
             stepResult <- onSuccess(
                             result,
                             StateChange.none
@@ -455,7 +456,7 @@ final case class PersistentExecutor(
             inp    <- eval(input)(activity.inputSchema)
             output <- opExec.execute(inp, activity.operation).either
             result <- output match {
-                        case Left(error) => failWith(SchemaAndValue.of(error))
+                        case Left(error) => failWith(DynamicValueHelpers.of(error))
                         case Right(success) =>
                           val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
                           // TODO: take advantage of activity.check
@@ -478,26 +479,14 @@ final case class PersistentExecutor(
           )
 
         case ensuring @ Ensuring(flow, finalizer) =>
-          implicit val schemaE: Schema[ensuring.ValueE] =
-            ensuring.errorSchema.asInstanceOf[Schema[ensuring.ValueE]]
-          val schemaA: Schema[ensuring.ValueA] =
-            ensuring.resultSchema.asInstanceOf[Schema[ensuring.ValueA]]
           val cont =
             Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
               EvaluatedRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
-                (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])(
-                  schemaE,
-                  Schema[Unit],
-                  schemaA
-                )
-              }(schemaE),
+                (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
+              },
               EvaluatedRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
-                (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])(
-                  schemaE,
-                  Schema[Unit],
-                  schemaA
-                )
-              }(schemaA)
+                (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
+              }
             )
 
           ZIO.succeed(
@@ -532,8 +521,6 @@ final case class PersistentExecutor(
           } yield result
 
         case await @ Await(execFlow) =>
-          implicit val schemaE: Schema[await.ValueE] = await.schemaE
-          implicit val schemaA: Schema[await.ValueA] = await.schemaA
           for {
             executingFlow <- eval(execFlow)
             _             <- ZIO.log("Waiting for result")
@@ -552,15 +539,14 @@ final case class PersistentExecutor(
                   error
                     .fold(
                       die => ZIO.die(new IOException("Awaited flow died", die)),
-                      dynamicError =>
-                        ZIO.succeed(Remote.RemoteEither(Left((Remote.Literal(dynamicError, schemaE), schemaA))))
+                      dynamicError => ZIO.succeed(Remote.RemoteEither(Left(Remote.Literal(dynamicError))))
                     )
                     .flatMap { finishWith =>
                       onSuccess(finishWith)
                     },
                 dynamicSuccess =>
                   onSuccess(
-                    Remote.RemoteEither(Right((schemaE, Remote.Literal(dynamicSuccess.result, schemaA)))),
+                    Remote.RemoteEither(Right(Remote.Literal(dynamicSuccess.result))),
                     StateChange.advanceClock(dynamicSuccess.timestamp)
                   )
               )
@@ -586,7 +572,7 @@ final case class PersistentExecutor(
                             case Some(Right(dynamicSuccess)) =>
                               // succeeded
                               onSuccess(
-                                Remote.Literal(DynamicValue.SomeValue(dynamicSuccess.result), timeout.resultSchema),
+                                Remote.Literal(DynamicValue.SomeValue(dynamicSuccess.result)),
                                 StateChange.increaseForkCounter ++ StateChange.advanceClock(dynamicSuccess.timestamp)
                               )
                             case Some(Left(Left(fatal))) =>
@@ -595,14 +581,14 @@ final case class PersistentExecutor(
                             case Some(Left(Right(dynamicError))) =>
                               // failed with typed error
                               failWith(
-                                SchemaAndValue(timeout.errorSchema, dynamicError),
+                                dynamicError,
                                 StateChange.increaseForkCounter
                               )
                             case None =>
                               // timed out
                               interruptFlow(forkId).zipRight(
                                 onSuccess(
-                                  Remote.Literal(DynamicValue.NoneValue, timeout.resultSchema),
+                                  Remote.Literal(DynamicValue.NoneValue),
                                   StateChange.increaseForkCounter
                                 )
                               )
@@ -642,7 +628,7 @@ final case class PersistentExecutor(
                         onSuccess(Remote.unit)
                       else
                         failWith(
-                          SchemaAndValue.of(
+                          DynamicValueHelpers.of(
                             ActivityError(
                               s"Flow ${persistentExecutingFlow.id} to be interrupted is not running",
                               None
@@ -662,18 +648,15 @@ final case class PersistentExecutor(
 
         case NewVar(name, initial) =>
           for {
-            schemaAndValue    <- evalDynamic(initial)
+            initialValue      <- evalDynamic(initial)
             remoteVariableName = RemoteVariableName(name)
             vref               = RemoteVariableReference[Any](remoteVariableName)
-            _                 <- RemoteContext.setVariable(remoteVariableName, schemaAndValue.value)
+            _                 <- RemoteContext.setVariable(remoteVariableName, initialValue)
             _                 <- ZIO.logDebug(s"Created new variable $name")
             result            <- onSuccess(Remote(vref), StateChange.none)
           } yield result
 
         case i @ Iterate(initial, step0, predicate) =>
-          implicit val schemaE: Schema[i.ValueE] = i.errorSchema
-          implicit val schemaA: Schema[i.ValueA] = i.resultSchema
-
           val tempVarCounter = state.tempVarCounter
           val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
 
@@ -685,10 +668,10 @@ final case class PersistentExecutor(
           ): ZFlow[Any, i.ValueE, i.ValueA] =
             ZFlow.ifThenElse(boolRemote)(
               for {
-                a0       <- stateVar.get(schemaA)
+                a0       <- stateVar.get
                 nextFlow <- step(a0)
-                a1       <- ZFlow.unwrap(nextFlow)(i.errorSchema, i.resultSchema)
-                _        <- stateVar.set(a1)(schemaA)
+                a1       <- ZFlow.unwrap(nextFlow)
+                _        <- stateVar.set(a1)
                 continue <- predicate(a1)
                 result   <- iterate(step, predicate, stateVar, continue)
               } yield result,
@@ -700,7 +683,6 @@ final case class PersistentExecutor(
             stateValue <- stateVar.get
             boolRemote <- ZFlow(predicate(stateValue))
             _          <- ZFlow.log(s"stateValue = $stateValue")
-            _          <- ZFlow.log(s"boolRemote = $boolRemote")
             _          <- ZFlow.log(s"boolRemote = $boolRemote")
             stateValue <- iterate(step0, predicate, stateVar, boolRemote)
           } yield stateValue
@@ -1123,7 +1105,7 @@ object PersistentExecutor {
                 EvaluatedRemoteFunction.make((_: Remote[Unit]) =>
                   ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]
                 )
-              )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
+              )
             state.copy(
               current = compensateAndFail
             )
@@ -1142,7 +1124,7 @@ object PersistentExecutor {
                   ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
                 ),
                 EvaluatedRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
-              )(txState.body.errorSchema.asInstanceOf[Schema[Any]], txState.body.resultSchema.asInstanceOf[Schema[Any]])
+              )
 
             // TODO: we need to assign a new transaction ID because we are not cleaning up persisted variables yet
             val newTransactionId = TransactionId("tx" + state.transactionCounter.toString)
