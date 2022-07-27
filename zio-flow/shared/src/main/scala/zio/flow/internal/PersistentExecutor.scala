@@ -411,7 +411,7 @@ final case class PersistentExecutor(
             stepResult        <- onSuccess(variable, StateChange.none)
           } yield stepResult
 
-        case modify @ Modify(svar, f0) =>
+        case Modify(svar, f0) =>
           val f = f0.asInstanceOf[EvaluatedRemoteFunction[Any, (A, Any)]]
           for {
             variableReference <- eval(svar)
