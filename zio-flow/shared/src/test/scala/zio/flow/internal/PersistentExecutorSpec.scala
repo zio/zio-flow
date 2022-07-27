@@ -766,6 +766,17 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
     } { res =>
       assertTrue(res == List.range(1, 10))
+    },
+    testFlow("unwrap remote flows in parallel") {
+      val flows: List[ZFlow[Any, ZNothing, Int]] =
+        List.range(1, 10).map(ZFlow(_))
+
+      val collected: ZFlow[Any, ActivityError, List[Int]] =
+        ZFlow.foreachPar(Remote(flows))(ZFlow.unwrap[Any, ZNothing, Int])
+
+      collected
+    } { collected =>
+      assertTrue(collected == List.range(1, 10))
     }
   )
 
