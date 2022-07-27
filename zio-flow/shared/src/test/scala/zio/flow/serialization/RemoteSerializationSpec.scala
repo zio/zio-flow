@@ -70,7 +70,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("nested")(roundtripCheck(codec, genNested)),
       test("variable")(roundtripCheck(codec, genRemoteVariable)),
       test("variable of nothing") {
-        val variable = Remote.Variable[ZNothing](RemoteVariableName("test"), schemaZNothing)
+        val variable = Remote.Variable[ZNothing](RemoteVariableName("test"))
         roundtrip(codec, variable)
       },
       test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
@@ -124,7 +124,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
             either.fold(
               msg => {
                 val throwable: Throwable = new Generators.TestException(msg)
-                Left((Remote(throwable), Schema[Int]))
+                Left(Remote(throwable))
               },
               value => Right(value)
             )

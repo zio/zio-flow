@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.ZLayer
+import zio.{ZIO, ZLayer}
 import zio.flow._
 import zio.flow.remote.numeric._
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
@@ -19,7 +19,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn <- remote.evalDynamic
               typ <- remote.eval[String]
             } yield assertTrue(
-              dyn == SchemaAndValue(Schema.primitive[String], DynamicValue.Primitive("test", StandardType[String])),
+              dyn == DynamicValue.Primitive("test", StandardType[String]),
               typ == "test"
             )
 
@@ -29,14 +29,14 @@ object RemoteSpec extends ZIOSpecDefault {
       suite("Variable")(
         test("evaluates to the stored value") {
           val name   = RemoteVariableName("test")
-          val remote = Remote.Variable(name, Schema.primitive[String])
+          val remote = Remote.Variable(name)
           val test =
             for {
               _   <- RemoteContext.setVariable(name, DynamicValue.fromSchemaAndValue(Schema[String], "test"))
               dyn <- remote.evalDynamic
               typ <- remote.eval[String]
             } yield assertTrue(
-              dyn == SchemaAndValue(Schema.primitive[String], DynamicValue.Primitive("test", StandardType[String])),
+              dyn == DynamicValue.Primitive("test", StandardType[String]),
               typ == "test"
             )
 
@@ -44,7 +44,7 @@ object RemoteSpec extends ZIOSpecDefault {
         },
         test("fails if not stored") {
           val name   = RemoteVariableName("test")
-          val remote = Remote.Variable(name, Schema.primitive[Int])
+          val remote = Remote.Variable(name)
           val test =
             for {
               dyn <- remote.evalDynamic.exit
@@ -55,26 +55,26 @@ object RemoteSpec extends ZIOSpecDefault {
       ),
       suite("Either")(
         test("evaluates correctly when it is Left") {
-          val remote = Remote.RemoteEither(Left((Remote("test"), Schema[Int])))
+          val remote = Remote.RemoteEither(Left(Remote("test")))
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Either[String, Int]]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
+              dyn == DynamicValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
               typ == Left("test")
             )
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         },
         test("evaluates correctly when it is Right") {
-          val remote = Remote.RemoteEither(Right((Schema[Int], (Remote("test")))))
+          val remote = Remote.RemoteEither(Right(Remote("test")))
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Either[Int, String]]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
+              dyn == DynamicValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
               typ == Right("test")
             )
 
@@ -84,13 +84,13 @@ object RemoteSpec extends ZIOSpecDefault {
       suite("SwapEither")(
         test("evaluates correctly when it is Left") {
           val remote =
-            Remote.SwapEither(Remote.RemoteEither(Left((Remote("test"), Schema[Int]))))
+            Remote.SwapEither(Remote.RemoteEither(Left(Remote("test"))))
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Either[Int, String]]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
+              dyn == DynamicValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
               typ == Right("test")
             )
 
@@ -98,13 +98,13 @@ object RemoteSpec extends ZIOSpecDefault {
         },
         test("evaluates correctly when it is Right") {
           val remote =
-            Remote.SwapEither(Remote.RemoteEither(Right((Schema[Int], (Remote("test"))))))
+            Remote.SwapEither(Remote.RemoteEither(Right(Remote("test"))))
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Either[String, Int]]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
+              dyn == DynamicValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
               typ == Left("test")
             )
 
@@ -120,7 +120,7 @@ object RemoteSpec extends ZIOSpecDefault {
           )
           val expectedValue = ("hello", TestCaseClass("x", 2), 1)
           val expectedDynamicValue =
-            SchemaAndValue.fromSchemaAndValue(Schema.tuple3[String, TestCaseClass, Int], expectedValue)
+            DynamicValue.fromSchemaAndValue(Schema.tuple3[String, TestCaseClass, Int], expectedValue)
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -135,26 +135,26 @@ object RemoteSpec extends ZIOSpecDefault {
       ),
       suite("LessThanEqual")(
         test("evaluates correctly when less") {
-          val remote = Remote.LessThanEqual(Remote(5), Remote(10))
+          val remote = Remote.LessThanEqual(Remote(5), Remote(10), Schema[Int])
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Boolean]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Boolean], true),
+              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], true),
               typ == true
             )
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         },
         test("evaluates correctly when greater") {
-          val remote = Remote.LessThanEqual(Remote(50), Remote(10))
+          val remote = Remote.LessThanEqual(Remote(50), Remote(10), Schema[Int])
           val test =
             for {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Boolean]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Boolean], false),
+              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], false),
               typ == false
             )
 
@@ -180,7 +180,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn <- remote.evalDynamic
               typ <- remote.eval[Int]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema[Int], 160),
+              dyn == DynamicValue.fromSchemaAndValue(Schema[Int], 160),
               typ == 160
             )
 
@@ -199,7 +199,7 @@ object RemoteSpec extends ZIOSpecDefault {
               dyn <- remote.evalDynamic
               typ <- remote.eval[TestCaseClass]
             } yield assertTrue(
-              dyn == SchemaAndValue.fromSchemaAndValue(Schema[TestCaseClass], TestCaseClass("c", 30)),
+              dyn == DynamicValue.fromSchemaAndValue(Schema[TestCaseClass], TestCaseClass("c", 30)),
               typ == TestCaseClass("c", 30)
             )
 
@@ -226,8 +226,8 @@ object RemoteSpec extends ZIOSpecDefault {
           val flow = ZFlow.succeed(ZFlow.succeed(1))
           val test = for {
             dyn <- Remote.Flow(flow).evalDynamic
-            rs   = dyn.schema.asInstanceOf[Schema[_]]
-          } yield assertTrue(rs eq ZFlow.schemaAny)
+            typ <- ZIO.fromEither(dyn.toTypedValue(ZFlow.schemaAny))
+          } yield assertTrue(typ == ZFlow.succeed(ZFlow.succeed(1)))
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }

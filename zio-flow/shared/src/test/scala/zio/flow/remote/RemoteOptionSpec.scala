@@ -31,7 +31,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("isNone") {
-        val op1 = Remote[Option[Int]](None) // TODO: otherwise diverging implicits. Should Remote be invariant?
+        val op1 = Remote.none
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(

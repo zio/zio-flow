@@ -1,6 +1,5 @@
 package zio.flow.internal
 
-import zio.flow.SchemaAndValue
 import zio.schema.{DynamicValue, Schema}
 
 sealed trait TransactionFailure[+E]
@@ -22,29 +21,23 @@ object TransactionFailure {
       )
     )
 
-  def wrapDynamic[E](value: SchemaAndValue[E]): SchemaAndValue[TransactionFailure[E]] = {
-    val result = SchemaAndValue(
-      schema(value.schema),
-      DynamicValue.Enumeration(
-        "Fail" -> value.value
-      )
+  /** Wraps a dynamic value E with TransactionFailure.Fail(value) */
+  def wrapDynamic[E](value: DynamicValue): DynamicValue =
+    DynamicValue.Enumeration(
+      "Fail" -> value
     )
-    result
-  }
 
-  def unwrapDynamic(schemaAndValue: SchemaAndValue[Any]): Option[SchemaAndValue[Any]] =
-    schemaAndValue.value match {
+  /**
+   * Unwraps a dynamic value of type TransactionFailure.Fail or returns None if
+   * it was TransactionFailure.Retry
+   */
+  def unwrapDynamic(dynamicValue: DynamicValue): Option[DynamicValue] =
+    dynamicValue match {
       case DynamicValue.Enumeration((name, value)) =>
         name match {
           case "Retry" => None
           case "Fail" =>
-            val errorSchema = schemaAndValue.schema match {
-              case Schema.Enum2(_, failSchema, _) =>
-                failSchema.codec
-              case _ =>
-                throw new IllegalArgumentException(s"TransactionFailure.unwrapDynamic called with an unexpected schema")
-            }
-            Some(SchemaAndValue(errorSchema, value))
+            Some(value)
           case _ =>
             throw new IllegalArgumentException(s"TransactionFailure.unwrapDynamic called with an unexpected schema")
         }
