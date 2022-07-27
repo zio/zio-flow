@@ -9,7 +9,8 @@ object DynamicValueHelpers {
 
   def tuple(values: DynamicValue*): DynamicValue =
     values.toList match {
-      case (left :: rest) => DynamicValue.Tuple(left, tuple(rest: _*))
-      case _              => throw new IllegalArgumentException(s"DynamicValueHelpers.tuple requires at least two parameters")
+      case (left :: last :: Nil)   => DynamicValue.Tuple(left, last)
+      case (left :: right :: rest) => tuple(DynamicValue.Tuple(left, right) :: rest: _*)
+      case _                       => throw new IllegalArgumentException(s"DynamicValueHelpers.tuple requires at least two parameters")
     }
 }

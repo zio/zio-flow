@@ -135,7 +135,7 @@ object RemoteSpec extends ZIOSpecDefault {
       ),
       suite("LessThanEqual")(
         test("evaluates correctly when less") {
-          val remote = Remote.LessThanEqual(Remote(5), Remote(10))
+          val remote = Remote.LessThanEqual(Remote(5), Remote(10), Schema[Int])
           val test =
             for {
               dyn <- remote.evalDynamic
@@ -148,7 +148,7 @@ object RemoteSpec extends ZIOSpecDefault {
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         },
         test("evaluates correctly when greater") {
-          val remote = Remote.LessThanEqual(Remote(50), Remote(10))
+          val remote = Remote.LessThanEqual(Remote(50), Remote(10), Schema[Int])
           val test =
             for {
               dyn <- remote.evalDynamic

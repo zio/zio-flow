@@ -719,7 +719,7 @@ object PrettyPrint {
         builder.append(")")
       case Remote.Branch(_, _, _) => ???
       case Remote.Length(_)       => ???
-      case Remote.LessThanEqual(left, right) =>
+      case Remote.LessThanEqual(left, right, _) =>
         prettyPrintRemote(left, builder, indent)
         builder.append("<=")
         prettyPrintRemote(right, builder, indent)

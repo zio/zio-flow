@@ -333,7 +333,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       rv  <- Gen.int
       lLit = Remote(lv)
       rLit = Remote(rv)
-    } yield Remote.LessThanEqual(lLit, rLit)
+    } yield Remote.LessThanEqual(lLit, rLit, Schema[Int])
 
   lazy val genEqual: Gen[Sized, Remote[Any]] =
     for {

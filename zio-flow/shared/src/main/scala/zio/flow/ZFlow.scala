@@ -753,9 +753,8 @@ object ZFlow {
   def now: ZFlow[Any, ZNothing, Instant] = Now
 
   def sleep(duration: Remote[Duration]): ZFlow[Any, ZNothing, Unit] =
-    // TODO: why are these type args needed - they prevent using for comprehension
-    ZFlow.now.flatMap[Any, ZNothing, Unit] { now =>
-      ZFlow(now.plusDuration(duration)).flatMap[Any, ZNothing, Unit] { later =>
+    ZFlow.now.flatMap { now =>
+      ZFlow(now.plusDuration(duration)).flatMap { later =>
         ZFlow.waitTill(later).map { _ =>
           Remote.unit
         }

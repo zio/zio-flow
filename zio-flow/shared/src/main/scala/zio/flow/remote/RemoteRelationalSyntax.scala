@@ -17,19 +17,20 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.schema.Schema
 
 final class RemoteRelationalSyntax[A](val self: Remote[A]) extends AnyVal {
 
-  def <(that: Remote[A]): Remote[Boolean] =
+  def <(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     (self <= that) && (self !== that)
 
-  def <=(that: Remote[A]): Remote[Boolean] =
-    Remote.LessThanEqual(self, that)
+  def <=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
+    Remote.LessThanEqual(self, that, schema)
 
-  def >(that: Remote[A]): Remote[Boolean] =
+  def >(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     !(self <= that)
 
-  def >=(that: Remote[A]): Remote[Boolean] =
+  def >=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     (self > that) || (self === that)
 
   def !==(that: Remote[A]): Remote[Boolean] =

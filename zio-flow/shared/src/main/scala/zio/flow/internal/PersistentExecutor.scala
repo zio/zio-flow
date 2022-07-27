@@ -919,7 +919,6 @@ final case class PersistentExecutor(
     for {
       _ <- ZIO.logInfo(s"Deleting persisted state $id")
       _ <- kvStore.delete(Namespaces.workflowState, id.toRaw)
-      // TODO: delete persisted variables
     } yield ()
 
   private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
@@ -1126,7 +1125,7 @@ object PersistentExecutor {
                 EvaluatedRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
               )
 
-            // TODO: we need to assign a new transaction ID because we are not cleaning up persisted variables yet
+            // We need to assign a new transaction ID because we are not cleaning up persisted variables immediately
             val newTransactionId = TransactionId("tx" + state.transactionCounter.toString)
             state.copy(
               current = compensateAndRun,
