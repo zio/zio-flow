@@ -1,10 +1,9 @@
-package zio.flow
+package zio.flow.internal
 
-import zio._
 import zio.flow.internal.IndexedStore.Index
-import zio.flow.internal.{DurableLog, IndexedStore}
-import zio.test._
 import zio.test.Assertion.isEmpty
+import zio.test.{Gen, Sized, ZIOSpecDefault, assert, assertTrue, check}
+import zio.{Chunk, ZIO, ZLayer}
 
 object DurableLogSpec extends ZIOSpecDefault {
 

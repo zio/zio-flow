@@ -1,9 +1,9 @@
-package zio.flow
+package zio.flow.internal
 
-import zio.flow.internal.{DurableLog, DurablePromise, IndexedStore}
-import zio.{Promise, ZEnvironment, ZIO}
+import zio.flow._
 import zio.flow.serialization._
-import zio.test.{TestEnvironment, ZIOSpecDefault, Spec, assertTrue}
+import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.{Promise, ZEnvironment, ZIO}
 
 import java.io.IOException
 
