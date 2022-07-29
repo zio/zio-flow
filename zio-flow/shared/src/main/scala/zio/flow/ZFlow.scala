@@ -827,7 +827,7 @@ object ZFlow {
   /**
    * Creates a flow that returns the given value.
    *
-   * The value's type must have a [[Schema]] to be able to persist it in a
+   * The value's type must have a Schema to be able to persist it in a
    * [[Remote]] value.
    */
   def apply[A: Schema](a: A): ZFlow[Any, ZNothing, A] = Return(Remote(a))
