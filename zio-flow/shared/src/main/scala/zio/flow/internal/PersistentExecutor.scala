@@ -42,9 +42,6 @@ final case class PersistentExecutor(
 
   import PersistentExecutor._
 
-  type Erased     = ZFlow[Any, Any, Any]
-  type ErasedCont = Remote[Any] => ZFlow[Any, Any, Any]
-
   private val promiseEnv = ZEnvironment(durableLog, execEnv)
 
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
@@ -467,11 +464,11 @@ final case class PersistentExecutor(
                       }
           } yield result
 
-        case tx @ Transaction(flow) =>
+        case Transaction(flow) =>
           val env = state.currentEnvironment
           ZIO.succeed(
             StepResult(
-              StateChange.enterTransaction(flow.provide(env.asInstanceOf[Remote[tx.ValueR]])) ++
+              StateChange.enterTransaction(flow.provide(coerceRemote(env))) ++
                 StateChange.pushContinuation(Instruction.CommitTransaction) ++
                 StateChange.setCurrent(flow),
               continue = true
@@ -500,7 +497,7 @@ final case class PersistentExecutor(
 
         case UnwrapRemote(remote) =>
           for {
-            evaluated <- eval(remote.asInstanceOf[Remote[Remote[Any]]])(Remote.schemaAny)
+            evaluated <- eval(coerceRemote(remote))(Remote.schemaAny)
             result    <- onSuccess(evaluated)
           } yield result
 
@@ -698,13 +695,6 @@ final case class PersistentExecutor(
       }
     }
 
-    // TODO: move somewhere better
-    def optionalAnnotate[R, E, A](key: => String, value: => Option[String])(f: ZIO[R, E, A]): ZIO[R, E, A] =
-      value match {
-        case Some(value) => ZIO.logAnnotate(key, value)(f)
-        case None        => f
-      }
-
     def waitForVariablesToChange(
       watchedVariables: Set[ScopedRemoteVariableName],
       watchPosition: Index
@@ -733,37 +723,39 @@ final case class PersistentExecutor(
     ] =
       stateRef.get.flatMap { state0 =>
         ZIO.logAnnotate("flowId", FlowId.unwrap(state0.id)) {
-          optionalAnnotate("txId", state0.transactionStack.headOption.map(s => TransactionId.unwrap(s.id))) {
-            val scope = state0.scope
+          Logging
+            .optionalTransactionId(state0.transactionStack.headOption.map(_.id)) {
+              val scope = state0.scope
 
-            val remoteContext = ZLayer(RemoteContext.persistent(scope))
+              val remoteContext = ZLayer(RemoteContext.persistent(scope))
 
-            remoteContext {
-              for {
-                recordingContext <- RecordingRemoteContext.startRecording
+              remoteContext {
+                for {
+                  recordingContext <- RecordingRemoteContext.startRecording
 
-                stepResult <-
-                  state0.status match {
-                    case PersistentWorkflowStatus.Running =>
-                      step(state0).provideSomeLayer[
-                        VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
-                      ](
-                        ZLayer.succeed(recordingContext.remoteContext)
-                      )
-                    case PersistentWorkflowStatus.Done =>
-                      ZIO.succeed(StepResult(StateChange.none, continue = false))
-                    case PersistentWorkflowStatus.Suspended =>
-                      waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next)
-                        .as(StepResult(StateChange.resume, continue = true))
-                  }
-                state1  = stepResult.stateChange(state0)
-                state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
-                _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-              } yield stepResult
+                  stepResult <-
+                    state0.status match {
+                      case PersistentWorkflowStatus.Running =>
+                        step(state0).provideSomeLayer[
+                          VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
+                        ](
+                          ZLayer.succeed(recordingContext.remoteContext)
+                        )
+                      case PersistentWorkflowStatus.Done =>
+                        ZIO.succeed(StepResult(StateChange.none, continue = false))
+                      case PersistentWorkflowStatus.Suspended =>
+                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next)
+                          .as(StepResult(StateChange.resume, continue = true))
+                    }
+                  state1  = stepResult.stateChange(state0)
+                  state2 <- persistState(state.id, state0, stepResult.stateChange, state1, recordingContext)
+                  _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                } yield stepResult
+              }
             }
-          }.flatMap { stepResult =>
-            runSteps(stateRef).when(stepResult.continue).unit
-          }
+            .flatMap { stepResult =>
+              runSteps(stateRef).when(stepResult.continue).unit
+            }
         }
       }
 
