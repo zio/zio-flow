@@ -22,32 +22,78 @@ import zio.schema.{CaseSet, Schema}
 
 import java.time.{Duration, Instant}
 
+/**
+ * ZFlow is a serializable executable workflow.
+ *
+ * Values (including functions) used in ZFlows must be [[Remote]] values which
+ * guarantees that they can be persisted.
+ *
+ * @tparam R
+ *   The type of the input that can be provided for the workflow
+ * @tparam E
+ *   The type this workflow can fail with
+ * @tparam A
+ *   The result type this workflow returns with in case it succeeds
+ */
 sealed trait ZFlow[-R, +E, +A] {
   self =>
 
+  /**
+   * Executes this flow and then that flow, keeping only the result of the
+   * second.
+   *
+   * An alias for [[zipRight]].
+   */
   final def *>[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
-    self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._2)
+    zipRight(that)
 
+  /**
+   * Executes this flow and then that flow, keeping only the result of the
+   * first.
+   *
+   * An alias for [[zipLeft]]
+   */
   final def <*[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, A1] =
-    self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._1)
+    zipLeft(that)
 
+  /**
+   * Executes this flow and then that flow keeping the result of both zipped
+   * together
+   *
+   * An alias for [[zip]]
+   */
+  final def <*>[R1 <: R, E1 >: E, A1 >: A, B](
+    that: ZFlow[R1, E1, B]
+  ): ZFlow[R1, E1, (A1, B)] =
+    zip(that)
+
+  /** Replace the flow's result value with the provided value */
   final def as[B](b: => Remote[B]): ZFlow[R, E, B] =
     self.map[B](_ => b)
 
+  /** Recover from any failure of this flow by executing the given function */
   final def catchAll[R1 <: R, E1 >: E, A1 >: A, E2](
     f: Remote[E1] => ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
     self.foldFlow(f, (a: Remote[A1]) => ZFlow(a))
 
+  /**
+   * Ensure that the given flow is executed after this flow, regardless of
+   * success or failure
+   */
   final def ensuring[E1 >: E, A1 >: A](
     flow: ZFlow[Any, ZNothing, Any]
   ): ZFlow[R, E1, A1] =
     ZFlow.Ensuring[R, E1, A1](self, flow.unit)
 
+  /**
+   * Executes this flow and then calls the given function with the flow's result
+   * to determine the next steps.
+   */
   final def flatMap[R1 <: R, E1 >: E, B](
     f: Remote[A] => ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
@@ -56,19 +102,33 @@ sealed trait ZFlow[-R, +E, +A] {
       f
     )
 
+  /**
+   * Executes this flow and then calls either the onError or the onSuccess
+   * functions to determine the next steps.
+   */
   final def foldFlow[R1 <: R, E2, B](
-    error: Remote[E] => ZFlow[R1, E2, B],
-    success: Remote[A] => ZFlow[R1, E2, B]
+    onError: Remote[E] => ZFlow[R1, E2, B],
+    onSuccess: Remote[A] => ZFlow[R1, E2, B]
   ): ZFlow[R1, E2, B] =
     ZFlow.Fold(
       self,
-      EvaluatedRemoteFunction.make(error.andThen(_.toRemote)),
-      EvaluatedRemoteFunction.make(success.andThen(_.toRemote))
+      EvaluatedRemoteFunction.make(onError.andThen(_.toRemote)),
+      EvaluatedRemoteFunction.make(onSuccess.andThen(_.toRemote))
     )
 
+  /**
+   * Execute this flow in the background.
+   *
+   * The returned value (of type [[ExecutingFlow]]) can be used to await or
+   * interrupt the running flow.
+   */
   final def fork: ZFlow[R, ZNothing, ExecutingFlow[E, A]] =
     ZFlow.Fork(self)
 
+  /**
+   * Executes this flow and based on its boolean result determines the next
+   * steps by either calling ifTrue or ifFalse
+   */
   final def ifThenElse[R1 <: R, E1 >: E, B](
     ifTrue: ZFlow[R1, E1, B],
     ifFalse: ZFlow[R1, E1, B]
@@ -79,6 +139,13 @@ sealed trait ZFlow[-R, +E, +A] {
       .widen[Boolean]
       .flatMap((bool: Remote[Boolean]) => ZFlow.unwrap(bool.ifThenElse(ifTrue.toRemote, ifFalse.toRemote)))
 
+  /**
+   * Repeatedly executes a flow until a given predicate becomes true.
+   *
+   * The initial value is the result of this flow. The step function is called
+   * with this value to produce the next flow to execute. The iteration stops
+   * when te predicate function returns true for the last step's result.
+   */
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]
   ): ZFlow[R1, E1, A1] =
@@ -90,17 +157,29 @@ sealed trait ZFlow[-R, +E, +A] {
       )
     )
 
+  /** Maps the result of this flow with the given function */
   final def map[B](f: Remote[A] => Remote[B]): ZFlow[R, E, B] =
     self.flatMap[R, E, B](a => ZFlow(f(a)))
 
+  /** Converts this flow's failure to a fatal flow failure */
   final def orDie[R1 <: R, E1 >: E, A1 >: A]: ZFlow[R1, ZNothing, A1] =
     self.catchAll[R1, E1, A1, ZNothing]((_: Remote[E1]) => ZFlow.Die)
 
+  /**
+   * Executes this flow and if it fails executes that flow.
+   *
+   * The flow and the fallback flow must have compatible result types. If they
+   * don't, use [[orElseEither]].
+   */
   final def orElse[R1 <: R, E1 >: E, E2, A1 >: A](
     that: ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
     self.catchAll((_: Remote[E1]) => that)
 
+  /**
+   * Executes this flow and if it fails executes that flow. The two flows can
+   * have different result types which will be captured in an Either value.
+   */
   final def orElseEither[R1 <: R, A1 >: A, E2, B](
     that: ZFlow[R1, E2, B]
   ): ZFlow[R1, E2, Either[A1, B]] =
@@ -120,20 +199,57 @@ sealed trait ZFlow[-R, +E, +A] {
   final def orTry[R1 <: R, E1 >: E, A1 >: A](that: ZFlow[R1, E1, A1]): ZFlow[R1, E1, A1] =
     ZFlow.OrTry(self, that)
 
+  /** Provide a value as this flow's input */
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
+  /**
+   * Try to execute this flow but timeout after the given duration.
+   *
+   * If the flow finished running within the time limits, the result is wrapped
+   * in Some, otherwise if it timed out the result is None.
+   */
   final def timeout(
     duration: Remote[Duration]
   ): ZFlow[R, E, Option[A]] =
     ZFlow.Timeout[R, E, A](self, duration)
 
+  /** Ignores the successful result of this flow and return with unit instead */
   final def unit: ZFlow[R, E, Unit] = as(())
 
+  /**
+   * Executes this flow and then that flow keeping the result of both zipped
+   * together
+   *
+   * Has a symbolic alias [[<*>]]
+   */
   final def zip[R1 <: R, E1 >: E, A1 >: A, B](
     that: ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, (A1, B)] =
     self.flatMap((a: Remote[A1]) => that.map((b: Remote[B]) => a -> b))
 
+  /**
+   * Executes this flow and then that flow, keeping only the result of the
+   * first.
+   *
+   * Has a symbolic alias [[<*]]
+   */
+  final def zipLeft[R1 <: R, E1 >: E, A1 >: A, B](
+    that: ZFlow[R1, E1, B]
+  ): ZFlow[R1, E1, A1] =
+    self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._1)
+
+  /**
+   * Executes this flow and then that flow, keeping only the result of the
+   * second.
+   *
+   * Has a symbolic alias [[*>]].
+   */
+  final def zipRight[R1 <: R, E1 >: E, A1 >: A, B](
+    that: ZFlow[R1, E1, B]
+  ): ZFlow[R1, E1, B] =
+    self.zip[R1, E1, A1, B](that).map((a: Remote[(A1, B)]) => a._2)
+
+  /** Widen the result type of the flow */
   final def widen[A0](implicit ev: A <:< A0): ZFlow[R, E, A0] = {
     val _ = ev
 
@@ -708,12 +824,27 @@ object ZFlow {
       Schema.Case("WaitTill", schema[A], _.asInstanceOf[WaitTill])
   }
 
+  /**
+   * Creates a flow that returns the given value.
+   *
+   * The value's type must have a [[Schema]] to be able to persist it in a
+   * [[Remote]] value.
+   */
   def apply[A: Schema](a: A): ZFlow[Any, ZNothing, A] = Return(Remote(a))
 
+  /** Creates a flow that returns the given remote value */
   def apply[A](remote: Remote[A]): ZFlow[Any, ZNothing, A] = Return(remote)
 
+  /** Creates a flow that fails with the given remote value */
   def fail[E](error: Remote[E]): ZFlow[Any, E, ZNothing] = ZFlow.Fail(error)
 
+  /**
+   * Creates a flow that executes the flow returned by the body function for
+   * each element of the given values.
+   *
+   * The result of the flow is the list of each flow's result, in the same order
+   * as the input values are.
+   */
   def foreach[R, E, A, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
@@ -726,6 +857,14 @@ object ZFlow {
       }
     }.map(_.reverse)
 
+  /**
+   * Creates a flow that executes the flow returned by the body function for
+   * each element of the given values. The sub-flows are all executed in
+   * parallel.
+   *
+   * The result of the flow is the list of each flow's result, in the same order
+   * as the input values are.
+   */
   def foreachPar[R, A, B: Schema](
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, ActivityError, B]): ZFlow[R, ActivityError, List[B]] =
@@ -733,22 +872,33 @@ object ZFlow {
       executingFlows <- ZFlow.foreach[R, ZNothing, A, ExecutingFlow[ActivityError, B]](values) { (remoteA: Remote[A]) =>
                           body(remoteA).fork
                         }
-      _       <- log("Awaiting results")
       eithers <- ZFlow.foreach(executingFlows)(remote => remote.await)
-      _       <- log("Got results from all forked fibers")
       bs      <- ZFlow.fromEither(remote.RemoteEitherSyntax.collectAll(eithers))
     } yield bs
 
+  /**
+   * Creates a flow from a remote either value that either fails or succeeds
+   * corresponding to the either value.
+   */
   def fromEither[E, A](either: Remote[Either[E, A]]): ZFlow[Any, E, A] =
     ZFlow.unwrap(either.fold((e: Remote[E]) => ZFlow.fail(e), (a: Remote[A]) => ZFlow.succeed(a)))
 
+  /**
+   * Creates a flow that executes either the ifTrue flow or the ifFalse flow
+   * based on the given remote boolean's value
+   */
   def ifThenElse[R, E, A](
     p: Remote[Boolean]
   )(ifTrue: ZFlow[R, E, A], ifFalse: ZFlow[R, E, A]): ZFlow[R, E, A] =
     ZFlow.unwrap(p.ifThenElse(ifTrue, ifFalse))
 
+  /** Creates a flow that returns the flow's input */
   def input[R]: ZFlow[R, ZNothing, R] = Input[R]()
 
+  /**
+   * Creates a flow that iterates a sub-flow starting from an initial value
+   * until a given predicate evaluates to true.
+   */
   def iterate[R, E, A](
     initial: Remote[A],
     step: Remote[A] => Remote[ZFlow[R, E, A]],
@@ -756,21 +906,37 @@ object ZFlow {
   ): ZFlow.Iterate[R, E, A] =
     ZFlow.Iterate(initial, EvaluatedRemoteFunction.make(step), EvaluatedRemoteFunction.make(predicate))
 
+  /** Creates a flow that logs a string */
   def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(Remote(message))
 
+  /** Creates a flow that logs a remote string */
   def log(remoteMessage: Remote[String]): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(remoteMessage)
 
+  /**
+   * Creates a flow that defines a new remote variable of type A, with a given
+   * name and initial value.
+   */
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, ZNothing, RemoteVariableReference[A]] =
     NewVar(name, initial)
 
+  /** Creates a flow that returns the current time */
   def now: ZFlow[Any, ZNothing, Instant] = Now
 
+  /**
+   * Creates a flow that repeats the given flow and stops when it evaluates to
+   * true.
+   */
   def repeatUntil[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(false).iterate((_: Remote[Boolean]) => flow)(_ === false)
 
+  /**
+   * Creates a flow that repeats the given flow and stops when it evaluates to
+   * false.
+   */
   def repeatWhile[R, E](flow: ZFlow[R, E, Boolean]): ZFlow[R, E, Boolean] =
     ZFlow(true).iterate((_: Remote[Boolean]) => flow)(_ === true)
 
+  /** Creates a flow that waits for the given duration */
   def sleep(duration: Remote[Duration]): ZFlow[Any, ZNothing, Unit] =
     ZFlow.now.flatMap { now =>
       ZFlow(now.plusDuration(duration)).flatMap { later =>
@@ -780,23 +946,40 @@ object ZFlow {
       }
     }
 
+  /** Creates a flow that returns the given remote value */
   def succeed[A](value: Remote[A]): ZFlow[Any, ZNothing, A] = ZFlow.Return(value)
 
+  /**
+   * Creates a transactional flow.
+   *
+   * Within a transaction each accessed remote variable is tracked and in case
+   * they got modified from another flow before the transaction finishes, the
+   * whole transaction is going to be retried.
+   *
+   * Activities executed within a transaction gets reverted in case of failure.
+   */
   def transaction[R, E, A](
     make: ZFlowTransaction => ZFlow[R, E, A]
   ): ZFlow[R, E, A] =
     Transaction(make(ZFlowTransaction.instance))
 
+  /** A flow that returns the unit value */
   val unit: ZFlow[Any, ZNothing, Unit] = ZFlow(Remote.unit)
 
+  /** Creates a flow that unwraps a remote flow value and executes it */
   def unwrap[R, E, A](remote: Remote[ZFlow[R, E, A]]): ZFlow[R, E, A] =
     Unwrap(remote)
 
+  /** Creates a flow that unwraps a nested remote value */
   def unwrapRemote[A](remote: Remote[Remote[A]]): ZFlow[Any, ZNothing, A] =
     UnwrapRemote(remote)
 
+  /** Creates a flow that suspends execution until a given point in time */
   def waitTill(instant: Remote[Instant]): ZFlow[Any, ZNothing, Unit] = WaitTill(instant)
 
+  /**
+   * Creates a flow that only runs the given flow if the given predicate is true
+   */
   def when[R, E, A](predicate: Remote[Boolean])(
     flow: ZFlow[R, E, A]
   ): ZFlow[R, E, Unit] =

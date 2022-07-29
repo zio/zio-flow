@@ -20,9 +20,11 @@ import zio.flow.{ActivityError, ExecutingFlow, Remote, ZFlow}
 
 final class RemoteExecutingFlowSyntax[E, A](val self: Remote[ExecutingFlow[E, A]]) extends AnyVal {
 
+  /** Wait until the forked flow finishes with either error or success */
   def await: ZFlow[Any, ActivityError, Either[E, A]] =
     ZFlow.Await(self)
 
+  /** Interrupt the forked flow */
   def interrupt: ZFlow[Any, ActivityError, Any] =
     ZFlow.Interrupt(self)
 
