@@ -794,7 +794,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     } { collected =>
       assertTrue(collected == List.range(1, 10))
     },
-    testFlow("recursion") {
+    testFlow("remote recursion") {
       ZFlow.unwrap {
         Remote.recurse[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
           (for {
@@ -806,6 +806,17 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                       )
           } yield result).toRemote
         }
+      }
+    } { res =>
+      assertTrue(res == 10)
+    },
+    testFlow("flow recursion") {
+      ZFlow.recurse[Any, ZNothing, Int](0) { case (value, rec) =>
+        ZFlow.log("recursion step") *>
+          ZFlow.ifThenElse(value === 10)(
+            ifTrue = ZFlow.succeed(value),
+            ifFalse = rec(value + 1)
+          )
       }
     } { res =>
       assertTrue(res == 10)
