@@ -247,6 +247,29 @@ object RemoteSpec extends RemoteSpecBase {
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
+      ),
+      suite("Recurse")(
+        test("recursive remote function") {
+          val N = 1000
+          val remote =
+            Remote.recurse(Remote(0)) { case (value, rec) =>
+              (value === N).ifThenElse(
+                value,
+                rec(value + 1)
+              )
+            }
+
+          val test =
+            for {
+              dyn <- remote.evalDynamic
+              typ <- remote.eval[Int]
+            } yield assertTrue(
+              dyn == DynamicValue.fromSchemaAndValue(Schema[Int], N),
+              typ == N
+            )
+
+          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+        }
       )
     )
 }

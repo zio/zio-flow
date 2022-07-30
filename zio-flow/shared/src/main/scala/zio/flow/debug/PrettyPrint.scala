@@ -779,6 +779,8 @@ object PrettyPrint {
         prettyPrintRemote(value(), builder, indent)
       case Remote.RemoteSome(_)       => ???
       case Remote.FoldOption(_, _, _) => ???
+      case Remote.Recurse(_, _, _)    => ???
+      case Remote.RecurseWith(_, _)   => ???
     }
   }
 

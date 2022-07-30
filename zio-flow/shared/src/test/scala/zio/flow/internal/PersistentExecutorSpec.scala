@@ -22,7 +22,7 @@ import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.{dies, equalTo, fails, hasMessage, isNone}
-import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue}
+import zio.test.{Live, TestClock, TestResult, assert, assertTrue}
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -159,7 +159,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
       assertTrue(result == 10)
-    } @@ TestAspect.ignore, // TODO: fix recursion support
+    },
     testFlow("Read") {
       for {
         variable <- ZFlow.newVar[Int]("var", 0)
@@ -793,6 +793,33 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       collected
     } { collected =>
       assertTrue(collected == List.range(1, 10))
+    },
+    testFlow("remote recursion") {
+      ZFlow.unwrap {
+        Remote.recurse[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
+          (for {
+            value <- ZFlow.unwrap(getValue)
+            _     <- ZFlow.log("recursion step")
+            result <- ZFlow.ifThenElse(value === 10)(
+                        ifTrue = ZFlow.succeed(value),
+                        ifFalse = ZFlow.unwrap(rec(ZFlow.succeed(value + 1)))
+                      )
+          } yield result).toRemote
+        }
+      }
+    } { res =>
+      assertTrue(res == 10)
+    },
+    testFlow("flow recursion") {
+      ZFlow.recurse[Any, ZNothing, Int](0) { case (value, rec) =>
+        ZFlow.log("recursion step") *>
+          ZFlow.ifThenElse(value === 10)(
+            ifTrue = ZFlow.succeed(value),
+            ifFalse = rec(value + 1)
+          )
+      }
+    } { res =>
+      assertTrue(res == 10)
     }
   )
 

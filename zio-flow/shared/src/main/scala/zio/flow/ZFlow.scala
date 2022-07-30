@@ -923,6 +923,27 @@ object ZFlow {
   def now: ZFlow[Any, ZNothing, Instant] = Now
 
   /**
+   * Creates a flow that allows it's body run recursively
+   *
+   * @param initial
+   *   The initial value passed to the body
+   * @param body
+   *   A function that gets the current value and a function that can be used to
+   *   recurse
+   */
+  def recurse[R, E, A](
+    initial: Remote[A]
+  )(body: (Remote[A], (Remote[A] => ZFlow[R, E, A])) => ZFlow[R, E, A]): ZFlow[R, E, A] =
+    ZFlow.unwrap {
+      Remote.recurse[ZFlow[R, E, A]](initial.toFlow) { case (getValue, rec) =>
+        (for {
+          value  <- ZFlow.unwrap(getValue)
+          result <- body(value, (next: Remote[A]) => ZFlow.unwrap(rec(ZFlow.succeed(next))))
+        } yield result).toRemote
+      }
+    }
+
+  /**
    * Creates a flow that repeats the given flow and stops when it evaluates to
    * true.
    */
