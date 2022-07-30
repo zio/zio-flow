@@ -240,50 +240,47 @@ object Remote {
       Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]])
   }
 
-  final case class EvaluatedRemoteFunction[A, B] private[flow] (
+  final case class UnboundRemoteFunction[A, B] private[flow] (
     input: Unbound[A],
     result: Remote[B]
-  ) extends Remote[B] {
+  ) extends Remote[EvaluatedRemoteFunction[A, B]] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
       result.evalDynamic
 
-    override def eval[A1 >: B](implicit schema: Schema[A1]): ZIO[LocalContext with RemoteContext, String, A1] =
-      result.eval[A1]
-
     def apply(a: Remote[A]): Remote[B] =
-      ApplyEvaluatedFunction(this, a)
+      EvaluateUnboundRemoteFunction(this, a)
 
-    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
-      EvaluatedRemoteFunction(input, result.substitute(f))
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[EvaluatedRemoteFunction[A, B]] =
+      UnboundRemoteFunction(input, result.substitute(f))
 
     override private[flow] val variableUsage = input.variableUsage.union(result.variableUsage)
   }
 
-  object EvaluatedRemoteFunction {
-    def make[A, B](fn: Remote[A] => Remote[B]): EvaluatedRemoteFunction[A, B] = {
+  object UnboundRemoteFunction {
+    def make[A, B](fn: Remote[A] => Remote[B]): UnboundRemoteFunction[A, B] = {
       val input = Unbound[A](LocalContext.generateFreshBinding)
-      EvaluatedRemoteFunction(
+      UnboundRemoteFunction(
         input,
         fn(input)
       )
     }
 
-    def schema[A, B]: Schema[EvaluatedRemoteFunction[A, B]] =
-      Schema.CaseClass2[Unbound[A], Remote[B], EvaluatedRemoteFunction[A, B]](
+    def schema[A, B]: Schema[UnboundRemoteFunction[A, B]] =
+      Schema.CaseClass2[Unbound[A], Remote[B], UnboundRemoteFunction[A, B]](
         Schema.Field("variable", Unbound.schema[A]),
         Schema.Field("result", Schema.defer(Remote.schema[B])),
-        EvaluatedRemoteFunction.apply(_, _),
+        UnboundRemoteFunction.apply(_, _),
         _.input,
         _.result
       )
 
-    def schemaCase[A, B]: Schema.Case[EvaluatedRemoteFunction[A, B], Remote[B]] =
-      Schema.Case("EvaluatedRemoteFunction", schema, _.asInstanceOf[EvaluatedRemoteFunction[A, B]])
+    def schemaCase[A, B]: Schema.Case[UnboundRemoteFunction[A, B], Remote[B]] =
+      Schema.Case("UnboundRemoteFunction", schema, _.asInstanceOf[UnboundRemoteFunction[A, B]])
   }
 
-  type ===>[A, B] = EvaluatedRemoteFunction[A, B]
+  type ===>[A, B] = UnboundRemoteFunction[A, B]
 
-  final case class ApplyEvaluatedFunction[A, B](f: EvaluatedRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+  final case class EvaluateUnboundRemoteFunction[A, B](f: UnboundRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
       for {
         input       <- a.evalDynamic
@@ -291,40 +288,40 @@ object Remote {
         variable     = Remote.Variable(paramName)
         _           <- RemoteContext.setVariable(paramName, input)
         _           <- LocalContext.pushBinding(f.input.identifier, variable)
-        result      <- f.result.evalDynamic
+        evaluated   <- f.evalDynamic
         _           <- LocalContext.popBinding(f.input.identifier)
-        resultRemote = Remote.fromDynamic(result)
+        resultRemote = Remote.fromDynamic(evaluated)
         finalResult <-
           if (resultRemote.variableUsage.bindings.contains(f.input.identifier)) {
             val substituted = resultRemote.substitute(Substitutions(Map(f.input -> variable)))
             substituted.evalDynamic
-          } else ZIO.succeed(result)
+          } else ZIO.succeed(evaluated)
       } yield finalResult
 
     override protected def substituteRec[C](fn: Remote.Substitutions): Remote[B] =
-      ApplyEvaluatedFunction(
-        f.substitute(fn).asInstanceOf[EvaluatedRemoteFunction[A, B]],
+      EvaluateUnboundRemoteFunction(
+        f.substitute(fn).asInstanceOf[UnboundRemoteFunction[A, B]],
         a.substitute(fn)
       )
 
     override private[flow] val variableUsage = f.variableUsage.union(a.variableUsage).removeBinding(f.input.identifier)
   }
 
-  object ApplyEvaluatedFunction {
-    def schema[A, B]: Schema[ApplyEvaluatedFunction[A, B]] =
-      Schema.CaseClass2[EvaluatedRemoteFunction[A, B], Remote[A], ApplyEvaluatedFunction[A, B]](
-        Schema.Field("f", EvaluatedRemoteFunction.schema[A, B]),
+  object EvaluateUnboundRemoteFunction {
+    def schema[A, B]: Schema[EvaluateUnboundRemoteFunction[A, B]] =
+      Schema.CaseClass2[UnboundRemoteFunction[A, B], Remote[A], EvaluateUnboundRemoteFunction[A, B]](
+        Schema.Field("f", UnboundRemoteFunction.schema[A, B]),
         Schema.Field("a", Schema.defer(Remote.schema[A])),
-        ApplyEvaluatedFunction.apply,
+        EvaluateUnboundRemoteFunction.apply,
         _.f,
         _.a
       )
 
-    def schemaCase[A, B]: Schema.Case[ApplyEvaluatedFunction[A, B], Remote[B]] =
-      Schema.Case[ApplyEvaluatedFunction[A, B], Remote[B]](
-        "RemoteApply",
+    def schemaCase[A, B]: Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]] =
+      Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]](
+        "EvaluateUnboundRemoteFunction",
         schema[A, B],
-        _.asInstanceOf[ApplyEvaluatedFunction[A, B]]
+        _.asInstanceOf[EvaluateUnboundRemoteFunction[A, B]]
       )
   }
 
@@ -483,8 +480,8 @@ object Remote {
 
   final case class FoldEither[A, B, C](
     either: Remote[Either[A, B]],
-    left: EvaluatedRemoteFunction[A, C],
-    right: EvaluatedRemoteFunction[B, C]
+    left: UnboundRemoteFunction[A, C],
+    right: UnboundRemoteFunction[B, C]
   ) extends Remote[C] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
@@ -500,8 +497,8 @@ object Remote {
     override protected def substituteRec[D](f: Remote.Substitutions): Remote[C] =
       FoldEither(
         either.substitute(f),
-        left.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, C]],
-        right.substitute(f).asInstanceOf[EvaluatedRemoteFunction[B, C]]
+        left.substitute(f).asInstanceOf[UnboundRemoteFunction[A, C]],
+        right.substitute(f).asInstanceOf[UnboundRemoteFunction[B, C]]
       )
 
     override private[flow] val variableUsage = either.variableUsage.union(left.variableUsage).union(right.variableUsage)
@@ -511,13 +508,13 @@ object Remote {
     def schema[A, B, C]: Schema[FoldEither[A, B, C]] =
       Schema.CaseClass3[
         Remote[Either[A, B]],
-        EvaluatedRemoteFunction[A, C],
-        EvaluatedRemoteFunction[B, C],
+        UnboundRemoteFunction[A, C],
+        UnboundRemoteFunction[B, C],
         FoldEither[A, B, C]
       ](
         Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
-        Schema.Field("left", EvaluatedRemoteFunction.schema[A, C]),
-        Schema.Field("right", EvaluatedRemoteFunction.schema[B, C]),
+        Schema.Field("left", UnboundRemoteFunction.schema[A, C]),
+        Schema.Field("right", UnboundRemoteFunction.schema[B, C]),
         { case (either, left, right) =>
           FoldEither(
             either,
@@ -2282,7 +2279,7 @@ object Remote {
       Schema.Case("And", schema, _.asInstanceOf[And])
   }
 
-  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: EvaluatedRemoteFunction[(B, A), B])
+  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: UnboundRemoteFunction[(B, A), B])
       extends Remote[B] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
@@ -2314,7 +2311,7 @@ object Remote {
       Fold(
         list.substitute(f),
         initial.substitute(f),
-        body.substitute(f).asInstanceOf[EvaluatedRemoteFunction[(B, A), B]]
+        body.substitute(f).asInstanceOf[UnboundRemoteFunction[(B, A), B]]
       )
 
     override private[flow] val variableUsage = list.variableUsage.union(initial.variableUsage).union(body.variableUsage)
@@ -2323,10 +2320,10 @@ object Remote {
   object Fold {
     def schema[A, B]: Schema[Fold[A, B]] =
       Schema.defer(
-        Schema.CaseClass3[Remote[List[A]], Remote[B], EvaluatedRemoteFunction[(B, A), B], Fold[A, B]](
+        Schema.CaseClass3[Remote[List[A]], Remote[B], UnboundRemoteFunction[(B, A), B], Fold[A, B]](
           Schema.Field("list", Remote.schema[List[A]]),
           Schema.Field("initial", Remote.schema[B]),
-          Schema.Field("body", EvaluatedRemoteFunction.schema[(B, A), B]),
+          Schema.Field("body", UnboundRemoteFunction.schema[(B, A), B]),
           { case (list, initial, body) => Fold(list, initial, body) },
           _.list,
           _.initial,
@@ -2802,8 +2799,8 @@ object Remote {
 
   final case class Iterate[A](
     initial: Remote[A],
-    iterate: EvaluatedRemoteFunction[A, A],
-    predicate: EvaluatedRemoteFunction[A, Boolean]
+    iterate: UnboundRemoteFunction[A, A],
+    predicate: UnboundRemoteFunction[A, Boolean]
   ) extends Remote[A] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] = {
@@ -2819,8 +2816,8 @@ object Remote {
     override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
       Iterate(
         initial.substitute(f),
-        iterate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, A]],
-        predicate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, Boolean]]
+        iterate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, A]],
+        predicate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, Boolean]]
       )
 
     override private[flow] val variableUsage =
@@ -2830,10 +2827,10 @@ object Remote {
   object Iterate {
     def schema[A]: Schema[Iterate[A]] =
       Schema.defer(
-        Schema.CaseClass3[Remote[A], EvaluatedRemoteFunction[A, A], EvaluatedRemoteFunction[A, Boolean], Iterate[A]](
+        Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, A], UnboundRemoteFunction[A, Boolean], Iterate[A]](
           Schema.Field("initial", Remote.schema[A]),
-          Schema.Field("iterate", EvaluatedRemoteFunction.schema[A, A]),
-          Schema.Field("predicate", EvaluatedRemoteFunction.schema[A, Boolean]),
+          Schema.Field("iterate", UnboundRemoteFunction.schema[A, A]),
+          Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
           Iterate.apply,
           _.initial,
           _.iterate,
@@ -2888,7 +2885,7 @@ object Remote {
   final case class FoldOption[A, B](
     option: Remote[Option[A]],
     ifEmpty: Remote[B],
-    ifNonEmpty: EvaluatedRemoteFunction[A, B]
+    ifNonEmpty: UnboundRemoteFunction[A, B]
   ) extends Remote[B] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
@@ -2905,7 +2902,7 @@ object Remote {
       FoldOption(
         option.substitute(f),
         ifEmpty.substitute(f),
-        ifNonEmpty.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, B]]
+        ifNonEmpty.substitute(f).asInstanceOf[UnboundRemoteFunction[A, B]]
       )
 
     override private[flow] val variableUsage =
@@ -2915,10 +2912,10 @@ object Remote {
   object FoldOption {
     def schema[A, B]: Schema[FoldOption[A, B]] =
       Schema.defer(
-        Schema.CaseClass3[Remote[Option[A]], Remote[B], EvaluatedRemoteFunction[A, B], FoldOption[A, B]](
+        Schema.CaseClass3[Remote[Option[A]], Remote[B], UnboundRemoteFunction[A, B], FoldOption[A, B]](
           Schema.Field("option", Remote.schema[Option[A]]),
           Schema.Field("ifEmpty", Remote.schema[B]),
-          Schema.Field("ifNonEmpty", EvaluatedRemoteFunction.schema[A, B]),
+          Schema.Field("ifNonEmpty", UnboundRemoteFunction.schema[A, B]),
           FoldOption.apply,
           _.option,
           _.ifEmpty,
@@ -3004,6 +3001,8 @@ object Remote {
 //        case _ => ZIO.left(self)
 //      }
 //  }
+
+  case class EvaluatedRemoteFunction[-A, +B](result: DynamicValue) extends AnyVal
 
   case class Substitutions(
     bindings: Map[Remote.Unbound[_], Remote[_]]
@@ -3111,8 +3110,8 @@ object Remote {
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
-  implicit def capturedRemoteToRemote[A, B](f: Remote[A] => Remote[B]): EvaluatedRemoteFunction[A, B] =
-    EvaluatedRemoteFunction.make((a: Remote[A]) => f(a))
+  implicit def capturedRemoteToRemote[A, B](f: Remote[A] => Remote[B]): UnboundRemoteFunction[A, B] =
+    UnboundRemoteFunction.make((a: Remote[A]) => f(a))
 
   val unit: Remote[Unit] = Remote.Ignore()
 
@@ -3127,8 +3126,8 @@ object Remote {
       .:+:(UnaryNumeric.schemaCase[A])
       .:+:(BinaryNumeric.schemaCase[A])
       .:+:(UnaryFractional.schemaCase[A])
-      .:+:(EvaluatedRemoteFunction.schemaCase[Any, A])
-      .:+:(ApplyEvaluatedFunction.schemaCase[Any, A])
+      .:+:(UnboundRemoteFunction.schemaCase[Any, A])
+      .:+:(EvaluateUnboundRemoteFunction.schemaCase[Any, A])
       .:+:(RemoteEither.schemaCase[A])
       .:+:(FoldEither.schemaCase[Any, Any, A])
       .:+:(SwapEither.schemaCase[A])

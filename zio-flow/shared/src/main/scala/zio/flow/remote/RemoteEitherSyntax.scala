@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.{Remote, ZFlow}
 
 import scala.util.Try
@@ -24,7 +24,7 @@ import scala.util.Try
 final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends AnyVal {
 
   def fold[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C]): Remote[C] =
-    Remote.FoldEither[A, B, C](self, EvaluatedRemoteFunction.make(left), EvaluatedRemoteFunction.make(right))
+    Remote.FoldEither[A, B, C](self, UnboundRemoteFunction.make(left), UnboundRemoteFunction.make(right))
 
   def handleEitherFlow[R, E, C](
     left: Remote[A] => ZFlow[R, E, C],
@@ -34,7 +34,7 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
     Remote.FoldEither[A1, B, Either[A1, B1]](
       self,
-      EvaluatedRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
+      UnboundRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
       f
     )
 
@@ -43,8 +43,8 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   ): Remote[Either[A, B1]] =
     Remote.FoldEither[A, B, Either[A, B1]](
       self,
-      EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
-      EvaluatedRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
+      UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
+      UnboundRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
     )
 
   def flatten[A1 >: A, B1](implicit
@@ -55,8 +55,8 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   def merge(implicit ev: Either[A, B] <:< Either[B, B]): Remote[B] =
     Remote.FoldEither[B, B, B](
       self.widen[Either[B, B]],
-      EvaluatedRemoteFunction.make(identity[Remote[B]]),
-      EvaluatedRemoteFunction.make(identity[Remote[B]])
+      UnboundRemoteFunction.make(identity[Remote[B]]),
+      UnboundRemoteFunction.make(identity[Remote[B]])
     )
 
   def isLeft: Remote[Boolean] =

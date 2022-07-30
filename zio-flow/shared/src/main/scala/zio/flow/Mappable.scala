@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 
 sealed trait Mappable[F[_]] {
   def performMap[A, B](fa: Remote[F[A]], ab: Remote[A] => Remote[B]): Remote[F[B]]
@@ -36,7 +36,7 @@ object Mappable {
       Remote.FoldOption(
         fa,
         Remote.none,
-        EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.RemoteSome(ab(a)))
+        UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteSome(ab(a)))
       )
 
     override def performFilter[A](
@@ -46,14 +46,14 @@ object Mappable {
       Remote.FoldOption(
         fa,
         Remote.none,
-        EvaluatedRemoteFunction.make((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote.none[A]))
+        UnboundRemoteFunction.make((a: Remote[A]) => predicate(a).ifThenElse(fa, Remote.none[A]))
       )
 
     override def performFlatmap[A, B](
       fa: Remote[Option[A]],
       ab: Remote[A] => Remote[Option[B]]
     ): Remote[Option[B]] =
-      Remote.FoldOption(fa, Remote.none[B], EvaluatedRemoteFunction.make(ab))
+      Remote.FoldOption(fa, Remote.none[B], UnboundRemoteFunction.make(ab))
   }
 
   implicit case object MappableList extends Mappable[List] {
@@ -62,7 +62,7 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote.nil,
-        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2)))
+        UnboundRemoteFunction.make((tuple: Remote[(List[B], A)]) => Remote.Cons(tuple._1, ab(tuple._2)))
       )
 
     override def performFilter[A](
@@ -72,7 +72,7 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote.nil,
-        EvaluatedRemoteFunction.make((tuple: Remote[(List[A], A)]) =>
+        UnboundRemoteFunction.make((tuple: Remote[(List[A], A)]) =>
           predicate(tuple._2).ifThenElse(Remote.Cons(tuple._1, tuple._2), tuple._1)
         )
       )
@@ -84,7 +84,7 @@ object Mappable {
       Remote.Fold(
         fa,
         Remote.nil,
-        EvaluatedRemoteFunction.make((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2))
+        UnboundRemoteFunction.make((tuple: Remote[(List[B], A)]) => tuple._1 ++ ab(tuple._2))
       )
   }
 

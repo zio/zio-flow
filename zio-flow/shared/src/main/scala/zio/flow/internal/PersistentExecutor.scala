@@ -17,11 +17,11 @@
 package zio.flow.internal
 
 import zio._
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.internal.IndexedStore.Index
 import zio.flow.remote.DynamicValueHelpers
 import zio.flow.serialization._
-import zio.flow.{Remote, _}
+import zio.flow._
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 
 import java.io.IOException
@@ -409,7 +409,7 @@ final case class PersistentExecutor(
           } yield stepResult
 
         case Modify(svar, f0) =>
-          val f = f0.asInstanceOf[EvaluatedRemoteFunction[Any, (A, Any)]]
+          val f = f0.asInstanceOf[UnboundRemoteFunction[Any, (A, Any)]]
           for {
             variableReference <- eval(svar)
             variable           = Remote.Variable(variableReference.name)
@@ -478,10 +478,10 @@ final case class PersistentExecutor(
         case ensuring @ Ensuring(flow, finalizer) =>
           val cont =
             Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
-              EvaluatedRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
+              UnboundRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
                 (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
               },
-              EvaluatedRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
+              UnboundRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
                 (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
               }
             )
@@ -658,8 +658,8 @@ final case class PersistentExecutor(
           val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
 
           def iterate(
-            step: Remote.EvaluatedRemoteFunction[i.ValueA, ZFlow[Any, i.ValueE, i.ValueA]],
-            predicate: EvaluatedRemoteFunction[i.ValueA, Boolean],
+            step: Remote.UnboundRemoteFunction[i.ValueA, ZFlow[Any, i.ValueE, i.ValueA]],
+            predicate: UnboundRemoteFunction[i.ValueA, Boolean],
             stateVar: Remote[RemoteVariableReference[i.ValueA]],
             boolRemote: Remote[Boolean]
           ): ZFlow[Any, i.ValueE, i.ValueA] =
@@ -936,8 +936,8 @@ object PersistentExecutor {
     final case class PushEnv(env: Remote[_]) extends Instruction
 
     final case class Continuation[R, A, E, E2, B](
-      onError: EvaluatedRemoteFunction[E, ZFlow[R, E2, B]],
-      onSuccess: EvaluatedRemoteFunction[A, ZFlow[R, E2, B]]
+      onError: UnboundRemoteFunction[E, ZFlow[R, E2, B]],
+      onSuccess: UnboundRemoteFunction[A, ZFlow[R, E2, B]]
     ) extends Instruction {
 
       override def toString: String =
@@ -965,12 +965,12 @@ object PersistentExecutor {
           .:+:(
             Schema.Case[Continuation[Any, Any, Any, Any, Any], Instruction](
               "Continuation",
-              Schema.CaseClass2[EvaluatedRemoteFunction[Any, ZFlow[Any, Any, Any]], EvaluatedRemoteFunction[
+              Schema.CaseClass2[UnboundRemoteFunction[Any, ZFlow[Any, Any, Any]], UnboundRemoteFunction[
                 Any,
                 ZFlow[Any, Any, Any]
               ], Continuation[Any, Any, Any, Any, Any]](
-                Schema.Field("onError", EvaluatedRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
-                Schema.Field("onSuccess", EvaluatedRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
+                Schema.Field("onError", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
+                Schema.Field("onSuccess", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
                 Continuation(_, _),
                 _.onError,
                 _.onSuccess
@@ -1090,12 +1090,10 @@ object PersistentExecutor {
             val compensateAndFail: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                EvaluatedRemoteFunction.make((error: Remote[ActivityError]) =>
+                UnboundRemoteFunction.make((error: Remote[ActivityError]) =>
                   ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
                 ),
-                EvaluatedRemoteFunction.make((_: Remote[Unit]) =>
-                  ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]
-                )
+                UnboundRemoteFunction.make((_: Remote[Unit]) => ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]])
               )
             state.copy(
               current = compensateAndFail
@@ -1111,10 +1109,10 @@ object PersistentExecutor {
             val compensateAndRun: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                EvaluatedRemoteFunction.make((error: Remote[ActivityError]) =>
+                UnboundRemoteFunction.make((error: Remote[ActivityError]) =>
                   ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
                 ),
-                EvaluatedRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
+                UnboundRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
               )
 
             // We need to assign a new transaction ID because we are not cleaning up persisted variables immediately
