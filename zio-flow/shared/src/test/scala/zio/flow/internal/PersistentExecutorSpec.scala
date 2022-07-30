@@ -22,7 +22,7 @@ import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.{dies, equalTo, fails, hasMessage, isNone}
-import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue}
+import zio.test.{Live, TestClock, TestResult, assert, assertTrue}
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -159,7 +159,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
       assertTrue(result == 10)
-    } @@ TestAspect.ignore, // TODO: fix recursion support
+    },
     testFlow("Read") {
       for {
         variable <- ZFlow.newVar[Int]("var", 0)
