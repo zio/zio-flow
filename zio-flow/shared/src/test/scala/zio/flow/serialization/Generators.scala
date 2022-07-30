@@ -32,6 +32,7 @@ import zio.flow.{
   ExecutingFlow,
   FlowId,
   Operation,
+  RecursionId,
   Remote,
   RemoteVariableName,
   RemoteVariableReference,
@@ -251,7 +252,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       operator         <- genUnaryFractionalOperator
     } yield Remote.UnaryFractional(value, fractional, operator)
 
-  lazy val genEvaluatedRemoteFunction: Gen[Sized, Remote[Any]] =
+  lazy val genUnboundRemoteFunction: Gen[Sized, Remote[Any]] =
     for {
       v <- genUnbound
       r <- Gen.oneOf(
@@ -261,9 +262,9 @@ trait Generators extends DefaultJavaTimeSchemas {
            )
     } yield Remote.UnboundRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
 
-  lazy val genRemoteApply: Gen[Sized, Remote[Any]] =
+  lazy val genEvaluateUnboundRemoteFunction: Gen[Sized, Remote[Any]] =
     for {
-      f <- genEvaluatedRemoteFunction
+      f <- genUnboundRemoteFunction
       a <- genLiteral
     } yield Remote.EvaluateUnboundRemoteFunction(f.asInstanceOf[Remote.UnboundRemoteFunction[Any, Any]], a)
 
@@ -286,8 +287,8 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(Right(Remote.Literal(right)))
                 )
       // TODO: generate functions compatible with the generated either
-      leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
-      rightF <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
+      leftF  <- genUnboundRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
+      rightF <- genUnboundRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
     } yield Remote.FoldEither(Remote.RemoteEither(either), leftF, rightF)
 
   lazy val genSwapEither: Gen[Sized, Remote[Any]] =
@@ -321,7 +322,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genTuple4: Gen[Sized, Remote[Any]] =
     for {
       a <- genLiteral
-      b <- genEvaluatedRemoteFunction
+      b <- genUnboundRemoteFunction
       c <- genBinaryNumeric
       d <- genRemoteEither
     } yield Remote.Tuple4(a, b, c, d)
@@ -508,12 +509,25 @@ trait Generators extends DefaultJavaTimeSchemas {
       b <- genLiteral
     } yield Remote.FoldOption(Remote.RemoteSome(a), b, Remote.UnboundRemoteFunction.make((_: Remote[Int]) => b))
 
+  lazy val genRecurse: Gen[Sized, Remote[Any]] =
+    for {
+      id      <- Gen.uuid.map(RecursionId(_))
+      initial <- genLiteral
+      body    <- genUnboundRemoteFunction
+    } yield Remote.Recurse(id, initial, body.asInstanceOf[UnboundRemoteFunction[Any, Any]])
+
+  lazy val genRecurseWith: Gen[Sized, Remote[Any]] =
+    for {
+      id    <- Gen.uuid.map(RecursionId(_))
+      value <- genLiteral
+    } yield Remote.RecurseWith(id, value)
+
   lazy val genZFlowReturn: Gen[Sized, ZFlow.Return[Any]] =
     Gen
       .oneOf(
         genLiteral,
         genRemoteSome,
-        genRemoteApply
+        genEvaluateUnboundRemoteFunction
       )
       .map(ZFlow.Return(_))
 
@@ -522,7 +536,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       .oneOf(
         genLiteral,
         genRemoteSome,
-        genRemoteApply
+        genEvaluateUnboundRemoteFunction
       )
       .map(ZFlow.Fail(_))
 
@@ -644,7 +658,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
       name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genBinaryNumeric, genRemoteApply)
+      initial <- Gen.oneOf(genLiteral, genBinaryNumeric, genEvaluateUnboundRemoteFunction)
     } yield ZFlow.NewVar(name, initial)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =

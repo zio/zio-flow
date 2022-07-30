@@ -2927,6 +2927,84 @@ object Remote {
       Schema.Case("FoldOption", schema, _.asInstanceOf[FoldOption[Any, A]])
   }
 
+  final case class Recurse[A](
+    id: RecursionId,
+    initial: Remote[A],
+    body: UnboundRemoteFunction[A, A]
+  ) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        _ <- RemoteContext.setVariable(
+               id.toRemoteVariableName,
+               DynamicValue.fromSchemaAndValue(UnboundRemoteFunction.schema[A, A], body)
+             )
+        result <- body(initial).evalDynamic
+      } yield result
+
+    override private[flow] def variableUsage =
+      initial.variableUsage.union(body.variableUsage)
+
+    override protected def substituteRec[B](f: Substitutions): Remote[A] =
+      Recurse(
+        id,
+        initial.substitute(f),
+        body.substitute(f).asInstanceOf[UnboundRemoteFunction[A, A]]
+      )
+  }
+
+  object Recurse {
+    def schema[A]: Schema[Recurse[A]] =
+      Schema.defer {
+        Schema
+          .CaseClass3[RecursionId, Remote[A], UnboundRemoteFunction[A, A], Recurse[A]](
+            Schema.Field("id", Schema[RecursionId]),
+            Schema.Field("initial", Remote.schema[A]),
+            Schema.Field("body", UnboundRemoteFunction.schema[A, A]),
+            Recurse(_, _, _),
+            _.id,
+            _.initial,
+            _.body
+          )
+      }
+
+    def schemaCase[A]: Schema.Case[Recurse[A], Remote[A]] =
+      Schema.Case("Recurse", schema, _.asInstanceOf[Recurse[A]])
+  }
+
+  final case class RecurseWith[A](id: RecursionId, value: Remote[A]) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      RemoteContext.getVariable(id.toRemoteVariableName).flatMap {
+        case None =>
+          ZIO.fail(s"Could not find recursive function body ${RecursionId.unwrap(id)}")
+        case Some(dynamicBody) =>
+          ZIO.fromEither(dynamicBody.toTypedValue(UnboundRemoteFunction.schema[A, A])).flatMap { body =>
+            body(value).evalDynamic
+          }
+      }
+
+    override private[flow] def variableUsage =
+      value.variableUsage.union(VariableUsage.variable(id.toRemoteVariableName))
+
+    override protected def substituteRec[B](f: Substitutions): Remote[A] =
+      RecurseWith(id, value.substitute(f))
+  }
+
+  object RecurseWith {
+    def schema[A]: Schema[RecurseWith[A]] =
+      Schema.defer {
+        Schema.CaseClass2[RecursionId, Remote[A], RecurseWith[A]](
+          Schema.Field("id", Schema[RecursionId]),
+          Schema.Field("value", Remote.schema[A]),
+          RecurseWith(_, _),
+          _.id,
+          _.value
+        )
+      }
+
+    def schemaCase[A]: Schema.Case[RecurseWith[A], Remote[A]] =
+      Schema.Case("RecurseWith", schema, _.asInstanceOf[RecurseWith[A]])
+  }
+
 //  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
 //    val schema: Schema[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
 //
@@ -3090,6 +3168,17 @@ object Remote {
 
   def none[A]: Remote[Option[A]] = Remote.Literal(DynamicValue.NoneValue)
 
+  def recurse[A](
+    initial: Remote[A]
+  )(body: (Remote[A], (Remote[A] => Remote.RecurseWith[A])) => Remote[A]): Remote[A] = {
+    val id = LocalContext.generateFreshRecursionId
+    Remote.Recurse(
+      id,
+      initial,
+      UnboundRemoteFunction.make((value: Remote[A]) => body(value, (next: Remote[A]) => Remote.RecurseWith(id, next)))
+    )
+  }
+
   def right[A, B](value: Remote[B]): Remote[Either[A, B]] = Remote.RemoteEither(Right(value))
 
   def sequenceEither[A, B](
@@ -3180,6 +3269,8 @@ object Remote {
       .:+:(Lazy.schemaCase[A])
       .:+:(RemoteSome.schemaCase[A])
       .:+:(FoldOption.schemaCase[A])
+      .:+:(Recurse.schemaCase[A])
+      .:+:(RecurseWith.schemaCase[A])
   )
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]

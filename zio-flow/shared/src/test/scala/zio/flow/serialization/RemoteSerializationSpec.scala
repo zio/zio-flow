@@ -92,8 +92,8 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
       test("unary numeric")(roundtripCheck(codec, genUnaryNumeric)),
       test("unary fractional")(roundtripCheck(codec, genUnaryFractional)),
-      test("evaluated remote function")(roundtripCheck(codec, genEvaluatedRemoteFunction)),
-      test("remote apply")(roundtripCheck(codec, genRemoteApply)),
+      test("unbound remote function")(roundtripCheck(codec, genUnboundRemoteFunction)),
+      test("evaluate unbound remote function")(roundtripCheck(codec, genEvaluateUnboundRemoteFunction)),
       test("remote either")(roundtripCheck(codec, genRemoteEither)),
       test("foldEither")(roundtripCheck(codec, genFoldEither)),
       test("swapEither")(roundtripCheck(codec, genSwapEither)),
@@ -123,7 +123,9 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("duration multiplied by")(roundtripCheck(codec, genDurationMultipledBy)),
       test("iterate")(roundtripCheck(codec, genIterate)),
       test("remote some")(roundtripCheck(codec, genRemoteSome)),
-      test("fold option")(roundtripCheck(codec, genFoldOption))
+      test("fold option")(roundtripCheck(codec, genFoldOption)),
+      test("recurse")(roundtripCheck(codec, genRecurse)),
+      test("recurseWith")(roundtripCheck(codec, genRecurseWith))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =

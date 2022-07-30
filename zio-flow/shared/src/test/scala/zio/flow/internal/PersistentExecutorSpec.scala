@@ -793,6 +793,22 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       collected
     } { collected =>
       assertTrue(collected == List.range(1, 10))
+    },
+    testFlow("recursion") {
+      ZFlow.unwrap {
+        Remote.recurse[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
+          (for {
+            value <- ZFlow.unwrap(getValue)
+            _     <- ZFlow.log("recursion step")
+            result <- ZFlow.ifThenElse(value === 10)(
+                        ifTrue = ZFlow.succeed(value),
+                        ifFalse = ZFlow.unwrap(rec(ZFlow.succeed(value + 1)))
+                      )
+          } yield result).toRemote
+        }
+      }
+    } { res =>
+      assertTrue(res == 10)
     }
   )
 

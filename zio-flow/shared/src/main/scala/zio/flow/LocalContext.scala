@@ -32,6 +32,9 @@ object LocalContext {
   def generateFreshBinding: BindingName =
     BindingName(UUID.randomUUID())
 
+  def generateFreshRecursionId: RecursionId =
+    RecursionId(UUID.randomUUID())
+
   def pushBinding(unbound: BindingName, variable: Remote.Variable[_]): ZIO[LocalContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.pushBinding(unbound, variable))
   def popBinding(unbound: BindingName): ZIO[LocalContext, Nothing, Unit] =
