@@ -63,11 +63,11 @@ object PrettyPrint {
         builder.append("<")
         builder.append(BindingName.unwrap(identifier))
         builder.append(">")
-      case Remote.EvaluatedRemoteFunction(input, result) =>
+      case Remote.UnboundRemoteFunction(input, result) =>
         prettyPrintRemote(input, builder, indent)
         builder.append(" => ")
         prettyPrintRemote(result, builder, indent)
-      case Remote.ApplyEvaluatedFunction(f, a) =>
+      case Remote.EvaluateUnboundRemoteFunction(f, a) =>
         prettyPrintRemote(f, builder, indent)
         builder.append(" called with ")
         prettyPrintRemote(a, builder, indent)

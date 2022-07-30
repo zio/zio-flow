@@ -18,7 +18,7 @@ package zio.flow.remote
 
 import zio.flow._
 import zio.ZNothing
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 
 class RemoteVariableReferenceSyntax[A](val self: Remote[RemoteVariableReference[A]]) extends AnyVal {
 
@@ -49,7 +49,7 @@ class RemoteVariableReferenceSyntax[A](val self: Remote[RemoteVariableReference[
   def modify[B](
     f: Remote[A] => (Remote[B], Remote[A])
   ): ZFlow[Any, ZNothing, B] =
-    ZFlow.Modify(self, EvaluatedRemoteFunction.make((a: Remote[A]) => Remote.tuple2(f(a))))
+    ZFlow.Modify(self, UnboundRemoteFunction.make((a: Remote[A]) => Remote.tuple2(f(a))))
 
   /**
    * Updates the value stored in a remote variable using the given function, and

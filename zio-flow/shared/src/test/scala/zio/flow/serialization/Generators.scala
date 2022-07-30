@@ -16,7 +16,7 @@
 
 package zio.flow.serialization
 
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.internal.DurablePromise
 import zio.flow.remote.numeric.{
   BinaryNumericOperator,
@@ -259,13 +259,13 @@ trait Generators extends DefaultJavaTimeSchemas {
              genRemoteVariable,
              genBinaryNumeric
            )
-    } yield Remote.EvaluatedRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
+    } yield Remote.UnboundRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
 
   lazy val genRemoteApply: Gen[Sized, Remote[Any]] =
     for {
       f <- genEvaluatedRemoteFunction
       a <- genLiteral
-    } yield Remote.ApplyEvaluatedFunction(f.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Any]], a)
+    } yield Remote.EvaluateUnboundRemoteFunction(f.asInstanceOf[Remote.UnboundRemoteFunction[Any, Any]], a)
 
   lazy val genRemoteEither: Gen[Sized, Remote[Any]] =
     for {
@@ -286,8 +286,8 @@ trait Generators extends DefaultJavaTimeSchemas {
                   Gen.const(Right(Remote.Literal(right)))
                 )
       // TODO: generate functions compatible with the generated either
-      leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
-      rightF <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.EvaluatedRemoteFunction[Any, Either[Any, Any]]])
+      leftF  <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
+      rightF <- genEvaluatedRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
     } yield Remote.FoldEither(Remote.RemoteEither(either), leftF, rightF)
 
   lazy val genSwapEither: Gen[Sized, Remote[Any]] =
@@ -367,14 +367,14 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genAnd: Gen[Sized, Remote[Any]] =
     for {
       left <- Gen.boolean.map(Remote(_))
-      right = Remote.EvaluatedRemoteFunction.make((b: Remote[Boolean]) => Remote.Not(b))
-    } yield Remote.And(left, right)
+      right = Remote.UnboundRemoteFunction.make((b: Remote[Boolean]) => Remote.Not(b))
+    } yield Remote.And(left, right(Remote(false)))
 
   lazy val genFold: Gen[Sized, Remote[Any]] =
     for {
       list    <- Gen.listOf(Gen.double).map(Remote(_))
       initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
-      fun = Remote.EvaluatedRemoteFunction.make((tuple: Remote[(Double, Double)]) =>
+      fun = Remote.UnboundRemoteFunction.make((tuple: Remote[(Double, Double)]) =>
               Remote.BinaryNumeric(
                 Remote.TupleAccess(tuple, 0),
                 Remote.TupleAccess(tuple, 1),
@@ -479,11 +479,11 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
-      iterate = EvaluatedRemoteFunction.make((a: Remote[Int]) =>
+      iterate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                   Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add)
                 )
       limit <- Gen.int
-      predicate = EvaluatedRemoteFunction.make((a: Remote[Int]) =>
+      predicate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
                       Remote.BinaryNumeric(
@@ -506,7 +506,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       a <- Gen.int.map(Remote(_))
       b <- genLiteral
-    } yield Remote.FoldOption(Remote.RemoteSome(a), b, Remote.EvaluatedRemoteFunction.make((_: Remote[Int]) => b))
+    } yield Remote.FoldOption(Remote.RemoteSome(a), b, Remote.UnboundRemoteFunction.make((_: Remote[Int]) => b))
 
   lazy val genZFlowReturn: Gen[Sized, ZFlow.Return[Any]] =
     Gen
@@ -541,7 +541,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       varName <- genRemoteVariableName
       svar     = RemoteVariableReference[Int](varName)
-      f = Remote.EvaluatedRemoteFunction.make((a: Remote[Int]) =>
+      f = Remote.UnboundRemoteFunction.make((a: Remote[Int]) =>
             Remote.Tuple2(
               Remote("done"),
               Remote.BinaryNumeric(a, Remote(1), Numeric.NumericInt, BinaryNumericOperator.Add)
@@ -554,11 +554,11 @@ trait Generators extends DefaultJavaTimeSchemas {
       flow         <- genZFlowNow
       successValue <- genDynamicValue
       ifSuccess =
-        EvaluatedRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
+        UnboundRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
           ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
         )
       ifError =
-        EvaluatedRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
+        UnboundRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
           ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
         )
     } yield ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any](flow, ifError, ifSuccess)
@@ -651,13 +651,13 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
-      iterate = EvaluatedRemoteFunction.make((a: Remote[Int]) =>
+      iterate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                   Remote.Flow(
                     ZFlow.Return(Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add))
                   )
                 )
       limit <- Gen.int
-      predicate = EvaluatedRemoteFunction.make((a: Remote[Int]) =>
+      predicate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
                       Remote.BinaryNumeric(

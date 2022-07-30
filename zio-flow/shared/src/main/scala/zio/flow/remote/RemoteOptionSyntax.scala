@@ -16,14 +16,14 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 
 final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
 
   def fold[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =
-    Remote.FoldOption(self, forNone, EvaluatedRemoteFunction.make(f))
+    Remote.FoldOption(self, forNone, UnboundRemoteFunction.make(f))
 
   def isSome: Remote[Boolean] =
     fold(Remote(false), _ => Remote(true))

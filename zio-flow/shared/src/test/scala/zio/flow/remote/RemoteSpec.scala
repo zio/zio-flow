@@ -182,7 +182,7 @@ object RemoteSpec extends RemoteSpecBase {
           val remote = Remote.Fold(
             Remote(List(10, 20, 30)),
             Remote(100),
-            Remote.EvaluatedRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
+            Remote.UnboundRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
               Remote.BinaryNumeric(
                 Remote.TupleAccess(tuple, 0),
                 Remote.TupleAccess(tuple, 1),
@@ -206,7 +206,7 @@ object RemoteSpec extends RemoteSpecBase {
           val remote = Remote.Fold(
             Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
             Remote(TestCaseClass("d", 40)),
-            Remote.EvaluatedRemoteFunction.make((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
+            Remote.UnboundRemoteFunction.make((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
               Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
             )
           )

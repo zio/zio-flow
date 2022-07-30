@@ -112,8 +112,8 @@ sealed trait ZFlow[-R, +E, +A] {
   ): ZFlow[R1, E2, B] =
     ZFlow.Fold(
       self,
-      EvaluatedRemoteFunction.make(onError.andThen(_.toRemote)),
-      EvaluatedRemoteFunction.make(onSuccess.andThen(_.toRemote))
+      UnboundRemoteFunction.make(onError.andThen(_.toRemote)),
+      UnboundRemoteFunction.make(onSuccess.andThen(_.toRemote))
     )
 
   /**
@@ -152,8 +152,8 @@ sealed trait ZFlow[-R, +E, +A] {
     self.flatMap((remoteA: Remote[A1]) =>
       ZFlow.Iterate(
         remoteA,
-        EvaluatedRemoteFunction.make((a1: Remote[A1]) => step(a1).toRemote),
-        EvaluatedRemoteFunction.make(predicate)
+        UnboundRemoteFunction.make((a1: Remote[A1]) => step(a1).toRemote),
+        UnboundRemoteFunction.make(predicate)
       )
     )
 
@@ -353,8 +353,8 @@ object ZFlow {
 
   final case class Fold[R, E, E2, A, B](
     value: ZFlow[R, E, A],
-    ifError: EvaluatedRemoteFunction[E, ZFlow[R, E2, B]],
-    ifSuccess: EvaluatedRemoteFunction[A, ZFlow[R, E2, B]]
+    ifError: UnboundRemoteFunction[E, ZFlow[R, E2, B]],
+    ifSuccess: UnboundRemoteFunction[A, ZFlow[R, E2, B]]
   ) extends ZFlow[R, E2, B] {
     type ValueE  = E
     type ValueE2 = E2
@@ -365,8 +365,8 @@ object ZFlow {
     override protected def substituteRec[C](f: Remote.Substitutions): ZFlow[R, E2, B] =
       Fold(
         value.substitute(f),
-        ifError.substitute(f).asInstanceOf[EvaluatedRemoteFunction[E, ZFlow[R, E2, B]]],
-        ifSuccess.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, ZFlow[R, E2, B]]]
+        ifError.substitute(f).asInstanceOf[UnboundRemoteFunction[E, ZFlow[R, E2, B]]],
+        ifSuccess.substitute(f).asInstanceOf[UnboundRemoteFunction[A, ZFlow[R, E2, B]]]
       )
 
     override private[flow] val variableUsage =
@@ -376,13 +376,13 @@ object ZFlow {
   object Fold {
     def schema[R, E, E2, A, B]: Schema[Fold[R, E, E2, A, B]] =
       Schema.defer(
-        Schema.CaseClass3[ZFlow[R, E, A], EvaluatedRemoteFunction[E, ZFlow[R, E2, B]], EvaluatedRemoteFunction[
+        Schema.CaseClass3[ZFlow[R, E, A], UnboundRemoteFunction[E, ZFlow[R, E2, B]], UnboundRemoteFunction[
           A,
           ZFlow[R, E2, B]
         ], Fold[R, E, E2, A, B]](
           Schema.Field("value", ZFlow.schema[R, E, A]),
-          Schema.Field("ifError", EvaluatedRemoteFunction.schema[E, ZFlow[R, E2, B]]),
-          Schema.Field("ifSuccess", EvaluatedRemoteFunction.schema[A, ZFlow[R, E2, B]]),
+          Schema.Field("ifError", UnboundRemoteFunction.schema[E, ZFlow[R, E2, B]]),
+          Schema.Field("ifSuccess", UnboundRemoteFunction.schema[A, ZFlow[R, E2, B]]),
           (value, ifError, ifSuccess) => Fold(value, ifError, ifSuccess),
           _.value,
           _.ifError,
@@ -461,8 +461,8 @@ object ZFlow {
 
   final case class Iterate[R, E, A](
     initial: Remote[A],
-    step: EvaluatedRemoteFunction[A, ZFlow[R, E, A]],
-    predicate: EvaluatedRemoteFunction[A, Boolean]
+    step: UnboundRemoteFunction[A, ZFlow[R, E, A]],
+    predicate: UnboundRemoteFunction[A, Boolean]
   ) extends ZFlow[R, E, A] {
     type ValueE = E
     type ValueA = A
@@ -470,8 +470,8 @@ object ZFlow {
     override protected def substituteRec[B](f: Remote.Substitutions): ZFlow[R, E, A] =
       Iterate(
         initial.substitute(f),
-        step.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, ZFlow[R, E, A]]],
-        predicate.substitute(f).asInstanceOf[EvaluatedRemoteFunction[A, Boolean]]
+        step.substitute(f).asInstanceOf[UnboundRemoteFunction[A, ZFlow[R, E, A]]],
+        predicate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, Boolean]]
       )
 
     override private[flow] val variableUsage =
@@ -481,13 +481,13 @@ object ZFlow {
   object Iterate {
     def schema[R, E, A]: Schema[Iterate[R, E, A]] =
       Schema.defer(
-        Schema.CaseClass3[Remote[A], EvaluatedRemoteFunction[A, ZFlow[R, E, A]], EvaluatedRemoteFunction[
+        Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, ZFlow[R, E, A]], UnboundRemoteFunction[
           A,
           Boolean
         ], Iterate[R, E, A]](
           Schema.Field("initial", Remote.schema[A]),
-          Schema.Field("step", EvaluatedRemoteFunction.schema[A, ZFlow[R, E, A]]),
-          Schema.Field("predicate", EvaluatedRemoteFunction.schema[A, Boolean]),
+          Schema.Field("step", UnboundRemoteFunction.schema[A, ZFlow[R, E, A]]),
+          Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
           { case (initial, step, predicate) =>
             Iterate(initial, step, predicate)
           },
@@ -519,12 +519,12 @@ object ZFlow {
       Schema.Case("Log", schema, _.asInstanceOf[Log])
   }
 
-  final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: EvaluatedRemoteFunction[A, (B, A)])
+  final case class Modify[A, B](svar: Remote[RemoteVariableReference[A]], f: UnboundRemoteFunction[A, (B, A)])
       extends ZFlow[Any, Nothing, B] {
     override protected def substituteRec[C](fn: Remote.Substitutions): ZFlow[Any, Nothing, B] =
       Modify(
         svar.substitute(fn),
-        f.substitute(fn).asInstanceOf[EvaluatedRemoteFunction[A, (B, A)]]
+        f.substitute(fn).asInstanceOf[UnboundRemoteFunction[A, (B, A)]]
       )
 
     override private[flow] val variableUsage = svar.variableUsage.union(f.variableUsage)
@@ -532,12 +532,12 @@ object ZFlow {
 
   object Modify {
     def schema[A, B]: Schema[Modify[A, B]] =
-      Schema.CaseClass2[Remote[RemoteVariableReference[A]], EvaluatedRemoteFunction[A, (B, A)], Modify[
+      Schema.CaseClass2[Remote[RemoteVariableReference[A]], UnboundRemoteFunction[A, (B, A)], Modify[
         A,
         B
       ]](
         Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
-        Schema.Field("f", EvaluatedRemoteFunction.schema[A, (B, A)]),
+        Schema.Field("f", UnboundRemoteFunction.schema[A, (B, A)]),
         { case (svar, f) =>
           Modify(svar, f)
         },
@@ -904,7 +904,7 @@ object ZFlow {
     step: Remote[A] => Remote[ZFlow[R, E, A]],
     predicate: Remote[A] => Remote[Boolean]
   ): ZFlow.Iterate[R, E, A] =
-    ZFlow.Iterate(initial, EvaluatedRemoteFunction.make(step), EvaluatedRemoteFunction.make(predicate))
+    ZFlow.Iterate(initial, UnboundRemoteFunction.make(step), UnboundRemoteFunction.make(predicate))
 
   /** Creates a flow that logs a string */
   def log(message: String): ZFlow[Any, ZNothing, Unit] = ZFlow.Log(Remote(message))

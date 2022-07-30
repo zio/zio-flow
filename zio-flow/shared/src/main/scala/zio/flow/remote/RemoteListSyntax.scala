@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.EvaluatedRemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
 import zio.flow.remote.numeric._
 
@@ -72,7 +72,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
   ): Remote[B] =
-    Remote.Fold(self, initial, EvaluatedRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._1, tuple._2)))
+    Remote.Fold(self, initial, UnboundRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._1, tuple._2)))
 
   def headOption1: Remote[Option[A]] = Remote
     .UnCons(self)
