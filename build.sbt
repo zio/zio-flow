@@ -64,9 +64,6 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "io.d11"  %% "zhttp"                 % Version.zioHttp
     ) ++
       commonTestDependencies.map(_ % Test)
-      ++ Seq(
-        "io.d11" %% "zhttp-test" % Version.zioHttp % Test
-      )
   )
   .settings(fork := true)
   .settings(testFrameworks += zioTest)
