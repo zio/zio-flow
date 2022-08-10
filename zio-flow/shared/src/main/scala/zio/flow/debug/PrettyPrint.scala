@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.debug
 
 import zio.flow.{BindingName, Remote, RemoteVariableName, ZFlow}
@@ -24,16 +40,12 @@ object PrettyPrint {
     }
 
     val _ = remote match {
-      case Remote.Literal(value, schemaA) =>
-        if (schemaA eq ZFlow.schemaAny) {
-          value.toTypedValue(ZFlow.schemaAny) match {
-            case Left(value) =>
-              builder.append(s"!! $value")
-            case Right(flow) =>
-              prettyPrintFlow(flow, builder, indent)
-          }
-        } else {
-          builder.append(value.toString)
+      case Remote.Literal(value) =>
+        value.toTypedValue(ZFlow.schemaAny) match {
+          case Left(value) =>
+            builder.append(value.toString)
+          case Right(flow) =>
+            prettyPrintFlow(flow, builder, indent)
         }
       case Remote.Flow(flow) =>
         builder.append("flow")
@@ -43,19 +55,19 @@ object PrettyPrint {
         prettyPrintRemote(remote, builder, indent)
       case Remote.Ignore() =>
         builder.append("ignore")
-      case Remote.Variable(identifier, _) =>
+      case Remote.Variable(identifier) =>
         builder.append("[[")
         builder.append(RemoteVariableName.unwrap(identifier))
         builder.append("]]")
-      case Remote.Unbound(identifier, _) =>
+      case Remote.Unbound(identifier) =>
         builder.append("<")
         builder.append(BindingName.unwrap(identifier))
         builder.append(">")
-      case Remote.EvaluatedRemoteFunction(input, result) =>
+      case Remote.UnboundRemoteFunction(input, result) =>
         prettyPrintRemote(input, builder, indent)
         builder.append(" => ")
         prettyPrintRemote(result, builder, indent)
-      case Remote.ApplyEvaluatedFunction(f, a) =>
+      case Remote.EvaluateUnboundRemoteFunction(f, a) =>
         prettyPrintRemote(f, builder, indent)
         builder.append(" called with ")
         prettyPrintRemote(a, builder, indent)
@@ -71,11 +83,11 @@ object PrettyPrint {
         prettyPrintRemote(value, builder, indent)
       case Remote.RemoteEither(either) =>
         either match {
-          case Left((value, _)) =>
+          case Left(value) =>
             builder.append("left[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
-          case Right((_, value)) =>
+          case Right(value) =>
             builder.append("right[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
@@ -95,7 +107,7 @@ object PrettyPrint {
         prettyPrintRemote(either, builder, indent + 2)
       case Remote.Try(either) =>
         either match {
-          case Left((value, _)) =>
+          case Left(value) =>
             builder.append("failure[")
             prettyPrintRemote(value, builder, indent)
             builder.append("]")
@@ -723,7 +735,7 @@ object PrettyPrint {
         builder.append(")")
       case Remote.Branch(_, _, _) => ???
       case Remote.Length(_)       => ???
-      case Remote.LessThanEqual(left, right) =>
+      case Remote.LessThanEqual(left, right, _) =>
         prettyPrintRemote(left, builder, indent)
         builder.append("<=")
         prettyPrintRemote(right, builder, indent)
@@ -767,6 +779,8 @@ object PrettyPrint {
         prettyPrintRemote(value(), builder, indent)
       case Remote.RemoteSome(_)       => ???
       case Remote.FoldOption(_, _, _) => ???
+      case Remote.Recurse(_, _, _)    => ???
+      case Remote.RecurseWith(_, _)   => ???
     }
   }
 
@@ -787,7 +801,7 @@ object PrettyPrint {
         builder.append("waitTill (")
         prettyPrintRemote(time, builder, indent)
         builder.append(")")
-      case ZFlow.Read(svar, _) =>
+      case ZFlow.Read(svar) =>
         builder.append("read (")
         prettyPrintRemote(svar, builder, indent)
         builder.append(")")

@@ -48,4 +48,14 @@ package object flow extends Syntax with Schemas {
   object TransactionId extends Newtype[String] {
     implicit val schema: Schema[TransactionId] = Schema[String].transform(apply(_), unwrap)
   }
+
+  type RecursionId = RecursionId.Type
+  object RecursionId extends Newtype[UUID] {
+    implicit val schema: Schema[RecursionId] = Schema[UUID].transform(apply(_), unwrap)
+  }
+
+  implicit class RecursionIdSyntax(val recursionId: RecursionId) extends AnyVal {
+    def toRemoteVariableName: RemoteVariableName =
+      RemoteVariableName(s"__rec__${RecursionId.unwrap(recursionId)}")
+  }
 }

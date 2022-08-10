@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.serialization
 
 import zio.flow._
@@ -70,14 +86,14 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("nested")(roundtripCheck(codec, genNested)),
       test("variable")(roundtripCheck(codec, genRemoteVariable)),
       test("variable of nothing") {
-        val variable = Remote.Variable[ZNothing](RemoteVariableName("test"), schemaZNothing)
+        val variable = Remote.Variable[ZNothing](RemoteVariableName("test"))
         roundtrip(codec, variable)
       },
       test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
       test("unary numeric")(roundtripCheck(codec, genUnaryNumeric)),
       test("unary fractional")(roundtripCheck(codec, genUnaryFractional)),
-      test("evaluated remote function")(roundtripCheck(codec, genEvaluatedRemoteFunction)),
-      test("remote apply")(roundtripCheck(codec, genRemoteApply)),
+      test("unbound remote function")(roundtripCheck(codec, genUnboundRemoteFunction)),
+      test("evaluate unbound remote function")(roundtripCheck(codec, genEvaluateUnboundRemoteFunction)),
       test("remote either")(roundtripCheck(codec, genRemoteEither)),
       test("foldEither")(roundtripCheck(codec, genFoldEither)),
       test("swapEither")(roundtripCheck(codec, genSwapEither)),
@@ -107,7 +123,9 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("duration multiplied by")(roundtripCheck(codec, genDurationMultipledBy)),
       test("iterate")(roundtripCheck(codec, genIterate)),
       test("remote some")(roundtripCheck(codec, genRemoteSome)),
-      test("fold option")(roundtripCheck(codec, genFoldOption))
+      test("fold option")(roundtripCheck(codec, genFoldOption)),
+      test("recurse")(roundtripCheck(codec, genRecurse)),
+      test("recurseWith")(roundtripCheck(codec, genRecurseWith))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =
@@ -124,7 +142,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
             either.fold(
               msg => {
                 val throwable: Throwable = new Generators.TestException(msg)
-                Left((Remote(throwable), Schema[Int]))
+                Left(Remote(throwable))
               },
               value => Right(value)
             )

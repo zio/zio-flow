@@ -56,33 +56,19 @@ object RemoteTupleGenerator extends AutoPlugin {
         Term.Name(s"typ$i")
       }.toList
       val fromTyps = Term.Tuple(typNames)
-      val schemaFromDyns =
-        dynNames.map { dyn =>
-          q"$dyn.schema"
-        }
 
       val evalDynamic =
         (dynNames zip model.paramRefs).map { case (dynName, paramName) =>
           Enumerator.Generator(Pat.Var(dynName), q"$paramName.evalDynamic")
         }
-      val toTyped =
-        (typNames zip dynNames).map { case (typName, dynName) =>
-          Enumerator.Generator(Pat.Var(typName), q"ZIO.fromEither($dynName.toTyped)")
-        }
 
       q"""trait $name[..${model.typeParams}] {
-          lazy val schema: Schema[_ <: ${model.appliedTupleType}] =
-            Schema.${model.schemaTupleMethod}(..$schemaFromParamVals)
 
-          def evalDynamic: ZIO[LocalContext with RemoteContext, String, SchemaAndValue[${model.appliedTupleType}]] =
+          def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
             for {
               ..$evalDynamic
-              ..$toTyped
 
-              result = SchemaAndValue.fromSchemaAndValue(
-                         Schema.${model.schemaTupleMethod}(..$schemaFromDyns),
-                         ${fromTyps}
-                       )
+              result = DynamicValueHelpers.tuple(..$dynNames)
             } yield result
 
           ..${model.paramVals}

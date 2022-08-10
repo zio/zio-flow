@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.remote.numeric
+package zio.flow.remote
 
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema.{DynamicValue, Schema}
 
-sealed trait UnaryFractionalOperator
-object UnaryFractionalOperator {
-  case object Sin    extends UnaryFractionalOperator
-  case object ArcSin extends UnaryFractionalOperator
-  case object ArcTan extends UnaryFractionalOperator
+object DynamicValueHelpers {
 
-  implicit val schema: Schema[UnaryFractionalOperator] = DeriveSchema.gen
+  def of[A: Schema](value: A): DynamicValue =
+    DynamicValue.fromSchemaAndValue(Schema[A], value)
+
+  def tuple(values: DynamicValue*): DynamicValue =
+    values.toList match {
+      case (left :: last :: Nil)   => DynamicValue.Tuple(left, last)
+      case (left :: right :: rest) => tuple(DynamicValue.Tuple(left, right) :: rest: _*)
+      case _                       => throw new IllegalArgumentException(s"DynamicValueHelpers.tuple requires at least two parameters")
+    }
 }

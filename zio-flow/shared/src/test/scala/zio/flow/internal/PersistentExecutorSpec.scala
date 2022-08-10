@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.internal
 
 import zio.{ZNothing, _}
@@ -6,7 +22,7 @@ import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.{dies, equalTo, fails, hasMessage, isNone}
-import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue}
+import zio.test.{Live, TestClock, TestResult, assert, assertTrue}
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -143,7 +159,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
       assertTrue(result == 10)
-    } @@ TestAspect.ignore, // TODO: fix recursion support
+    },
     testFlow("Read") {
       for {
         variable <- ZFlow.newVar[Int]("var", 0)
@@ -766,6 +782,44 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
     } { res =>
       assertTrue(res == List.range(1, 10))
+    },
+    testFlow("unwrap remote flows in parallel") {
+      val flows: List[ZFlow[Any, ZNothing, Int]] =
+        List.range(1, 10).map(ZFlow(_))
+
+      val collected: ZFlow[Any, ActivityError, List[Int]] =
+        ZFlow.foreachPar(Remote(flows))(ZFlow.unwrap[Any, ZNothing, Int])
+
+      collected
+    } { collected =>
+      assertTrue(collected == List.range(1, 10))
+    },
+    testFlow("remote recursion") {
+      ZFlow.unwrap {
+        Remote.recurse[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
+          (for {
+            value <- ZFlow.unwrap(getValue)
+            _     <- ZFlow.log("recursion step")
+            result <- ZFlow.ifThenElse(value === 10)(
+                        ifTrue = ZFlow.succeed(value),
+                        ifFalse = ZFlow.unwrap(rec(ZFlow.succeed(value + 1)))
+                      )
+          } yield result).toRemote
+        }
+      }
+    } { res =>
+      assertTrue(res == 10)
+    },
+    testFlow("flow recursion") {
+      ZFlow.recurse[Any, ZNothing, Int](0) { case (value, rec) =>
+        ZFlow.log("recursion step") *>
+          ZFlow.ifThenElse(value === 10)(
+            ifTrue = ZFlow.succeed(value),
+            ifFalse = rec(value + 1)
+          )
+      }
+    } { res =>
+      assertTrue(res == 10)
     }
   )
 

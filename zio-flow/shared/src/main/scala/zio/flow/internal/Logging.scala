@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.remote.numeric
+package zio.flow.internal
 
-import zio.schema.{DeriveSchema, Schema}
+import zio.ZIO
+import zio.flow.TransactionId
 
-sealed trait UnaryFractionalOperator
-object UnaryFractionalOperator {
-  case object Sin    extends UnaryFractionalOperator
-  case object ArcSin extends UnaryFractionalOperator
-  case object ArcTan extends UnaryFractionalOperator
+object Logging {
 
-  implicit val schema: Schema[UnaryFractionalOperator] = DeriveSchema.gen
+  def optionalTransactionId[R, E, A](transactionId: => Option[TransactionId])(f: ZIO[R, E, A]): ZIO[R, E, A] =
+    optionalAnnotate("txId", transactionId.map(TransactionId.unwrap))(f)
+
+  def optionalAnnotate[R, E, A](key: => String, value: => Option[String])(f: ZIO[R, E, A]): ZIO[R, E, A] =
+    value match {
+      case Some(value) => ZIO.logAnnotate(key, value)(f)
+      case None        => f
+    }
 }
