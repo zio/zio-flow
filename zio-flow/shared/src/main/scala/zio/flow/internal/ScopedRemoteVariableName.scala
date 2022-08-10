@@ -16,11 +16,47 @@
 
 package zio.flow.internal
 
-import zio.flow.RemoteVariableName
+import zio.Chunk
+import zio.flow.{FlowId, RemoteVariableName, TransactionId}
 import zio.schema.{DeriveSchema, Schema}
 
-final case class ScopedRemoteVariableName(name: RemoteVariableName, scope: RemoteVariableScope)
+final case class ScopedRemoteVariableName(name: RemoteVariableName, scope: RemoteVariableScope) {
+  def asString: String = getScopePrefix(scope) + name
+
+  private def getScopePrefix(scope: RemoteVariableScope): String =
+    scope match {
+      case RemoteVariableScope.TopLevel(flowId) =>
+        FlowId.unwrap(flowId) + "__"
+      case RemoteVariableScope.Fiber(flowId, parent) =>
+        getScopePrefix(parent) + "fi" ++ FlowId.unwrap(flowId) + "__"
+      case RemoteVariableScope.Transactional(parent, transaction) =>
+        getScopePrefix(parent) + "tx" ++ TransactionId.unwrap(transaction) + "__"
+    }
+}
 
 object ScopedRemoteVariableName {
+  def fromString(value: String): Option[ScopedRemoteVariableName] = {
+    val parts = Chunk.fromArray(value.split("__"))
+    if (parts.size < 2)
+      None
+    else {
+      val name = RemoteVariableName.unsafeMake(parts(parts.size - 1))
+      val scope =
+        parts.tail.init
+          .foldLeft[Option[RemoteVariableScope]](Some(RemoteVariableScope.TopLevel(FlowId.unsafeMake(parts(0))))) {
+            case (Some(scope), current) =>
+              if (current.startsWith("tx")) {
+                Some(RemoteVariableScope.Transactional(scope, TransactionId.unsafeMake(current.drop(2))))
+              } else if (current.startsWith("fi")) {
+                Some(RemoteVariableScope.Fiber(FlowId.unsafeMake(current.drop(2)), scope))
+              } else {
+                None
+              }
+            case _ => None
+          }
+      scope.map(scope => ScopedRemoteVariableName(name, scope))
+    }
+  }
+
   implicit val schema: Schema[ScopedRemoteVariableName] = DeriveSchema.gen
 }

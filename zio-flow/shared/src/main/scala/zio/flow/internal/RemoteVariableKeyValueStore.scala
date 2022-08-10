@@ -17,8 +17,9 @@
 package zio.flow.internal
 
 import zio.flow.internal.IndexedStore.Index
-import zio.flow.{ExecutionEnvironment, FlowId, RemoteVariableName, TransactionId}
+import zio.flow.{ExecutionEnvironment, RemoteVariableName}
 import zio.stm.{TRef, TSet}
+import zio.stream.ZStream
 import zio.{Chunk, IO, UIO, ZIO, ZLayer}
 
 import java.io.IOException
@@ -38,7 +39,7 @@ final case class RemoteVariableKeyValueStore(
     timestamp: Timestamp
   ): IO[IOException, Boolean] =
     ZIO.logDebug(s"Storing variable ${RemoteVariableName.unwrap(name)} in scope $scope with timestamp $timestamp") *>
-      keyValueStore.put(Namespaces.variables, key(getScopePrefix(scope), name), value, timestamp) <*
+      keyValueStore.put(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), value, timestamp) <*
       durableLog
         .append(
           Topics.variableChanges(scope.rootScope.flowId),
@@ -54,7 +55,7 @@ final case class RemoteVariableKeyValueStore(
     scope: RemoteVariableScope,
     before: Option[Timestamp]
   ): IO[IOException, Option[(Chunk[Byte], RemoteVariableScope)]] =
-    keyValueStore.getLatest(Namespaces.variables, key(getScopePrefix(scope), name), before).flatMap {
+    keyValueStore.getLatest(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), before).flatMap {
       case Some(value) =>
         ZIO.logDebug(s"Read variable ${RemoteVariableName.unwrap(name)} from scope $scope before $before") *>
           readVariables
@@ -74,7 +75,7 @@ final case class RemoteVariableKeyValueStore(
     name: RemoteVariableName,
     scope: RemoteVariableScope
   ): IO[IOException, Option[(Timestamp, RemoteVariableScope)]] =
-    keyValueStore.getLatestTimestamp(Namespaces.variables, key(getScopePrefix(scope), name)).flatMap {
+    keyValueStore.getLatestTimestamp(Namespaces.variables, key(ScopedRemoteVariableName(name, scope))).flatMap {
       case Some(value) =>
 //        ZIO.logDebug(s"Read latest timestamp of variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
         ZIO.some((value, scope))
@@ -89,7 +90,7 @@ final case class RemoteVariableKeyValueStore(
 
   def delete(name: RemoteVariableName, scope: RemoteVariableScope): IO[IOException, Unit] =
     ZIO.logDebug(s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope") *>
-      keyValueStore.delete(Namespaces.variables, key(getScopePrefix(scope), name))
+      keyValueStore.delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)))
 
   def getReadVariables: IO[Nothing, Set[ScopedRemoteVariableName]] =
     readVariables.toSet.commit
@@ -97,18 +98,15 @@ final case class RemoteVariableKeyValueStore(
   def getLatestIndex: UIO[Index] =
     lastIndex.get.commit
 
-  private def key(prefix: String, name: RemoteVariableName): Chunk[Byte] =
-    Chunk.fromArray((prefix + RemoteVariableName.unwrap(name)).getBytes(StandardCharsets.UTF_8))
+  def allStoredVariables: ZStream[Any, IOException, ScopedRemoteVariableName] =
+    keyValueStore
+      .scanAllKeys(Namespaces.variables)
+      .map(bytes => new String(bytes.toArray, StandardCharsets.UTF_8))
+      .map(str => Chunk.fromIterable(ScopedRemoteVariableName.fromString(str)))
+      .flattenChunks
 
-  private def getScopePrefix(scope: RemoteVariableScope): String =
-    scope match {
-      case RemoteVariableScope.TopLevel(flowId) =>
-        FlowId.unwrap(flowId) + "__"
-      case RemoteVariableScope.Fiber(flowId, _) =>
-        FlowId.unwrap(flowId) + "__"
-      case RemoteVariableScope.Transactional(parent, transaction) =>
-        getScopePrefix(parent) + "tx" ++ TransactionId.unwrap(transaction) + "__"
-    }
+  private def key(name: ScopedRemoteVariableName): Chunk[Byte] =
+    Chunk.fromArray(name.asString.getBytes(StandardCharsets.UTF_8))
 }
 
 object RemoteVariableKeyValueStore {

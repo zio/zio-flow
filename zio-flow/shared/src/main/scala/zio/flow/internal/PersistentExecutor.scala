@@ -28,7 +28,7 @@ import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import scala.annotation.nowarn
-import zio.stm.{TMap, TPromise, ZSTM}
+import zio.stm.{TMap, ZSTM}
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
@@ -105,14 +105,15 @@ final case class PersistentExecutor(
       deserializedStates <- kvStore
                               .scanAll(Namespaces.workflowState)
                               .mapZIO { case (rawKey, rawState) =>
-                                val id = FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8))
+                                val id = FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8))
                                 ZIO
                                   .fromEither(
                                     execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
                                   )
                                   .mapBoth(
                                     error => new IOException(s"Failed to deserialize state of $id: $error"),
-                                    state => (FlowId(new String(rawKey.toArray, StandardCharsets.UTF_8)), state)
+                                    state =>
+                                      (FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8)), state)
                                   )
                               }
                               .runCollect
@@ -144,7 +145,7 @@ final case class PersistentExecutor(
                   ZIO.logInfo(s"Flow $id is already running") *> promise.await.map(_.result)
                 } else {
                   val durablePromise =
-                    DurablePromise.make[Either[Throwable, DynamicValue], FlowResult](FlowId.unwrap(id + "_result"))
+                    DurablePromise.make[Either[Throwable, DynamicValue], FlowResult](FlowId.unwrap(id) + "_result")
 
                   loadState(id)
                     .map(
@@ -499,8 +500,10 @@ final case class PersistentExecutor(
           } yield result
 
         case fork @ Fork(workflow) =>
-          val forkId = state.id + s"_fork_${state.forkCounter}"
           for {
+            forkId <- (state.id + s"_fork_${state.forkCounter}").toZIO.orDieWith(s =>
+                        new IllegalStateException(s"Failed to generate forked flow id: $s")
+                      )
             resultPromise <- start[fork.ValueE, fork.ValueA](
                                forkId,
                                state.id :: state.parentStack,
@@ -548,8 +551,10 @@ final case class PersistentExecutor(
 
         case timeout @ Timeout(flow, duration) =>
           for {
-            d     <- eval(duration)
-            forkId = state.id + s"_timeout_${state.forkCounter}"
+            d <- eval(duration)
+            forkId <- (state.id + s"_timeout_${state.forkCounter}").toZIO.orDieWith(s =>
+                        new IllegalStateException(s"Failed to generate flow id: $s")
+                      )
             resultPromise <-
               start[timeout.ValueE, timeout.ValueA](
                 forkId,
@@ -642,12 +647,16 @@ final case class PersistentExecutor(
 
         case NewVar(name, initial) =>
           for {
-            initialValue      <- evalDynamic(initial)
-            remoteVariableName = RemoteVariableName(name)
-            vref               = RemoteVariableReference[Any](remoteVariableName)
-            _                 <- RemoteContext.setVariable(remoteVariableName, initialValue)
-            _                 <- ZIO.logDebug(s"Created new variable $name")
-            result            <- onSuccess(Remote(vref), StateChange.none)
+            initialValue <- evalDynamic(initial)
+            remoteVariableName <-
+              RemoteVariableName
+                .make(name)
+                .toZIO
+                .mapError(msg => new IOException(s"Failed to create remote variable with name $name: $msg"))
+            vref    = RemoteVariableReference[Any](remoteVariableName)
+            _      <- RemoteContext.setVariable(remoteVariableName, initialValue)
+            _      <- ZIO.logDebug(s"Created new variable $name")
+            result <- onSuccess(Remote(vref), StateChange.none)
           } yield result
 
         case i @ Iterate(initial, step0, predicate) =>
@@ -921,52 +930,52 @@ final case class PersistentExecutor(
                     ZIO.succeed(false)
                 }
     } yield result
-
-  private def recursiveGetReferencedVariables(
-    variables: Set[RemoteVariableName]
-  ): ZIO[Any, IOException, Set[RemoteVariableName]] =
-    variables // TODO
-
-  // TODO: this implementation is incorrect because remote variables are scoped
-  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
-    (for {
-      allStoredVariables <- kvStore
-                              .scanAllKeys(Namespaces.variables)
-                              .map(bytes => RemoteVariableName(new String(bytes.toArray, StandardCharsets.UTF_8)))
-                              .runCollect
-                              .map(_.toSet)
-      allWorkflows <- workflows.keys.commit
-      allStates    <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
-      allTopLevelReferencedVariables =
-        allStates.foldLeft(Set.empty[RemoteVariableName]) { case (vars, state) =>
-          state.current.variableUsage
-            .unionAll(
-              state.envStack.map(_.variableUsage)
-            )
-            .unionAll(
-              state.stack.map {
-                case Instruction.PopEnv       => VariableUsage.none
-                case Instruction.PushEnv(env) => env.variableUsage
-                case Instruction.Continuation(onError, onSuccess) =>
-                  onError.variableUsage.union(onSuccess.variableUsage)
-                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
-                case Instruction.CommitTransaction     => VariableUsage.none
-              }
-            )
-            .variables union vars
-        }
-      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
-      unusedVariables         = allStoredVariables.diff(allReferencedVariables)
-      _ <-
-        ZIO.logDebug(
-          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(RemoteVariableName.unwrap).mkString(", ")}"
-        )
-      _ <- ZIO.foreachDiscard(unusedVariables) {
-        kvStore.delete(Namespaces.variables, )
-      }
-    } yield ()).catchAllCause { cause =>
-      ZIO.logErrorCause(s"Garbage collection failed", cause)
-    }
+//
+//  private def recursiveGetReferencedVariables(
+//    variables: Set[RemoteVariableName]
+//  ): ZIO[Any, IOException, Set[RemoteVariableName]] =
+//    ZIO.succeed(variables) // TODO
+//
+//  // TODO: this implementation is incorrect because remote variables are scoped
+//  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
+//    (for {
+//      allStoredVariables <- kvStore
+//                              .scanAllKeys(Namespaces.variables)
+//                              .map(bytes => RemoteVariableName(new String(bytes.toArray, StandardCharsets.UTF_8)))
+//                              .runCollect
+//                              .map(_.toSet)
+//      allWorkflows <- workflows.keys.commit
+//      allStates    <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
+//      allTopLevelReferencedVariables =
+//        allStates.foldLeft(Set.empty[RemoteVariableName]) { case (vars, state) =>
+//          state.current.variableUsage
+//            .unionAll(
+//              state.envStack.map(_.variableUsage)
+//            )
+//            .unionAll(
+//              state.stack.map {
+//                case Instruction.PopEnv       => VariableUsage.none
+//                case Instruction.PushEnv(env) => env.variableUsage
+//                case Instruction.Continuation(onError, onSuccess) =>
+//                  onError.variableUsage.union(onSuccess.variableUsage)
+//                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
+//                case Instruction.CommitTransaction     => VariableUsage.none
+//              }
+//            )
+//            .variables union vars
+//        }
+//      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
+//      unusedVariables         = allStoredVariables.diff(allReferencedVariables)
+//      _ <-
+//        ZIO.logDebug(
+//          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(RemoteVariableName.unwrap).mkString(", ")}"
+//        )
+////      _ <- ZIO.foreachDiscard(unusedVariables) {
+////        kvStore.delete(Namespaces.variables, )
+////      }
+//    } yield ()).catchAllCause { cause =>
+//      ZIO.logErrorCause(s"Garbage collection failed", cause)
+//    }
 }
 
 object PersistentExecutor {
@@ -1106,7 +1115,7 @@ object PersistentExecutor {
     }
     private final case class EnterTransaction(flow: ZFlow[Any, _, _]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] = {
-        val transactionId = TransactionId("tx" + state.transactionCounter.toString)
+        val transactionId = TransactionId.fromCounter(state.transactionCounter)
         state.copy(
           transactionStack = TransactionState(
             transactionId,
@@ -1159,7 +1168,7 @@ object PersistentExecutor {
               )
 
             // We need to assign a new transaction ID because we are not cleaning up persisted variables immediately
-            val newTransactionId = TransactionId("tx" + state.transactionCounter.toString)
+            val newTransactionId = TransactionId.fromCounter(state.transactionCounter)
             state.copy(
               current = compensateAndRun,
               transactionStack = txState.copy(
@@ -1359,8 +1368,8 @@ object PersistentExecutor {
           watchPosition: Index
         ) =>
           State(
-            FlowId(id),
-            parentStack.map(FlowId(_)),
+            FlowId.unsafeMake(id),
+            parentStack.map(FlowId.unsafeMake),
             lastTimestamp,
             current,
             stack,
