@@ -17,8 +17,8 @@
 package zio
 
 import zio.flow.FlowId.unwrap
-import zio.prelude.{Newtype, Validation}
 import zio.prelude.Assertion._
+import zio.prelude.Newtype
 import zio.schema.Schema
 
 import java.nio.charset.StandardCharsets
@@ -53,8 +53,9 @@ package object flow extends Syntax with Schemas {
   }
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
-    def +(postfix: String): Validation[String, FlowId] = FlowId.make(unwrap(flowId) + postfix)
-    def toRaw: Chunk[Byte]                             = Chunk.fromArray(unwrap(flowId).getBytes(StandardCharsets.UTF_8))
+    def /(postfix: FlowId): FlowId = FlowId.unsafeMake(unwrap(flowId) + "_" + unwrap(postfix))
+
+    def toRaw: Chunk[Byte] = Chunk.fromArray(unwrap(flowId).getBytes(StandardCharsets.UTF_8))
   }
 
   type TransactionId = TransactionId.Type

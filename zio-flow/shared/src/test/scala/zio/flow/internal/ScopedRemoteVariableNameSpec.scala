@@ -21,7 +21,7 @@ object ScopedRemoteVariableNameSpec extends ZIOFlowBaseSpec with Generators {
         test("fiber") {
           val name = ScopedRemoteVariableName(
             RemoteVariableName("x"),
-            RemoteVariableScope.Fiber(FlowId("flow2"), RemoteVariableScope.TopLevel(FlowId("flow1")))
+            RemoteVariableScope.Fiber(FlowId("flow1_flow2"), RemoteVariableScope.TopLevel(FlowId("flow1")))
           )
           assertInvertible(name)
         }
