@@ -124,6 +124,6 @@ object RemoteVariableKeyValueStore {
   def getReadVariables: ZIO[RemoteVariableKeyValueStore, Nothing, Set[ScopedRemoteVariableName]] =
     ZIO.serviceWithZIO(_.getReadVariables)
 
-  def getLastIndex: ZIO[RemoteVariableKeyValueStore, Nothing, Index] =
+  def getLatestIndex: ZIO[RemoteVariableKeyValueStore, Nothing, Index] =
     ZIO.serviceWithZIO(_.getLatestIndex)
 }

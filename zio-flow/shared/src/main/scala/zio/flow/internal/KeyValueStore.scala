@@ -37,6 +37,8 @@ trait KeyValueStore {
 }
 
 object KeyValueStore {
+  val any: ZLayer[KeyValueStore, Nothing, KeyValueStore] = ZLayer.service[KeyValueStore]
+
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
     ZLayer.scoped {
       for {

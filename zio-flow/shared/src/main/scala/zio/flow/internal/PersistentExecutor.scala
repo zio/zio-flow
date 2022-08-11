@@ -35,6 +35,7 @@ final case class PersistentExecutor(
   execEnv: ExecutionEnvironment,
   durableLog: DurableLog,
   kvStore: KeyValueStore,
+  remoteVariableKvStore: RemoteVariableKeyValueStore,
   opExec: OperationExecutor[Any],
   workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]]
 ) extends ZFlowExecutor {
@@ -768,7 +769,7 @@ final case class PersistentExecutor(
                           ZLayer.succeed(kvStore),
                           ZLayer.succeed(durableLog),
                           ZLayer(VirtualClock.make(state.lastTimestamp)),
-                          RemoteVariableKeyValueStore.live
+                          ZLayer.succeed(remoteVariableKvStore)
                         )
                         .catchAllCause { error =>
                           ZIO.logErrorCause(s"Persistent executor ${state.id} failed", error) *>
@@ -876,7 +877,7 @@ final case class PersistentExecutor(
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (name, value) =>
              remoteContext.setVariable(name, value)
            }
-      lastIndex <- RemoteVariableKeyValueStore.getLastIndex
+      lastIndex <- RemoteVariableKeyValueStore.getLatestIndex
       state2 = state1
                  .copy(
                    lastTimestamp = currentTimestamp,
@@ -922,52 +923,68 @@ final case class PersistentExecutor(
                     ZIO.succeed(false)
                 }
     } yield result
-//
-//  private def recursiveGetReferencedVariables(
-//    variables: Set[RemoteVariableName]
-//  ): ZIO[Any, IOException, Set[RemoteVariableName]] =
-//    ZIO.succeed(variables) // TODO
-//
-//  // TODO: this implementation is incorrect because remote variables are scoped
-//  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
-//    (for {
-//      allStoredVariables <- kvStore
-//                              .scanAllKeys(Namespaces.variables)
-//                              .map(bytes => RemoteVariableName(new String(bytes.toArray, StandardCharsets.UTF_8)))
-//                              .runCollect
-//                              .map(_.toSet)
-//      allWorkflows <- workflows.keys.commit
-//      allStates    <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
-//      allTopLevelReferencedVariables =
-//        allStates.foldLeft(Set.empty[RemoteVariableName]) { case (vars, state) =>
-//          state.current.variableUsage
-//            .unionAll(
-//              state.envStack.map(_.variableUsage)
-//            )
-//            .unionAll(
-//              state.stack.map {
-//                case Instruction.PopEnv       => VariableUsage.none
-//                case Instruction.PushEnv(env) => env.variableUsage
-//                case Instruction.Continuation(onError, onSuccess) =>
-//                  onError.variableUsage.union(onSuccess.variableUsage)
-//                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
-//                case Instruction.CommitTransaction     => VariableUsage.none
-//              }
-//            )
-//            .variables union vars
-//        }
-//      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
+
+  private def recursiveGetReferencedVariables(
+    allStoredVariables: Set[ScopedRemoteVariableName],
+    topLevelVariables: Set[ScopedRemoteVariableName],
+    variables: Set[ScopedRemoteVariableName]
+  ): ZIO[Any, IOException, Set[ScopedRemoteVariableName]] = {
+    def withAllParents(name: ScopedRemoteVariableName): Set[ScopedRemoteVariableName] =
+      name.scope.parentScope match {
+        case Some(parent) => withAllParents(ScopedRemoteVariableName(name.name, parent)) + name
+        case None         => Set(name)
+      }
+
+    val allTransactionalVariables = allStoredVariables.collect {
+      case name @ ScopedRemoteVariableName(_, RemoteVariableScope.Transactional(_, _)) => name
+    }
+    val possibleTransactionalVariables = topLevelVariables.flatMap { name =>
+      allTransactionalVariables.filter(_.scope.flowId == name.scope.flowId)
+    }
+    val variablesAndTheirParents = variables.flatMap(withAllParents) intersect allStoredVariables
+
+    val allVariables = variablesAndTheirParents union possibleTransactionalVariables
+    // TODO: we have to read each variable and if it is a Remote or a Flow, find usages in them
+
+    ZIO.succeed(allVariables)
+  }
+
+  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
+    (for {
+      allStoredVariables <- remoteVariableKvStore.allStoredVariables.runCollect.map(_.toSet)
+      allWorkflows       <- workflows.keys.commit
+      allStates          <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
+      allTopLevelReferencedVariables =
+        allStates.foldLeft(Set.empty[ScopedRemoteVariableName]) { case (vars, state) =>
+          state.current.variableUsage
+            .unionAll(
+              state.envStack.map(_.variableUsage)
+            )
+            .unionAll(
+              state.stack.map {
+                case Instruction.PopEnv       => VariableUsage.none
+                case Instruction.PushEnv(env) => env.variableUsage
+                case Instruction.Continuation(onError, onSuccess) =>
+                  onError.variableUsage.union(onSuccess.variableUsage)
+                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
+                case Instruction.CommitTransaction     => VariableUsage.none
+              }
+            )
+            .variables
+            .map(name => ScopedRemoteVariableName(name, state.id.asScope)) union vars
+        }
+      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
 //      unusedVariables         = allStoredVariables.diff(allReferencedVariables)
 //      _ <-
 //        ZIO.logDebug(
 //          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(RemoteVariableName.unwrap).mkString(", ")}"
 //        )
-////      _ <- ZIO.foreachDiscard(unusedVariables) {
-////        kvStore.delete(Namespaces.variables, )
-////      }
-//    } yield ()).catchAllCause { cause =>
-//      ZIO.logErrorCause(s"Garbage collection failed", cause)
-//    }
+//      _ <- ZIO.foreachDiscard(unusedVariables) {
+//        kvStore.delete(Namespaces.variables, )
+//      }
+    } yield ()).catchAllCause { cause =>
+      ZIO.logErrorCause(s"Garbage collection failed", cause)
+    }
 }
 
 object PersistentExecutor {
@@ -1043,18 +1060,22 @@ object PersistentExecutor {
   }
 
   def make(
-    opEx: OperationExecutor[Any],
+    operationExecutor: OperationExecutor[Any],
     serializer: Serializer,
     deserializer: Deserializer
   ): ZLayer[DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
-    ZLayer {
-      for {
-        durableLog <- ZIO.service[DurableLog]
-        kvStore    <- ZIO.service[KeyValueStore]
-        ref        <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
-        execEnv     = ExecutionEnvironment(serializer, deserializer)
-      } yield PersistentExecutor(execEnv, durableLog, kvStore, opEx, ref)
-    }
+    (ZLayer.succeed(
+      ExecutionEnvironment(serializer, deserializer)
+    )) >+> (DurableLog.any ++ KeyValueStore.any ++ RemoteVariableKeyValueStore.live) >>>
+      ZLayer {
+        for {
+          durableLog            <- ZIO.service[DurableLog]
+          kvStore               <- ZIO.service[KeyValueStore]
+          remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
+          execEnv               <- ZIO.service[ExecutionEnvironment]
+          ref                   <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
+        } yield PersistentExecutor(execEnv, durableLog, kvStore, remoteVariableKvStore, operationExecutor, ref)
+      }
 
   case class StepResult(stateChange: StateChange, continue: Boolean)
 

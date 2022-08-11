@@ -38,6 +38,8 @@ object DurableLog {
   def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.getAllAvailable(topic, position))
 
+  val any: ZLayer[DurableLog, Nothing, DurableLog] = ZLayer.service[DurableLog]
+
   val live: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.scoped {
       for {
