@@ -19,9 +19,11 @@ package zio.flow.internal
 import zio._
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.internal.IndexedStore.Index
+import zio.flow.metrics
 import zio.flow.remote.DynamicValueHelpers
 import zio.flow.serialization._
 import zio.flow._
+import zio.flow.internal.PersistentExecutor.GarbageCollectionCommand
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 
 import java.io.IOException
@@ -29,6 +31,7 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 import scala.annotation.nowarn
 import zio.stm.{TMap, ZSTM}
+import zio.stream.ZStream
 
 // TODO: better error type than IOException
 final case class PersistentExecutor(
@@ -36,8 +39,9 @@ final case class PersistentExecutor(
   durableLog: DurableLog,
   kvStore: KeyValueStore,
   remoteVariableKvStore: RemoteVariableKeyValueStore,
-  opExec: OperationExecutor[Any],
-  workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]]
+  operationExecutor: OperationExecutor[Any],
+  workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]],
+  gcQueue: Queue[GarbageCollectionCommand]
 ) extends ZFlowExecutor {
 
   import PersistentExecutor._
@@ -127,6 +131,15 @@ final case class PersistentExecutor(
              } yield ()
            }
     } yield ()
+
+  /** Force a GC run manually */
+  override def forceGarbageCollection(): ZIO[Any, Nothing, Unit] =
+    Promise
+      .make[Nothing, Any]
+      .flatMap { finished =>
+        gcQueue.offer(GarbageCollectionCommand(finished)) *> finished.await
+      }
+      .unit
 
   private def start[E, A](
     id: ScopedFlowId,
@@ -448,7 +461,7 @@ final case class PersistentExecutor(
         case RunActivity(input, activity) =>
           for {
             inp    <- eval(input)(activity.inputSchema)
-            output <- opExec.execute(inp, activity.operation).either
+            output <- operationExecutor.execute(inp, activity.operation).either
             result <- output match {
                         case Left(error) => failWith(DynamicValueHelpers.of(error))
                         case Right(success) =>
@@ -924,10 +937,29 @@ final case class PersistentExecutor(
                 }
     } yield result
 
+  private def getAllReferences(name: ScopedRemoteVariableName): ZIO[Any, IOException, Set[ScopedRemoteVariableName]] =
+    // NOTE: this could be optimized if we store some type information and only read variables that are known to be remote or flow
+    ZIO.logDebug(s"Garbage collector checking $name") *>
+      remoteVariableKvStore
+        .getLatest(name.name, name.scope, before = None)
+        .flatMap {
+          case Some((bytes, scope)) =>
+            ZIO
+              .fromEither(execEnv.deserializer.deserialize[DynamicValue](bytes))
+              .map { dynValue =>
+                val remote = Remote.fromDynamic(dynValue)
+                remote.variableUsage.variables.map(name => ScopedRemoteVariableName(name, scope)) + name
+              }
+              .catchAll(_ => ZIO.succeed(Set(name)))
+          case None =>
+            ZIO.succeed(Set(name))
+        }
+
   private def recursiveGetReferencedVariables(
     allStoredVariables: Set[ScopedRemoteVariableName],
     topLevelVariables: Set[ScopedRemoteVariableName],
-    variables: Set[ScopedRemoteVariableName]
+    variables: Set[ScopedRemoteVariableName],
+    alreadyRead: Set[ScopedRemoteVariableName]
   ): ZIO[Any, IOException, Set[ScopedRemoteVariableName]] = {
     def withAllParents(name: ScopedRemoteVariableName): Set[ScopedRemoteVariableName] =
       name.scope.parentScope match {
@@ -944,13 +976,29 @@ final case class PersistentExecutor(
     val variablesAndTheirParents = variables.flatMap(withAllParents) intersect allStoredVariables
 
     val allVariables = variablesAndTheirParents union possibleTransactionalVariables
-    // TODO: we have to read each variable and if it is a Remote or a Flow, find usages in them
+    val newVariables = allVariables.diff(alreadyRead)
 
-    ZIO.succeed(allVariables)
+    ZIO.foreach(newVariables)(scopedVariable => getAllReferences(scopedVariable)).flatMap { extendedNewVariables =>
+      val finalAllVariables = allVariables union extendedNewVariables.flatten
+      if (finalAllVariables.size > allVariables.size) {
+        recursiveGetReferencedVariables(
+          allStoredVariables,
+          topLevelVariables,
+          finalAllVariables,
+          alreadyRead union newVariables
+        )
+      } else {
+        ZIO.succeed(finalAllVariables)
+      }
+    }
   }
 
-  private def garbageCollect(): ZIO[Any, Nothing, Unit] =
-    (for {
+  private[flow] def startGarbageCollector(): ZIO[Scope, Nothing, Unit] =
+    ZStream.fromQueue(gcQueue).mapZIO(cmd => garbageCollect(cmd.finished)).runDrain.forkScoped.unit
+
+  private def garbageCollect(finished: Promise[Nothing, Any]): ZIO[Any, Nothing, Unit] = {
+    for {
+      _                  <- ZIO.logInfo(s"Garbage Collection starting")
       allStoredVariables <- remoteVariableKvStore.allStoredVariables.runCollect.map(_.toSet)
       allWorkflows       <- workflows.keys.commit
       allStates          <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
@@ -973,18 +1021,25 @@ final case class PersistentExecutor(
             .variables
             .map(name => ScopedRemoteVariableName(name, state.id.asScope)) union vars
         }
-      allReferencedVariables <- recursiveGetReferencedVariables(allTopLevelReferencedVariables)
-//      unusedVariables         = allStoredVariables.diff(allReferencedVariables)
-//      _ <-
-//        ZIO.logDebug(
-//          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(RemoteVariableName.unwrap).mkString(", ")}"
-//        )
-//      _ <- ZIO.foreachDiscard(unusedVariables) {
-//        kvStore.delete(Namespaces.variables, )
-//      }
-    } yield ()).catchAllCause { cause =>
-      ZIO.logErrorCause(s"Garbage collection failed", cause)
-    }
+      allReferencedVariables <- recursiveGetReferencedVariables(
+                                  allStoredVariables = allStoredVariables,
+                                  topLevelVariables = allTopLevelReferencedVariables,
+                                  variables = allTopLevelReferencedVariables,
+                                  alreadyRead = Set.empty
+                                )
+      unusedVariables = allStoredVariables.diff(allReferencedVariables)
+      _ <-
+        ZIO.logDebug(
+          s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(_.asString).mkString(", ")}"
+        )
+      _ <- ZIO.foreachDiscard(unusedVariables) { scopedVar =>
+             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope) @@ metrics.gcDeletions
+           }
+      _ <- ZIO.logInfo(s"Garbage Collection finished")
+    } yield ()
+  }.catchAllCause { cause =>
+    ZIO.logErrorCause(s"Garbage collection failed", cause)
+  }.ensuring(finished.succeed(())) @@ metrics.gcTimeMillis @@ metrics.gcRuns
 }
 
 object PersistentExecutor {
@@ -1062,20 +1117,36 @@ object PersistentExecutor {
   def make(
     operationExecutor: OperationExecutor[Any],
     serializer: Serializer,
-    deserializer: Deserializer
+    deserializer: Deserializer,
+    gcPeriod: Duration = 5.minutes
   ): ZLayer[DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
     (ZLayer.succeed(
       ExecutionEnvironment(serializer, deserializer)
     )) >+> (DurableLog.any ++ KeyValueStore.any ++ RemoteVariableKeyValueStore.live) >>>
-      ZLayer {
+      ZLayer.scoped {
         for {
           durableLog            <- ZIO.service[DurableLog]
           kvStore               <- ZIO.service[KeyValueStore]
           remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
           execEnv               <- ZIO.service[ExecutionEnvironment]
-          ref                   <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
-        } yield PersistentExecutor(execEnv, durableLog, kvStore, remoteVariableKvStore, operationExecutor, ref)
+          workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
+          gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
+          _ <- Promise
+                 .make[Nothing, Any]
+                 .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
+                 .scheduleFork(Schedule.fixed(gcPeriod))
+        } yield PersistentExecutor(
+          execEnv,
+          durableLog,
+          kvStore,
+          remoteVariableKvStore,
+          operationExecutor,
+          workflows,
+          gcQueue
+        )
       }
+
+  case class GarbageCollectionCommand(finished: Promise[Nothing, Any])
 
   case class StepResult(stateChange: StateChange, continue: Boolean)
 

@@ -145,7 +145,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
 
   override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] = {
 
-    val request = scanRequest.copy(
+    val request = scanKeysRequest.copy(
       expressionAttributeValues = Map(
         ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
       )
