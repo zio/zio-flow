@@ -826,6 +826,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   val suite4 = suite("Garbage Collection")(
     testGCFlow("Unused simple variable gets deleted") { break =>
+      // TODO: variable usage tracking breaks on Remote[RemoteVariableReference], can we use Remote.Variable directly now?
       for {
         v1 <- ZFlow.newVar[Int]("v1", 1)
         _  <- ZFlow.newVar[Int]("v2", 1)

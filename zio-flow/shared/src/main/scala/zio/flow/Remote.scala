@@ -158,6 +158,38 @@ object Remote {
       Schema.Case("Nested", schema[Any], _.asInstanceOf[Nested[Any]])
   }
 
+  final case class VariableReference[A](ref: RemoteVariableReference[A]) extends Remote[RemoteVariableReference[A]] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(DynamicValue.fromSchemaAndValue(RemoteVariableReference.schema[A], ref))
+
+    override private[flow] def variableUsage: VariableUsage =
+      VariableUsage.variable(ref.name)
+
+    override protected def substituteRec[B](f: Substitutions): Remote[RemoteVariableReference[A]] =
+      this
+
+    /**
+     * Gets a [[Remote]] which represents the value stored in this remote
+     * variable
+     */
+    def dereference: Remote.Variable[A] = ref.toRemote
+  }
+
+  object VariableReference {
+
+    // NOTE: must be kept identifiable from DynamicValues in Remote.fromDynamic
+    def schema[A]: Schema[VariableReference[A]] =
+      Schema.CaseClass1[RemoteVariableReference[A], VariableReference[A]](
+        Schema.Field("ref", Schema[RemoteVariableReference[A]]),
+        VariableReference(_),
+        _.ref
+      )
+
+    def schemaCase[A]: Schema.Case[VariableReference[Any], Remote[A]] =
+      Schema.Case("VariableReference", schema[Any], _.asInstanceOf[VariableReference[Any]])
+  }
+
   final case class Ignore() extends Remote[Unit] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
       ZIO.succeed(
@@ -3112,27 +3144,32 @@ object Remote {
 
   def fromDynamic[A](dynamicValue: DynamicValue): Remote[A] =
     // TODO: either avoid this or do it nicer
-    dynamicValue.toTypedValue(ZFlow.schemaAny) match {
+    dynamicValue.toTypedValue(RemoteVariableReference.schema[Any]) match {
       case Left(_) =>
-        // Not a ZFlow
-        dynamicValue.toTypedValue(Remote.schemaAny) match {
+        dynamicValue.toTypedValue(ZFlow.schemaAny) match {
           case Left(_) =>
-            // Not a Remote
-            dynamicValue match {
-              case dynamicTuple: DynamicValue.Tuple =>
-                Tuple2(
-                  Remote.fromDynamic(dynamicTuple.left),
-                  Remote.fromDynamic(dynamicTuple.right)
-                ).asInstanceOf[Remote[A]]
-              // TODO: flatten tuple?
-              case _ =>
-                Literal(dynamicValue)
+            // Not a ZFlow
+            dynamicValue.toTypedValue(Remote.schemaAny) match {
+              case Left(_) =>
+                // Not a Remote
+                dynamicValue match {
+                  case dynamicTuple: DynamicValue.Tuple =>
+                    Tuple2(
+                      Remote.fromDynamic(dynamicTuple.left),
+                      Remote.fromDynamic(dynamicTuple.right)
+                    ).asInstanceOf[Remote[A]]
+                  // TODO: flatten tuple?
+                  case _ =>
+                    Literal(dynamicValue)
+                }
+              case Right(remote) =>
+                Nested(remote).asInstanceOf[Remote[A]]
             }
-          case Right(remote) =>
-            Nested(remote).asInstanceOf[Remote[A]]
+          case Right(zflow) =>
+            Flow(zflow).asInstanceOf[Remote[A]]
         }
-      case Right(zflow) =>
-        Flow(zflow).asInstanceOf[Remote[A]]
+      case Right(ref) =>
+        VariableReference(ref).asInstanceOf[Remote[A]]
     }
 
   def left[A, B](value: Remote[A]): Remote[Either[A, B]] =
@@ -3209,6 +3246,7 @@ object Remote {
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Flow.schemaCase[A])
       .:+:(Nested.schemaCase[A])
+      .:+:(VariableReference.schemaCase[A])
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
       .:+:(Unbound.schemaCase[A])

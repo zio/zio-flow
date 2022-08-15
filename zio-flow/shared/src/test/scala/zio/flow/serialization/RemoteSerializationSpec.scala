@@ -84,6 +84,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       },
       test("flow")(roundtripCheck(codec, genRemoteFlow)),
       test("nested")(roundtripCheck(codec, genNested)),
+      test("varible reference")(roundtripCheck(codec, genVariableReference)),
       test("variable")(roundtripCheck(codec, genRemoteVariable)),
       test("variable of nothing") {
         val variable = Remote.Variable[ZNothing](RemoteVariableName("test"))

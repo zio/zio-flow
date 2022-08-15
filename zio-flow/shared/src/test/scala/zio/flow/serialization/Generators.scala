@@ -207,6 +207,11 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genNested: Gen[Sized, Remote[Any]] =
     Gen.oneOf(genLiteral, genRemoteVariable).map(Remote.Nested(_))
 
+  lazy val genVariableReference: Gen[Sized, Remote[Any]] =
+    for {
+      name <- genRemoteVariableName
+    } yield Remote.VariableReference(RemoteVariableReference(name))
+
   lazy val genRemoteVariable: Gen[Sized, Remote[Any]] =
     for {
       name <- genRemoteVariableName

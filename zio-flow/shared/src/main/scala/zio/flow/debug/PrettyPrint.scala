@@ -53,6 +53,10 @@ object PrettyPrint {
       case Remote.Nested(remote) =>
         builder.append("nested ")
         prettyPrintRemote(remote, builder, indent)
+      case Remote.VariableReference(ref) =>
+        builder.append("[[ref ")
+        builder.append(RemoteVariableName.unwrap(ref.name))
+        builder.append("]]")
       case Remote.Ignore() =>
         builder.append("ignore")
       case Remote.Variable(identifier) =>
