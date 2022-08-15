@@ -126,4 +126,7 @@ object RemoteVariableKeyValueStore {
 
   def getLatestIndex: ZIO[RemoteVariableKeyValueStore, Nothing, Index] =
     ZIO.serviceWithZIO(_.getLatestIndex)
+
+  def allStoredVariables: ZStream[RemoteVariableKeyValueStore, IOException, ScopedRemoteVariableName] =
+    ZStream.serviceWithStream(_.allStoredVariables)
 }

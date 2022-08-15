@@ -1135,15 +1135,17 @@ object PersistentExecutor {
                  .make[Nothing, Any]
                  .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
                  .scheduleFork(Schedule.fixed(gcPeriod))
-        } yield PersistentExecutor(
-          execEnv,
-          durableLog,
-          kvStore,
-          remoteVariableKvStore,
-          operationExecutor,
-          workflows,
-          gcQueue
-        )
+          executor = PersistentExecutor(
+                       execEnv,
+                       durableLog,
+                       kvStore,
+                       remoteVariableKvStore,
+                       operationExecutor,
+                       workflows,
+                       gcQueue
+                     )
+          _ <- executor.startGarbageCollector()
+        } yield executor
       }
 
   case class GarbageCollectionCommand(finished: Promise[Nothing, Any])

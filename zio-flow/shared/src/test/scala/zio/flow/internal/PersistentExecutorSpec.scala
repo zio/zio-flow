@@ -28,6 +28,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import zio.flow.operation.http.API
+import zio.flow.serialization.{Deserializer, Serializer}
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private val unit: Unit = ()
@@ -823,8 +824,26 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
   )
 
+  val suite4 = suite("Garbage Collection")(
+    testGCFlow("Unused simple variable gets deleted") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        _  <- ZFlow.newVar[Int]("v2", 1)
+        _  <- v1.set(10)
+        _  <- break
+        _  <- v1.set(100)
+        r  <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 100,
+        vars == Set.empty[ScopedRemoteVariableName] // TODO
+      )
+    }
+  )
+
   override def spec =
-    suite("All tests")(suite1, suite2, suite3)
+    suite("All tests")(suite1, suite2, suite3, suite4)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,
@@ -963,6 +982,74 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                       }
             logLines2 <- logQueue.takeAll
           } yield (result, logLines1, logLines2)
+        }
+      } yield assert.tupled(results)
+    }
+
+  private def testGCFlow[E: Schema, A: Schema](
+    label: String
+  )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Set[ScopedRemoteVariableName]) => TestResult) =
+    test(label) {
+      for {
+        _            <- ZIO.logDebug(s"=== testGCFlow $label started === ")
+        runtime      <- ZIO.runtime[Any]
+        breakPromise <- Promise.make[Nothing, Unit]
+        logger = new ZLogger[String, Any] {
+
+                   override def apply(
+                     trace: Trace,
+                     fiberId: FiberId,
+                     logLevel: LogLevel,
+                     message: () => String,
+                     cause: Cause[Any],
+                     context: FiberRefs,
+                     spans: List[LogSpan],
+                     annotations: Map[String, String]
+                   ): String = Unsafe.unsafeCompat { implicit u =>
+                     val msg = message()
+                     runtime.unsafe.run {
+                       msg match {
+                         case "!!!BREAK!!!" => breakPromise.succeed(())
+                         case _             => ZIO.unit
+                       }
+                     }.getOrThrowFiberFailure()
+                     msg
+                   }
+                 }
+        results <- {
+          val break: ZFlow[Any, Nothing, Unit] =
+            (ZFlow.log("!!!BREAK!!!") *>
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+          val finalFlow = flow(break)
+
+          ZIO.scoped[Live with DurableLog with KeyValueStore] {
+            for {
+              pair <- finalFlow
+                        .submitTestPersistent(label)
+                        .provideSomeLayer[Scope with DurableLog with KeyValueStore](Runtime.addLogger(logger))
+              (executor, fiber) = pair
+              _                <- ZIO.logDebug(s"Adjusting clock by 20s")
+              _                <- TestClock.adjust(20.seconds)
+              _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+                     breakPromise.await
+                   }
+              _ <- ZIO.logDebug("Forcing GC")
+              _ <- executor.forceGarbageCollection()
+              vars <-
+                RemoteVariableKeyValueStore.allStoredVariables.runCollect
+                  .provideSome[DurableLog with KeyValueStore](
+                    RemoteVariableKeyValueStore.live,
+                    ZLayer.succeed(
+                      ExecutionEnvironment(Serializer.json, Deserializer.json)
+                    ) // TODO: this should not be recreated here
+                  )
+              _ <- ZIO.logDebug(s"Adjusting clock by 200s")
+              _ <- TestClock.adjust(200.seconds)
+              result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+                          fiber.join
+                        }
+            } yield (result, vars.toSet)
+          }
         }
       } yield assert.tupled(results)
     }
