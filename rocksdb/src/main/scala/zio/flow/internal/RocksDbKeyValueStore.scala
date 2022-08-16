@@ -119,7 +119,7 @@ final case class RocksDbKeyValueStore(
                      getLastTimestamp(Some(value), None).flatMap {
                        case None =>
                          ZIO.succeed(Chunk.empty)
-                       case Some(timestamp) =>
+                       case Some(_) =>
                          ZIO.succeed(Chunk(keyChunk))
                      }
                    }
