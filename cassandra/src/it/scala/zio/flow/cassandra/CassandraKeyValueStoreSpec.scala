@@ -156,6 +156,37 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
             hasSameElements(keyValuePairs)
           )
         }
+      },
+      test("should return all keys pairs for a `scanAllKeys` call.") {
+        val uniqueNamespace = newTimeBasedName()
+        val keyValuePairs =
+          Chunk
+            .fromIterable(1 to 5001)
+            .map { n =>
+              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
+            }
+        val expectedLength = keyValuePairs.length
+
+        for {
+          putSuccesses <-
+            ZIO
+              .foreachPar(keyValuePairs) { case (key, value) =>
+                KeyValueStore.put(uniqueNamespace, key, value, Timestamp(1L))
+              }
+          retrieved <-
+            KeyValueStore
+              .scanAllKeys(uniqueNamespace)
+              .runCollect
+        } yield {
+          assertTrue(
+            putSuccesses.length == expectedLength,
+            putSuccesses.toSet == Set(true),
+            retrieved.length == expectedLength
+          ) &&
+          assert(retrieved)(
+            hasSameElements(keyValuePairs.map(_._1))
+          )
+        }
       }
     ).provideCustomLayerShared(database >>> CassandraKeyValueStore.layer) @@ nondeterministic @@ sequential
 

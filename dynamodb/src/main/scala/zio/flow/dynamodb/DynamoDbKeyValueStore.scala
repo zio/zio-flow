@@ -31,7 +31,6 @@ import java.nio.charset.StandardCharsets
 import zio.aws.dynamodb.model.QueryRequest
 import zio.aws.dynamodb.model.BatchWriteItemRequest
 import zio.aws.dynamodb.model.WriteRequest
-import zio.prelude.data.Optional
 import zio.aws.dynamodb.model.DeleteRequest
 import scala.util.Try
 
@@ -48,16 +47,12 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
       UpdateItemRequest(
         tableName,
         dynamoDbKey(namespace, key, timestamp),
-        updateExpression = Option(
-          UpdateExpression(
-            s"SET $valueColumnName = ${RequestExpressionPlaceholder.valueColumn}, $namespaceColumnName = ${RequestExpressionPlaceholder.namespaceColumn}"
-          )
+        updateExpression = UpdateExpression(
+          s"SET $valueColumnName = ${RequestExpressionPlaceholder.valueColumn}, $namespaceColumnName = ${RequestExpressionPlaceholder.namespaceColumn}"
         ),
-        expressionAttributeValues = Option(
-          Map(
-            ExpressionAttributeValueVariable(RequestExpressionPlaceholder.valueColumn)     -> binaryValue(value),
-            ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
-          )
+        expressionAttributeValues = Map(
+          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.valueColumn)     -> binaryValue(value),
+          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
         )
       )
 
@@ -80,18 +75,15 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
     val request =
       QueryRequest(
         tableName,
-        limit = Option(PositiveIntegerObject(1)),
-        scanIndexForward = Option(false),
-        keyConditionExpression = Option(
-          KeyExpression(s"$keyColumnName = ${RequestExpressionPlaceholder.keyColumn}$timestampCondition")
-        ),
-        expressionAttributeValues = Option(
-          Map(
-            ExpressionAttributeValueVariable(RequestExpressionPlaceholder.keyColumn) -> dynamoDbKeyValue(namespace, key)
-          ) ++ before.map(timestamp =>
-            (ExpressionAttributeValueVariable(RequestExpressionPlaceholder.timestampColumn)) -> longValue(
-              timestamp.value
-            )
+        limit = PositiveIntegerObject(1),
+        scanIndexForward = false,
+        keyConditionExpression =
+          KeyExpression(s"$keyColumnName = ${RequestExpressionPlaceholder.keyColumn}$timestampCondition"),
+        expressionAttributeValues = Map(
+          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.keyColumn) -> dynamoDbKeyValue(namespace, key)
+        ) ++ before.map(timestamp =>
+          (ExpressionAttributeValueVariable(RequestExpressionPlaceholder.timestampColumn)) -> longValue(
+            timestamp.value
           )
         )
       )
@@ -126,10 +118,8 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
   override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] = {
 
     val request = scanRequest.copy(
-      expressionAttributeValues = Option(
-        Map(
-          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
-        )
+      expressionAttributeValues = Map(
+        ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
       )
     )
 
@@ -153,19 +143,41 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
       }
   }
 
+  override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] = {
+
+    val request = scanKeysRequest.copy(
+      expressionAttributeValues = Map(
+        ExpressionAttributeValueVariable(RequestExpressionPlaceholder.namespaceColumn) -> stringValue(namespace)
+      )
+    )
+
+    dynamoDB
+      .scan(request)
+      .mapBoth(
+        ioExceptionOf(s"Error scanning all key-value pairs for <$namespace> namespace", _),
+        item =>
+          for {
+            key           <- item.get(AttributeName(keyColumnName))
+            keyByteChunk  <- key.b.toOption
+            namespaceBytes = namespace.getBytes(StandardCharsets.UTF_8)
+          } yield {
+            keyByteChunk.drop(namespaceBytes.size)
+          }
+      )
+      .collect { case Some(byteChunkPair) =>
+        byteChunkPair
+      }
+  }
+
   private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, IOException, Timestamp] = {
     val request =
       QueryRequest(
         tableName,
-        limit = Option(PositiveIntegerObject(1)),
-        scanIndexForward = Option(false),
-        keyConditionExpression = Option(
-          KeyExpression(s"$keyColumnName = ${RequestExpressionPlaceholder.keyColumn}")
-        ),
-        expressionAttributeValues = Option(
-          Map(
-            ExpressionAttributeValueVariable(RequestExpressionPlaceholder.keyColumn) -> dynamoDbKeyValue(namespace, key)
-          )
+        limit = PositiveIntegerObject(1),
+        scanIndexForward = false,
+        keyConditionExpression = KeyExpression(s"$keyColumnName = ${RequestExpressionPlaceholder.keyColumn}"),
+        expressionAttributeValues = Map(
+          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.keyColumn) -> dynamoDbKeyValue(namespace, key)
         )
       )
 
@@ -192,7 +204,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
           .batchWriteItem(
             BatchWriteItemRequest(
               Map(
-                tableName -> items.map(i => WriteRequest(deleteRequest = Optional.Present(i)))
+                tableName -> items.map(i => WriteRequest(deleteRequest = i))
               )
             )
           )
@@ -234,31 +246,36 @@ object DynamoDbKeyValueStore {
   private val scanRequest: ScanRequest =
     ScanRequest(
       tableName,
-      projectionExpression = Option(
-        ProjectionExpression(
-          Seq(keyColumnName, valueColumnName).mkString(", ")
-        )
+      projectionExpression = ProjectionExpression(
+        Seq(keyColumnName, valueColumnName).mkString(", ")
       ),
-      filterExpression = Option(
-        ConditionExpression(
-          s"$namespaceColumnName = ${RequestExpressionPlaceholder.namespaceColumn}"
-        )
+      filterExpression = ConditionExpression(
+        s"$namespaceColumnName = ${RequestExpressionPlaceholder.namespaceColumn}"
+      )
+    )
+
+  private val scanKeysRequest: ScanRequest =
+    ScanRequest(
+      tableName,
+      projectionExpression = ProjectionExpression(keyColumnName),
+      filterExpression = ConditionExpression(
+        s"$namespaceColumnName = ${RequestExpressionPlaceholder.namespaceColumn}"
       )
     )
 
   private def binaryValue(b: Chunk[Byte]): AttributeValue =
     AttributeValue(
-      b = Option(BinaryAttributeValue(b))
+      b = BinaryAttributeValue(b)
     )
 
   private def stringValue(s: String): AttributeValue =
     AttributeValue(
-      s = Option(StringAttributeValue(s))
+      s = StringAttributeValue(s)
     )
 
   private def longValue(n: Long): AttributeValue =
     AttributeValue(
-      n = Option(NumberAttributeValue(n.toString()))
+      n = NumberAttributeValue(n.toString())
     )
 
   private def dynamoDbKeyValue(namespace: String, key: Chunk[Byte]): AttributeValue =

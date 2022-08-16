@@ -38,6 +38,9 @@ trait ZFlowExecutor {
    * Executors with no support for persistency should do nothing.
    */
   def restartAll(): ZIO[Any, IOException, Unit]
+
+  /** Force a GC run manually */
+  def forceGarbageCollection(): ZIO[Any, Nothing, Unit]
 }
 
 object ZFlowExecutor {}

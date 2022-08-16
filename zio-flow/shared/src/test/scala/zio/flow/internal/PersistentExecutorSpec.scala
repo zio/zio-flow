@@ -28,6 +28,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import zio.flow.operation.http.API
+import zio.flow.serialization.{Deserializer, Serializer}
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private val unit: Unit = ()
@@ -823,8 +824,147 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
   )
 
+  val suite4 = suite("Garbage Collection")(
+    testGCFlow("Unused simple variable gets deleted") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        _  <- ZFlow.newVar[Int]("v2", 1)
+        _  <- v1.set(10)
+        _  <- break
+        _  <- v1.set(100)
+        r  <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 100,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Unused simple variable gets deleted"))
+          )
+        ),
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v2"),
+            RemoteVariableScope.TopLevel(FlowId("Unused simple variable gets deleted"))
+          )
+        )
+      )
+    },
+    testGCFlow("Variable referenced by flow is kept") { break =>
+      for {
+        v1    <- ZFlow.newVar[Int]("v1", 1)
+        v2    <- ZFlow.newVar[ZFlow[Any, ZNothing, Int]]("v2", v1.updateAndGet(_ + 1))
+        _     <- break
+        flow2 <- v2.get
+        r     <- ZFlow.unwrap(flow2)
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 2,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Variable referenced by flow is kept"))
+          )
+        ),
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v2"),
+            RemoteVariableScope.TopLevel(FlowId("Variable referenced by flow is kept"))
+          )
+        )
+      )
+    },
+    testGCFlow("Chain of computation") { break =>
+      for {
+        a <- ZFlow.newVar[Int]("v1", 1)
+        b <- a.get.map(_ + 1)
+        c <- b + 1
+        _ <- break
+        r <- c + 1
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 4,
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Chain of computation"))
+          )
+        )
+      )
+    },
+    testGCFlow("Shadowed variable of fiber is kept") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        fiber <- (
+                   for {
+                     v1 <- ZFlow.newVar[Int]("v1", 2)
+                     _  <- ZFlow.sleep(1.day)
+                   } yield v1
+                 ).fork
+        _ <- break
+        _ <- fiber.interrupt
+        r <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 1,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Shadowed variable of fiber is kept"))
+          )
+        ),
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.Fiber(
+              FlowId("fork0"),
+              RemoteVariableScope.TopLevel(FlowId("Shadowed variable of fiber is kept"))
+            )
+          )
+        )
+      )
+    },
+    testGCFlow("Shadowed variable of interrupted fiber is deleted") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        fiber <- (
+                   for {
+                     v1 <- ZFlow.newVar[Int]("v1", 2)
+                     _  <- ZFlow.sleep(1.day)
+                   } yield v1
+                 ).fork
+        _ <- fiber.interrupt
+        _ <- break
+        r <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 1,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Shadowed variable of interrupted fiber is deleted"))
+          )
+        ),
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.Fiber(
+              FlowId("fork0"),
+              RemoteVariableScope.TopLevel(FlowId("Shadowed variable of interrupted fiber is deleted"))
+            )
+          )
+        )
+      )
+    }
+  )
+
   override def spec =
-    suite("All tests")(suite1, suite2, suite3)
+    suite("All tests")(suite1, suite2, suite3, suite4)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,
@@ -963,6 +1103,74 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                       }
             logLines2 <- logQueue.takeAll
           } yield (result, logLines1, logLines2)
+        }
+      } yield assert.tupled(results)
+    }
+
+  private def testGCFlow[E: Schema, A: Schema](
+    label: String
+  )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Set[ScopedRemoteVariableName]) => TestResult) =
+    test(label) {
+      for {
+        _            <- ZIO.logDebug(s"=== testGCFlow $label started === ")
+        runtime      <- ZIO.runtime[Any]
+        breakPromise <- Promise.make[Nothing, Unit]
+        logger = new ZLogger[String, Any] {
+
+                   override def apply(
+                     trace: Trace,
+                     fiberId: FiberId,
+                     logLevel: LogLevel,
+                     message: () => String,
+                     cause: Cause[Any],
+                     context: FiberRefs,
+                     spans: List[LogSpan],
+                     annotations: Map[String, String]
+                   ): String = Unsafe.unsafeCompat { implicit u =>
+                     val msg = message()
+                     runtime.unsafe.run {
+                       msg match {
+                         case "!!!BREAK!!!" => breakPromise.succeed(())
+                         case _             => ZIO.unit
+                       }
+                     }.getOrThrowFiberFailure()
+                     msg
+                   }
+                 }
+        results <- {
+          val break: ZFlow[Any, Nothing, Unit] =
+            (ZFlow.log("!!!BREAK!!!") *>
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+          val finalFlow = flow(break)
+
+          ZIO.scoped[Live with DurableLog with KeyValueStore] {
+            for {
+              pair <- finalFlow
+                        .submitTestPersistent(label)
+                        .provideSomeLayer[Scope with DurableLog with KeyValueStore](Runtime.addLogger(logger))
+              (executor, fiber) = pair
+              _                <- ZIO.logDebug(s"Adjusting clock by 20s")
+              _                <- TestClock.adjust(20.seconds)
+              _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+                     breakPromise.await
+                   }
+              _ <- ZIO.logDebug("Forcing GC")
+              _ <- executor.forceGarbageCollection()
+              vars <-
+                RemoteVariableKeyValueStore.allStoredVariables.runCollect
+                  .provideSome[DurableLog with KeyValueStore](
+                    RemoteVariableKeyValueStore.live,
+                    ZLayer.succeed(
+                      ExecutionEnvironment(Serializer.json, Deserializer.json)
+                    ) // TODO: this should not be recreated here
+                  )
+              _ <- ZIO.logDebug(s"Adjusting clock by 200s")
+              _ <- TestClock.adjust(200.seconds)
+              result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+                          fiber.join
+                        }
+            } yield (result, vars.toSet)
+          }
         }
       } yield assert.tupled(results)
     }

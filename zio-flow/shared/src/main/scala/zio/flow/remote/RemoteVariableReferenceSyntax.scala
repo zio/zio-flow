@@ -16,9 +16,9 @@
 
 package zio.flow.remote
 
-import zio.flow._
 import zio.ZNothing
 import zio.flow.Remote.UnboundRemoteFunction
+import zio.flow._
 
 class RemoteVariableReferenceSyntax[A](val self: Remote[RemoteVariableReference[A]]) extends AnyVal {
 

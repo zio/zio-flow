@@ -33,7 +33,7 @@ trait RemoteContext {
 
 object RemoteContext {
   def generateFreshVariableName: RemoteVariableName =
-    RemoteVariableName(s"p_${UUID.randomUUID()}")
+    RemoteVariableName.unsafeMake(s"p_${UUID.randomUUID()}")
 
   def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))

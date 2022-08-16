@@ -23,11 +23,11 @@ final case class ExecutingFlow[+E, +A](id: FlowId, result: DurablePromise[_, _])
 
 object ExecutingFlow {
   implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.CaseClass2[String, DurablePromise[Either[Throwable, E], A], ExecutingFlow[E, A]](
-      Schema.Field("id", Schema[String]),
+    Schema.CaseClass2[FlowId, DurablePromise[Either[Throwable, E], A], ExecutingFlow[E, A]](
+      Schema.Field("id", Schema[FlowId]),
       Schema.Field("result", Schema[DurablePromise[Either[Throwable, E], A]]),
-      { case (id, promise) => ExecutingFlow(FlowId(id), promise) },
-      (ef: ExecutingFlow[E, A]) => FlowId.unwrap(ef.id),
+      { case (id, promise) => ExecutingFlow(id, promise) },
+      (ef: ExecutingFlow[E, A]) => ef.id,
       (ef: ExecutingFlow[E, A]) => ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]]
     )
 }

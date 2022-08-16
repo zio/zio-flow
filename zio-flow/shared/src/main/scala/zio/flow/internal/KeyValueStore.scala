@@ -31,10 +31,14 @@ trait KeyValueStore {
 
   def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
 
+  def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]]
+
   def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit]
 }
 
 object KeyValueStore {
+  val any: ZLayer[KeyValueStore, Nothing, KeyValueStore] = ZLayer.service[KeyValueStore]
+
   val inMemory: ZLayer[Any, Nothing, KeyValueStore] =
     ZLayer.scoped {
       for {
@@ -70,6 +74,9 @@ object KeyValueStore {
     ZStream.serviceWithStream(
       _.scanAll(namespace)
     )
+
+  def scanAllKeys(namespace: String): ZStream[KeyValueStore, IOException, Chunk[Byte]] =
+    ZStream.serviceWithStream(_.scanAllKeys(namespace))
 
   def delete(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Unit] =
     ZIO.serviceWithZIO(
@@ -137,6 +144,17 @@ object KeyValueStore {
           ns.get(namespace) match {
             case Some(value) =>
               ZStream.fromIterable(value).map { case (key, value) => (key, value.maxBy(_.timestamp.value).data) }
+            case None => ZStream.empty
+          }
+        }
+      }
+
+    override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] =
+      ZStream.unwrap {
+        namespaces.get.map { ns =>
+          ns.get(namespace) match {
+            case Some(value) =>
+              ZStream.fromIterable(value.keys)
             case None => ZStream.empty
           }
         }

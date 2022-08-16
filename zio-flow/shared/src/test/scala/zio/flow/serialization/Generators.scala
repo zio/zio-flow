@@ -17,7 +17,7 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.internal.DurablePromise
+import zio.flow.internal.{DurablePromise, RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
   BinaryNumericOperator,
   Fractional,
@@ -36,6 +36,7 @@ import zio.flow.{
   Remote,
   RemoteVariableName,
   RemoteVariableReference,
+  TransactionId,
   ZFlow
 }
 import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema}
@@ -56,10 +57,28 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.instant.map(value => DynamicValue.fromSchemaAndValue(instantSchema, value))
     )
 
-  lazy val genRemoteVariableName: Gen[Sized, flow.RemoteVariableName.Type] =
-    Gen.string1(Gen.alphaNumericChar).map(RemoteVariableName.apply(_))
+  lazy val genRemoteVariableName: Gen[Sized, RemoteVariableName] =
+    Gen.string1(Gen.alphaNumericChar).map(RemoteVariableName.unsafeMake)
 
-  lazy val genBindingName: Gen[Sized, flow.BindingName.Type] =
+  lazy val genFlowId: Gen[Sized, FlowId] =
+    Gen.alphaNumericStringBounded(1, 16).map(FlowId.unsafeMake)
+
+  lazy val genTransactionId: Gen[Sized, TransactionId] =
+    Gen.alphaNumericStringBounded(1, 16).map(TransactionId.unsafeMake)
+
+  lazy val genScope: Gen[Sized, RemoteVariableScope] =
+    Gen.suspend {
+      Gen.oneOf(
+        genFlowId.map(RemoteVariableScope.TopLevel),
+        (genFlowId <*> genScope).map { case (id, scope) => RemoteVariableScope.Fiber(id, scope) },
+        (genTransactionId <*> genScope).map { case (id, scope) => RemoteVariableScope.Transactional(scope, id) }
+      )
+    }
+
+  lazy val genScopedRemoteVariableName: Gen[Sized, ScopedRemoteVariableName] =
+    (genRemoteVariableName <*> genScope).map { case (name, scope) => ScopedRemoteVariableName(name, scope) }
+
+  lazy val genBindingName: Gen[Sized, BindingName] =
     Gen.uuid.map(BindingName.apply(_))
 
   lazy val genNumeric: Gen[Any, (Numeric[Any], Gen[Any, Remote[Any]])] =
@@ -187,6 +206,11 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genNested: Gen[Sized, Remote[Any]] =
     Gen.oneOf(genLiteral, genRemoteVariable).map(Remote.Nested(_))
+
+  lazy val genVariableReference: Gen[Sized, Remote[Any]] =
+    for {
+      name <- genRemoteVariableName
+    } yield Remote.VariableReference(RemoteVariableReference(name))
 
   lazy val genRemoteVariable: Gen[Sized, Remote[Any]] =
     for {
@@ -742,10 +766,10 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   def genExecutingFlow[E, A]: Gen[Sized, ExecutingFlow[E, A]] =
     for {
-      id        <- Gen.string1(Gen.asciiChar)
+      id        <- genFlowId
       promiseId <- Gen.string1(Gen.asciiChar)
       promise    = DurablePromise[E, A](promiseId)
-    } yield ExecutingFlow(FlowId(id), promise)
+    } yield ExecutingFlow(id, promise)
 }
 
 object Generators {
