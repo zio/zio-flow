@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,91 @@
 
 package zio.flow.internal
 
-import java.io.IOException
-
+import java.io._
 import zio._
-import zio.console.putStrLn
+import zio.flow._
+import zio.flow.internal.IndexedStore.Index
 import zio.schema._
 
-final case class DurablePromise[E, A](promiseId: String, durableLog: DurableLog, promise: Promise[E, A]) {
-  def succeed(value: A)(implicit schemaA: Schema[A]): IO[IOException, Boolean] =
-    putStrLn("Succeed on Promise " + promise).provide(Has(console.Console.Service.live)) *> promise.succeed(value)
+final case class DurablePromise[E, A](promiseId: String) {
 
-  def fail(error: E)(implicit schemaE: Schema[E]): IO[IOException, Boolean] = promise.fail(error)
+  def awaitEither(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Either[E, A]] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      ZIO.log(s"Waiting for durable promise $promiseId") *>
+        DurableLog
+          .subscribe(Topics.promise(promiseId), Index(0L))
+          .runHead
+          .flatMap {
+            case Some(data) =>
+              ZIO.log(s"Got durable promise result for $promiseId") *>
+                ZIO
+                  .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
+                  .mapError(msg =>
+                    new IOException(
+                      s"Could not deserialize durable promise [$promiseId]: $msg (from ${new String(data.toArray)})"
+                    )
+                  )
+            case None =>
+              ZIO.fail(new IOException(s"Could not find get durable promise result [$promiseId]"))
+          }
+    }
 
-  def awaitEither(implicit schemaE: Schema[E], schemaA: Schema[A]): IO[IOException, Either[E, A]] =
-    putStrLn("Await on Promise " + promise).provide(Has(console.Console.Service.live)) *> promise.await.either
+  def fail(
+    error: E
+  )(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Boolean] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      ZIO.log(s"Setting $promiseId to failure $error") *>
+        DurableLog
+          .append(Topics.promise(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error)))
+          .map(_ == 0L)
+    }
+
+  def succeed(
+    value: A
+  )(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Boolean] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      ZIO.log(s"Setting $promiseId to success: $value") *>
+        DurableLog
+          .append(Topics.promise(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value)))
+          .map(_ == 0L)
+    }
+
+  def poll(implicit
+    schemaE: Schema[E],
+    schemaA: Schema[A]
+  ): ZIO[DurableLog with ExecutionEnvironment, IOException, Option[Either[E, A]]] =
+    ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
+      ZIO.log(s"Polling durable promise $promiseId") *>
+        DurableLog
+          .getAllAvailable(Topics.promise(promiseId), Index(0L))
+          .runHead
+          .flatMap(optData =>
+            ZIO.foreach(optData)(data =>
+              ZIO.log(s"Got durable promise result for $promiseId") *>
+                ZIO
+                  .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
+                  .mapError(msg =>
+                    new IOException(
+                      s"Could not deserialize durable promise [$promiseId]: $msg (from ${new String(data.toArray)})"
+                    )
+                  )
+            )
+          )
+    }
 }
 
 object DurablePromise {
-  def make[E, A](promiseId: String, durableLog: DurableLog, promise: Promise[E, A]): DurablePromise[E, A] =
-    DurablePromise(promiseId, durableLog, promise)
+  implicit def schema[E, A]: Schema[DurablePromise[E, A]] = DeriveSchema.gen
+
+  def make[E, A](promiseId: String): DurablePromise[E, A] =
+    DurablePromise(promiseId)
 }

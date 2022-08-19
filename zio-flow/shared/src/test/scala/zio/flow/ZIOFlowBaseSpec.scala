@@ -1,10 +1,5 @@
 package zio.flow
 
-import zio.duration._
-import zio.test._
-import zio.test.environment._
+import zio.test.ZIOSpecDefault
 
-trait ZIOFlowBaseSpec extends DefaultRunnableSpec {
-  override def aspects: List[TestAspectAtLeastR[Live]] =
-    List(TestAspect.timeout(60.seconds))
-}
+trait ZIOFlowBaseSpec extends ZIOSpecDefault {}

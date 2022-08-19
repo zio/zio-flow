@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,44 @@
 
 package zio.flow.remote
 
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
 import zio.schema.DeriveSchema.gen
 
-class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
+final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
 
-  def handleOption[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =
-    Remote.FoldOption(self, forNone, f)
+  def fold[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =
+    Remote.FoldOption(self, forNone, UnboundRemoteFunction.make(f))
 
   def isSome: Remote[Boolean] =
-    handleOption(Remote(false), _ => Remote(true))
+    fold(Remote(false), _ => Remote(true))
 
   def isNone: Remote[Boolean] =
-    handleOption(Remote(true), _ => Remote(false))
+    fold(Remote(true), _ => Remote(false))
 
-  final def isEmpty: Remote[Boolean] = isNone
+  def isEmpty: Remote[Boolean] = isNone
 
-  final def isDefined: Remote[Boolean] = !isEmpty
+  def isDefined: Remote[Boolean] = !isEmpty
 
-  final def knownSize: Remote[Int] = handleOption(Remote(0), _ => Remote(1))
+  def knownSize: Remote[Int] = fold(Remote(0), _ => Remote(1))
 
-  final def contains[A1 >: A](elem: A1): Remote[Boolean] = Remote.ContainsOption(self, elem)
+  def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] =
+    self.fold(
+      Remote(false),
+      (value: Remote[A]) => value.widen[A1] === elem
+    )
 
-  def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = handleOption(alternative, _ => self)
+  def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = fold(alternative, _ => self)
 
-  final def zip[A1 >: A, B](that: Remote[Option[B]]): Remote[Option[(A1, B)]] = Remote.ZipOption(self, that)
+  def zip[B](
+    that: Remote[Option[B]]
+  ): Remote[Option[(A, B)]] =
+    self.fold(
+      Remote.none,
+      (a: Remote[A]) =>
+        that.fold(
+          Remote.none,
+          (b: Remote[B]) => Remote.RemoteSome(Remote.tuple2((a, b)))
+        )
+    )
 }

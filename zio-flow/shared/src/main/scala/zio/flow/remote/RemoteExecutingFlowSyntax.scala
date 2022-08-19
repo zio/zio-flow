@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@
 
 package zio.flow.remote
 
-import zio.flow.{ActivityError, ExecutingFlow, FlowId, Remote, ZFlow}
+import zio.flow.{ActivityError, ExecutingFlow, Remote, ZFlow}
 
-class RemoteExecutingFlowSyntax[A](self: Remote[A]) {
+final class RemoteExecutingFlowSyntax[E, A](val self: Remote[ExecutingFlow[E, A]]) extends AnyVal {
 
-  def flowId[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): Remote[FlowId] = ???
+  /** Wait until the forked flow finishes with either error or success */
+  def await: ZFlow[Any, ActivityError, Either[E, A]] =
+    ZFlow.Await(self)
 
-  def await[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): ZFlow[Any, ActivityError, Either[E, A2]] =
-    ZFlow.Await(self.widen[ExecutingFlow[E, A2]])
-
-  def interrupt[E, A2](implicit ev: A <:< ExecutingFlow[E, A2]): ZFlow[Any, ActivityError, Any] =
-    ZFlow.Interrupt(self.widen[ExecutingFlow[E, A2]])
+  /** Interrupt the forked flow */
+  def interrupt: ZFlow[Any, ActivityError, Any] =
+    ZFlow.Interrupt(self)
 
 }

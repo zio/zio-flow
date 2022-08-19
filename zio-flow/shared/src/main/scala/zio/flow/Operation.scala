@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,41 @@
 
 package zio.flow
 
-import zio.schema.Schema
+import zio.schema._
+import zio.flow.operation.http.API
 
-sealed trait Operation[-R, +A]
+sealed trait Operation[-R, +A] {
+  val inputSchema: Schema[_ >: R]
+  val resultSchema: Schema[_ <: A]
+}
+
 object Operation {
   final case class Http[R, A](
-    url: java.net.URI,
-    method: String = "GET",
-    headers: Map[String, String],
-    inputSchema: Schema[R],
-    outputSchema: Schema[A]
-  ) extends Operation[R, A]
+    host: String,
+    api: zio.flow.operation.http.API[R, A]
+  ) extends Operation[R, A] {
+    override val inputSchema: Schema[_ >: R]  = api.requestInput.schema
+    override val resultSchema: Schema[_ <: A] = api.outputSchema
+  }
 
-  final case class SendEmail(
-    server: String,
-    port: Int
-  ) extends Operation[EmailRequest, Unit]
+  object Http {
+    def schema[R, A]: Schema[Http[R, A]] = Schema.CaseClass2[String, API[R, A], Http[R, A]](
+      Schema.Field("host", Schema[String]),
+      Schema.Field("api", API.schema[R, A]),
+      (host, api) => Http(host, api),
+      _.host,
+      _.api
+    )
+
+    def schemaCase[R, A]: Schema.Case[Http[R, A], Operation[R, A]] =
+      Schema.Case("Http", schema[R, A], _.asInstanceOf[Http[R, A]])
+  }
+
+  implicit def schema[R, A]: Schema[Operation[R, A]] =
+    Schema.EnumN(
+      CaseSet
+        .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
+    )
 }
 
 final case class EmailRequest(
@@ -41,3 +60,7 @@ final case class EmailRequest(
   bcc: List[String],
   body: String
 )
+
+object EmailRequest {
+  implicit val emailRequestSchema: Schema[EmailRequest] = DeriveSchema.gen[EmailRequest]
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,6 @@ package zio.flow.remote
 
 import zio.flow._
 
-class RemoteStringSyntax(self: Remote[String]) {
+final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def length: Remote[Int] = Remote.Length(self)
 }

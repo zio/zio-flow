@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,24 +17,25 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.schema.Schema
 
-class RemoteRelationalSyntax[A](self: Remote[A]) {
+final class RemoteRelationalSyntax[A](val self: Remote[A]) extends AnyVal {
 
-  final def <(that: Remote[A]): Remote[Boolean] =
+  def <(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     (self <= that) && (self !== that)
 
-  final def <=(that: Remote[A]): Remote[Boolean] =
-    Remote.LessThanEqual(self, that)
+  def <=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
+    Remote.LessThanEqual(self, that, schema)
 
-  final def >(that: Remote[A]): Remote[Boolean] =
+  def >(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     !(self <= that)
 
-  final def >=(that: Remote[A]): Remote[Boolean] =
+  def >=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     (self > that) || (self === that)
 
-  final def !==(that: Remote[A]): Remote[Boolean] =
+  def !==(that: Remote[A]): Remote[Boolean] =
     !(self === that)
 
-  final def ===(that: Remote[A]): Remote[Boolean] =
+  def ===(that: Remote[A]): Remote[Boolean] =
     Remote.Equal(self, that)
 }

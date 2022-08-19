@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,28 +17,34 @@
 package zio.flow.internal
 
 import zio._
+import zio.flow.internal.IndexedStore.Index
 import zio.stream._
 
 import java.io.IOException
 
 trait DurableLog {
-  def append(topic: String, value: Chunk[Byte]): IO[IOException, Long]
-  def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]]
+  def append(topic: String, value: Chunk[Byte]): IO[IOException, Index]
+  def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
+  def getAllAvailable(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
 }
 
 object DurableLog {
+  def append(topic: String, value: Chunk[Byte]): ZIO[DurableLog, IOException, Index] =
+    ZIO.serviceWithZIO(_.append(topic, value))
 
-  def append(topic: String, value: Chunk[Byte]): ZIO[Has[DurableLog], IOException, Long] =
-    ZIO.serviceWith(_.append(topic, value))
-
-  def subscribe(topic: String, position: Long): ZStream[Has[DurableLog], IOException, Chunk[Byte]] =
+  def subscribe(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.subscribe(topic, position))
 
-  val live: ZLayer[Has[IndexedStore], Nothing, Has[DurableLog]] =
-    ZLayer.fromManaged {
+  def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
+    ZStream.serviceWithStream(_.getAllAvailable(topic, position))
+
+  val any: ZLayer[DurableLog, Nothing, DurableLog] = ZLayer.service[DurableLog]
+
+  val live: ZLayer[IndexedStore, Nothing, DurableLog] =
+    ZLayer.scoped {
       for {
-        indexedStore <- ZManaged.service[IndexedStore]
-        topics       <- Ref.makeManaged[Map[String, Topic]](Map.empty)
+        indexedStore <- ZIO.service[IndexedStore]
+        topics       <- Ref.make[Map[String, Topic]](Map.empty)
         durableLog    = DurableLogLive(topics, indexedStore)
       } yield durableLog
     }
@@ -47,7 +53,7 @@ object DurableLog {
     topics: Ref[Map[String, Topic]],
     indexedStore: IndexedStore
   ) extends DurableLog {
-    def append(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
+    def append(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
       getTopic(topic).flatMap { case Topic(hub, semaphore) =>
         semaphore.withPermit {
           indexedStore.put(topic, value).flatMap { position =>
@@ -56,19 +62,19 @@ object DurableLog {
           }
         }
       }
-    def subscribe(topic: String, position: Long): ZStream[Any, IOException, Chunk[Byte]] =
-      ZStream.unwrapManaged {
-        getTopic(topic).toManaged_.flatMap { case Topic(hub, _) =>
+    def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]] =
+      ZStream.unwrapScoped {
+        getTopic(topic).flatMap { case Topic(hub, _) =>
           hub.subscribe.flatMap { subscription =>
-            subscription.size.toManaged_.flatMap { size =>
+            subscription.size.flatMap { size =>
               if (size > 0)
-                subscription.take.toManaged_.map { case (value, index) =>
+                subscription.take.map { case (value, index) =>
                   indexedStore.scan(topic, position, index) ++
                     ZStream(value) ++
                     ZStream.fromQueue(subscription).map(_._1)
                 }
               else
-                indexedStore.position(topic).toManaged_.map { currentPosition =>
+                indexedStore.position(topic).map { currentPosition =>
                   indexedStore.scan(topic, position, currentPosition) ++
                     collectFrom(ZStream.fromQueue(subscription), currentPosition)
                 }
@@ -77,9 +83,16 @@ object DurableLog {
         }
       }
 
+    def getAllAvailable(topic: String, position: IndexedStore.Index): ZStream[Any, IOException, Chunk[Byte]] =
+      ZStream.unwrap {
+        indexedStore.position(topic).map { current =>
+          indexedStore.scan(topic, position, current)
+        }
+      }
+
     private def collectFrom(
-      stream: ZStream[Any, IOException, (Chunk[Byte], Long)],
-      position: Long
+      stream: ZStream[Any, IOException, (Chunk[Byte], Index)],
+      position: Index
     ): ZStream[Any, IOException, Chunk[Byte]] =
       stream.collect { case (value, index) if index >= position => value }
 
@@ -89,23 +102,24 @@ object DurableLog {
           case Some(Topic(hub, semaphore)) =>
             Topic(hub, semaphore) -> topics
           case None =>
-            val hub       = unsafeMakeHub[(Chunk[Byte], Long)]()
-            val semaphore = unsafeMakeSemaphore(1)
-            Topic(hub, semaphore) -> topics.updated(topic, Topic(hub, semaphore))
+            Unsafe.unsafeCompat { implicit u =>
+              val topicInstance = Topic.make
+              topicInstance -> topics.updated(topic, topicInstance)
+            }
         }
       }
   }
 
-  private final case class Topic(hub: Hub[(Chunk[Byte], Long)], semaphore: Semaphore)
+  private final case class Topic(hub: Hub[(Chunk[Byte], Index)], semaphore: Semaphore)
 
   private object Topic {
-    def unsafeMake(): Topic =
-      Topic(unsafeMakeHub[(Chunk[Byte], Long)](), unsafeMakeSemaphore(1))
+    def make(implicit unsafe: Unsafe): Topic =
+      Topic(makeHub[(Chunk[Byte], Index)], makeSemaphore(1))
   }
 
-  private def unsafeMakeHub[A](): Hub[A] =
-    Runtime.default.unsafeRun(Hub.unbounded[A])
+  private def makeHub[A](implicit unsafe: Unsafe): Hub[A] =
+    Runtime.default.unsafe.run(Hub.unbounded[A]).getOrThrowFiberFailure()
 
-  private def unsafeMakeSemaphore(permits: Long): Semaphore =
-    Runtime.default.unsafeRun(Semaphore.make(permits))
+  private def makeSemaphore(permits: Long)(implicit unsafe: Unsafe): Semaphore =
+    Runtime.default.unsafe.run(Semaphore.make(permits)).getOrThrowFiberFailure()
 }

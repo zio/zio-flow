@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,58 +16,33 @@
 
 package zio.flow
 
-import java.time.temporal.{ChronoUnit, TemporalAmount, TemporalField, TemporalUnit}
+import zio.flow.remote.DynamicValueHelpers
+import zio.flow.remote.RemoteTuples._
+import zio.flow.remote.numeric._
+import zio.flow.serialization.FlowSchemaAst
+import zio.schema.{CaseSet, DynamicValue, Schema}
+import zio.{Chunk, ZIO}
+
+import java.math.BigDecimal
+import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
-
+import scala.collection.immutable.ListMap
 import scala.language.implicitConversions
-
-import zio.Chunk
-import zio.flow.remote._
-import zio.flow.remote.Numeric.NumericInt
-import zio.schema.Schema
-
-trait SchemaAndValue[+A] { self =>
-  type Subtype <: A
-
-  def schema: Schema[Subtype]
-
-  def value: Subtype
-
-  def toRemote: Remote[A] = Remote.Literal(value, schema)
-
-  def unsafeCoerce[B]: SchemaAndValue[B] = self.asInstanceOf[SchemaAndValue[B]]
-}
-
-object SchemaAndValue {
-  def apply[A](schema0: Schema[A], value0: A): SchemaAndValue[A] =
-    new SchemaAndValue[A] {
-      override type Subtype = A
-
-      override def schema: Schema[Subtype] = schema0
-
-      override def value: Subtype = value0
-
-      //TODO : Equals and Hashcode required
-    }
-
-  def unapply[A](schemaAndValue: SchemaAndValue[A]): Option[(Schema[schemaAndValue.Subtype], schemaAndValue.Subtype)] =
-    Some((schemaAndValue.schema, schemaAndValue.value))
-}
 
 /**
  * A `Remote[A]` is a blueprint for constructing a value of type `A` on a remote
  * machine. Remote values can always be serialized, because they are mere
  * blueprints, and they do not contain any Scala code.
  */
-sealed trait Remote[+A] {
+sealed trait Remote[+A] { self =>
 
-  def eval: Either[Remote[A], A] = evalWithSchema.map(_.value)
+  def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue]
+  def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[LocalContext with RemoteContext, String, A1] =
+    evalDynamic.flatMap(dyn => ZIO.fromEither(dyn.toTypedValue(schema)))
 
-  def evalWithSchema: Either[Remote[A], SchemaAndValue[A]]
-
-  def self: Remote[A] = this
-
-  final def iterate[A1 >: A](step: Remote[A1] => Remote[A1])(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
+  final def iterate[A1 >: A: Schema](
+    step: Remote[A1] => Remote[A1]
+  )(predicate: Remote[A1] => Remote[Boolean]): Remote[A1] =
     predicate(self).ifThenElse(
       step(self).iterate(step)(predicate),
       self
@@ -81,1157 +56,3138 @@ sealed trait Remote[+A] {
     self.asInstanceOf[Remote[B]]
   }
 
-  final def unit: Remote[Unit] = Remote.Ignore(self)
+  final def unit: Remote[Unit] = Remote.Ignore()
 
-  override def equals(that: Any): Boolean =
-    that match {
-      case that: Remote[a] => Remote.checkEquality(self, that)
-      case _               => false
-    }
+  private[flow] def variableUsage: VariableUsage
+
+  final def substitute[B](f: Remote.Substitutions): Remote[A] =
+    if (f.cut(variableUsage)) this
+    else
+      f.matches(this) match {
+        case Some(value) => value.substitute(f).asInstanceOf[Remote[A]]
+        case None        => substituteRec(f)
+      }
+
+  protected def substituteRec[B](f: Remote.Substitutions): Remote[A]
 }
 
 object Remote {
+//
+//  /**
+//   * Constructs accessors that can be used modify remote versions of user
+//   * defined data types.
+//   */
+//  def makeAccessors[A](implicit
+//    schema: Schema[A]
+//  ): schema.schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
+//    schema.schema.makeAccessors(RemoteAccessorBuilder)
 
-  /**
-   * Constructs accessors that can be used modify remote versions of user
-   * defined data types.
-   */
-  def makeAccessors[A](implicit schema: Schema[A]): schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
-    schema.makeAccessors(RemoteAccessorBuilder)
+  final case class Literal[A](value: DynamicValue) extends Remote[A] {
 
-  final case class Literal[A](value: A, schema: Schema[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Right(SchemaAndValue(schema, value))
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(value)
+
+    override def eval[A1 >: A](implicit schemaA1: Schema[A1]): ZIO[LocalContext with RemoteContext, String, A1] =
+      ZIO.fromEither(value.toTypedValue(schemaA1))
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Literal(otherValue) =>
+          value == otherValue
+        case _ => false
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] = this
+
+    override private[flow] val variableUsage = VariableUsage.none
   }
 
-  final case class Ignore[A](value: Remote[A]) extends Remote[Unit] {
-    def evalWithSchema: Either[Remote[Unit], SchemaAndValue[Unit]] =
-      Right(SchemaAndValue(Schema[Unit], ()))
+  object Literal {
+    def schema[A]: Schema[Literal[A]] =
+      Schema[DynamicValue].transform(Literal(_), _.value)
 
-    def schema: Schema[Unit] = Schema[Unit]
+    def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
+      Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
   }
 
-  final case class Variable[A](identifier: String, schema: Schema[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = Left(self)
+  final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(DynamicValue.fromSchemaAndValue(ZFlow.schema[R, E, A], flow))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[ZFlow[R, E, A]] =
+      Flow(flow.substitute(f))
+
+    override private[flow] val variableUsage = flow.variableUsage
   }
 
-  final case class AddNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEval(left, right)(
-        (l, r) => SchemaAndValue(numeric.schema, numeric.add(l, r)),
-        AddNumeric(_, _, numeric)
+  object Flow {
+    def schema[R, E, A]: Schema[Flow[R, E, A]] =
+      Schema.defer(
+        ZFlow
+          .schema[R, E, A]
+          .transform(
+            Flow(_),
+            _.flow
+          )
+      )
+
+    def schemaCase[A]: Schema.Case[Flow[Any, Any, Any], Remote[A]] =
+      Schema.Case("Flow", schema[Any, Any, Any], _.asInstanceOf[Flow[Any, Any, Any]])
+  }
+
+  final case class Nested[A](remote: Remote[A]) extends Remote[Remote[A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(
+        DynamicValue.fromSchemaAndValue(Remote.schema[A], remote)
+      )
+
+    override def eval[A1 >: Remote[A]](implicit schema: Schema[A1]): ZIO[LocalContext with RemoteContext, String, A1] =
+      ZIO.succeed(remote)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Remote[A]] =
+      Nested(remote.substitute(f))
+
+    override private[flow] val variableUsage = remote.variableUsage
+  }
+
+  object Nested {
+    def schema[A]: Schema[Nested[A]] =
+      Schema.defer(Remote.schema[A].transform(Nested(_), _.remote))
+
+    def schemaCase[A]: Schema.Case[Nested[Any], Remote[A]] =
+      Schema.Case("Nested", schema[Any], _.asInstanceOf[Nested[Any]])
+  }
+
+  final case class VariableReference[A](ref: RemoteVariableReference[A]) extends Remote[RemoteVariableReference[A]] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(DynamicValue.fromSchemaAndValue(RemoteVariableReference.schema[A], ref))
+
+    override private[flow] def variableUsage: VariableUsage =
+      VariableUsage.variable(ref.name)
+
+    override protected def substituteRec[B](f: Substitutions): Remote[RemoteVariableReference[A]] =
+      this
+
+    /**
+     * Gets a [[Remote]] which represents the value stored in this remote
+     * variable
+     */
+    def dereference: Remote.Variable[A] = ref.toRemote
+  }
+
+  object VariableReference {
+
+    // NOTE: must be kept identifiable from DynamicValues in Remote.fromDynamic
+    def schema[A]: Schema[VariableReference[A]] =
+      Schema.CaseClass1[RemoteVariableReference[A], VariableReference[A]](
+        Schema.Field("ref", Schema[RemoteVariableReference[A]]),
+        VariableReference(_),
+        _.ref
+      )
+
+    def schemaCase[A]: Schema.Case[VariableReference[Any], Remote[A]] =
+      Schema.Case("VariableReference", schema[Any], _.asInstanceOf[VariableReference[Any]])
+  }
+
+  final case class Ignore() extends Remote[Unit] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      ZIO.succeed(
+        DynamicValue.fromSchemaAndValue(Schema.primitive[Unit], ())
+      )
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Unit] =
+      this
+
+    override private[flow] val variableUsage = VariableUsage.none
+  }
+  object Ignore {
+    val schema: Schema[Ignore] = Schema[Unit].transform(_ => Ignore(), _ => ())
+
+    def schemaCase[A]: Schema.Case[Ignore, Remote[A]] =
+      Schema.Case("Ignore", schema, _.asInstanceOf[Ignore])
+  }
+
+  final case class Variable[A](identifier: RemoteVariableName) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      RemoteContext.getVariable(identifier).flatMap {
+        case None        => ZIO.fail(s"Could not find identifier $identifier")
+        case Some(value) => ZIO.succeed(value)
+      }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Variable(otherIdentifier) =>
+          otherIdentifier == identifier
+        case _ => false
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      this
+
+    override private[flow] val variableUsage = VariableUsage.variable(identifier)
+  }
+
+  object Variable {
+    def schema[A]: Schema[Variable[A]] =
+      Schema.CaseClass1[RemoteVariableName, Variable[A]](
+        Schema.Field("identifier", Schema[RemoteVariableName]),
+        construct = (identifier: RemoteVariableName) => Variable(identifier),
+        extractField = (variable: Variable[A]) => variable.identifier
+      )
+
+    def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
+      Schema.Case("Variable", schema, _.asInstanceOf[Variable[A]])
+  }
+
+  final case class Unbound[A](identifier: BindingName) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      LocalContext.getBinding(identifier).flatMap {
+        case Some(variable) => variable.evalDynamic
+        case None           => ZIO.fail(s"Cannot evaluate binding ${BindingName.unwrap(identifier)}, it has to be substituted")
+      }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Unbound(otherIdentifier) =>
+          otherIdentifier == identifier
+        case _ => false
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      this
+
+    override private[flow] val variableUsage = VariableUsage.binding(identifier)
+  }
+
+  object Unbound {
+    def schema[A]: Schema[Unbound[A]] =
+      Schema.CaseClass1[BindingName, Unbound[A]](
+        Schema.Field("identifier", Schema[BindingName]),
+        construct = (identifier: BindingName) => Unbound(identifier),
+        extractField = (variable: Unbound[A]) => variable.identifier
+      )
+
+    def schemaCase[A]: Schema.Case[Unbound[A], Remote[A]] =
+      Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]])
+  }
+
+  final case class UnboundRemoteFunction[A, B] private[flow] (
+    input: Unbound[A],
+    result: Remote[B]
+  ) extends Remote[EvaluatedRemoteFunction[A, B]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      result.evalDynamic
+
+    def apply(a: Remote[A]): Remote[B] =
+      EvaluateUnboundRemoteFunction(this, a)
+
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[EvaluatedRemoteFunction[A, B]] =
+      UnboundRemoteFunction(input, result.substitute(f))
+
+    override private[flow] val variableUsage = input.variableUsage.union(result.variableUsage)
+  }
+
+  object UnboundRemoteFunction {
+    def make[A, B](fn: Remote[A] => Remote[B]): UnboundRemoteFunction[A, B] = {
+      val input = Unbound[A](LocalContext.generateFreshBinding)
+      UnboundRemoteFunction(
+        input,
+        fn(input)
+      )
+    }
+
+    def schema[A, B]: Schema[UnboundRemoteFunction[A, B]] =
+      Schema.CaseClass2[Unbound[A], Remote[B], UnboundRemoteFunction[A, B]](
+        Schema.Field("variable", Unbound.schema[A]),
+        Schema.Field("result", Schema.defer(Remote.schema[B])),
+        UnboundRemoteFunction.apply(_, _),
+        _.input,
+        _.result
+      )
+
+    def schemaCase[A, B]: Schema.Case[UnboundRemoteFunction[A, B], Remote[B]] =
+      Schema.Case("UnboundRemoteFunction", schema, _.asInstanceOf[UnboundRemoteFunction[A, B]])
+  }
+
+  type ===>[A, B] = UnboundRemoteFunction[A, B]
+
+  final case class EvaluateUnboundRemoteFunction[A, B](f: UnboundRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        input       <- a.evalDynamic
+        paramName    = RemoteContext.generateFreshVariableName
+        variable     = Remote.Variable(paramName)
+        _           <- RemoteContext.setVariable(paramName, input)
+        _           <- LocalContext.pushBinding(f.input.identifier, variable)
+        evaluated   <- f.evalDynamic
+        _           <- LocalContext.popBinding(f.input.identifier)
+        resultRemote = Remote.fromDynamic(evaluated)
+        finalResult <-
+          if (resultRemote.variableUsage.bindings.contains(f.input.identifier)) {
+            val substituted = resultRemote.substitute(Substitutions(Map(f.input -> variable)))
+            substituted.evalDynamic
+          } else ZIO.succeed(evaluated)
+      } yield finalResult
+
+    override protected def substituteRec[C](fn: Remote.Substitutions): Remote[B] =
+      EvaluateUnboundRemoteFunction(
+        f.substitute(fn).asInstanceOf[UnboundRemoteFunction[A, B]],
+        a.substitute(fn)
+      )
+
+    override private[flow] val variableUsage = f.variableUsage.union(a.variableUsage).removeBinding(f.input.identifier)
+  }
+
+  object EvaluateUnboundRemoteFunction {
+    def schema[A, B]: Schema[EvaluateUnboundRemoteFunction[A, B]] =
+      Schema.CaseClass2[UnboundRemoteFunction[A, B], Remote[A], EvaluateUnboundRemoteFunction[A, B]](
+        Schema.Field("f", UnboundRemoteFunction.schema[A, B]),
+        Schema.Field("a", Schema.defer(Remote.schema[A])),
+        EvaluateUnboundRemoteFunction.apply,
+        _.f,
+        _.a
+      )
+
+    def schemaCase[A, B]: Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]] =
+      Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]](
+        "EvaluateUnboundRemoteFunction",
+        schema[A, B],
+        _.asInstanceOf[EvaluateUnboundRemoteFunction[A, B]]
       )
   }
 
-  final case class RemoteFunction[A, B](fn: Remote[A] => Remote[B]) extends Remote[B] {
-    def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = Left(this)
+  final case class UnaryNumeric[A](
+    value: Remote[A],
+    numeric: Numeric[A],
+    operator: UnaryNumericOperator
+  ) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        v <- value.eval(numeric.schema)
+      } yield DynamicValue.fromSchemaAndValue(numeric.schema, numeric.unary(operator, v))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      UnaryNumeric(value.substitute(f), numeric, operator)
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
-  final case class RemoteApply[A, B](remotefn: RemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+  object UnaryNumeric {
+    def schema[A]: Schema[UnaryNumeric[A]] =
+      Schema.CaseClass3[Remote[A], Numeric[A], UnaryNumericOperator, UnaryNumeric[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        Schema.Field("operator", Schema[UnaryNumericOperator]),
+        UnaryNumeric.apply,
+        _.value,
+        _.numeric,
+        _.operator
+      )
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val aEval = a.evalWithSchema
-      aEval match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          remotefn
-            .fn(Remote.Literal[schemaAndValue.Subtype](schemaAndValue.value, schemaAndValue.schema))
-            .evalWithSchema
-      }
-    }
+    def schemaCase[A]: Schema.Case[UnaryNumeric[A], Remote[A]] =
+      Schema.Case("UnaryNumeric", schema, _.asInstanceOf[UnaryNumeric[A]])
   }
 
-  final case class DivNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class BinaryNumeric[A](
+    left: Remote[A],
+    right: Remote[A],
+    numeric: Numeric[A],
+    operator: BinaryNumericOperator
+  ) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        l <- left.eval(numeric.schema)
+        r <- right.eval(numeric.schema)
+      } yield DynamicValue.fromSchemaAndValue(numeric.schema, numeric.binary(operator, l, r))
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(left, right)(numeric.divide, DivNumeric(_, _, numeric), numeric.schema)
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      BinaryNumeric(left.substitute(f), right.substitute(f), numeric, operator)
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
-  final case class MulNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  object BinaryNumeric {
+    def schema[A]: Schema[BinaryNumeric[A]] =
+      Schema.CaseClass4[Remote[A], Remote[A], Numeric[A], BinaryNumericOperator, BinaryNumeric[A]](
+        Schema.Field("left", Schema.defer(Remote.schema[A])),
+        Schema.Field("right", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
+        Schema.Field("operator", Schema[BinaryNumericOperator]),
+        BinaryNumeric.apply,
+        _.left,
+        _.right,
+        _.numeric,
+        _.operator
+      )
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(left, right)(numeric.multiply, MulNumeric(_, _, numeric), numeric.schema)
+    def schemaCase[A]: Schema.Case[BinaryNumeric[A], Remote[A]] =
+      Schema.Case("BinaryNumeric", schema, _.asInstanceOf[BinaryNumeric[A]])
   }
 
-  final case class PowNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class UnaryFractional[A](value: Remote[A], fractional: Fractional[A], operator: UnaryFractionalOperator)
+      extends Remote[A] {
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(left, right)(numeric.pow, PowNumeric(_, _, numeric), numeric.schema)
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        v <- value.eval(fractional.schema)
+      } yield DynamicValue.fromSchemaAndValue(fractional.schema, fractional.unary(operator, v))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      UnaryFractional(value.substitute(f), fractional, operator)
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
-  final case class NegationNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  object UnaryFractional {
+    def schema[A]: Schema[UnaryFractional[A]] =
+      Schema.CaseClass3[Remote[A], Fractional[A], UnaryFractionalOperator, UnaryFractional[A]](
+        Schema.Field("value", Schema.defer(Remote.schema[A])),
+        Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
+        Schema.Field("operator", Schema[UnaryFractionalOperator]),
+        UnaryFractional.apply,
+        _.value,
+        _.fractional,
+        _.operator
+      )
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(numeric.negate, NegationNumeric(_, numeric), numeric.schema)
+    def schemaCase[A]: Schema.Case[UnaryFractional[A], Remote[A]] =
+      Schema.Case("UnaryFractional", schema, _.asInstanceOf[UnaryFractional[A]])
   }
 
-  final case class RootNumeric[A](value: Remote[A], n: Remote[A], numeric: Numeric[A]) extends Remote[A] {
+  final case class RemoteEither[A, B](
+    either: Either[Remote[A], Remote[B]]
+  ) extends Remote[Either[A, B]] {
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(value, n)(numeric.root, RootNumeric(_, _, numeric), numeric.schema)
-  }
-
-  final case class LogNumeric[A](value: Remote[A], base: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(value, base)(numeric.log, PowNumeric(_, _, numeric), numeric.schema)
-  }
-
-  final case class ModNumeric(left: Remote[Int], right: Remote[Int]) extends Remote[Int] {
-    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
-      Remote.binaryEvalWithSchema(left, right)(NumericInt.mod, ModNumeric(_, _), Schema.primitive[Int])
-  }
-
-  final case class AbsoluteNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(numeric.abs, AbsoluteNumeric(_, numeric), numeric.schema)
-  }
-
-  final case class MinNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(left, right)(numeric.min, MinNumeric(_, _, numeric), numeric.schema)
-  }
-
-  final case class MaxNumeric[A](left: Remote[A], right: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.binaryEvalWithSchema(left, right)(numeric.max, MaxNumeric(_, _, numeric), numeric.schema)
-  }
-
-  final case class FloorNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(numeric.floor, FloorNumeric(_, numeric), numeric.schema)
-  }
-
-  final case class CeilNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(numeric.ceil, CeilNumeric(_, numeric), numeric.schema)
-  }
-
-  final case class RoundNumeric[A](value: Remote[A], numeric: Numeric[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(numeric.round, RoundNumeric(_, numeric), numeric.schema)
-  }
-
-  final case class SinFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(a => fractional.sin(a), SinFractional(_, fractional), fractional.schema)
-  }
-
-  final case class SinInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(fractional.inverseSin, SinInverseFractional(_, fractional), fractional.schema)
-  }
-
-  final case class TanInverseFractional[A](value: Remote[A], fractional: Fractional[A]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      Remote.unaryEvalWithSchema(value)(fractional.inverseTan, TanInverseFractional(_, fractional), fractional.schema)
-  }
-
-  final case class Either0[A, B](either: Either[(Remote[A], Schema[B]), (Schema[A], Remote[B])])
-      extends Remote[Either[A, B]] {
-    override def evalWithSchema: Either[Remote[Either[A, B]], SchemaAndValue[Either[A, B]]] = either match {
-      case Left((remoteA, schemaB)) =>
-        remoteA.evalWithSchema.fold(
-          remoteA => Left(Either0(Left((remoteA, schemaB)))),
-          a => Right(SchemaAndValue(Schema.EitherSchema(a.schema, schemaB), Left(a.value)))
-        )
-      case Right((schemaA, remoteB)) =>
-        remoteB.evalWithSchema.fold(
-          remoteB => Left(Either0(Right((schemaA, remoteB)))),
-          b => Right(SchemaAndValue(Schema.EitherSchema(schemaA, b.schema), (Right(b.value))))
-        )
-    }
-  }
-
-  final case class FlatMapEither[A, B, C](
-    either: Remote[Either[A, B]],
-    f: Remote[B] => Remote[Either[A, C]],
-    cSchema: Schema[C]
-  ) extends Remote[Either[A, C]] {
-    override def evalWithSchema: Either[Remote[Either[A, C]], SchemaAndValue[Either[A, C]]] =
-      either.evalWithSchema match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
-          schemaAndValue.value match {
-            case Left(a)  => Right(SchemaAndValue(Schema.EitherSchema(schemaEither.left, cSchema), Left(a)))
-            case Right(b) => f(Remote(b)(schemaEither.right)).evalWithSchema
-            case _ =>
-              throw new IllegalStateException("Every remote FlatMapEither must be constructed using Remote[Either].")
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      either match {
+        case Left(value) =>
+          value.evalDynamic.map { leftValue =>
+            DynamicValue.LeftValue(leftValue)
+          }
+        case Right(value) =>
+          value.evalDynamic.map { rightValue =>
+            DynamicValue.RightValue(rightValue)
           }
       }
+    override def equals(that: Any): Boolean =
+      that match {
+        case RemoteEither(otherEither) =>
+          (either, otherEither) match {
+            case (Left(value), Left(otherValue)) =>
+              value == otherValue
+            case (Right(value), Right(otherValue)) =>
+              value == otherValue
+            case _ => false
+          }
+        case _ => false
+      }
+
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[Either[A, B]] =
+      RemoteEither(either match {
+        case Left(valueA)  => Left(valueA.substitute(f))
+        case Right(valueB) => Right(valueB.substitute(f))
+      })
+
+    override private[flow] val variableUsage = either match {
+      case Left(valueA)  => valueA.variableUsage
+      case Right(valueB) => valueB.variableUsage
+    }
+  }
+
+  object RemoteEither {
+    def schema[A, B]: Schema[RemoteEither[A, B]] =
+      Schema.defer {
+        Schema
+          .either(Remote.schema[A], Remote.schema[B])
+          .transform(
+            value => RemoteEither.apply(value),
+            _.either
+          )
+      }
+
+    def schemaCase[A]: Schema.Case[RemoteEither[Any, Any], Remote[A]] =
+      Schema.Case("RemoteEither", schema[Any, Any], _.asInstanceOf[RemoteEither[Any, Any]])
   }
 
   final case class FoldEither[A, B, C](
     either: Remote[Either[A, B]],
-    left: Remote[A] => Remote[C],
-    right: Remote[B] => Remote[C]
+    left: UnboundRemoteFunction[A, C],
+    right: UnboundRemoteFunction[B, C]
   ) extends Remote[C] {
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = either.evalWithSchema match {
-      case Left(_) => Left(self)
-      case Right(schemaAndValue) =>
-        val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
-        schemaAndValue.value match {
-          case Left(a)  => left(Literal(a, schemaEither.left)).evalWithSchema
-          case Right(b) => right(Literal(b, schemaEither.right)).evalWithSchema
-          case _        => throw new IllegalStateException("Every remote FoldEither must be constructed using Remote[Either].")
-        }
-    }
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      either.evalDynamic.flatMap {
+        case DynamicValue.LeftValue(value) =>
+          left(Remote.fromDynamic(value)).evalDynamic
+        case DynamicValue.RightValue(value) =>
+          right(Remote.fromDynamic(value)).evalDynamic
+        case other: DynamicValue =>
+          ZIO.fail(s"Unexpected value in Remote.FoldEither of type ${other.getClass.getSimpleName}")
+      }
+
+    override protected def substituteRec[D](f: Remote.Substitutions): Remote[C] =
+      FoldEither(
+        either.substitute(f),
+        left.substitute(f).asInstanceOf[UnboundRemoteFunction[A, C]],
+        right.substitute(f).asInstanceOf[UnboundRemoteFunction[B, C]]
+      )
+
+    override private[flow] val variableUsage = either.variableUsage.union(left.variableUsage).union(right.variableUsage)
+  }
+
+  object FoldEither {
+    def schema[A, B, C]: Schema[FoldEither[A, B, C]] =
+      Schema.CaseClass3[
+        Remote[Either[A, B]],
+        UnboundRemoteFunction[A, C],
+        UnboundRemoteFunction[B, C],
+        FoldEither[A, B, C]
+      ](
+        Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
+        Schema.Field("left", UnboundRemoteFunction.schema[A, C]),
+        Schema.Field("right", UnboundRemoteFunction.schema[B, C]),
+        { case (either, left, right) =>
+          FoldEither(
+            either,
+            left,
+            right
+          )
+        },
+        _.either,
+        _.left,
+        _.right
+      )
+
+    def schemaCase[A, B, C]: Schema.Case[FoldEither[A, B, C], Remote[C]] =
+      Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
   }
 
   final case class SwapEither[A, B](
     either: Remote[Either[A, B]]
   ) extends Remote[Either[B, A]] {
-    override def evalWithSchema: Either[Remote[Either[B, A]], SchemaAndValue[Either[B, A]]] =
-      either.evalWithSchema match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          val schemaEither = schemaAndValue.schema.asInstanceOf[Schema.EitherSchema[A, B]]
-          Right(
-            SchemaAndValue(
-              Schema.EitherSchema(schemaEither.right, schemaEither.left),
-              schemaAndValue.value.asInstanceOf[Either[A, B]].swap
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      either.evalDynamic.flatMap {
+        case DynamicValue.LeftValue(value) =>
+          ZIO.succeed(DynamicValue.RightValue(value))
+        case DynamicValue.RightValue(value) =>
+          ZIO.succeed(DynamicValue.LeftValue(value))
+        case other: DynamicValue =>
+          ZIO.fail(s"Unexpected value in Remote.SwapEither of type ${other.getClass.getSimpleName}")
+      }
+
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[Either[B, A]] =
+      SwapEither(either.substitute(f))
+
+    override private[flow] val variableUsage = either.variableUsage
+  }
+
+  object SwapEither {
+    def schema[A, B]: Schema[SwapEither[A, B]] =
+      Schema
+        .defer(
+          Remote
+            .schema[Either[A, B]]
+            .transform(
+              SwapEither(_),
+              _.either
             )
-          )
-      }
+        )
+
+    def schemaCase[A]: Schema.Case[SwapEither[Any, Any], Remote[A]] =
+      Schema.Case("SwapEither", schema[Any, Any], _.asInstanceOf[SwapEither[Any, Any]])
   }
 
-  final case class Try[A](either: Either[(Remote[Throwable], Schema[A]), Remote[A]]) extends Remote[scala.util.Try[A]] {
-    self =>
-
-    def evalWithSchema: Either[Remote[scala.util.Try[A]], SchemaAndValue[scala.util.Try[A]]] =
+  final case class Try[A](either: Either[Remote[Throwable], Remote[A]]) extends Remote[scala.util.Try[A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
       either match {
-        case Left((remoteThrowable, schemaA)) =>
-          remoteThrowable.evalWithSchema.fold(
-            _ => Left(self),
-            throwable => Right(SchemaAndValue(schemaTry(schemaA), scala.util.Failure(throwable.value)))
-          )
-        case Right(remoteA) =>
-          remoteA.evalWithSchema.fold(
-            _ => Left(self),
-            a => Right(SchemaAndValue(schemaTry(a.schema), scala.util.Success(a.value)))
-          )
+        case Left(throwable) =>
+          throwable.evalDynamic.map { throwableValue =>
+            DynamicValue.Enumeration("Failure" -> DynamicValue.Record(ListMap("exception" -> throwableValue)))
+          }
+        case Right(success) =>
+          success.evalDynamic.map { successValue =>
+            DynamicValue.Enumeration("Success" -> DynamicValue.Record(ListMap("value" -> successValue)))
+          }
       }
-  }
 
-  final case class Tuple2[A, B](left: Remote[A], right: Remote[B]) extends Remote[(A, B)] {
-
-    override def evalWithSchema: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = {
-      //def schemaTuple[T, U](a: Schema[T], b: Schema[U]): Schema[(T, U)] = ???
-
-      val evaluatedLeft  = left.evalWithSchema
-      val evaluatedRight = right.evalWithSchema
-      (for {
-        l <- evaluatedLeft
-        r <- evaluatedRight
-      } yield (l, r)) match {
-        case Left(_) =>
-          val reducedLeft  = evaluatedLeft.fold(identity, a => Literal(a.value, a.schema))
-          val reducedRight = evaluatedRight.fold(identity, b => Literal(b.value, b.schema))
-          Left((reducedLeft, reducedRight))
-        case Right((a, b)) => Right(SchemaAndValue(Schema.Tuple(a.schema, b.schema), (a.value, b.value)))
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case Try(otherEither) =>
+          (either, otherEither) match {
+            case (Left(value), Left(otherValue)) =>
+              value == otherValue
+            case (Right(value), Right(otherValue)) =>
+              value == otherValue
+            case _ => false
+          }
+        case _ => false
       }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[scala.util.Try[A]] =
+      Try(either match {
+        case Left(throwable) => Left(throwable.substitute(f))
+        case Right(success)  => Right(success.substitute(f))
+      })
+
+    override private[flow] val variableUsage = either match {
+      case Left(throwable) => throwable.variableUsage
+      case Right(success)  => success.variableUsage
     }
   }
 
-  final case class Tuple3[A, B, C](_1: Remote[A], _2: Remote[B], _3: Remote[C]) extends Remote[(A, B, C)] {
-
-    override def evalWithSchema: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = {
-      def schemaTuple[S, T, U](schemaS: Schema[S], schemaT: Schema[T], schemaU: Schema[U]): Schema[(S, T, U)] = ???
-
-      val first  = _1.evalWithSchema
-      val second = _2.evalWithSchema
-      val third  = _3.evalWithSchema
-
-      (for {
-        a <- first
-        b <- second
-        c <- third
-      } yield (a, b, c)) match {
-        case Left(_) =>
-          val reducedFirst  = first.fold(identity, a => Literal(a.value, a.schema))
-          val reducedSecond = second.fold(identity, b => Literal(b.value, b.schema))
-          val reducedThird  = third.fold(identity, c => Literal(c.value, c.schema))
-          Left((reducedFirst, reducedSecond, reducedThird))
-        case Right((a, b, c)) =>
-          Right(SchemaAndValue(schemaTuple(a.schema, b.schema, c.schema), (a.value, b.value, c.value)))
-      }
-    }
-  }
-
-  final case class Tuple4[A, B, C, D](_1: Remote[A], _2: Remote[B], _3: Remote[C], _4: Remote[D])
-      extends Remote[(A, B, C, D)] {
-
-    override def evalWithSchema: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = {
-      def schemaTuple[S, T, U, V](
-        schemaS: Schema[S],
-        schemaT: Schema[T],
-        schemaU: Schema[U],
-        schemaV: Schema[V]
-      ): Schema[(S, T, U, V)] = ???
-
-      val first  = _1.evalWithSchema
-      val second = _2.evalWithSchema
-      val third  = _3.evalWithSchema
-      val fourth = _4.evalWithSchema
-      (for {
-        a <- first
-        b <- second
-        c <- third
-        d <- fourth
-      } yield (a, b, c, d)) match {
-        case Left(_) =>
-          val reducedFirst  = first.fold(identity, a => Literal(a.value, a.schema))
-          val reducedSecond = second.fold(identity, b => Literal(b.value, b.schema))
-          val reducedThird  = third.fold(identity, c => Literal(c.value, c.schema))
-          val reducedFourth = fourth.fold(identity, d => Literal(d.value, d.schema))
-          Left((reducedFirst, reducedSecond, reducedThird, reducedFourth))
-        case Right((a, b, c, d)) =>
-          Right(
-            SchemaAndValue(schemaTuple(a.schema, b.schema, c.schema, d.schema), (a.value, b.value, c.value, d.value))
+  object Try {
+    def schema[A]: Schema[Try[A]] =
+      Schema.defer(
+        Schema
+          .either(Remote.schema[Throwable], Remote.schema[A])
+          .transform(
+            Try.apply,
+            _.either
           )
-      }
-    }
+      )
+
+    def schemaCase[A]: Schema.Case[Try[Any], Remote[A]] =
+      Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]])
   }
 
-  final case class First[A, B](tuple: Remote[(A, B)]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
-      val evaluatedTuple = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._1,
-            remoteT => First(remoteT),
-            schemaAndValue.schema.asInstanceOf[Schema.Tuple[A, B]].left
-          )
-      }
-    }
+  // beginning of generated tuple constructors
+  final case class Tuple2[T1, T2](t1: Remote[T1], t2: Remote[T2])
+      extends Remote[(T1, T2)]
+      with RemoteTuple2.Construct[T1, T2] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2)] =
+      Tuple2(t1.substitute(f), t2.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage)
   }
 
-  final case class Second[A, B](tuple: Remote[(A, B)]) extends Remote[B] {
-
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val evaluatedTuple: Either[Remote[(A, B)], SchemaAndValue[(A, B)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._2,
-            remoteT => Second(remoteT),
-            schemaAndValue.schema.asInstanceOf[Schema.Tuple[A, B]].right
-          )
-      }
-    }
+  object Tuple2 extends RemoteTuple2.ConstructStatic[Tuple2] {
+    def construct[T1, T2](t1: Remote[T1], t2: Remote[T2]): Tuple2[T1, T2] = Tuple2(t1, t2)
   }
 
-  private def asSchemaOf3[A, B, C](schema: Schema[((A, B), C)]): Schema.Tuple[(A, B), C] =
-    schema.asInstanceOf[Schema.Tuple[(A, B), C]]
-
-  private def asSchemaOf4[A, B, C, D](schema: Schema[(((A, B), C), D)]): Schema.Tuple[((A, B), C), D] =
-    schema.asInstanceOf[Schema.Tuple[((A, B), C), D]]
-
-  private def asSchemaOf5[A, B, C, D, E](schema: Schema[((((A, B), C), D), E)]): Schema.Tuple[(((A, B), C), D), E] =
-    schema.asInstanceOf[Schema.Tuple[(((A, B), C), D), E]]
-
-  private def schemaOf3[A, B, C](schemaAndValue: SchemaAndValue[(A, B, C)]): Schema.Tuple[(A, B), C] =
-    asSchemaOf3(schemaAndValue.schema.asInstanceOf[Schema.Transform[((A, B), C), _]].codec)
-
-  private def schemaOf4[A, B, C, D](schemaAndValue: SchemaAndValue[(A, B, C, D)]): Schema.Tuple[((A, B), C), D] =
-    asSchemaOf4(schemaAndValue.schema.asInstanceOf[Schema.Transform[(((A, B), C), D), _]].codec)
-
-  private def schemaOf5[A, B, C, D, E](
-    schemaAndValue: SchemaAndValue[(A, B, C, D, E)]
-  ): Schema.Tuple[(((A, B), C), D), E] =
-    asSchemaOf5(schemaAndValue.schema.asInstanceOf[Schema.Transform[((((A, B), C), D), E), _]].codec)
-
-  final case class FirstOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._1,
-            remoteT => FirstOf3(remoteT),
-            schemaOf3(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .left
-          )
-      }
-    }
+  final case class Tuple3[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3])
+      extends Remote[(T1, T2, T3)]
+      with RemoteTuple3.Construct[T1, T2, T3] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3)] =
+      Tuple3(t1.substitute(f), t2.substitute(f), t3.substitute(f))
+    override private[flow] val variableUsage =
+      VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage).union(t3.variableUsage)
   }
 
-  final case class SecondOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[B] {
+  object Tuple3 extends RemoteTuple3.ConstructStatic[Tuple3] {
+    def construct[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3]): Tuple3[T1, T2, T3] = Tuple3(t1, t2, t3)
+  }
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._2,
-            remoteT => SecondOf3(remoteT), {
-              println(schemaAndValue.schema)
-              schemaOf3(schemaAndValue).left
-                .asInstanceOf[Schema.Tuple[A, B]]
-                .right
+  final case class Tuple4[T1, T2, T3, T4](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3], t4: Remote[T4])
+      extends Remote[(T1, T2, T3, T4)]
+      with RemoteTuple4.Construct[T1, T2, T3, T4] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4)] =
+      Tuple4(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f))
+    override private[flow] val variableUsage =
+      VariableUsage.none.union(t1.variableUsage).union(t2.variableUsage).union(t3.variableUsage).union(t4.variableUsage)
+  }
+
+  object Tuple4 extends RemoteTuple4.ConstructStatic[Tuple4] {
+    def construct[T1, T2, T3, T4](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4]
+    ): Tuple4[T1, T2, T3, T4] = Tuple4(t1, t2, t3, t4)
+  }
+
+  final case class Tuple5[T1, T2, T3, T4, T5](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5]
+  ) extends Remote[(T1, T2, T3, T4, T5)]
+      with RemoteTuple5.Construct[T1, T2, T3, T4, T5] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5)] =
+      Tuple5(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f), t5.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+  }
+
+  object Tuple5 extends RemoteTuple5.ConstructStatic[Tuple5] {
+    def construct[T1, T2, T3, T4, T5](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5]
+    ): Tuple5[T1, T2, T3, T4, T5] = Tuple5(t1, t2, t3, t4, t5)
+  }
+
+  final case class Tuple6[T1, T2, T3, T4, T5, T6](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6)]
+      with RemoteTuple6.Construct[T1, T2, T3, T4, T5, T6] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6)] =
+      Tuple6(t1.substitute(f), t2.substitute(f), t3.substitute(f), t4.substitute(f), t5.substitute(f), t6.substitute(f))
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+  }
+
+  object Tuple6 extends RemoteTuple6.ConstructStatic[Tuple6] {
+    def construct[T1, T2, T3, T4, T5, T6](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6]
+    ): Tuple6[T1, T2, T3, T4, T5, T6] = Tuple6(t1, t2, t3, t4, t5, t6)
+  }
+
+  final case class Tuple7[T1, T2, T3, T4, T5, T6, T7](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7)]
+      with RemoteTuple7.Construct[T1, T2, T3, T4, T5, T6, T7] {
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
+      Tuple7(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f)
+      )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+  }
+
+  object Tuple7 extends RemoteTuple7.ConstructStatic[Tuple7] {
+    def construct[T1, T2, T3, T4, T5, T6, T7](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7]
+    ): Tuple7[T1, T2, T3, T4, T5, T6, T7] = Tuple7(t1, t2, t3, t4, t5, t6, t7)
+  }
+
+  final case class Tuple8[T1, T2, T3, T4, T5, T6, T7, T8](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8)]
+      with RemoteTuple8.Construct[T1, T2, T3, T4, T5, T6, T7, T8] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] = Tuple8(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+  }
+
+  object Tuple8 extends RemoteTuple8.ConstructStatic[Tuple8] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8]
+    ): Tuple8[T1, T2, T3, T4, T5, T6, T7, T8] = Tuple8(t1, t2, t3, t4, t5, t6, t7, t8)
+  }
+
+  final case class Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)]
+      with RemoteTuple9.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] = Tuple9(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+  }
+
+  object Tuple9 extends RemoteTuple9.ConstructStatic[Tuple9] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9]
+    ): Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9] = Tuple9(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  }
+
+  final case class Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)]
+      with RemoteTuple10.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] = Tuple10(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+  }
+
+  object Tuple10 extends RemoteTuple10.ConstructStatic[Tuple10] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10]
+    ): Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] = Tuple10(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+  }
+
+  final case class Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)]
+      with RemoteTuple11.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] = Tuple11(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+  }
+
+  object Tuple11 extends RemoteTuple11.ConstructStatic[Tuple11] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11]
+    ): Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] = Tuple11(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+  }
+
+  final case class Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)]
+      with RemoteTuple12.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)] = Tuple12(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+  }
+
+  object Tuple12 extends RemoteTuple12.ConstructStatic[Tuple12] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12]
+    ): Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] =
+      Tuple12(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12)
+  }
+
+  final case class Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)]
+      with RemoteTuple13.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] = Tuple13(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+  }
+
+  object Tuple13 extends RemoteTuple13.ConstructStatic[Tuple13] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13]
+    ): Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] =
+      Tuple13(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13)
+  }
+
+  final case class Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)]
+      with RemoteTuple14.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] = Tuple14(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+  }
+
+  object Tuple14 extends RemoteTuple14.ConstructStatic[Tuple14] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14]
+    ): Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] =
+      Tuple14(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14)
+  }
+
+  final case class Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)]
+      with RemoteTuple15.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] = Tuple15(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+  }
+
+  object Tuple15 extends RemoteTuple15.ConstructStatic[Tuple15] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15]
+    ): Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] =
+      Tuple15(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15)
+  }
+
+  final case class Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)]
+      with RemoteTuple16.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] = Tuple16(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+  }
+
+  object Tuple16 extends RemoteTuple16.ConstructStatic[Tuple16] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16]
+    ): Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] =
+      Tuple16(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16)
+  }
+
+  final case class Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)]
+      with RemoteTuple17.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] = Tuple17(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+  }
+
+  object Tuple17 extends RemoteTuple17.ConstructStatic[Tuple17] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17]
+    ): Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] =
+      Tuple17(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17)
+  }
+
+  final case class Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)]
+      with RemoteTuple18.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] = Tuple18(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+  }
+
+  object Tuple18 extends RemoteTuple18.ConstructStatic[Tuple18] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18]
+    ): Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] =
+      Tuple18(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18)
+  }
+
+  final case class Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)]
+      with RemoteTuple19.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19
+      ] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] = Tuple19(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f),
+      t19.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+  }
+
+  object Tuple19 extends RemoteTuple19.ConstructStatic[Tuple19] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19]
+    ): Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19] =
+      Tuple19(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19)
+  }
+
+  final case class Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)]
+      with RemoteTuple20.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20
+      ] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] = Tuple20(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f),
+      t8.substitute(f),
+      t9.substitute(f),
+      t10.substitute(f),
+      t11.substitute(f),
+      t12.substitute(f),
+      t13.substitute(f),
+      t14.substitute(f),
+      t15.substitute(f),
+      t16.substitute(f),
+      t17.substitute(f),
+      t18.substitute(f),
+      t19.substitute(f),
+      t20.substitute(f)
+    )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
+  }
+
+  object Tuple20 extends RemoteTuple20.ConstructStatic[Tuple20] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20]
+    ): Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20] =
+      Tuple20(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20)
+  }
+
+  final case class Tuple21[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    T21
+  ](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20],
+    t21: Remote[T21]
+  ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)]
+      with RemoteTuple21.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20,
+        T21
+      ] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)] =
+      Tuple21(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f),
+        t20.substitute(f),
+        t21.substitute(f)
+      )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
+      .union(t21.variableUsage)
+  }
+
+  object Tuple21 extends RemoteTuple21.ConstructStatic[Tuple21] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20],
+      t21: Remote[T21]
+    ): Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21] =
+      Tuple21(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21)
+  }
+
+  final case class Tuple22[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    T21,
+    T22
+  ](
+    t1: Remote[T1],
+    t2: Remote[T2],
+    t3: Remote[T3],
+    t4: Remote[T4],
+    t5: Remote[T5],
+    t6: Remote[T6],
+    t7: Remote[T7],
+    t8: Remote[T8],
+    t9: Remote[T9],
+    t10: Remote[T10],
+    t11: Remote[T11],
+    t12: Remote[T12],
+    t13: Remote[T13],
+    t14: Remote[T14],
+    t15: Remote[T15],
+    t16: Remote[T16],
+    t17: Remote[T17],
+    t18: Remote[T18],
+    t19: Remote[T19],
+    t20: Remote[T20],
+    t21: Remote[T21],
+    t22: Remote[T22]
+  ) extends Remote[
+        (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)
+      ]
+      with RemoteTuple22.Construct[
+        T1,
+        T2,
+        T3,
+        T4,
+        T5,
+        T6,
+        T7,
+        T8,
+        T9,
+        T10,
+        T11,
+        T12,
+        T13,
+        T14,
+        T15,
+        T16,
+        T17,
+        T18,
+        T19,
+        T20,
+        T21,
+        T22
+      ] {
+    override protected def substituteRec[B](
+      f: Remote.Substitutions
+    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)] =
+      Tuple22(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f),
+        t10.substitute(f),
+        t11.substitute(f),
+        t12.substitute(f),
+        t13.substitute(f),
+        t14.substitute(f),
+        t15.substitute(f),
+        t16.substitute(f),
+        t17.substitute(f),
+        t18.substitute(f),
+        t19.substitute(f),
+        t20.substitute(f),
+        t21.substitute(f),
+        t22.substitute(f)
+      )
+    override private[flow] val variableUsage = VariableUsage.none
+      .union(t1.variableUsage)
+      .union(t2.variableUsage)
+      .union(t3.variableUsage)
+      .union(t4.variableUsage)
+      .union(t5.variableUsage)
+      .union(t6.variableUsage)
+      .union(t7.variableUsage)
+      .union(t8.variableUsage)
+      .union(t9.variableUsage)
+      .union(t10.variableUsage)
+      .union(t11.variableUsage)
+      .union(t12.variableUsage)
+      .union(t13.variableUsage)
+      .union(t14.variableUsage)
+      .union(t15.variableUsage)
+      .union(t16.variableUsage)
+      .union(t17.variableUsage)
+      .union(t18.variableUsage)
+      .union(t19.variableUsage)
+      .union(t20.variableUsage)
+      .union(t21.variableUsage)
+      .union(t22.variableUsage)
+  }
+
+  object Tuple22 extends RemoteTuple22.ConstructStatic[Tuple22] {
+    def construct[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22](
+      t1: Remote[T1],
+      t2: Remote[T2],
+      t3: Remote[T3],
+      t4: Remote[T4],
+      t5: Remote[T5],
+      t6: Remote[T6],
+      t7: Remote[T7],
+      t8: Remote[T8],
+      t9: Remote[T9],
+      t10: Remote[T10],
+      t11: Remote[T11],
+      t12: Remote[T12],
+      t13: Remote[T13],
+      t14: Remote[T14],
+      t15: Remote[T15],
+      t16: Remote[T16],
+      t17: Remote[T17],
+      t18: Remote[T18],
+      t19: Remote[T19],
+      t20: Remote[T20],
+      t21: Remote[T21],
+      t22: Remote[T22]
+    ): Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22] =
+      Tuple22(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22)
+  }
+  // end of generated tuple constructors
+
+  final case class TupleAccess[T, A](tuple: Remote[T], n: Int) extends Remote[A] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        dynTuple <- tuple.evalDynamic
+        value     = TupleAccess.findValueIn(dynTuple, n)
+      } yield value
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      TupleAccess(tuple.substitute(f), n)
+
+    override private[flow] val variableUsage = tuple.variableUsage
+  }
+
+  object TupleAccess {
+    private def findValueIn(value: DynamicValue, n: Int): DynamicValue = {
+      def find(value: DynamicValue, current: Int): Either[Int, DynamicValue] =
+        value match {
+          case DynamicValue.Tuple(a, b) =>
+            if (current == n) {
+              find(a, current)
+            } else {
+              find(a, current) match {
+                case Left(updated) =>
+                  find(b, updated)
+                case Right(value) =>
+                  Right(value)
+              }
             }
-          )
+          case _ if current == n =>
+            Right(value)
+          case _ =>
+            Left(current + 1)
+        }
+
+      find(value, 0) match {
+        case Left(_)      => throw new IllegalStateException(s"Cannot find value for index $n in dynamic tuple")
+        case Right(value) => value
       }
     }
-  }
 
-  final case class ThirdOf3[A, B, C](tuple: Remote[(A, B, C)]) extends Remote[C] {
+    def schema[T, A]: Schema[TupleAccess[T, A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[T], Int, TupleAccess[T, A]](
+          Schema.Field("tuple", Remote.schema[T]),
+          Schema.Field("n", Schema[Int]),
+          TupleAccess(_, _),
+          _.tuple,
+          _.n
+        )
+      )
 
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C)], SchemaAndValue[(A, B, C)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._3,
-            remoteT => ThirdOf3(remoteT),
-            schemaOf3(schemaAndValue).right
-          )
-      }
-    }
-  }
-
-  final case class FirstOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._1,
-            remoteT => FirstOf4(remoteT), {
-              println(schemaAndValue.schema)
-              schemaOf4(schemaAndValue).left
-                .asInstanceOf[Schema.Tuple[(A, B), C]]
-                .left
-                .asInstanceOf[Schema.Tuple[A, B]]
-                .left
-            }
-          )
-      }
-    }
-  }
-
-  final case class SecondOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[B] {
-
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._2,
-            remoteT => SecondOf4(remoteT),
-            schemaOf4(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .right
-          )
-      }
-    }
-  }
-
-  final case class ThirdOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[C] {
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._3,
-            remoteT => ThirdOf4(remoteT),
-            schemaOf4(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .right
-          )
-      }
-    }
-  }
-
-  final case class FourthOf4[A, B, C, D](tuple: Remote[(A, B, C, D)]) extends Remote[D] {
-    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D)], SchemaAndValue[(A, B, C, D)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._4,
-            remoteT => FourthOf4(remoteT),
-            schemaOf4(schemaAndValue).right
-          )
-      }
-    }
-  }
-
-  final case class FirstOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[A] {
-
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._1,
-            remoteT => FirstOf5(remoteT),
-            schemaOf5(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-              .left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .left
-          )
-      }
-    }
-  }
-
-  final case class SecondOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[B] {
-
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._2,
-            remoteT => SecondOf5(remoteT),
-            schemaOf5(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-              .left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .left
-              .asInstanceOf[Schema.Tuple[A, B]]
-              .right
-          )
-      }
-    }
-  }
-
-  final case class ThirdOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[C] {
-    override def evalWithSchema: Either[Remote[C], SchemaAndValue[C]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._3,
-            remoteT => ThirdOf5(remoteT),
-            schemaOf5(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-              .left
-              .asInstanceOf[Schema.Tuple[(A, B), C]]
-              .right
-          )
-      }
-    }
-  }
-
-  final case class FourthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[D] {
-    override def evalWithSchema: Either[Remote[D], SchemaAndValue[D]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._4,
-            remoteT => FourthOf5(remoteT),
-            schemaOf5(schemaAndValue).left
-              .asInstanceOf[Schema.Tuple[((A, B), C), D]]
-              .right
-          )
-      }
-    }
-  }
-
-  final case class FifthOf5[A, B, C, D, E](tuple: Remote[(A, B, C, D, E)]) extends Remote[E] {
-    override def evalWithSchema: Either[Remote[E], SchemaAndValue[E]] = {
-      val evaluatedTuple: Either[Remote[(A, B, C, D, E)], SchemaAndValue[(A, B, C, D, E)]] = tuple.evalWithSchema
-      evaluatedTuple match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          unaryEvalWithSchema(tuple)(
-            t => t._5,
-            remoteT => FifthOf5(remoteT),
-            schemaOf5(schemaAndValue).right
-          )
-      }
-    }
+    def schemaCase[A]: Schema.Case[TupleAccess[Any, A], Remote[A]] =
+      Schema.Case("TupleAccess", schema[Any, A], _.asInstanceOf[TupleAccess[Any, A]])
   }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = predicate.eval match {
-      case Left(_)      => Left(self)
-      case Right(value) => if (value) ifTrue.evalWithSchema else ifFalse.evalWithSchema
-    }
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      predicate.eval.flatMap {
+        case false => ifFalse.evalDynamic
+        case true  => ifTrue.evalDynamic
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      Branch(
+        predicate.substitute(f),
+        ifTrue.substitute(f),
+        ifFalse.substitute(f)
+      )
+
+    override private[flow] val variableUsage =
+      predicate.variableUsage.union(ifTrue.variableUsage).union(ifFalse.variableUsage)
+  }
+
+  object Branch {
+    def schema[A]: Schema[Branch[A]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[Boolean], Remote[A], Remote[A], Branch[A]](
+          Schema.Field("predicate", Remote.schema[Boolean]),
+          Schema.Field("ifTrue", Remote.schema[A]),
+          Schema.Field("ifFalse", Remote.schema[A]),
+          { case (predicate, ifTrue, ifFalse) => Branch(predicate, ifTrue, ifFalse) },
+          _.predicate,
+          _.ifTrue,
+          _.ifFalse
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Branch[A], Remote[A]] =
+      Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]])
   }
 
   case class Length(remoteString: Remote[String]) extends Remote[Int] {
-    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
-      unaryEvalWithSchema(remoteString)(str => str.length, remoteStr => Length(remoteStr), Schema[Int])
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      remoteString.eval.map { value =>
+        DynamicValue.fromSchemaAndValue(Schema[Int], value.length)
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Int] =
+      Length(remoteString.substitute(f))
+
+    override private[flow] val variableUsage = remoteString.variableUsage
   }
 
-  final case class LessThanEqual[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
-      val lEval = left.evalWithSchema
-      val rEval = right.evalWithSchema
-      (lEval, rEval) match {
-        case (Right(SchemaAndValue(leftSchemaA, leftA)), Right(SchemaAndValue(_, rightA))) =>
-          Right(
-            SchemaAndValue(
-              Schema[Boolean],
-              leftSchemaA.ordering.asInstanceOf[Ordering[Any]].compare(leftA, rightA) <= 0
-            )
-          )
-        case _ => Left(self)
-      }
-    }
+  object Length {
+    val schema: Schema[Length] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          Length.apply,
+          _.remoteString
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[Length, Remote[A]] =
+      Schema.Case("Length", schema, _.asInstanceOf[Length])
+  }
+
+  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], schema: Schema[A]) extends Remote[Boolean] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        leftVal      <- left.eval(schema)
+        rightVal     <- right.eval(schema)
+        ordering      = schema.ordering
+        compareResult = ordering.compare(leftVal, rightVal)
+      } yield DynamicValueHelpers.of(compareResult <= 0)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
+      LessThanEqual(left.substitute(f), right.substitute(f), schema)
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
+  }
+
+  object LessThanEqual {
+    def schema[A]: Schema[LessThanEqual[A]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[A], Remote[A], FlowSchemaAst, LessThanEqual[A]](
+          Schema.Field("left", Remote.schema[A]),
+          Schema.Field("right", Remote.schema[A]),
+          Schema.Field("schema", FlowSchemaAst.schema),
+          { case (left, right, schema) => LessThanEqual(left, right, schema.toSchema[A]) },
+          _.left,
+          _.right,
+          lte => FlowSchemaAst.fromSchema(lte.schema)
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[LessThanEqual[Any], Remote[A]] =
+      Schema.Case("LessThanEqual", schema[Any], _.asInstanceOf[LessThanEqual[Any]])
   }
 
   final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
-      val lEval = left.evalWithSchema
-      val rEval = right.evalWithSchema
-      (lEval, rEval) match {
-        //FIXME : fix when zio schema can compare Schemas
-        case (Right(SchemaAndValue(_, leftA)), Right(SchemaAndValue(_, rightA))) =>
-          Right(
-            SchemaAndValue(Schema[Boolean], (leftA == rightA))
-          )
-        case _ => Left(self)
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        leftDyn  <- left.evalDynamic
+        rightDyn <- right.evalDynamic
+        result    = leftDyn == rightDyn
+      } yield DynamicValue.fromSchemaAndValue(Schema[Boolean], result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
+      Equal(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
+  }
+
+  object Equal {
+    def schema[A]: Schema[Equal[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[A], Remote[A], Equal[A]](
+          Schema.Field("left", Remote.schema[A]),
+          Schema.Field("right", Remote.schema[A]),
+          { case (left, right) => Equal(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Equal[Any], Remote[A]] =
+      Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]])
+  }
+
+  final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      value.eval.map { boolValue =>
+        DynamicValue.fromSchemaAndValue(Schema[Boolean], !boolValue)
       }
-    }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
+      Not(value.substitute(f))
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
-  final case class Not[A](value: Remote[Boolean]) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
-      unaryEval(value)(a => !a, remoteA => Not(remoteA)).map(SchemaAndValue(Schema[Boolean], _))
+  object Not {
+    val schema: Schema[Not] = Schema.defer(
+      Remote
+        .schema[Boolean]
+        .transform(
+          Not.apply,
+          _.value
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[Not, Remote[A]] =
+      Schema.Case("Not", schema, _.asInstanceOf[Not])
   }
 
-  final case class And[A](left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] =
-      binaryEval(left, right)((l, r) => l && r, (remoteL, remoteR) => And(remoteL, remoteR))
-        .map(SchemaAndValue(Schema[Boolean], _))
+  final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        lval <- left.eval
+        rval <- right.eval
+      } yield DynamicValue.fromSchemaAndValue(Schema[Boolean], lval && rval)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Boolean] =
+      And(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
-  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: Remote[(B, A)] => Remote[B])
+  object And {
+    val schema: Schema[And] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Boolean], Remote[Boolean], And](
+          Schema.Field("left", Remote.schema[Boolean]),
+          Schema.Field("right", Remote.schema[Boolean]),
+          { case (left, right) => And(left, right) },
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[And, Remote[A]] =
+      Schema.Case("And", schema, _.asInstanceOf[And])
+  }
+
+  final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: UnboundRemoteFunction[(B, A), B])
       extends Remote[B] {
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] = {
-      val aSchema: Schema[A] = list.evalWithSchema match {
-        case Left(_) => Schema.fail("Could not reduce.")
-        case Right(schemaAndVal) =>
-          schemaAndVal.schema.asInstanceOf[Schema[List[A]]] match {
-            case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-            case _                                 => Schema.fail[A]("Failure.")
-          }
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      list.evalDynamic.flatMap { listDyn =>
+        for {
+          initialDyn <- initial.evalDynamic
+          result <- listDyn match {
+                      case DynamicValue.Sequence(elemsDyn) =>
+                        ZIO.foldLeft(elemsDyn)(initialDyn) { case (b, a) =>
+                          val appliedBody =
+                            body
+                              .apply(
+                                Remote
+                                  .Tuple2(
+                                    Remote.fromDynamic(b),
+                                    Remote.fromDynamic(a)
+                                  )
+                              )
+
+                          appliedBody.evalDynamic
+                        }
+                      case _ =>
+                        ZIO.fail(s"Fold's list did not evaluate into a sequence")
+                    }
+        } yield result
       }
-      list.eval match {
-        case Left(_) => Left(self)
-        case Right(l) =>
-          l.foldLeft[Either[Remote[B], SchemaAndValue[B]]](initial.evalWithSchema) {
-            case (Left(_), _) => Left(self)
-            case (Right(schemaAndVal), a) =>
-              body(Literal((schemaAndVal.value, a), Schema.Tuple(schemaAndVal.schema, aSchema))).evalWithSchema
-          }
-      }
-    }
+
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
+      Fold(
+        list.substitute(f),
+        initial.substitute(f),
+        body.substitute(f).asInstanceOf[UnboundRemoteFunction[(B, A), B]]
+      )
+
+    override private[flow] val variableUsage = list.variableUsage.union(initial.variableUsage).union(body.variableUsage)
+  }
+
+  object Fold {
+    def schema[A, B]: Schema[Fold[A, B]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[List[A]], Remote[B], UnboundRemoteFunction[(B, A), B], Fold[A, B]](
+          Schema.Field("list", Remote.schema[List[A]]),
+          Schema.Field("initial", Remote.schema[B]),
+          Schema.Field("body", UnboundRemoteFunction.schema[(B, A), B]),
+          { case (list, initial, body) => Fold(list, initial, body) },
+          _.list,
+          _.initial,
+          _.body
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Fold[Any, A], Remote[A]] =
+      Schema.Case("Fold", schema[Any, A], _.asInstanceOf[Fold[Any, A]])
   }
 
   final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
 
-    override def evalWithSchema: Either[Remote[List[A]], SchemaAndValue[List[A]]] = {
-      val evaluatedList: Either[Remote[List[A]], SchemaAndValue[List[A]]] = list.evalWithSchema
-      evaluatedList match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          binaryEvalWithSchema(list, head)(
-            (l, h) => h :: l,
-            (remoteL, remoteH) => Cons(remoteL, remoteH),
-            schemaAndValue.schema.asInstanceOf[Schema[List[A]]]
-          )
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      head.evalDynamic.flatMap { headDyn =>
+        list.evalDynamic.flatMap {
+          case DynamicValue.Sequence(values) =>
+            ZIO.succeed(DynamicValue.Sequence(headDyn +: values))
+          case other: DynamicValue =>
+            ZIO.fail(s"Unexpected list value for Remote.Cons: ${other.getClass.getSimpleName}")
+        }
       }
-    }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[List[A]] =
+      Cons(list.substitute(f), head.substitute(f))
+
+    override private[flow] val variableUsage = list.variableUsage.union(head.variableUsage)
+  }
+
+  object Cons {
+    def schema[A]: Schema[Cons[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[List[A]], Remote[A], Cons[A]](
+          Schema.Field("list", Remote.schema[List[A]]),
+          Schema.Field("head", Remote.schema[A]),
+          Cons.apply,
+          _.list,
+          _.head
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Cons[A], Remote[A]] =
+      Schema.Case("Cons", schema[A], _.asInstanceOf[Cons[A]])
   }
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
 
-    override def evalWithSchema: Either[Remote[Option[(A, List[A])]], SchemaAndValue[Option[(A, List[A])]]] = {
-      implicit def toOptionSchema[T](schema: Schema[T]): Schema[Option[T]] = ???
-
-      implicit def toTupleSchema[S, U](schemaS: Schema[S], schemaU: Schema[U]): Schema[(S, U)] = ???
-
-      list.evalWithSchema.fold(
-        remote => Left(UnCons(remote)),
-        rightVal => {
-          val schemaAndValue = rightVal.asInstanceOf[SchemaAndValue[List[A]]]
-          Right(schemaAndValue.value.headOption match {
-            case Some(v) =>
-              SchemaAndValue(
-                toOptionSchema(
-                  toTupleSchema(
-                    (schemaAndValue.schema.asInstanceOf[SchemaList[A]]) match {
-                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-                      case _ =>
-                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-                    },
-                    schemaAndValue.schema.asInstanceOf[SchemaList[A]]
-                  )
-                ),
-                Some((v.asInstanceOf[A], schemaAndValue.value.tail.asInstanceOf[List[A]]))
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      list.evalDynamic.flatMap {
+        case DynamicValue.Sequence(values) =>
+          val lst = values.toList
+          lst match {
+            case head :: tail =>
+              ZIO.succeed(
+                DynamicValue.SomeValue(DynamicValueHelpers.tuple(head, DynamicValue.Sequence(Chunk.fromIterable(tail))))
               )
-            case None =>
-              val schema = schemaAndValue.schema.asInstanceOf[SchemaList[A]]
-              SchemaAndValue(
-                toOptionSchema(
-                  toTupleSchema(
-                    schema match {
-                      case Schema.Sequence(schemaA, _, _, _) => schemaA.asInstanceOf[Schema[A]]
-                      case _ =>
-                        throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-                    },
-                    schemaAndValue.schema
-                  )
-                ),
-                None
-              )
-            case _ => throw new IllegalStateException("Every remote UnCons must be constructed using Remote[List].")
-          })
-        }
+            case _ =>
+              ZIO.succeed(DynamicValue.NoneValue)
+          }
+
+        case other: DynamicValue =>
+          ZIO.fail(s"Unexpected list value for Remote.UnCons: ${other.getClass.getSimpleName}")
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[(A, List[A])]] =
+      UnCons(list.substitute(f))
+
+    override private[flow] val variableUsage = list.variableUsage
+  }
+
+  object UnCons {
+    def schema[A]: Schema[UnCons[A]] = Schema.defer(
+      Remote
+        .schema[List[A]]
+        .transform(
+          UnCons.apply,
+          _.list
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[UnCons[A], Remote[A]] =
+      Schema.Case("UnCons", schema[A], _.asInstanceOf[UnCons[A]])
+  }
+
+  final case class InstantFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Instant] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        s <- seconds.eval[Long]
+        n <- nanos.eval[Long]
+      } yield DynamicValueHelpers.of(Instant.ofEpochSecond(s, n))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
+      InstantFromLongs(seconds.substitute(f), nanos.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage.union(nanos.variableUsage)
+  }
+
+  object InstantFromLongs {
+
+    val schema: Schema[InstantFromLongs] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[Long], InstantFromLongs](
+          Schema.Field("seconds", Remote.schema[Long]),
+          Schema.Field("nanos", Remote.schema[Long]),
+          InstantFromLongs.apply,
+          _.seconds,
+          _.nanos
+        )
       )
-    }
+
+    def schemaCase[A]: Schema.Case[InstantFromLongs, Remote[A]] =
+      Schema.Case("InstantFromLongs", schema, _.asInstanceOf[InstantFromLongs])
   }
 
-  final case class InstantFromLong[A](seconds: Remote[Long]) extends Remote[Instant] {
-    override def evalWithSchema: Either[Remote[Instant], SchemaAndValue[Instant]] =
-      unaryEval(seconds)(s => Instant.ofEpochSecond(s), remoteS => InstantFromLong(remoteS))
-        .map(SchemaAndValue(Schema[Instant], _))
+  final case class InstantFromString(charSeq: Remote[String]) extends Remote[Instant] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      charSeq.eval[String].map(s => DynamicValueHelpers.of(Instant.parse(s)))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
+      InstantFromString(charSeq.substitute(f))
+
+    override private[flow] val variableUsage = charSeq.variableUsage
   }
 
-  final case class InstantToLong[A](instant: Remote[Instant]) extends Remote[Long] {
+  object InstantFromString {
+    val schema: Schema[InstantFromString] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          InstantFromString.apply,
+          _.charSeq
+        )
+    )
 
-    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] =
-      unaryEval(instant)(_.getEpochSecond, remoteS => InstantToLong(remoteS)).map(SchemaAndValue(Schema[Long], _))
+    def schemaCase[A]: Schema.Case[InstantFromString, Remote[A]] =
+      Schema.Case("InstantFromString", schema, _.asInstanceOf[InstantFromString])
   }
 
-  final case class TemporalFieldOfInstant(instant: Remote[Instant], field: Remote[TemporalField]) extends Remote[Int] {
-    override def evalWithSchema: Either[Remote[Int], SchemaAndValue[Int]] =
-      binaryEval(instant, field)(
-        _ get _,
-        (remoteInstant, remoteField) => TemporalFieldOfInstant(remoteInstant, remoteField)
+  final case class InstantToTuple(instant: Remote[Instant]) extends Remote[(Long, Int)] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      instant.eval[Instant].map { instant =>
+        DynamicValue
+          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Int]), (instant.getEpochSecond, instant.getNano))
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(Long, Int)] =
+      InstantToTuple(instant.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage
+  }
+
+  object InstantToTuple {
+    val schema: Schema[InstantToTuple] = Schema.defer(
+      Remote
+        .schema[Instant]
+        .transform(
+          InstantToTuple.apply,
+          _.instant
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[InstantToTuple, Remote[A]] =
+      Schema.Case("InstantToTuple", schema, _.asInstanceOf[InstantToTuple])
+  }
+
+  final case class InstantPlusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        instant  <- instant.eval[Instant]
+        duration <- duration.eval[Duration]
+        result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
+      InstantPlusDuration(instant.substitute(f), duration.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage.union(duration.variableUsage)
+  }
+
+  object InstantPlusDuration {
+    val schema: Schema[InstantPlusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantPlusDuration](
+          Schema.Field("instant", Remote.schema[Instant]),
+          Schema.Field("duration", Remote.schema[Duration]),
+          InstantPlusDuration.apply,
+          _.instant,
+          _.duration
+        )
       )
-        .map(SchemaAndValue(Schema[Int], _))
+
+    def schemaCase[A]: Schema.Case[InstantPlusDuration, Remote[A]] =
+      Schema.Case("InstantPlusDuration", schema, _.asInstanceOf[InstantPlusDuration])
   }
 
-  final case class DurationFromTemporalAmount(amount: Remote[TemporalAmount]) extends Remote[Duration] {
-    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
-      unaryEval(amount)(a => Duration.from(a), remoteAmount => DurationFromTemporalAmount(remoteAmount))
-        .map(SchemaAndValue(Schema[Duration], _))
+  final case class InstantTruncate(instant: Remote[Instant], temporalUnit: Remote[ChronoUnit]) extends Remote[Instant] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        instant      <- instant.eval[Instant]
+        temporalUnit <- temporalUnit.eval[ChronoUnit].tapError(s => ZIO.debug(s"Failed to evaluate temporal unit: $s"))
+        result        = instant.truncatedTo(temporalUnit)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Instant] =
+      InstantTruncate(instant.substitute(f), temporalUnit.substitute(f))
+
+    override private[flow] val variableUsage = instant.variableUsage.union(temporalUnit.variableUsage)
   }
 
-  final case class AmountToDuration(amount: Remote[Long], temporal: Remote[TemporalUnit]) extends Remote[Duration] {
-    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] = binaryEval(amount, temporal)(
-      (amount, unit) => Duration.of(amount, unit),
-      (remoteAmount, remoteUnit) => AmountToDuration(remoteAmount, remoteUnit)
-    ).map(SchemaAndValue(Schema[Duration], _))
+  object InstantTruncate {
+    val schema: Schema[InstantTruncate] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[ChronoUnit], InstantTruncate](
+          Schema.Field("instant", Remote.schema[Instant]),
+          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
+          InstantTruncate.apply,
+          _.instant,
+          _.temporalUnit
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[InstantTruncate, Remote[A]] =
+      Schema.Case("InstantTruncate", schema, _.asInstanceOf[InstantTruncate])
   }
 
-  final case class DurationToSecsNanos(duration: Remote[Duration]) extends Remote[(Long, Long)] {
-    override def evalWithSchema: Either[Remote[(Long, Long)], SchemaAndValue[(Long, Long)]] = unaryEval(duration)(
-      d => (d.getSeconds, d.getNano.toLong),
-      remoteDuration => DurationToSecsNanos(remoteDuration)
-    ).map(SchemaAndValue(Schema[(Long, Long)], _))
+  final case class DurationFromString(charSeq: Remote[String]) extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      charSeq.eval[String].map(s => DynamicValueHelpers.of(Duration.parse(s)))
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationFromString(charSeq.substitute(f))
+
+    override private[flow] val variableUsage = charSeq.variableUsage
   }
 
-  final case class DurationToLong[A](duration: Remote[Duration]) extends Remote[Long] {
+  object DurationFromString {
+    val schema: Schema[DurationFromString] = Schema.defer(
+      Remote
+        .schema[String]
+        .transform(
+          DurationFromString.apply,
+          _.charSeq
+        )
+    )
 
-    override def evalWithSchema: Either[Remote[Long], SchemaAndValue[Long]] = unaryEval(duration)(
-      _.getSeconds() % 60,
-      remoteDuration => DurationToLong(remoteDuration)
-    ).map(SchemaAndValue(Schema[Long], _))
+    def schemaCase[A]: Schema.Case[DurationFromString, Remote[A]] =
+      Schema.Case("DurationFromString", schema, _.asInstanceOf[DurationFromString])
   }
 
-  final case class LongToDuration(seconds: Remote[Long]) extends Remote[Duration] {
-    override def evalWithSchema: Either[Remote[Duration], SchemaAndValue[Duration]] =
-      unaryEval(seconds)(Duration.ofSeconds, remoteS => LongToDuration(remoteS))
-        .map(SchemaAndValue(Schema[Duration], _))
+  final case class DurationBetweenInstants(startInclusive: Remote[Instant], endExclusive: Remote[Instant])
+      extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        start <- startInclusive.eval[Instant]
+        end   <- endExclusive.eval[Instant]
+        result = Duration.between(start, end)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationBetweenInstants(
+        startInclusive.substitute(f),
+        endExclusive.substitute(f)
+      )
+
+    override private[flow] val variableUsage = startInclusive.variableUsage.union(endExclusive.variableUsage)
+  }
+
+  object DurationBetweenInstants {
+    val schema: Schema[DurationBetweenInstants] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Instant], Remote[Instant], DurationBetweenInstants](
+          Schema.Field("startInclusive", Remote.schema[Instant]),
+          Schema.Field("endExclusive", Remote.schema[Instant]),
+          DurationBetweenInstants.apply,
+          _.startInclusive,
+          _.endExclusive
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationBetweenInstants, Remote[A]] =
+      Schema.Case("DurationBetweenInstants", schema, _.asInstanceOf[DurationBetweenInstants])
+  }
+
+  final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        bd     <- seconds.eval[BigDecimal]
+        seconds = bd.longValue()
+        nanos   = bd.subtract(new BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
+        result  = Duration.ofSeconds(seconds, nanos.toLong)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationFromBigDecimal(seconds.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage
+  }
+
+  object DurationFromBigDecimal {
+    private val oneBillion = new BigDecimal(1000000000L)
+
+    val schema: Schema[DurationFromBigDecimal] = Schema.defer(
+      Remote
+        .schema[BigDecimal]
+        .transform(
+          DurationFromBigDecimal.apply,
+          _.seconds
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationFromBigDecimal, Remote[A]] =
+      Schema.Case("DurationFromBigDecimal", schema, _.asInstanceOf[DurationFromBigDecimal])
+  }
+
+  final case class DurationFromLongs(seconds: Remote[Long], nanoAdjustment: Remote[Long]) extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        seconds        <- seconds.eval[Long]
+        nanoAdjustment <- nanoAdjustment.eval[Long]
+        result          = Duration.ofSeconds(seconds, nanoAdjustment)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationFromLongs(seconds.substitute(f), nanoAdjustment.substitute(f))
+
+    override private[flow] val variableUsage = seconds.variableUsage.union(nanoAdjustment.variableUsage)
+  }
+
+  object DurationFromLongs {
+    val schema: Schema[DurationFromLongs] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
+          Schema.Field("seconds", Remote.schema[Long]),
+          Schema.Field("nanoAdjusment", Remote.schema[Long]),
+          DurationFromLongs.apply,
+          _.seconds,
+          _.nanoAdjustment
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationFromLongs, Remote[A]] =
+      Schema.Case("DurationFromLongs", schema, _.asInstanceOf[DurationFromLongs])
+  }
+
+  final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        amount       <- amount.eval[Long]
+        temporalUnit <- temporalUnit.eval[ChronoUnit]
+        result        = Duration.of(amount, temporalUnit)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationFromAmount(amount.substitute(f), temporalUnit.substitute(f))
+
+    override private[flow] val variableUsage = amount.variableUsage.union(temporalUnit.variableUsage)
+  }
+
+  object DurationFromAmount {
+    val schema: Schema[DurationFromAmount] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Long], Remote[ChronoUnit], DurationFromAmount](
+          Schema.Field("amount", Remote.schema[Long]),
+          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
+          DurationFromAmount.apply,
+          _.amount,
+          _.temporalUnit
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationFromAmount, Remote[A]] =
+      Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
+  }
+
+  final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      duration.eval[Duration].map { duration =>
+        DynamicValue
+          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Long]), (duration.getSeconds, duration.getNano.toLong))
+      }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[(Long, Long)] =
+      DurationToLongs(duration.substitute(f))
+
+    override private[flow] val variableUsage = duration.variableUsage
+  }
+
+  object DurationToLongs {
+    val schema: Schema[DurationToLongs] = Schema.defer(
+      Remote
+        .schema[Duration]
+        .transform(
+          DurationToLongs.apply,
+          _.duration
+        )
+    )
+
+    def schemaCase[A]: Schema.Case[DurationToLongs, Remote[A]] =
+      Schema.Case("DurationToLongs", schema, _.asInstanceOf[DurationToLongs])
+  }
+
+  final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        left  <- left.eval[Duration]
+        right <- right.eval[Duration]
+        result = left.plus(right)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationPlusDuration(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
+  }
+
+  object DurationPlusDuration {
+    val schema: Schema[DurationPlusDuration] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationPlusDuration](
+          Schema.Field("left", Remote.schema[Duration]),
+          Schema.Field("right", Remote.schema[Duration]),
+          DurationPlusDuration.apply,
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationPlusDuration, Remote[A]] =
+      Schema.Case("DurationPlusDuration", schema, _.asInstanceOf[DurationPlusDuration])
+  }
+
+  final case class DurationMultipliedBy(left: Remote[Duration], right: Remote[Long]) extends Remote[Duration] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        left  <- left.eval[Duration]
+        right <- right.eval[Long]
+        result = left.multipliedBy(right)
+      } yield DynamicValueHelpers.of(result)
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Duration] =
+      DurationMultipliedBy(left.substitute(f), right.substitute(f))
+
+    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
+  }
+
+  object DurationMultipliedBy {
+    val schema: Schema[DurationMultipliedBy] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[Duration], Remote[Long], DurationMultipliedBy](
+          Schema.Field("left", Remote.schema[Duration]),
+          Schema.Field("right", Remote.schema[Long]),
+          DurationMultipliedBy.apply,
+          _.left,
+          _.right
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[DurationMultipliedBy, Remote[A]] =
+      Schema.Case("DurationMultipliedBy", schema, _.asInstanceOf[DurationMultipliedBy])
   }
 
   final case class Iterate[A](
     initial: Remote[A],
-    iterate: Remote[A] => Remote[A],
-    predicate: Remote[A] => Remote[Boolean]
+    iterate: UnboundRemoteFunction[A, A],
+    predicate: UnboundRemoteFunction[A, Boolean]
   ) extends Remote[A] {
 
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = {
-      def loop(current: Remote[A]): Either[Remote[A], SchemaAndValue[A]] =
-        predicate(current).evalWithSchema match {
-          case Left(_)      => Left(self)
-          case Right(value) => if (value.value) loop(iterate(current)) else current.evalWithSchema
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] = {
+      def loop(current: Remote[A]): ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+        predicate(current).eval[Boolean].flatMap {
+          case false => current.evalDynamic
+          case true  => loop(iterate(current))
         }
 
       loop(initial)
     }
+
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      Iterate(
+        initial.substitute(f),
+        iterate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, A]],
+        predicate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, Boolean]]
+      )
+
+    override private[flow] val variableUsage =
+      initial.variableUsage.union(iterate.variableUsage).union(predicate.variableUsage)
   }
 
-  final case class Lazy[A] private (value: () => Remote[A]) extends Remote[A] {
-    override def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] = value().evalWithSchema
+  object Iterate {
+    def schema[A]: Schema[Iterate[A]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, A], UnboundRemoteFunction[A, Boolean], Iterate[A]](
+          Schema.Field("initial", Remote.schema[A]),
+          Schema.Field("iterate", UnboundRemoteFunction.schema[A, A]),
+          Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
+          Iterate.apply,
+          _.initial,
+          _.iterate,
+          _.predicate
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Iterate[A], Remote[A]] =
+      Schema.Case("Iterate", schema, _.asInstanceOf[Iterate[A]])
   }
 
-  final case class Some0[A](value: Remote[A]) extends Remote[Option[A]] {
-    override def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
-      value.evalWithSchema match {
-        case Left(_) => Left(self)
-        case Right(SchemaAndValue(schema, value)) =>
-          val schemaA = schema.asInstanceOf[Schema[A]]
-          val a       = value.asInstanceOf[A]
-          Right(SchemaAndValue(Schema.Optional(schemaA), Some(a)))
-        case Right(_) => throw new IllegalStateException("Every remote Some0 must be constructed using Remote[Option].")
-      }
-  }
+  final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
 
-  final case class FoldOption[A, B](option: Remote[Option[A]], remoteB: Remote[B], f: Remote[A] => Remote[B])
-      extends Remote[B] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      value().evalDynamic
 
-    def schemaFromOption[T](opSchema: Schema[Option[T]]): Schema[T] =
-      opSchema.transform(op => op.getOrElse(().asInstanceOf[T]), (value: T) => Some(value))
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
+      Lazy(() => value().substitute(f))
 
-    override def evalWithSchema: Either[Remote[B], SchemaAndValue[B]] =
-      option.evalWithSchema match {
-        case Left(_) => Left(self)
-        case Right(schemaAndValue) =>
-          val schemaA = schemaFromOption(schemaAndValue.schema.asInstanceOf[Schema[Option[A]]])
-          schemaAndValue.value.fold(remoteB.evalWithSchema)(v => f(Literal(v, schemaA)).evalWithSchema)
-      }
-  }
-
-  final case class ZipOption[A, B](remoteA: Remote[Option[A]], remoteB: Remote[Option[B]])
-      extends Remote[Option[(A, B)]] {
-
-    override def evalWithSchema: Either[Remote[Option[(A, B)]], SchemaAndValue[Option[(A, B)]]] = {
-      val lEval = remoteA.evalWithSchema
-      val rEval = remoteB.evalWithSchema
-      (lEval, rEval) match {
-        case (Right(SchemaAndValue(schemaA, leftA)), Right(SchemaAndValue(schemaB, rightA))) =>
-          val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
-          val rightVal: Option[B]    = rightA.asInstanceOf[Option[B]]
-          val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
-          val schemaBInst: Schema[B] = schemaB.asInstanceOf[Schema[B]]
-
-          val value = if (leftVal.isEmpty || rightVal.isEmpty) None else Some((leftVal.get, rightVal.get))
-          Right(
-            SchemaAndValue(Schema.Optional(Schema.Tuple(schemaAInst, schemaBInst)), value)
-          )
-        case _ => Left(Remote(None))
-      }
-    }
-  }
-
-  final case class ContainsOption[A](left: Remote[Option[A]], right: A) extends Remote[Boolean] {
-    override def evalWithSchema: Either[Remote[Boolean], SchemaAndValue[Boolean]] = {
-      val lEval = left.evalWithSchema
-
-      lEval match {
-        case (Right(SchemaAndValue(schemaA, leftA))) =>
-          val leftVal: Option[A]     = leftA.asInstanceOf[Option[A]]
-          val schemaAInst: Schema[A] = schemaA.asInstanceOf[Schema[A]]
-          val value: Literal[A]      = Literal(right, schemaAInst)
-          Right(
-            SchemaAndValue(Schema[Boolean], leftVal.contains(value.value))
-          )
-        case _ => Left(Remote(false))
-      }
-    }
-  }
-
-  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
-    def evalWithSchema: Either[Remote[A], SchemaAndValue[A]] =
-      whole.evalWithSchema match {
-        case Right(SchemaAndValue(_, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
-        case _                               => Left(self)
-      }
-  }
-
-  final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
-    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
-      whole.evalWithSchema match {
-        case Right(SchemaAndValue(_, whole)) =>
-          piece.evalWithSchema match {
-            case Right(SchemaAndValue(_, piece)) =>
-              val newValue = lens.unsafeSet(piece)(whole)
-              Right(SchemaAndValue(lens.schemaWhole, newValue))
-            case _ => Left(self)
-          }
-        case _ => Left(self)
-      }
-  }
-
-  final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
-    def evalWithSchema: Either[Remote[Option[A]], SchemaAndValue[Option[A]]] =
-      whole.evalWithSchema match {
-        case Right(SchemaAndValue(_, whole)) =>
-          Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
-        case _ => Left(self)
-      }
-  }
-
-  final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
-    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
-      piece.evalWithSchema match {
-        case Right(SchemaAndValue(_, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
-        case _                               => Left(self)
-      }
-  }
-
-  final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
-    def evalWithSchema: Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]] =
-      whole.evalWithSchema match {
-        case Right(SchemaAndValue(_, whole)) =>
-          Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
-        case _ => Left(self)
-      }
-  }
-
-  final case class TraversalSet[S, A](whole: Remote[S], piece: Remote[Chunk[A]], traversal: RemoteTraversal[S, A])
-      extends Remote[S] {
-    def evalWithSchema: Either[Remote[S], SchemaAndValue[S]] =
-      whole.evalWithSchema match {
-        case Right(SchemaAndValue(_, whole)) =>
-          piece.evalWithSchema match {
-            case Right(SchemaAndValue(_, piece)) =>
-              val newValue = traversal.unsafeSet(whole)(piece)
-              Right(SchemaAndValue(traversal.schemaWhole, newValue))
-            case _ => Left(self)
-          }
-        case _ => Left(self)
-      }
+    override private[flow] lazy val variableUsage = value().variableUsage
   }
 
   object Lazy {
-    def apply[A](value: () => Remote[A]): Remote[A] = {
-      lazy val remote = value()
+    def schema[A]: Schema[Lazy[A]] =
+      Schema.defer(Remote.schema[A].transform((a: Remote[A]) => Lazy(() => a), _.value()))
 
-      val value2: () => Remote[A] = () => remote
-
-      new Lazy(value2)
-    }
+    def schemaCase[A]: Schema.Case[Lazy[A], Remote[A]] =
+      Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
   }
 
-  private[zio] def unaryEval[A, B](
-    remote: Remote[A]
-  )(f: A => B, g: Remote[A] => Remote[B]): Either[Remote[B], B] =
-    remote.eval.fold(remote => Left(g(remote)), a => Right(f(a)))
+  final case class RemoteSome[A](value: Remote[A]) extends Remote[Option[A]] {
 
-  private[zio] def unaryEvalWithSchema[A, B](
-    remote: Remote[A]
-  )(f: A => B, g: Remote[A] => Remote[B], schema: Schema[B]): Either[Remote[B], SchemaAndValue[B]] =
-    remote.eval.fold(remote => Left(g(remote)), a => Right(SchemaAndValue(schema, f(a))))
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        dyn <- value.evalDynamic
+      } yield DynamicValue.SomeValue(dyn)
 
-  private[zio] def binaryEval[A, B, C, D](
-    left: Remote[A],
-    right: Remote[B]
-  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C]): Either[Remote[C], D] = {
-    val leftEither  = left.eval
-    val rightEither = right.eval
-    (for {
-      l <- leftEither
-      r <- rightEither
-    } yield f(l, r)) match {
-      case Left(_) =>
-        Left(g(left, right))
-      case Right(v) => Right(v)
-    }
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[A]] =
+      RemoteSome(value.substitute(f))
+
+    override private[flow] val variableUsage = value.variableUsage
   }
 
-  private[zio] def binaryEvalWithSchema[A, B, C, D](
-    left: Remote[A],
-    right: Remote[B]
-  )(f: (A, B) => D, g: (Remote[A], Remote[B]) => Remote[C], schema: Schema[D]): Either[Remote[C], SchemaAndValue[D]] = {
-    val leftEither: Either[Remote[A], SchemaAndValue[A]]  = left.evalWithSchema
-    val rightEither: Either[Remote[B], SchemaAndValue[B]] = right.evalWithSchema
-    (for {
-      l <- leftEither
-      r <- rightEither
-    } yield f(l.value, r.value)) match {
-      case Left(_) =>
-        Left(g(left, right))
-      case Right(v) => Right(SchemaAndValue(schema, v))
-    }
+  object RemoteSome {
+    def schema[A]: Schema[RemoteSome[A]] =
+      Schema.defer(Remote.schema[A].transform(RemoteSome(_), _.value))
+
+    def schemaCase[A]: Schema.Case[RemoteSome[A], Remote[A]] =
+      Schema.Case("RemoteSome", schema, _.asInstanceOf[RemoteSome[A]])
+  }
+
+  final case class FoldOption[A, B](
+    option: Remote[Option[A]],
+    ifEmpty: Remote[B],
+    ifNonEmpty: UnboundRemoteFunction[A, B]
+  ) extends Remote[B] {
+
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      option.evalDynamic.flatMap {
+        case DynamicValue.NoneValue =>
+          ifEmpty.evalDynamic
+        case DynamicValue.SomeValue(value) =>
+          ifNonEmpty(Remote.fromDynamic(value)).evalDynamic
+        case other: DynamicValue =>
+          ZIO.fail(s"Unexpected value in Remote.FoldOption: ${other.getClass.getSimpleName}")
+      }
+
+    override protected def substituteRec[C](f: Remote.Substitutions): Remote[B] =
+      FoldOption(
+        option.substitute(f),
+        ifEmpty.substitute(f),
+        ifNonEmpty.substitute(f).asInstanceOf[UnboundRemoteFunction[A, B]]
+      )
+
+    override private[flow] val variableUsage =
+      option.variableUsage.union(ifEmpty.variableUsage).union(ifNonEmpty.variableUsage)
+  }
+
+  object FoldOption {
+    def schema[A, B]: Schema[FoldOption[A, B]] =
+      Schema.defer(
+        Schema.CaseClass3[Remote[Option[A]], Remote[B], UnboundRemoteFunction[A, B], FoldOption[A, B]](
+          Schema.Field("option", Remote.schema[Option[A]]),
+          Schema.Field("ifEmpty", Remote.schema[B]),
+          Schema.Field("ifNonEmpty", UnboundRemoteFunction.schema[A, B]),
+          FoldOption.apply,
+          _.option,
+          _.ifEmpty,
+          _.ifNonEmpty
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[FoldOption[Any, A], Remote[A]] =
+      Schema.Case("FoldOption", schema, _.asInstanceOf[FoldOption[Any, A]])
+  }
+
+  final case class Recurse[A](
+    id: RecursionId,
+    initial: Remote[A],
+    body: UnboundRemoteFunction[A, A]
+  ) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      for {
+        _ <- RemoteContext.setVariable(
+               id.toRemoteVariableName,
+               DynamicValue.fromSchemaAndValue(UnboundRemoteFunction.schema[A, A], body)
+             )
+        result <- body(initial).evalDynamic
+      } yield result
+
+    override private[flow] def variableUsage =
+      initial.variableUsage.union(body.variableUsage)
+
+    override protected def substituteRec[B](f: Substitutions): Remote[A] =
+      Recurse(
+        id,
+        initial.substitute(f),
+        body.substitute(f).asInstanceOf[UnboundRemoteFunction[A, A]]
+      )
+  }
+
+  object Recurse {
+    def schema[A]: Schema[Recurse[A]] =
+      Schema.defer {
+        Schema
+          .CaseClass3[RecursionId, Remote[A], UnboundRemoteFunction[A, A], Recurse[A]](
+            Schema.Field("id", Schema[RecursionId]),
+            Schema.Field("initial", Remote.schema[A]),
+            Schema.Field("body", UnboundRemoteFunction.schema[A, A]),
+            Recurse(_, _, _),
+            _.id,
+            _.initial,
+            _.body
+          )
+      }
+
+    def schemaCase[A]: Schema.Case[Recurse[A], Remote[A]] =
+      Schema.Case("Recurse", schema, _.asInstanceOf[Recurse[A]])
+  }
+
+  final case class RecurseWith[A](id: RecursionId, value: Remote[A]) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+      RemoteContext.getVariable(id.toRemoteVariableName).flatMap {
+        case None =>
+          ZIO.fail(s"Could not find recursive function body ${RecursionId.unwrap(id)}")
+        case Some(dynamicBody) =>
+          ZIO.fromEither(dynamicBody.toTypedValue(UnboundRemoteFunction.schema[A, A])).flatMap { body =>
+            body(value).evalDynamic
+          }
+      }
+
+    override private[flow] def variableUsage =
+      value.variableUsage.union(VariableUsage.variable(id.toRemoteVariableName))
+
+    override protected def substituteRec[B](f: Substitutions): Remote[A] =
+      RecurseWith(id, value.substitute(f))
+  }
+
+  object RecurseWith {
+    def schema[A]: Schema[RecurseWith[A]] =
+      Schema.defer {
+        Schema.CaseClass2[RecursionId, Remote[A], RecurseWith[A]](
+          Schema.Field("id", Schema[RecursionId]),
+          Schema.Field("value", Remote.schema[A]),
+          RecurseWith(_, _),
+          _.id,
+          _.value
+        )
+      }
+
+    def schemaCase[A]: Schema.Case[RecurseWith[A], Remote[A]] =
+      Schema.Case("RecurseWith", schema, _.asInstanceOf[RecurseWith[A]])
+  }
+
+//  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
+//    val schema: Schema[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
+//      whole.evalWithSchema.map {
+//        case Right(SchemaAndValue(_, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
+//        case _                               => Left(self)
+//      }
+//  }
+//
+//  final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
+//    val schema: Schema[S] = SchemaOrNothing.fromSchema(lens.schemaWhole)
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
+//      whole.evalWithSchema.flatMap {
+//        case Right(SchemaAndValue(_, whole)) =>
+//          piece.evalWithSchema.flatMap {
+//            case Right(SchemaAndValue(_, piece)) =>
+//              val newValue = lens.unsafeSet(piece)(whole)
+//              ZIO.right(SchemaAndValue(lens.schemaWhole, newValue))
+//            case _ => ZIO.left(self)
+//          }
+//        case _ => ZIO.left(self)
+//      }
+//  }
+//
+//  final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
+//    val schema: Schema[Option[A]] = SchemaOrNothing.fromSchema(Schema.option(prism.schemaPiece))
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[Option[A]], SchemaAndValue[Option[A]]]] =
+//      whole.evalWithSchema.map {
+//        case Right(SchemaAndValue(_, whole)) =>
+//          Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
+//        case _ => Left(self)
+//      }
+//  }
+//
+//  final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
+//    val schema: Schema[S] = SchemaOrNothing.fromSchema(prism.schemaWhole)
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
+//      piece.evalWithSchema.map {
+//        case Right(SchemaAndValue(_, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
+//        case _                               => Left(self)
+//      }
+//  }
+//
+//  final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
+//    val schema: Schema[Chunk[A]] = SchemaOrNothing.fromSchema(Schema.chunk(traversal.schemaPiece))
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]]] =
+//      whole.evalWithSchema.map {
+//        case Right(SchemaAndValue(_, whole)) =>
+//          Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
+//        case _ => Left(self)
+//      }
+//  }
+//
+//  final case class TraversalSet[S, A](whole: Remote[S], piece: Remote[Chunk[A]], traversal: RemoteTraversal[S, A])
+//      extends Remote[S] {
+//    val schema: Schema[S] = SchemaOrNothing.fromSchema(traversal.schemaWhole)
+//
+//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
+//      whole.evalWithSchema.flatMap {
+//        case Right(SchemaAndValue(_, whole)) =>
+//          piece.evalWithSchema.flatMap {
+//            case Right(SchemaAndValue(_, piece)) =>
+//              val newValue = traversal.unsafeSet(whole)(piece)
+//              ZIO.right(SchemaAndValue(traversal.schemaWhole, newValue))
+//            case _ => ZIO.left(self)
+//          }
+//        case _ => ZIO.left(self)
+//      }
+//  }
+
+  case class EvaluatedRemoteFunction[-A, +B](result: DynamicValue) extends AnyVal
+
+  case class Substitutions(
+    bindings: Map[Remote.Unbound[_], Remote[_]]
+  ) {
+    def matches(remote: Remote[_]): Option[Remote[_]] =
+      remote match {
+        case unbound: Remote.Unbound[_] => bindings.get(unbound)
+        case _                          => None
+      }
+
+    lazy val bindingNames: Set[BindingName] = bindings.keySet.map(_.identifier)
+
+    def cut(usage: VariableUsage): Boolean =
+      usage.bindings.intersect(bindingNames).isEmpty
   }
 
   implicit def apply[A: Schema](value: A): Remote[A] =
-    Literal(value, Schema[A])
-
-  def checkEquality[A](self: Remote[A], that: Remote[Any]): Boolean = {
-    var counter: Int = 0
-
-    def freshIdentifier(): String = {
-      counter = counter + 1
-
-      s"var${counter}"
+    // TODO: can we do this on type level instead?
+    value match {
+      case dynamicValue: DynamicValue =>
+        Literal(dynamicValue)
+      case flow: ZFlow[_, _, _] =>
+        Flow(flow).asInstanceOf[Remote[A]]
+      case remote: Remote[Any] =>
+        Nested(remote).asInstanceOf[Remote[A]]
+      case _ =>
+        Literal(DynamicValue.fromSchemaAndValue(Schema[A], value))
     }
 
-    def loop[A](self: Remote[A], that: Remote[Any]): Boolean =
-      (self, that) match {
-        case (Literal(value1, schema1), Literal(value2, schema2)) =>
-          // TODO: Ensure ZIO Schema supports `==` and `hashCode`.
-          (value1 == value2) && (schema1 == schema2)
+  def fromDynamic[A](dynamicValue: DynamicValue): Remote[A] =
+    // TODO: either avoid this or do it nicer
+    dynamicValue.toTypedValue(RemoteVariableReference.schema[Any]) match {
+      case Left(_) =>
+        dynamicValue.toTypedValue(ZFlow.schemaAny) match {
+          case Left(_) =>
+            // Not a ZFlow
+            dynamicValue.toTypedValue(Remote.schemaAny) match {
+              case Left(_) =>
+                // Not a Remote
+                dynamicValue match {
+                  case dynamicTuple: DynamicValue.Tuple =>
+                    Tuple2(
+                      Remote.fromDynamic(dynamicTuple.left),
+                      Remote.fromDynamic(dynamicTuple.right)
+                    ).asInstanceOf[Remote[A]]
+                  // TODO: flatten tuple?
+                  case _ =>
+                    Literal(dynamicValue)
+                }
+              case Right(remote) =>
+                Nested(remote).asInstanceOf[Remote[A]]
+            }
+          case Right(zflow) =>
+            Flow(zflow).asInstanceOf[Remote[A]]
+        }
+      case Right(ref) =>
+        VariableReference(ref).asInstanceOf[Remote[A]]
+    }
 
-        case (l: Ignore[l], Ignore(value2)) =>
-          loop(l.value, value2)
+  def left[A, B](value: Remote[A]): Remote[Either[A, B]] =
+    Remote.RemoteEither(Left(value))
 
-        case (Variable(identifier1, schema1), Variable(identifier2, schema2)) =>
-          (identifier1 == identifier2) && (schema1 == schema2)
+  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, Remote(0L))
 
-        case (AddNumeric(left1, right1, numeric1), AddNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
+  def ofEpochSecond(second: Remote[Long], nanos: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, nanos)
 
-        case (DivNumeric(left1, right1, numeric1), DivNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
+  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] =
+    Remote.InstantFromLongs(
+      milliSecond / 1000L,
+      (milliSecond % 1000L) * 1000000L
+    )
 
-        case (MulNumeric(left1, right1, numeric1), MulNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
+  def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, Remote(0L))
 
-        case (PowNumeric(left1, right1, numeric1), PowNumeric(left2, right2, numeric2)) =>
-          loop(left1, left2) &&
-            loop(right1, right2) &&
-            (numeric1 == numeric2)
-
-        case (NegationNumeric(value1, numeric1), NegationNumeric(value2, numeric2)) =>
-          loop(value1, value2) && (numeric1 == numeric2)
-
-        case (l: Either0[l1, l2], Either0(either2)) =>
-          (l.either, either2) match {
-            case (Left((l, _)), Left((r, _)))   => loop(l, r)
-            case (Right((_, l)), Right((_, r))) => loop(l, r)
-            case _                              => false
-          }
-
-        case (
-              FoldEither(either1, left1, right1),
-              FoldEither(either2, left2, right2)
-            ) =>
-          // TODO: FoldEither must capture Schema[C]
-          val leftId  = Variable(freshIdentifier(), ???)
-          val rightId = Variable(freshIdentifier(), ???)
-
-          loop(either1, either2) &&
-          loop(left1(leftId), left2(leftId)) &&
-          loop(right1(rightId), right2(rightId))
-
-        case (l: Tuple2[l1, l2], Tuple2(left2, right2)) =>
-          loop(l.left, left2) && loop(l.right, right2)
-
-        case (l: Tuple3[l1, l2, l3], Tuple3(a2, b2, c2)) =>
-          loop(l._1, a2) &&
-            loop(l._2, b2) &&
-            loop(l._3, c2)
-
-        case (First(tuple1), First(tuple2)) =>
-          loop(tuple1, tuple2)
-
-        case (Second(tuple1), Second(tuple2)) =>
-          loop(tuple1, tuple2)
-
-        case (FirstOf3(tuple1), FirstOf3(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf3(tuple1), SecondOf3(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf3(tuple1), ThirdOf3(tuple2))   => loop(tuple1, tuple2)
-
-        case (FirstOf4(tuple1), FirstOf4(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf4(tuple1), SecondOf4(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf4(tuple1), ThirdOf4(tuple2))   => loop(tuple1, tuple2)
-        case (FourthOf4(tuple1), FourthOf4(tuple2)) => loop(tuple1, tuple2)
-
-        case (FirstOf5(tuple1), FirstOf5(tuple2))   => loop(tuple1, tuple2)
-        case (SecondOf5(tuple1), SecondOf5(tuple2)) => loop(tuple1, tuple2)
-        case (ThirdOf5(tuple1), ThirdOf5(tuple2))   => loop(tuple1, tuple2)
-        case (FourthOf5(tuple1), FourthOf5(tuple2)) => loop(tuple1, tuple2)
-        case (FifthOf5(tuple1), FifthOf5(tuple2))   => loop(tuple1, tuple2)
-
-        case (Branch(predicate1, ifTrue1, ifFalse1), Branch(predicate2, ifTrue2, ifFalse2)) =>
-          loop(predicate1, predicate2) &&
-            loop(ifTrue1, ifTrue2) &&
-            loop(ifFalse1, ifFalse2)
-
-        case (l: LessThanEqual[l], LessThanEqual(left2, right2)) =>
-          // TODO: Support `==` and `hashCode` for `Sortable`.
-          loop(l.left, left2) &&
-            loop(l.right, right2)
-
-        case (l: Not[l], Not(value2)) =>
-          loop(l.value, value2)
-
-        case (l: And[l], And(left2, right2)) =>
-          loop(l.left, left2) && loop(l.right, right2)
-
-        case (Fold(list1, initial1, body1), Fold(list2, initial2, body2)) =>
-          // TODO: Need Schema[(B, A)]
-          // Fold can capture Schema[A] (???), and we already have Schema[B]
-          // We can use these to make Schema[(B, A)]
-          val identifier = Variable(freshIdentifier(), ???)
-
-          loop(list1, list2) &&
-          loop(initial1, initial2) &&
-          loop(body1(identifier), body2(identifier))
-
-        case (Iterate(initial1, iterate1, predicate1), Iterate(initial2, iterate2, predicate2)) =>
-          val var1 = Variable(freshIdentifier(), ???)
-          val var2 = Variable(freshIdentifier(), ???)
-
-          loop(initial1, initial2) &&
-          loop(iterate1(var1), iterate2(var1)) &&
-          loop(predicate1(var2), predicate2(var2))
-
-        case (Lazy(value1), Lazy(value2)) =>
-          // TODO: Handle loops in the graph appropriately
-          loop(value1(), value2())
-
-        case _ => false
-      }
-
-    loop(self, that)
-  }
-
-  def sequenceEither[A, B](
-    either: Either[Remote[A], Remote[B]]
-  )(implicit aSchema: Schema[A], bSchema: Schema[B]): Remote[Either[A, B]] =
-    Either0(either match {
-      case Left(l)  => Left((l, bSchema))
-      case Right(r) => Right((aSchema, r))
-    })
-
-  def fromEpochSec(seconds: Remote[Long]): Remote[Instant] =
-    Remote.InstantFromLong(seconds)
-
-  def let[A, B](remote: Remote[A])(fn: Remote[A] => Remote[B]): Remote[B] =
-    Remote.RemoteApply(Remote.RemoteFunction(fn), remote)
-
-  def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.LongToDuration(seconds)
+  def ofSeconds(seconds: Remote[Long], nanos: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, nanos)
 
   def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
 
@@ -1240,10 +3196,34 @@ object Remote {
   def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
 
   def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
-    Remote.AmountToDuration(milliseconds, Remote(ChronoUnit.MILLIS))
+    Remote.DurationFromAmount(milliseconds, Remote(ChronoUnit.MILLIS))
 
   def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
-    Remote.AmountToDuration(nanoseconds, Remote(ChronoUnit.NANOS))
+    Remote.DurationFromAmount(nanoseconds, Remote(ChronoUnit.NANOS))
+
+  def nil[A]: Remote[List[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
+
+  def none[A]: Remote[Option[A]] = Remote.Literal(DynamicValue.NoneValue)
+
+  def recurse[A](
+    initial: Remote[A]
+  )(body: (Remote[A], (Remote[A] => Remote.RecurseWith[A])) => Remote[A]): Remote[A] = {
+    val id = LocalContext.generateFreshRecursionId
+    Remote.Recurse(
+      id,
+      initial,
+      UnboundRemoteFunction.make((value: Remote[A]) => body(value, (next: Remote[A]) => Remote.RecurseWith(id, next)))
+    )
+  }
+
+  def right[A, B](value: Remote[B]): Remote[Either[A, B]] = Remote.RemoteEither(Right(value))
+
+  def sequenceEither[A, B](
+    either: Either[Remote[A], Remote[B]]
+  ): Remote[Either[A, B]] =
+    RemoteEither(either)
+
+  def suspend[A](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
   implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
     Tuple2(t._1, t._2)
@@ -1254,12 +3234,83 @@ object Remote {
   implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
     Tuple4(t._1, t._2, t._3, t._4)
 
-  def suspend[A](remote: Remote[A]): Remote[A] = Lazy(() => remote)
-
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
-  val unit: Remote[Unit] = Remote(())
+  implicit def capturedRemoteToRemote[A, B](f: Remote[A] => Remote[B]): UnboundRemoteFunction[A, B] =
+    UnboundRemoteFunction.make((a: Remote[A]) => f(a))
 
-  implicit def schemaRemote[A]: Schema[Remote[A]] = ???
+  val unit: Remote[Unit] = Remote.Ignore()
 
+  private def createSchema[A]: Schema[Remote[A]] = Schema.EnumN(
+    CaseSet
+      .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
+      .:+:(Flow.schemaCase[A])
+      .:+:(Nested.schemaCase[A])
+      .:+:(VariableReference.schemaCase[A])
+      .:+:(Ignore.schemaCase[A])
+      .:+:(Variable.schemaCase[A])
+      .:+:(Unbound.schemaCase[A])
+      .:+:(UnaryNumeric.schemaCase[A])
+      .:+:(BinaryNumeric.schemaCase[A])
+      .:+:(UnaryFractional.schemaCase[A])
+      .:+:(UnboundRemoteFunction.schemaCase[Any, A])
+      .:+:(EvaluateUnboundRemoteFunction.schemaCase[Any, A])
+      .:+:(RemoteEither.schemaCase[A])
+      .:+:(FoldEither.schemaCase[Any, Any, A])
+      .:+:(SwapEither.schemaCase[A])
+      .:+:(Try.schemaCase[A])
+      .:+:(Tuple2.schemaCase[A])
+      .:+:(Tuple3.schemaCase[A])
+      .:+:(Tuple4.schemaCase[A])
+      .:+:(Tuple5.schemaCase[A])
+      .:+:(Tuple6.schemaCase[A])
+      .:+:(Tuple7.schemaCase[A])
+      .:+:(Tuple8.schemaCase[A])
+      .:+:(Tuple9.schemaCase[A])
+      .:+:(Tuple10.schemaCase[A])
+      .:+:(Tuple11.schemaCase[A])
+      .:+:(Tuple12.schemaCase[A])
+      .:+:(Tuple13.schemaCase[A])
+      .:+:(Tuple14.schemaCase[A])
+      .:+:(Tuple15.schemaCase[A])
+      .:+:(Tuple16.schemaCase[A])
+      .:+:(Tuple17.schemaCase[A])
+      .:+:(Tuple18.schemaCase[A])
+      .:+:(Tuple19.schemaCase[A])
+      .:+:(Tuple20.schemaCase[A])
+      .:+:(Tuple21.schemaCase[A])
+      .:+:(Tuple22.schemaCase[A])
+      .:+:(TupleAccess.schemaCase[A])
+      .:+:(Branch.schemaCase[A])
+      .:+:(Length.schemaCase[A])
+      .:+:(LessThanEqual.schemaCase[A])
+      .:+:(Equal.schemaCase[A])
+      .:+:(Not.schemaCase[A])
+      .:+:(And.schemaCase[A])
+      .:+:(Fold.schemaCase[A])
+      .:+:(Cons.schemaCase[A])
+      .:+:(UnCons.schemaCase[A])
+      .:+:(InstantFromLongs.schemaCase[A])
+      .:+:(InstantFromString.schemaCase[A])
+      .:+:(InstantToTuple.schemaCase[A])
+      .:+:(InstantPlusDuration.schemaCase[A])
+      .:+:(InstantTruncate.schemaCase[A])
+      .:+:(DurationFromString.schemaCase[A])
+      .:+:(DurationBetweenInstants.schemaCase[A])
+      .:+:(DurationFromBigDecimal.schemaCase[A])
+      .:+:(DurationFromLongs.schemaCase[A])
+      .:+:(DurationFromAmount.schemaCase[A])
+      .:+:(DurationToLongs.schemaCase[A])
+      .:+:(DurationPlusDuration.schemaCase[A])
+      .:+:(DurationMultipliedBy.schemaCase[A])
+      .:+:(Iterate.schemaCase[A])
+      .:+:(Lazy.schemaCase[A])
+      .:+:(RemoteSome.schemaCase[A])
+      .:+:(FoldOption.schemaCase[A])
+      .:+:(Recurse.schemaCase[A])
+      .:+:(RecurseWith.schemaCase[A])
+  )
+
+  implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
+  def schema[A]: Schema[Remote[A]]            = schemaAny.asInstanceOf[Schema[Remote[A]]]
 }

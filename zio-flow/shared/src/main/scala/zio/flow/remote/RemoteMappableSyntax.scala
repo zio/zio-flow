@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,22 @@
 
 package zio.flow.remote
 
-import zio.flow.{Mappable, Remote}
+import zio.flow.{Mappable, Remote, RemoteContext}
 
-class RemoteMappableSyntax[A](self: Remote[A]) {
+final class RemoteMappableSyntax[A](val self: Remote[A]) extends AnyVal {
 
   def filter[F[_], A1](
     predicate: Remote[A1] => Remote[Boolean]
-  )(implicit ev: A <:< F[A1], impl: Mappable[F]): Remote[F[A1]] =
+  )(implicit ev: A <:< F[A1], impl: Mappable[F], context: RemoteContext): Remote[F[A1]] =
     impl.performFilter(self.widen[F[A1]], predicate)
 
-  def map[F[_], A1, B](f: Remote[A1] => Remote[B])(implicit ev: A <:< F[A1], impl: Mappable[F]): Remote[F[B]] =
+  def map[F[_], A1, B](
+    f: Remote[A1] => Remote[B]
+  )(implicit ev: A <:< F[A1], impl: Mappable[F], context: RemoteContext): Remote[F[B]] =
     impl.performMap(self.widen[F[A1]], f)
 
-  def flatMap[F[_], A1, B](f: Remote[A1] => Remote[F[B]])(implicit ev: A <:< F[A1], impl: Mappable[F]): Remote[F[B]] =
+  def flatMap[F[_], A1, B](
+    f: Remote[A1] => Remote[F[B]]
+  )(implicit ev: A <:< F[A1], impl: Mappable[F], context: RemoteContext): Remote[F[B]] =
     impl.performFlatmap(self.widen[F[A1]], f)
 }

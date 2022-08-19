@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,54 +17,63 @@
 package zio.flow.internal
 
 import java.io.IOException
-
 import zio._
+import zio.flow.internal.IndexedStore.Index
+import zio.prelude.Subtype
+import zio.schema.Schema
 import zio.stream._
 
 trait IndexedStore {
-  def position(topic: String): IO[IOException, Long]
-  def put(topic: String, value: Chunk[Byte]): IO[IOException, Long]
-  def scan(topic: String, position: Long, until: Long): ZStream[Any, IOException, Chunk[Byte]]
+  def position(topic: String): IO[IOException, Index]
+  def put(topic: String, value: Chunk[Byte]): IO[IOException, Index]
+  def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]]
 }
 
 object IndexedStore {
+  type Index = Index.Type
+  object Index extends Subtype[Long] {
+    implicit val schema: Schema[Index] = Schema[Long].transform(Index(_), Index.unwrap)
+  }
 
-  def position(topic: String): ZIO[Has[IndexedStore], IOException, Long] =
-    ZIO.serviceWith(_.position(topic))
+  implicit class IndexSyntax(private val index: Index) extends AnyVal {
+    def next: Index = Index(index + 1)
+  }
 
-  def put(topic: String, value: Chunk[Byte]): ZIO[Has[IndexedStore], IOException, Long] =
-    ZIO.serviceWith(_.put(topic, value))
+  def position(topic: String): ZIO[IndexedStore, IOException, Index] =
+    ZIO.serviceWithZIO(_.position(topic))
 
-  def scan(topic: String, position: Long, until: Long): ZStream[Has[IndexedStore], IOException, Chunk[Byte]] =
+  def put(topic: String, value: Chunk[Byte]): ZIO[IndexedStore, IOException, Index] =
+    ZIO.serviceWithZIO(_.put(topic, value))
+
+  def scan(topic: String, position: Index, until: Index): ZStream[IndexedStore, IOException, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scan(topic, position, until))
 
-  val live: ZLayer[Any, Nothing, Has[IndexedStore]] =
-    ZLayer.fromManaged {
+  val inMemory: ZLayer[Any, Nothing, IndexedStore] =
+    ZLayer {
       for {
-        topics      <- Ref.makeManaged[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
-        indexedStore = IndexedStoreLive(topics)
-      } yield indexedStore
+        topics <- Ref.make[Map[String, Chunk[Chunk[Byte]]]](Map.empty)
+      } yield InMemoryIndexedStore(topics)
     }
 
-  private final case class IndexedStoreLive(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {
+  private final case class InMemoryIndexedStore(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {
 
-    def position(topic: String): IO[IOException, Long] =
+    def position(topic: String): IO[IOException, Index] =
       topics.get.map { topics =>
         topics.get(topic) match {
-          case Some(values) => values.length.toLong
-          case None         => 0L
+          case Some(values) => Index(values.length.toLong)
+          case None         => Index(0L)
         }
       }
 
-    def put(topic: String, value: Chunk[Byte]): IO[IOException, Long] =
+    def put(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
       topics.modify { topics =>
         topics.get(topic) match {
-          case Some(values) => values.length.toLong -> topics.updated(topic, values :+ value)
-          case None         => 0L                   -> topics.updated(topic, Chunk(value))
+          case Some(values) => Index(values.length.toLong) -> topics.updated(topic, values :+ value)
+          case None         => Index(0L)                   -> topics.updated(topic, Chunk(value))
         }
       }
 
-    def scan(topic: String, position: Long, until: Long): ZStream[Any, IOException, Chunk[Byte]] =
+    def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]] =
       ZStream.unwrap {
         topics.get.map { topics =>
           topics.get(topic) match {
