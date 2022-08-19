@@ -53,7 +53,7 @@ trait ColumnFamilyManagement {
 }
 
 object ColumnFamilyManagement {
-  private[internal] def getExistingNamespaces(
+  private[flow] def getExistingNamespaces(
     rocksDB: RocksDB
   ): IO[IOException, List[(String, Promise[IOException, ColumnFamilyHandle])]] =
     rocksDB.initialHandles.flatMap { handles =>
