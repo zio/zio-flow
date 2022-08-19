@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.rocksdb
 
 import org.{rocksdb => jrocks}
@@ -26,9 +42,9 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
       } yield db)
   }
 
-  private val diStore: ZLayer[TransactionDB, Throwable, RocksDbIndexedStore] = RocksDbIndexedStore.live
+  private val diStore: ZLayer[TransactionDB, Throwable, RocksDbIndexedStore] = RocksDbIndexedStore.layer
   private val diStore2: ZLayer[TransactionDB, Throwable, RocksDbIndexedStore] =
-    RocksDbIndexedStore.live("someTopic")
+    RocksDbIndexedStore.withEmptyTopic("someTopic")
   private val customLayer: ZLayer[Any, Throwable, TransactionDB with RocksDbIndexedStore] =
     transactionDbLayer >+> diStore
   private val customLayer2: ZLayer[Any, Throwable, TransactionDB with RocksDbIndexedStore] =
