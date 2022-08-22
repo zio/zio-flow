@@ -2,9 +2,9 @@ package zio.flow.server
 
 import zhttp.service.Server
 import zio._
-import zio.flow.ExecutionEnvironment
-import zio.flow.internal.KeyValueStore
+import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore, PersistentExecutor}
 import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.{ActivityError, ExecutionEnvironment, Operation, OperationExecutor}
 
 object Main extends ZIOAppDefault {
   override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = (for {
@@ -15,6 +15,15 @@ object Main extends ZIOAppDefault {
       ZLayer.succeed(ExecutionEnvironment(Serializer.json, Deserializer.json)),
       KeyValueStore.inMemory,
       ZFlowService.layer,
-      ZFlowEndpoint.layer
+      ZFlowEndpoint.layer,
+      DurableLog.live,
+      IndexedStore.inMemory,
+      PersistentExecutor.make(
+        new OperationExecutor[Any] {
+          def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] = ???
+        },
+        Serializer.json,
+        Deserializer.json
+      )
     )
 }

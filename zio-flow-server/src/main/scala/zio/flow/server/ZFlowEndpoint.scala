@@ -14,28 +14,25 @@ final class ZFlowEndpoint(flowService: ZFlowService) {
       case GET -> !! / "templates" / templateId =>
         flowService
           .getZFlowTemplate(TemplateId(templateId))
-          .fold(
-            error => Response.fromHttpError(HttpError.InternalServerError(error.getMessage)),
-            flow =>
-              flow.fold(Response.text(s"Workflow $templateId not found").setStatus(Status.NotFound)) { flow =>
-                Response(
-                  data = HttpData.fromChunk(JsonCodec.encode(ZFlow.schemaAny)(flow)),
-                  headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
-                )
-              }
-          )
+          .map { flow =>
+            flow.fold(Response.text(s"Workflow $templateId not found").setStatus(Status.NotFound)) { flow =>
+              Response(
+                data = HttpData.fromChunk(JsonCodec.encode(ZFlow.schemaAny)(flow)),
+                headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
+              )
+            }
+          }
       case request @ PUT -> !! / "templates" / templateId =>
         for {
           flow <- deserializeFlow(request)
           _    <- flowService.saveZFlowTemplate(TemplateId(templateId), flow)
         } yield Response.ok
       case DELETE -> !! / "templates" / templateId =>
+        flowService.deleteZFlowTemplate(TemplateId(templateId)).as(Response.status(Status.NoContent))
+      case POST -> !! / "templates" / templateId / "trigger" =>
         flowService
-          .deleteZFlowTemplate(TemplateId(templateId))
-          .fold[Response](
-            error => Response.fromHttpError(InternalServerError(error.getMessage, Some(error))),
-            _ => Response.status(Status.NoContent)
-          )
+          .trigger(TemplateId(templateId))
+          .map(flowId => Response.text(FlowId.unwrap(flowId)))
     }
     .catchAll { error =>
       Http.error(InternalServerError(error.getMessage, Some(error)))
