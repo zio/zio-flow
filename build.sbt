@@ -75,6 +75,16 @@ lazy val zioFlowJS = zioFlow.js
 
 lazy val zioFlowJVM = zioFlow.jvm
 
+lazy val zioFlowServer = project
+  .in(file("zio-flow-server"))
+  .dependsOn(zioFlowJVM)
+  .settings(stdSettings("zio-flow-server"))
+  .settings(
+    libraryDependencies ++= commonTestDependencies.map(_ % Test)
+  )
+  .settings(fork := true)
+  .settings(testFrameworks += zioTest)
+
 lazy val rocksdb = project
   .in(file("rocksdb"))
   .dependsOn(zioFlowJVM)
