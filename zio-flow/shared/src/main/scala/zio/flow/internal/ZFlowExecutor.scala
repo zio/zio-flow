@@ -17,6 +17,7 @@
 package zio.flow.internal
 
 import zio._
+import zio.flow.internal.PersistentExecutor.FlowResult
 import zio.flow.{FlowId, ZFlow}
 import zio.schema.{DynamicValue, Schema}
 
@@ -42,14 +43,14 @@ trait ZFlowExecutor {
   def start[E, A](
     id: FlowId,
     flow: ZFlow[Any, E, A]
-  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], DynamicValue]]
+  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], FlowResult]]
 
   /**
    * Poll currently running and complete workflows.
    *
    * If the workflow with the provided id is completed, it will be returned.
    */
-  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, Exception, Option[IO[DynamicValue, DynamicValue]]]
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, Exception, Option[IO[DynamicValue, FlowResult]]]
 
   /**
    * Restart all known persisted running flows after recreating an executor.
@@ -57,6 +58,9 @@ trait ZFlowExecutor {
    * Executors with no support for persistency should do nothing.
    */
   def restartAll(): ZIO[Any, IOException, Unit]
+
+  /** Force a GC run manually */
+  def forceGarbageCollection(): ZIO[Any, Nothing, Unit]
 }
 
 object ZFlowExecutor {}

@@ -1,11 +1,10 @@
 package zio.flow
 
-import zio.flow
 import zio.schema.{DeriveSchema, Schema}
 import zio.ZNothing
 import zio.test._
 
-import java.net.URI
+import zio.flow.operation.http
 
 object GoodcoverUseCase extends ZIOSpecDefault {
 
@@ -31,11 +30,8 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     "get-policy-claim-status",
     "Returns whether or not claim was made on a policy for a certain year",
     Operation.Http[Policy, Boolean](
-      new URI("getPolicyClaimStatus.com"),
-      "GET",
-      Map.empty[String, String],
-      implicitly[Schema[Policy]],
-      implicitly[Schema[Boolean]]
+      "getPolicyClaimStatus.com",
+      http.API.get("").input[Policy].output[Boolean]
     ),
     ZFlow.succeed(true),
     ZFlow.unit
@@ -45,21 +41,10 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     "get-fire-risk",
     "Gets the probability of fire hazard for a particular property",
     Operation.Http[Policy, Double](
-      new URI("getFireRiskForProperty.com"),
-      "GET",
-      Map.empty[String, String],
-      implicitly[Schema[Policy]],
-      implicitly[Schema[Double]]
+      "getFireRiskForProperty.com",
+      http.API.get("").input[Policy].output[Double]
     ),
     ZFlow.succeed(0.23),
-    ZFlow.unit
-  )
-
-  val reminderEmailForManualEvaluation: Activity[flow.EmailRequest, Unit] = Activity(
-    "send-reminder-email",
-    "Send out emails, can use third party service.",
-    Operation.SendEmail("Server", 22),
-    ZFlow.unit,
     ZFlow.unit
   )
 
@@ -67,11 +52,8 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     "is-manual-evaluation-required",
     "Returns whether or not manual evaluation is required for this policy.",
     Operation.Http[(Policy, Double), Boolean](
-      new URI("isManualEvalRequired.com"),
-      "GET",
-      Map.empty[String, String],
-      implicitly[Schema[(Policy, Double)]],
-      implicitly[Schema[Boolean]]
+      "isManualEvalRequired.com",
+      http.API.get("").input[(Policy, Double)].output[Boolean]
     ),
     ZFlow.succeed(true),
     ZFlow.unit
@@ -95,8 +77,8 @@ object GoodcoverUseCase extends ZIOSpecDefault {
           _    <- setBoolVarAfterSleep(bool, 5, true).fork
           _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
           loop <- bool.get
-          _    <- ZFlow.log("Send reminder email to evaluator")
-          _    <- reminderEmailForManualEvaluation(emailRequest)
+          // _    <- ZFlow.log("Send reminder email to evaluator")
+          // _    <- reminderEmailForManualEvaluation(emailRequest)
         } yield !loop
       ),
     (b: Remote[Boolean]) => b
@@ -113,8 +95,8 @@ object GoodcoverUseCase extends ZIOSpecDefault {
         _    <- setBoolVarAfterSleep(bool, 5, true).fork
         _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
         loop <- bool.get
-        _    <- ZFlow.log("Send reminder email to customer for payment")
-        _    <- reminderEmailForManualEvaluation(emailRequest)
+        // _    <- ZFlow.log("Send reminder email to customer for payment")
+        // _    <- reminderEmailForManualEvaluation(emailRequest)
       } yield !loop),
     (b: Remote[Boolean]) => b
   )
@@ -124,13 +106,10 @@ object GoodcoverUseCase extends ZIOSpecDefault {
       "create-renewed-policy",
       "Creates a new Insurance Policy based on external params like previous claim, fire risk etc.",
       Operation.Http[(Boolean, Double), Option[Policy]](
-        new URI("createRenewedPolicy.com"),
-        "GET",
-        Map.empty[String, String],
-        implicitly[Schema[(Boolean, Double)]],
-        implicitly[Schema[Option[Policy]]]
+        "createRenewedPolicy.com",
+        http.API.get("").input[(Boolean, Double)].output[Option[Policy]]
       ),
-      ZFlow.succeed(None),
+      ZFlow.succeed(Remote.none[Policy]),
       ZFlow.unit
     )
 

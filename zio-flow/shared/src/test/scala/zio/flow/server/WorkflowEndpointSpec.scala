@@ -11,7 +11,7 @@ object WorkflowEndpointSpec extends ZIOFlowBaseSpec {
     test("TODO")(assertTrue(true))
   )
 
-  val exec = ZLayer.fromZIO(MockExecutors.mockPersistentTestClock)
+  val exec = ZLayer.fromZIO(MockExecutors.persistent())
 
   val endpointLayer = exec >+> ZLayer.fromZIO(WorkflowEndpoint.make())
 

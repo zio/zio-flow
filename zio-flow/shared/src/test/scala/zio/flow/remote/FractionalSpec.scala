@@ -1,9 +1,26 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow.{Remote, RemoteContext, remote}
+import zio.flow.{LocalContext, Remote, RemoteContext, remote}
 import zio.schema.Schema
-import zio.test.{Gen, TestAspect, TestConfig, Spec, check}
+import zio.test.{Gen, Spec, TestAspect, TestConfig, check}
 
 object FractionalSpec extends RemoteSpecBase {
 
@@ -14,21 +31,21 @@ object FractionalSpec extends RemoteSpecBase {
       fractionalTests("BigDecimal", Gen.bigDecimal(BigDecimal(Double.MinValue), BigDecimal(Double.MaxValue)))(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(RemoteContext.inMemory)
+    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A])(ops: FractionalOps[A])(implicit
-    fractionalA: remote.Fractional[A]
+    fractionalA: remote.numeric.Fractional[A]
   ) =
     suite(name)(
       testOp[R, A]("Sin", gen)(_.sin)(ops.sin),
       testOp[R, A]("Cos", gen)(_.cos)(ops.cos) @@ TestAspect.ignore,
       testOp[R, A]("Tan", gen)(_.tan)(ops.tan) @@ TestAspect.ignore,
-      testOp[R, A]("Tan-Inverse", gen)(_.tanInverse)(ops.inverseTan)
+      testOp[R, A]("Tan-Inverse", gen)(_.atan)(ops.inverseTan)
     )
 
-  private def testOp[R, A: Schema: remote.Fractional](name: String, gen: Gen[R, A])(
+  private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
-  )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: A => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(gen) { x =>
         fractionalOp(x) <-> op(x)

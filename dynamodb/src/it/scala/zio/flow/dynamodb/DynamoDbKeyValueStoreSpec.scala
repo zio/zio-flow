@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.tableName
@@ -7,6 +23,8 @@ import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}
+import zio.flow.internal.Timestamp
+import zio.test.Assertion.isNone
 
 object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
 
@@ -37,16 +55,33 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           ZIO.scoped {
             createDynamoDbTable(tableName) *> {
               for {
-                putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
-                retrieved1    <- KeyValueStore.get(namespace, key)
-                putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
-                retrieved2    <- KeyValueStore.get(namespace, key)
+                putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+                putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+                retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
+                retrieved2    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
               } yield assertTrue(
                 putSucceeded1,
                 retrieved1.get == value1,
                 putSucceeded2,
                 retrieved2.get == value2
               )
+            }
+          }
+        }
+      },
+      test("should be able to delete a key-value pair") {
+        checkN(10)(
+          dynamoDbNameGen,
+          nonEmptyByteChunkGen,
+          byteChunkGen
+        ) { (namespace, key, value1) =>
+          ZIO.scoped {
+            createDynamoDbTable(tableName) *> {
+              for {
+                _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+                _      <- KeyValueStore.delete(namespace, key)
+                latest <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1)))
+              } yield assert(latest)(isNone)
             }
           }
         }
@@ -60,7 +95,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           ZIO.scoped {
             createDynamoDbTable(tableName) *> {
               KeyValueStore
-                .get(nonExistentNamespace, key)
+                .getLatest(nonExistentNamespace, key, None)
                 .map { retrieved =>
                   assertTrue(
                     retrieved.isEmpty
@@ -82,8 +117,8 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           ZIO.scoped {
             createDynamoDbTable(tableName) *> {
               for {
-                putSucceeded <- KeyValueStore.put(namespace, key, value)
-                retrieved    <- KeyValueStore.get(namespace, nonExistingKey)
+                putSucceeded <- KeyValueStore.put(namespace, key, value, Timestamp(1L))
+                retrieved    <- KeyValueStore.getLatest(namespace, nonExistingKey, Some(Timestamp(1L)))
               } yield assertTrue(
                 retrieved.isEmpty,
                 putSucceeded
@@ -122,7 +157,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
               putSuccesses <-
                 ZIO
                   .foreach(keyValuePairs) { case (key, value) =>
-                    KeyValueStore.put(uniqueTableName, key, value)
+                    KeyValueStore.put(uniqueTableName, key, value, Timestamp(1L))
                   }
               retrieved <-
                 KeyValueStore
@@ -136,6 +171,41 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
               ) &&
               assert(retrieved)(
                 hasSameElements(keyValuePairs)
+              )
+            }
+          }
+        }
+      },
+      test("should return all keys for a `scanAllKeys` call.") {
+        val uniqueTableName = newTimeBasedName()
+        val keyValuePairs =
+          Chunk
+            .fromIterable(1 to 1001)
+            .map { n =>
+              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
+            }
+        val expectedLength = keyValuePairs.length
+
+        ZIO.scoped {
+          createDynamoDbTable(tableName) *> {
+            for {
+              putSuccesses <-
+                ZIO
+                  .foreach(keyValuePairs) { case (key, value) =>
+                    KeyValueStore.put(uniqueTableName, key, value, Timestamp(1L))
+                  }
+              retrieved <-
+                KeyValueStore
+                  .scanAllKeys(uniqueTableName)
+                  .runCollect
+            } yield {
+              assertTrue(
+                putSuccesses.length == expectedLength,
+                putSuccesses.toSet == Set(true),
+                retrieved.length == expectedLength
+              ) &&
+              assert(retrieved)(
+                hasSameElements(keyValuePairs.map(_._1))
               )
             }
           }

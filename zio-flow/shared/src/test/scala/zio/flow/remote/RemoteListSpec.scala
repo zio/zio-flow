@@ -1,5 +1,22 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.remote
 
+import zio.ZLayer
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow._
 import zio.test.{Spec, TestEnvironment}
@@ -33,12 +50,17 @@ object RemoteListSpec extends RemoteSpecBase {
         val cons = Remote.Cons(l1, Remote(4))
         cons <-> (4 :: 1 :: 2 :: 3 :: Nil)
       },
+      test("UnCons") {
+        val l1     = Remote(1 :: 2 :: 3 :: Nil)
+        val uncons = Remote.UnCons(l1)
+        uncons <-> Some((1, 2 :: 3 :: Nil))
+      },
       test("Fold") {
         val l1                = Remote(1 :: 2 :: 3 :: Nil)
         val fold: Remote[Int] = l1.fold(Remote(0))((a, b) => a + b)
         fold <-> 6
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   override def spec = suite("RemoteListSpec")(suite1)
 }

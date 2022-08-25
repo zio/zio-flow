@@ -1,60 +1,59 @@
-///*
-// * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
-// *
-// * Licensed under the Apache License, Version 2.0 (the "License");
-// * you may not use this file except in compliance with the License.
-// * You may obtain a copy of the License at
-// *
-// *     http://www.apache.org/licenses/LICENSE-2.0
-// *
-// * Unless required by applicable law or agreed to in writing, software
-// * distributed under the License is distributed on an "AS IS" BASIS,
-// * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// * See the License for the specific language governing permissions and
-// * limitations under the License.
-// */
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package zio.flow.remote
 
-import zio.flow.Remote.RemoteFunction
+import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
 import zio.schema.DeriveSchema.gen
-import zio.schema.Schema
 
-class RemoteOptionSyntax[A](val self: Remote[Option[A]]) {
+final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
 
-  def handleOption[B](forNone: Remote[B], f: Remote[A] => Remote[B])(implicit
-    schemaA: Schema[A]
-  ): Remote[B] =
-    Remote.FoldOption(self, forNone, RemoteFunction(f).evaluated)
+  def fold[B](forNone: Remote[B], f: Remote[A] => Remote[B]): Remote[B] =
+    Remote.FoldOption(self, forNone, UnboundRemoteFunction.make(f))
 
-  def isSome(implicit
-    schemaA: Schema[A]
-  ): Remote[Boolean] =
-    handleOption(Remote(false), _ => Remote(true))
+  def isSome: Remote[Boolean] =
+    fold(Remote(false), _ => Remote(true))
 
-  def isNone(implicit
-    schemaA: Schema[A]
-  ): Remote[Boolean] =
-    handleOption(Remote(true), _ => Remote(false))
+  def isNone: Remote[Boolean] =
+    fold(Remote(true), _ => Remote(false))
 
-  final def isEmpty(implicit
-    schemaA: Schema[A]
-  ): Remote[Boolean] = isNone
+  def isEmpty: Remote[Boolean] = isNone
 
-  final def isDefined(implicit
-    schemaA: Schema[A]
-  ): Remote[Boolean] = !isEmpty
+  def isDefined: Remote[Boolean] = !isEmpty
 
-  final def knownSize(implicit
-    schemaA: Schema[A]
-  ): Remote[Int] = handleOption(Remote(0), _ => Remote(1))
+  def knownSize: Remote[Int] = fold(Remote(0), _ => Remote(1))
 
-  final def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] = Remote.OptionContains(self, elem)
+  def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] =
+    self.fold(
+      Remote(false),
+      (value: Remote[A]) => value.widen[A1] === elem
+    )
 
-  def orElse[B >: A](alternative: Remote[Option[B]])(implicit
-    schemaA: Schema[A]
-  ): Remote[Option[B]] = handleOption(alternative, _ => self)
+  def orElse[B >: A](alternative: Remote[Option[B]]): Remote[Option[B]] = fold(alternative, _ => self)
 
-  final def zip[A1 >: A, B](that: Remote[Option[B]]): Remote[Option[(A1, B)]] = Remote.ZipOption(self, that)
+  def zip[B](
+    that: Remote[Option[B]]
+  ): Remote[Option[(A, B)]] =
+    self.fold(
+      Remote.none,
+      (a: Remote[A]) =>
+        that.fold(
+          Remote.none,
+          (b: Remote[B]) => Remote.RemoteSome(Remote.tuple2((a, b)))
+        )
+    )
 }

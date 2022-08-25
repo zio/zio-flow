@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.remote
+package zio.flow.remote.numeric
 
 import zio.flow.Remote
 import zio.schema.{CaseSet, Schema}
@@ -29,6 +29,8 @@ sealed trait Numeric[A] {
   def multiply(left: A, right: A): A
 
   def divide(left: A, right: A): A
+
+  def mod(left: A, right: A): A
 
   def pow(left: A, right: A): A
 
@@ -50,10 +52,31 @@ sealed trait Numeric[A] {
 
   def round(left: A): A
 
+  def unary(op: UnaryNumericOperator, value: A): A =
+    op match {
+      case UnaryNumericOperator.Neg   => negate(value)
+      case UnaryNumericOperator.Abs   => abs(value)
+      case UnaryNumericOperator.Floor => floor(value)
+      case UnaryNumericOperator.Ceil  => ceil(value)
+      case UnaryNumericOperator.Round => round(value)
+    }
+
+  def binary(op: BinaryNumericOperator, left: A, right: A): A =
+    op match {
+      case BinaryNumericOperator.Add  => add(left, right)
+      case BinaryNumericOperator.Mul  => multiply(left, right)
+      case BinaryNumericOperator.Div  => divide(left, right)
+      case BinaryNumericOperator.Mod  => mod(left, right)
+      case BinaryNumericOperator.Pow  => pow(left, right)
+      case BinaryNumericOperator.Root => root(left, right)
+      case BinaryNumericOperator.Log  => log(left, right)
+      case BinaryNumericOperator.Min  => min(left, right)
+      case BinaryNumericOperator.Max  => max(left, right)
+    }
 }
 
 object Numeric extends NumericImplicits0 {
-  implicit object NumericInt extends Numeric[Int] {
+  trait NumericInt extends Numeric[Int] {
     override def fromLong(l: Long): Remote[Int] = Remote(l.toInt)
 
     def add(left: Int, right: Int): Int = left + right
@@ -86,6 +109,7 @@ object Numeric extends NumericImplicits0 {
 
     override def round(left: Int): Int = Math.round(left.toFloat)
   }
+  implicit object NumericInt extends NumericInt
 
   private val shortCase: Schema.Case[NumericShort.type, Numeric[Any]] = Schema.Case[NumericShort.type, Numeric[Any]](
     "NumericShort",
@@ -99,11 +123,12 @@ object Numeric extends NumericImplicits0 {
     _.asInstanceOf[NumericLong.type]
   )
 
-  private val bigIntCase: Schema.Case[NumericBigInt.type, Numeric[Any]] = Schema.Case[NumericBigInt.type, Numeric[Any]](
-    "NumericBigInt",
-    Schema.singleton[NumericBigInt.type](NumericBigInt),
-    _.asInstanceOf[NumericBigInt.type]
-  )
+  private val bigIntCase: Schema.Case[NumericBigInt.type, Numeric[Any]] =
+    Schema.Case[NumericBigInt.type, Numeric[Any]](
+      "NumericBigInt",
+      Schema.singleton[NumericBigInt.type](NumericBigInt),
+      _.asInstanceOf[NumericBigInt.type]
+    )
 
   private val floatCase: Schema.Case[NumericFloat.type, Numeric[Any]] = Schema.Case[NumericFloat.type, Numeric[Any]](
     "NumericFloat",
@@ -111,11 +136,12 @@ object Numeric extends NumericImplicits0 {
     _.asInstanceOf[NumericFloat.type]
   )
 
-  private val doubleCase: Schema.Case[NumericDouble.type, Numeric[Any]] = Schema.Case[NumericDouble.type, Numeric[Any]](
-    "NumericDouble",
-    Schema.singleton[NumericDouble.type](NumericDouble),
-    _.asInstanceOf[NumericDouble.type]
-  )
+  private val doubleCase: Schema.Case[NumericDouble.type, Numeric[Any]] =
+    Schema.Case[NumericDouble.type, Numeric[Any]](
+      "NumericDouble",
+      Schema.singleton[NumericDouble.type](NumericDouble),
+      _.asInstanceOf[NumericDouble.type]
+    )
 
   private val bigDecimalCase: Schema.Case[NumericBigDecimal.type, Numeric[Any]] =
     Schema.Case[NumericBigDecimal.type, Numeric[Any]](
@@ -149,7 +175,7 @@ object Numeric extends NumericImplicits0 {
 
 sealed trait NumericImplicits0 {
 
-  implicit case object NumericShort extends Numeric[Short] {
+  trait NumericShort extends Numeric[Short] {
     override def fromLong(l: Long): Remote[Short] = Remote(l.toShort)
 
     override def add(left: Short, right: Short): Short = (left + right).shortValue()
@@ -157,6 +183,8 @@ sealed trait NumericImplicits0 {
     override def multiply(left: Short, right: Short): Short = (left * right).shortValue()
 
     override def divide(left: Short, right: Short): Short = (left / right).shortValue()
+
+    override def mod(left: Short, right: Short): Short = (left % right).shortValue()
 
     override def pow(left: Short, right: Short): Short = Math.pow(left.toDouble, right.toDouble).toShort
 
@@ -180,8 +208,9 @@ sealed trait NumericImplicits0 {
 
     override def round(left: Short): Short = Math.round(left.toDouble).toShort
   }
+  implicit case object NumericShort extends NumericShort
 
-  implicit case object NumericLong extends Numeric[Long] {
+  trait NumericLong extends Numeric[Long] {
     override def fromLong(l: Long): Remote[Long] = Remote(l)
 
     override def add(left: Long, right: Long): Long = left + right
@@ -189,6 +218,8 @@ sealed trait NumericImplicits0 {
     override def multiply(left: Long, right: Long): Long = left * right
 
     override def divide(left: Long, right: Long): Long = left / right
+
+    override def mod(left: Long, right: Long): Long = left % right
 
     override def pow(left: Long, right: Long): Long = Math.pow(left.toDouble, right.toDouble).toLong
 
@@ -212,8 +243,9 @@ sealed trait NumericImplicits0 {
 
     override def round(left: Long): Long = Math.round(left.toDouble)
   }
+  implicit case object NumericLong extends NumericLong
 
-  implicit case object NumericBigInt extends Numeric[BigInt] {
+  trait NumericBigInt extends Numeric[BigInt] {
     override def fromLong(l: Long): Remote[BigInt] = Remote(BigInt(l))
 
     override def add(left: BigInt, right: BigInt): BigInt = left + right
@@ -222,7 +254,11 @@ sealed trait NumericImplicits0 {
 
     override def divide(left: BigInt, right: BigInt): BigInt = left / right
 
-    override def pow(left: BigInt, right: BigInt): BigInt = BigInt(Math.pow(left.doubleValue, right.doubleValue).toInt)
+    override def mod(left: BigInt, right: BigInt): BigInt = left % right
+
+    override def pow(left: BigInt, right: BigInt): BigInt = BigInt(
+      Math.pow(left.doubleValue, right.doubleValue).toInt
+    )
 
     override def root(left: BigInt, right: BigInt): BigInt = BigInt(
       Math.pow(left.doubleValue, 1 / right.doubleValue).toInt
@@ -248,8 +284,9 @@ sealed trait NumericImplicits0 {
 
     override def round(left: BigInt): BigInt = Math.round(left.doubleValue)
   }
+  implicit case object NumericBigInt extends NumericBigInt
 
-  implicit case object NumericFloat extends Numeric[Float] {
+  trait NumericFloat extends Numeric[Float] {
     override def fromLong(l: Long): Remote[Float] = Remote(l.toFloat)
 
     override def add(left: Float, right: Float): Float = left + right
@@ -257,6 +294,8 @@ sealed trait NumericImplicits0 {
     override def multiply(left: Float, right: Float): Float = left * right
 
     override def divide(left: Float, right: Float): Float = left / right
+
+    override def mod(left: Float, right: Float): Float = left % right
 
     override def pow(left: Float, right: Float): Float = Math.pow(left.toDouble, right.toDouble).toFloat
 
@@ -280,8 +319,9 @@ sealed trait NumericImplicits0 {
 
     override def round(left: Float): Float = Math.round(left).toFloat
   }
+  implicit case object NumericFloat extends NumericFloat
 
-  implicit case object NumericDouble extends Numeric[Double] {
+  trait NumericDouble extends Numeric[Double] {
     override def fromLong(l: Long): Remote[Double] = Remote(l.toDouble)
 
     override def add(left: Double, right: Double): Double = left + right
@@ -289,6 +329,8 @@ sealed trait NumericImplicits0 {
     override def multiply(left: Double, right: Double): Double = left * right
 
     override def divide(left: Double, right: Double): Double = left / right
+
+    override def mod(left: Double, right: Double): Double = left % right
 
     override def pow(left: Double, right: Double): Double = Math.pow(left, right)
 
@@ -312,8 +354,9 @@ sealed trait NumericImplicits0 {
 
     override def round(left: Double): Double = Math.round(left).toDouble
   }
+  implicit case object NumericDouble extends NumericDouble
 
-  implicit case object NumericBigDecimal extends Numeric[BigDecimal] {
+  trait NumericBigDecimal extends Numeric[BigDecimal] {
     override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
 
     override def add(left: BigDecimal, right: BigDecimal): BigDecimal = left + right
@@ -321,6 +364,8 @@ sealed trait NumericImplicits0 {
     override def multiply(left: BigDecimal, right: BigDecimal): BigDecimal = left * right
 
     override def divide(left: BigDecimal, right: BigDecimal): BigDecimal = left / right
+
+    override def mod(left: BigDecimal, right: BigDecimal): BigDecimal = left % right
 
     override def pow(left: BigDecimal, right: BigDecimal): BigDecimal = BigDecimal(
       Math.pow(left.doubleValue, right.doubleValue)
@@ -348,6 +393,7 @@ sealed trait NumericImplicits0 {
 
     override def round(left: BigDecimal): BigDecimal = Math.round(left.doubleValue)
   }
+  implicit case object NumericBigDecimal extends NumericBigDecimal
 }
 
 sealed trait Fractional[A] extends Numeric[A] {
@@ -357,138 +403,50 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def sin(a: A): A
 
-  def inverseSin(a: A): A
+  def asin(a: A): A
 
-  def inverseTan(a: A): A
+  def atan(a: A): A
 
+  def unary(operator: UnaryFractionalOperator, value: A): A =
+    operator match {
+      case UnaryFractionalOperator.Sin    => sin(value)
+      case UnaryFractionalOperator.ArcSin => asin(value)
+      case UnaryFractionalOperator.ArcTan => atan(value)
+    }
 }
 
 object Fractional {
 
-  implicit case object FractionalFloat extends Fractional[Float] {
+  implicit case object FractionalFloat extends Numeric.NumericFloat with Fractional[Float] {
     def fromDouble(const: Double): Float = const.toFloat
-
-    override def fromLong(l: Long): Remote[Float] = Remote(l.toFloat)
-
-    override def add(left: Float, right: Float): Float = left + right
-
-    override def multiply(left: Float, right: Float): Float = left * right
-
-    override def divide(left: Float, right: Float): Float = left / right
-
-    override def pow(left: Float, right: Float): Float = Math.pow(left.toDouble, right.toDouble).toFloat
-
-    override def root(left: Float, right: Float): Float = Math.pow(left.toDouble, 1 / right.toDouble).toFloat
-
-    override def negate(left: Float): Float = -1 * left
-
-    override def log(left: Float, right: Float): Float = (Math.log(left.toDouble) / Math.log(right.toDouble)).toFloat
 
     override def sin(a: Float): Float = Math.sin(a.toDouble).toFloat
 
-    def schema: Schema[Float] = implicitly[Schema[Float]]
+    override def asin(a: Float): Float = Math.asin(a.toDouble).toFloat
 
-    override def abs(left: Float): Float = Math.abs(left)
-
-    override def min(left: Float, right: Float): Float = Math.min(left, right)
-
-    override def max(left: Float, right: Float): Float = Math.max(left, right)
-
-    override def floor(left: Float): Float = Math.floor(left.toDouble).toFloat
-
-    override def ceil(left: Float): Float = Math.ceil(left.toDouble).toFloat
-
-    override def round(left: Float): Float = Math.round(left).toFloat
-
-    override def inverseSin(a: Float): Float = Math.asin(a.toDouble).toFloat
-
-    override def inverseTan(a: Float): Float = Math.atan(a.toDouble).toFloat
-
+    override def atan(a: Float): Float = Math.atan(a.toDouble).toFloat
   }
 
-  implicit case object FractionalDouble extends Fractional[Double] {
+  implicit case object FractionalDouble extends Numeric.NumericDouble with Fractional[Double] {
 
     def fromDouble(const: Double): Double = const.toDouble
 
-    override def fromLong(l: Long): Remote[Double] = Remote(l.toDouble)
-
-    override def add(left: Double, right: Double): Double = left + right
-
-    override def multiply(left: Double, right: Double): Double = left * right
-
-    override def divide(left: Double, right: Double): Double = left / right
-
-    override def pow(left: Double, right: Double): Double = Math.pow(left, right)
-
-    override def root(left: Double, right: Double): Double = Math.pow(left, 1 / right)
-
-    override def log(left: Double, right: Double): Double = Math.log(left) / Math.log(right)
-
-    override def negate(left: Double): Double = -1 * left
-
     override def sin(a: Double): Double = Math.sin(a)
 
-    def schema: Schema[Double] = implicitly[Schema[Double]]
+    override def asin(a: Double): Double = Math.asin(a)
 
-    override def abs(left: Double): Double = Math.abs(left)
-
-    override def min(left: Double, right: Double): Double = Math.min(left, right)
-
-    override def max(left: Double, right: Double): Double = Math.max(left, right)
-
-    override def floor(left: Double): Double = Math.floor(left)
-
-    override def ceil(left: Double): Double = Math.ceil(left)
-
-    override def round(left: Double): Double = Math.round(left).toDouble
-
-    override def inverseSin(a: Double): Double = Math.asin(a)
-
-    override def inverseTan(a: Double): Double = Math.atan(a)
+    override def atan(a: Double): Double = Math.atan(a)
 
   }
 
-  implicit case object FractionalBigDecimal extends Fractional[BigDecimal] {
-
+  implicit case object FractionalBigDecimal extends Numeric.NumericBigDecimal with Fractional[BigDecimal] {
     def fromDouble(const: Double): BigDecimal = BigDecimal(const)
-
-    override def fromLong(l: Long): Remote[BigDecimal] = Remote(BigDecimal(l))
-
-    override def add(left: BigDecimal, right: BigDecimal): BigDecimal = left + right
-
-    override def multiply(left: BigDecimal, right: BigDecimal): BigDecimal = left * right
-
-    override def divide(left: BigDecimal, right: BigDecimal): BigDecimal = left / right
-
-    override def pow(left: BigDecimal, right: BigDecimal): BigDecimal = Math.pow(left.doubleValue, right.doubleValue)
-
-    override def root(left: BigDecimal, right: BigDecimal): BigDecimal =
-      Math.pow(left.doubleValue, 1 / right.doubleValue)
-
-    override def negate(left: BigDecimal): BigDecimal = -1 * left
-
-    override def log(left: BigDecimal, right: BigDecimal): BigDecimal =
-      Math.log(left.doubleValue) / Math.log(right.doubleValue)
 
     override def sin(a: BigDecimal): BigDecimal = Math.sin(a.doubleValue)
 
-    def schema: Schema[BigDecimal] = implicitly[Schema[BigDecimal]]
+    override def asin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
 
-    override def abs(left: BigDecimal): BigDecimal = Math.abs(left.doubleValue)
-
-    override def min(left: BigDecimal, right: BigDecimal): BigDecimal = Math.min(left.doubleValue, right.doubleValue)
-
-    override def max(left: BigDecimal, right: BigDecimal): BigDecimal = Math.max(left.doubleValue, right.doubleValue)
-
-    override def floor(left: BigDecimal): BigDecimal = Math.floor(left.doubleValue)
-
-    override def ceil(left: BigDecimal): BigDecimal = Math.ceil(left.doubleValue)
-
-    override def round(left: BigDecimal): BigDecimal = Math.round(left.doubleValue)
-
-    override def inverseSin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
-
-    override def inverseTan(a: BigDecimal): BigDecimal =
+    override def atan(a: BigDecimal): BigDecimal =
       Math.atan(a.doubleValue)
 
   }

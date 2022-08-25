@@ -17,6 +17,10 @@
 package zio.flow
 
 import zio.{ZEnvironment, ZIO}
+import zio.flow.Operation.Http
+import zio.flow.operation.http._
+import zhttp.service.EventLoopGroup
+import zhttp.service.ChannelFactory
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
@@ -30,5 +34,16 @@ trait OperationExecutor[-R] { self =>
     new OperationExecutor[Any] {
       override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
         self.execute(input, operation).provideEnvironment(env)
+    }
+}
+
+case class OperationExecutorImpl() extends OperationExecutor[EventLoopGroup with ChannelFactory] {
+  override def execute[I, A](
+    input: I,
+    operation: Operation[I, A]
+  ): ZIO[EventLoopGroup with ChannelFactory, ActivityError, A] =
+    operation match {
+      case Http(host, api) =>
+        api.call(host)(input).mapError(e => ActivityError(s"Failed ${api.method} request to $host", Option(e)))
     }
 }

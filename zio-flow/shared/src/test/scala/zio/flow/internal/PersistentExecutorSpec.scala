@@ -1,33 +1,49 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.internal
 
 import zio.{ZNothing, _}
 import zio.flow._
+import zio.flow.mock.MockedOperation
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.{DeriveSchema, Schema}
-import zio.test.Assertion.{dies, equalTo, hasMessage}
-import zio.test.{Live, TestAspect, TestClock, TestResult, assert, assertTrue, live}
+import zio.test.Assertion.{dies, equalTo, fails, hasMessage, isNone}
+import zio.test.{Live, TestClock, TestResult, assert, assertTrue}
 
-import java.net.URI
 import java.time.Instant
 import java.util.concurrent.TimeUnit
-
+import java.util.concurrent.atomic.AtomicInteger
+import zio.flow.operation.http.API
+import zio.flow.serialization.{Deserializer, Serializer}
 object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private val unit: Unit = ()
+  private val counter    = new AtomicInteger(0)
 
   private val testActivity: Activity[Int, Int] =
     Activity(
       "Test Activity",
       "Mock activity created for test",
       Operation.Http[Int, Int](
-        new URI("testUrlForActivity.com"),
-        "GET",
-        Map.empty[String, String],
-        Schema[Int],
-        Schema[Int]
+        "testUrlForActivity.com",
+        API.get("").input[Int].output[Int]
       ),
       ZFlow.succeed(12),
-      ZFlow.succeed(15)
+      ZFlow.unit
     )
 
   val suite1 = suite("Operators in single run")(
@@ -47,14 +63,14 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     testFlow("foldM - success side") {
       ZFlow
         .succeed(15)
-        .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
+        .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
       assertTrue(result == unit)
     },
     testFlow("foldM - error side") {
       ZFlow
         .fail(15)
-        .foldM(_ => ZFlow.unit, _ => ZFlow.unit)
+        .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
     } { result =>
       assertTrue(result == unit)
     },
@@ -115,7 +131,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
               // TODO cleaner way to just notify failure?
               ZIO.succeed(assertTrue(false))
             case Some(r) =>
-              r.map(wr => assertTrue(wr.toTypedValue(Schema[Instant]) == Right(Instant.ofEpochSecond(5L))))
+              r.map(wr => assertTrue(wr.result.toTypedValue(Schema[Instant]) == Right(Instant.ofEpochSecond(5L))))
           }
         }
       }
@@ -128,6 +144,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                  now <- ZFlow.now
                } yield now
         fiber  <- flow.evaluateTestPersistent("waitTill").fork
+        _      <- TestClock.adjust(2.seconds)
+        result <- fiber.join
+      } yield assertTrue(result.getEpochSecond == 2L)
+    },
+    test("sleep") {
+      for {
+        curr <- Clock.currentTime(TimeUnit.SECONDS)
+        flow = for {
+                 _   <- ZFlow.sleep(2.seconds)
+                 now <- ZFlow.now
+               } yield now
+        fiber  <- flow.evaluateTestPersistent("sleep").fork
         _      <- TestClock.adjust(2.seconds)
         result <- fiber.join
       } yield assertTrue(result.getEpochSecond == 2L)
@@ -155,14 +183,27 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 //    },
     testFlow("Activity") {
       testActivity(12)
-    } { result =>
-      assertTrue(result == 12)
-    },
+    }(
+      assert = result => assertTrue(result == 12),
+      mock = MockedOperation.Http[Int, Int](
+        urlMatcher = equalTo("testUrlForActivity.com"),
+        methodMatcher = equalTo("GET"),
+        result = () => 12
+      )
+    ),
     testFlow("iterate") {
       ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
     } { result =>
       assertTrue(result == 10)
-    } @@ TestAspect.ignore, // TODO: fix recursion support
+    },
+    testFlow("Read") {
+      for {
+        variable <- ZFlow.newVar[Int]("var", 0)
+        a        <- variable.get
+      } yield a
+    } { result =>
+      assertTrue(result == 0)
+    },
     testFlow("Modify") {
       for {
         variable <- ZFlow.newVar[Int]("var", 0)
@@ -185,14 +226,321 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         i1 < i2
       )
     },
-    testFlow("transaction") {
-      // TODO: test transactional behavior
-      ZFlow.transaction { _ =>
-        ZFlow.succeed(100)
+    suite("transactions")(
+      testFlow("nop transaction") {
+        ZFlow.transaction { _ =>
+          ZFlow.succeed(100)
+        }
+      } { result =>
+        assertTrue(result == 100)
+      },
+      testFlow("setting variables in transaction") {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          var2 <- ZFlow.newVar[Int]("var2", 20)
+          _ <- ZFlow.transaction { _ =>
+                 for {
+                   _ <- var1.set(100)
+                   _ <- var2.set(200)
+                 } yield ()
+               }
+          v1 <- var1.get
+          v2 <- var2.get
+        } yield (v1, v2)
+      } { result =>
+        assertTrue(result == ((100, 200)))
+      },
+      testFlow("setting variables in a forked transaction") {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          fiber <- ZFlow.transaction { _ =>
+                     for {
+                       _ <- var1.set(100)
+                     } yield ()
+                   }.fork
+          _  <- fiber.await
+          v1 <- var1.get
+        } yield v1
+      } { result =>
+        assertTrue(result == 100)
+      },
+      testFlow("can return with a variable not existing outside") {
+        for {
+          fiber <- ZFlow.transaction { _ =>
+                     for {
+                       variable <- ZFlow.newVar("inner", 123)
+                       v0       <- variable.get
+                     } yield v0
+                   }.fork
+          v1 <- fiber.await
+        } yield v1
+      } { result =>
+        assertTrue(result == Right(123))
+      },
+      testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(500.millis)) {
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 10)
+          var2 <- ZFlow.newVar[Int]("var2", 20)
+          now  <- ZFlow.now
+          fib1 <- ZFlow.transaction { _ =>
+                    for {
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var1.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var2.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                    } yield ()
+                  }.fork
+          fib2 <- ZFlow.transaction { _ =>
+                    for {
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var1.update(_ + 1)
+                      _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                      _ <- var2.update(_ + 1)
+                    } yield ()
+                  }.fork
+
+          _  <- fib1.await
+          _  <- fib2.await
+          v1 <- var1.get
+          v2 <- var2.get
+        } yield (v1, v2)
+      } { result =>
+        assertTrue(result == ((12, 22)))
+      },
+      testFlow(
+        "retried transaction runs activity compensations in reverse order",
+        periodicAdjustClock = Some(1.second)
+      ) {
+
+        val activity1Undo1 = Activity(
+          "activity1Undo1",
+          "activity1Undo1",
+          Operation.Http("http://activity1/undo/1", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity1Undo2 = Activity(
+          "activity1Undo2",
+          "activity1Undo2",
+          Operation.Http("http://activity1/undo/2", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity2Undo = Activity(
+          "activity2Undo",
+          "activity2Undo",
+          Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+
+        val activity1 = Activity(
+          "activity1",
+          "activity1",
+          Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity1Undo1(n) *> activity1Undo2(n)).unit
+        )
+        val activity2 = Activity(
+          "activity2",
+          "activity2",
+          Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
+        )
+
+        for {
+          var1 <- ZFlow.newVar[Int]("var1", 1)
+          fib1 <- ZFlow.transaction { _ =>
+                    for {
+                      _  <- ZFlow.log(s"Starting transaction")
+                      v1 <- var1.get
+                      _  <- ZFlow.log(s"Got value of var1")
+                      _  <- activity1(v1)
+                      _  <- activity2(v1)
+                      _  <- var1.set(v1 + 1)
+                    } yield ()
+                  }.fork
+          now <- ZFlow.now
+          _   <- ZFlow.waitTill(now.plusSeconds(2L))
+          _   <- ZFlow.log(s"Modifying value var1")
+          _   <- var1.set(10)
+          _   <- ZFlow.log(s"Modified value var1")
+          _   <- fib1.await
+        } yield ()
+      }(
+        result => assertTrue(result == (())),
+        mock =
+          // First run (with input=1)
+          MockedOperation.Http(
+            urlMatcher = equalTo("http://activity1"),
+            methodMatcher = equalTo("GET"),
+            inputMatcher = equalTo(1),
+            result = () => 100,
+            duration = 2.seconds
+          ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity2"),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(1),
+              result = () => 200,
+              duration = 2.seconds
+            ) ++
+            // Revert
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity2/undo"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(200),
+              result = () => -2
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity1/undo/1"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -1
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity1/undo/2"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -11
+            ) ++
+            // Second run (with input=10)
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity1"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(10),
+              result = () => 100,
+              duration = 10.millis
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity2"),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(10),
+              result = () => 200,
+              duration = 10.millis
+            )
+      ),
+      testFlowExit(
+        "failed transaction runs activity compensations in reverse order",
+        periodicAdjustClock = Some(1.second)
+      ) {
+
+        val activity1Undo = Activity(
+          "activity1Undo",
+          "activity1Undo",
+          Operation.Http("http://activity1/undo", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+        val activity2Undo = Activity(
+          "activity2Undo",
+          "activity2Undo",
+          Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.unit
+        )
+
+        val activity1 = Activity(
+          "activity1",
+          "activity1",
+          Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity1Undo(n)).unit
+        )
+        val activity2 = Activity(
+          "activity2",
+          "activity2",
+          Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
+          ZFlow.succeed(0),
+          ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
+        )
+
+        for {
+          _ <- ZFlow.transaction { _ =>
+                 for {
+                   _ <- activity1(1)
+                   _ <- activity2(1)
+                   _ <- ZFlow.fail(ActivityError("simulated failure", None))
+                 } yield ()
+               }
+        } yield ()
+      }(
+        result =>
+          assert(result)(fails(equalTo(ActivityError("simulated failure", None)))) &&
+            assert(result.causeOption.flatMap(_.dieOption))(isNone),
+        mock =
+          // First run
+          MockedOperation.Http(
+            urlMatcher = equalTo("http://activity1"),
+            methodMatcher = equalTo("GET"),
+            inputMatcher = equalTo(1),
+            result = () => 100
+          ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity2"),
+              methodMatcher = equalTo("POST"),
+              inputMatcher = equalTo(1),
+              result = () => 200
+            ) ++
+            // Revert
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity2/undo"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(200),
+              result = () => -2
+            ) ++
+            MockedOperation.Http(
+              urlMatcher = equalTo("http://activity1/undo"),
+              methodMatcher = equalTo("GET"),
+              inputMatcher = equalTo(100),
+              result = () => -1
+            )
+      ),
+      testFlowAndLogs("retry until", periodicAdjustClock = Some(200.millis)) {
+        for {
+          variable <- ZFlow.newVar("var", 0)
+          fiber <- ZFlow.transaction { tx =>
+                     for {
+                       value <- variable.get
+                       _     <- ZFlow.log("TX")
+                       _     <- tx.retryUntil(value === 1)
+                     } yield value
+                   }.fork
+          _      <- ZFlow.sleep(1.second)
+          _      <- variable.set(1)
+          _      <- ZFlow.log("Waiting for the transaction fiber to stop")
+          result <- fiber.await
+        } yield result
+      } { (result, logs) =>
+        assertTrue(
+          result == Right(1),
+          logs.filter(_ == "TX").size == 2
+        )
+      },
+      testFlowAndLogs("orTry, second succeeds", periodicAdjustClock = Some(200.millis)) {
+        for {
+          variable <- ZFlow.newVar("var", 0)
+          fiber <- ZFlow.transaction { tx =>
+                     for {
+                       value <- variable.get
+                       _     <- ZFlow.log("TX1")
+                       _ <- tx.retryUntil(value === 1).orTry {
+                              ZFlow.log("TX2")
+                            }
+                     } yield 1
+                   }.fork
+          _      <- ZFlow.log("Waiting for the transaction fiber to stop")
+          result <- fiber.await
+        } yield result
+      } { (result, logs) =>
+        assertTrue(
+          result == Right(1),
+          logs.filter(_.startsWith("TX")) == Chunk("TX1", "TX2")
+        )
       }
-    } { result =>
-      assertTrue(result == 100)
-    },
+    ),
     testFlow("unwrap") {
       val flow = for {
         wrapped   <- ZFlow.input[ZFlow[Any, ZNothing, Int]]
@@ -202,6 +550,26 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       flow.provide(ZFlow.succeed(100))
     } { result =>
       assertTrue(result == 100)
+    },
+    testFlow("unwrap twice") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.succeed(ZFlow.succeed(10)))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
+    },
+    testFlow("nested unwrap") {
+      for {
+        wrapped <- ZFlow.succeed(ZFlow.unwrap(ZFlow.succeed(ZFlow.succeed(10))))
+        first   <- ZFlow.unwrap(wrapped)
+        second  <- ZFlow.unwrap(first)
+        result  <- second
+      } yield result
+    } { result =>
+      assertTrue(result == 10)
     },
     test("fork/await") {
       for {
@@ -251,7 +619,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         logs.contains("third"),
         !logs.contains("second")
       )
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     test("timeout works") {
       for {
         curr <- Clock.currentTime(TimeUnit.SECONDS)
@@ -263,7 +631,7 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
         _      <- TestClock.adjust(3.seconds)
         result <- fiber.join
       } yield assertTrue(result == None)
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     testFlow("timeout interrupts", periodicAdjustClock = Some(1.seconds)) {
       for {
         now <- ZFlow.now
@@ -277,13 +645,12 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield r
     } { result =>
       assertTrue(result == false)
-    } @@ TestAspect.ignore, // TODO: reenable, started to fail on RC6 on CI only
+    },
     testFlowExit[String, Nothing]("die") {
       ZFlow.fail("test").orDie
     } { (result: Exit[String, Nothing]) =>
       assert(result)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
     }
-    // TODO: retryUntil, orTry
   )
 
   val suite2 = suite("Restarted flows")(
@@ -392,13 +759,267 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
     }
   )
 
+  val suite3 = suite("ZFlow operators")(
+    testFlow("cons") {
+      ZFlow(Remote(1))
+        .map(Remote.Cons(Remote(List.empty[Int]), _))
+    } { result =>
+      assertTrue(result == List(1))
+    },
+    testFlow("zflow fold") {
+      ZFlow
+        .succeed(1)
+        .foldFlow(
+          (_: Remote[ZNothing]) => ZFlow.succeed("failed"),
+          (_: Remote[Int]) => ZFlow.succeed("succeeded")
+        )
+    } { res =>
+      assertTrue(res == "succeeded")
+    },
+    testFlow("list fold") {
+      ZFlow.succeed(
+        Remote(List(1, 2, 3))
+          .fold(Remote(0))(_ + _)
+      )
+    } { res =>
+      assertTrue(res == 6)
+    },
+    testFlow("list fold zflows, ignore accumulator") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (_, n) =>
+            ZFlow.succeed(n)
+          }
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("list fold zflows, ignore elem") {
+      ZFlow.unwrap {
+        Remote(List(1, 2, 3))
+          .fold(ZFlow.succeed(0)) { case (acc, _) =>
+            acc
+          }
+      }
+    } { res =>
+      assertTrue(res == 0)
+    },
+    testFlow("unwrap list fold zflows") {
+      val foldedFlow = Remote(List(1, 2))
+        .fold(ZFlow.succeed(0)) { case (flow, n) =>
+          flow.flatMap { prevFlow =>
+            ZFlow.unwrap(prevFlow).map(_ + n)
+          }
+        }
+      ZFlow.unwrap {
+        foldedFlow
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("unwrap list manually fold zflows") {
+      ZFlow.unwrap {
+        ZFlow.unwrap(Remote(ZFlow.unwrap(Remote(ZFlow.succeed(0))).map(_ + 1))).map(_ + 2)
+      }
+    } { res =>
+      assertTrue(res == 3)
+    },
+    testFlow("foreach") {
+      ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    },
+    testFlow("foreachPar") {
+      ZFlow.foreachPar(Remote(List.range(1, 10)))(ZFlow(_))
+    } { res =>
+      assertTrue(res == List.range(1, 10))
+    },
+    testFlow("unwrap remote flows in parallel") {
+      val flows: List[ZFlow[Any, ZNothing, Int]] =
+        List.range(1, 10).map(ZFlow(_))
+
+      val collected: ZFlow[Any, ActivityError, List[Int]] =
+        ZFlow.foreachPar(Remote(flows))(ZFlow.unwrap[Any, ZNothing, Int])
+
+      collected
+    } { collected =>
+      assertTrue(collected == List.range(1, 10))
+    },
+    testFlow("remote recursion") {
+      ZFlow.unwrap {
+        Remote.recurse[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
+          (for {
+            value <- ZFlow.unwrap(getValue)
+            _     <- ZFlow.log("recursion step")
+            result <- ZFlow.ifThenElse(value === 10)(
+                        ifTrue = ZFlow.succeed(value),
+                        ifFalse = ZFlow.unwrap(rec(ZFlow.succeed(value + 1)))
+                      )
+          } yield result).toRemote
+        }
+      }
+    } { res =>
+      assertTrue(res == 10)
+    },
+    testFlow("flow recursion") {
+      ZFlow.recurse[Any, ZNothing, Int](0) { case (value, rec) =>
+        ZFlow.log("recursion step") *>
+          ZFlow.ifThenElse(value === 10)(
+            ifTrue = ZFlow.succeed(value),
+            ifFalse = rec(value + 1)
+          )
+      }
+    } { res =>
+      assertTrue(res == 10)
+    }
+  )
+
+  val suite4 = suite("Garbage Collection")(
+    testGCFlow("Unused simple variable gets deleted") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        _  <- ZFlow.newVar[Int]("v2", 1)
+        _  <- v1.set(10)
+        _  <- break
+        _  <- v1.set(100)
+        r  <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 100,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Unused simple variable gets deleted"))
+          )
+        ),
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v2"),
+            RemoteVariableScope.TopLevel(FlowId("Unused simple variable gets deleted"))
+          )
+        )
+      )
+    },
+    testGCFlow("Variable referenced by flow is kept") { break =>
+      for {
+        v1    <- ZFlow.newVar[Int]("v1", 1)
+        v2    <- ZFlow.newVar[ZFlow[Any, ZNothing, Int]]("v2", v1.updateAndGet(_ + 1))
+        _     <- break
+        flow2 <- v2.get
+        r     <- ZFlow.unwrap(flow2)
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 2,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Variable referenced by flow is kept"))
+          )
+        ),
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v2"),
+            RemoteVariableScope.TopLevel(FlowId("Variable referenced by flow is kept"))
+          )
+        )
+      )
+    },
+    testGCFlow("Chain of computation") { break =>
+      for {
+        a <- ZFlow.newVar[Int]("v1", 1)
+        b <- a.get.map(_ + 1)
+        c <- b + 1
+        _ <- break
+        r <- c + 1
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 4,
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Chain of computation"))
+          )
+        )
+      )
+    },
+    testGCFlow("Shadowed variable of fiber is kept") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        fiber <- (
+                   for {
+                     v1 <- ZFlow.newVar[Int]("v1", 2)
+                     _  <- ZFlow.sleep(1.day)
+                   } yield v1
+                 ).fork
+        _ <- break
+        _ <- fiber.interrupt
+        r <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 1,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Shadowed variable of fiber is kept"))
+          )
+        ),
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.Fiber(
+              FlowId("fork0"),
+              RemoteVariableScope.TopLevel(FlowId("Shadowed variable of fiber is kept"))
+            )
+          )
+        )
+      )
+    },
+    testGCFlow("Shadowed variable of interrupted fiber is deleted") { break =>
+      for {
+        v1 <- ZFlow.newVar[Int]("v1", 1)
+        fiber <- (
+                   for {
+                     v1 <- ZFlow.newVar[Int]("v1", 2)
+                     _  <- ZFlow.sleep(1.day)
+                   } yield v1
+                 ).fork
+        _ <- fiber.interrupt
+        _ <- break
+        r <- v1.get
+      } yield r
+    } { (result, vars) =>
+      assertTrue(
+        result == 1,
+        vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.TopLevel(FlowId("Shadowed variable of interrupted fiber is deleted"))
+          )
+        ),
+        !vars.contains(
+          ScopedRemoteVariableName(
+            RemoteVariableName("v1"),
+            RemoteVariableScope.Fiber(
+              FlowId("fork0"),
+              RemoteVariableScope.TopLevel(FlowId("Shadowed variable of interrupted fiber is deleted"))
+            )
+          )
+        )
+      )
+    }
+  )
+
   override def spec =
-    suite("All tests")(suite1, suite2)
+    suite("All tests")(suite1, suite2, suite3, suite4)
       .provideCustom(
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory,
-        Runtime.addLogger(ZLogger.default.map(println(_)))
+        Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))
       )
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
@@ -406,8 +1027,10 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
 
   private def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String,
-    periodicAdjustClock: Option[Duration] = None
-  )(flow: ZFlow[Any, E, A])(assert: (Exit[E, A], Chunk[String]) => TestResult) =
+    periodicAdjustClock: Option[Duration]
+  )(
+    flow: ZFlow[Any, E, A]
+  )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation) =
     test(label) {
       for {
         logQueue <- Queue.unbounded[String]
@@ -420,18 +1043,18 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun(logQueue.offer(message()).unit)
+                     runtime.unsafe.run(logQueue.offer(message()).unit).getOrThrowFiberFailure()
                      msg
                    }
                  }
         fiber <-
           flow
-            .evaluateTestPersistent(label)
+            .evaluateTestPersistent("wf" + counter.incrementAndGet().toString, mock)
             .provideSomeLayer[DurableLog with KeyValueStore](Runtime.addLogger(logger))
             .exit
             .fork
@@ -446,22 +1069,29 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
   private def testFlowAndLogs[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None
-  )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult) =
-    testFlowAndLogsExit(label, periodicAdjustClock)(flow) { case (exit, logs) =>
-      exit.fold(cause => throw new FiberFailure(cause), result => assert(result, logs))
-    }
+  )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
+    testFlowAndLogsExit(label, periodicAdjustClock)(flow)(
+      { case (exit, logs) =>
+        exit.foldExit(cause => throw FiberFailure(cause), result => assert(result, logs))
+      },
+      mock
+    )
 
   private def testFlow[E: Schema, A: Schema](label: String, periodicAdjustClock: Option[Duration] = None)(
     flow: ZFlow[Any, E, A]
   )(
-    assert: A => TestResult
+    assert: A => TestResult,
+    mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogs(label, periodicAdjustClock)(flow) { case (result, _) => assert(result) }
+    testFlowAndLogs(label, periodicAdjustClock)(flow)({ case (result, _) => assert(result) }, mock)
 
-  private def testFlowExit[E: Schema, A: Schema](label: String)(flow: ZFlow[Any, E, A])(
-    assert: Exit[E, A] => TestResult
+  private def testFlowExit[E: Schema, A: Schema](label: String, periodicAdjustClock: Option[Duration] = None)(
+    flow: ZFlow[Any, E, A]
+  )(
+    assert: Exit[E, A] => TestResult,
+    mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogsExit(label)(flow) { case (result, _) => assert(result) }
+    testFlowAndLogsExit(label, periodicAdjustClock)(flow)({ case (result, _) => assert(result) }, mock)
 
   private def testRestartFlowAndLogs[E: Schema, A: Schema](
     label: String
@@ -480,17 +1110,17 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
                      logLevel: LogLevel,
                      message: () => String,
                      cause: Cause[Any],
-                     context: Map[FiberRef[_], Any],
+                     context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = {
+                   ): String = Unsafe.unsafeCompat { implicit u =>
                      val msg = message()
-                     runtime.unsafeRun {
+                     runtime.unsafe.run {
                        msg match {
                          case "!!!BREAK!!!" => breakPromise.succeed(())
                          case _             => logQueue.offer(msg).unit
                        }
-                     }
+                     }.getOrThrowFiberFailure()
                      msg
                    }
                  }
@@ -527,20 +1157,82 @@ object PersistentExecutorSpec extends ZIOFlowBaseSpec {
       } yield assert.tupled(results)
     }
 
+  private def testGCFlow[E: Schema, A: Schema](
+    label: String
+  )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Set[ScopedRemoteVariableName]) => TestResult) =
+    test(label) {
+      for {
+        _            <- ZIO.logDebug(s"=== testGCFlow $label started === ")
+        runtime      <- ZIO.runtime[Any]
+        breakPromise <- Promise.make[Nothing, Unit]
+        logger = new ZLogger[String, Any] {
+
+                   override def apply(
+                     trace: Trace,
+                     fiberId: FiberId,
+                     logLevel: LogLevel,
+                     message: () => String,
+                     cause: Cause[Any],
+                     context: FiberRefs,
+                     spans: List[LogSpan],
+                     annotations: Map[String, String]
+                   ): String = Unsafe.unsafeCompat { implicit u =>
+                     val msg = message()
+                     runtime.unsafe.run {
+                       msg match {
+                         case "!!!BREAK!!!" => breakPromise.succeed(())
+                         case _             => ZIO.unit
+                       }
+                     }.getOrThrowFiberFailure()
+                     msg
+                   }
+                 }
+        results <- {
+          val break: ZFlow[Any, Nothing, Unit] =
+            (ZFlow.log("!!!BREAK!!!") *>
+              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+          val finalFlow = flow(break)
+
+          ZIO.scoped[Live with DurableLog with KeyValueStore] {
+            for {
+              pair <- finalFlow
+                        .submitTestPersistent(label)
+                        .provideSomeLayer[Scope with DurableLog with KeyValueStore](Runtime.addLogger(logger))
+              (executor, fiber) = pair
+              _                <- ZIO.logDebug(s"Adjusting clock by 20s")
+              _                <- TestClock.adjust(20.seconds)
+              _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+                     breakPromise.await
+                   }
+              _ <- ZIO.logDebug("Forcing GC")
+              _ <- executor.forceGarbageCollection()
+              vars <-
+                RemoteVariableKeyValueStore.allStoredVariables.runCollect
+                  .provideSome[DurableLog with KeyValueStore](
+                    RemoteVariableKeyValueStore.live,
+                    ZLayer.succeed(
+                      ExecutionEnvironment(Serializer.json, Deserializer.json)
+                    ) // TODO: this should not be recreated here
+                  )
+              _ <- ZIO.logDebug(s"Adjusting clock by 200s")
+              _ <- TestClock.adjust(200.seconds)
+              result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+                          fiber.join
+                        }
+            } yield (result, vars.toSet)
+          }
+        }
+      } yield assert.tupled(results)
+    }
+
   private def waitAndPeriodicallyAdjustClock[E, A](
     description: String,
     duration: Duration,
     adjustment: Duration
   )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
-      _ <- ZIO.logDebug(s"Waiting for $description")
-      liveClockLayer = ZLayer.scoped {
-                         for {
-                           clock <- live(ZIO.clock)
-                           _     <- ZEnv.services.locallyScopedWith(_.add(clock))
-                         } yield ()
-                       }
-      maybeResult <- wait.timeout(1.second).provideSomeLayer[Live](liveClockLayer)
+      _           <- ZIO.logDebug(s"Waiting for $description")
+      maybeResult <- wait.timeout(1.second).withClock(Clock.ClockLive)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None =>

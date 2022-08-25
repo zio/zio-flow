@@ -1,21 +1,37 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.remote
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow.{Remote, RemoteContext}
-import zio.test.{TestResult, Spec, TestEnvironment}
+import zio.flow.{LocalContext, Remote, RemoteContext}
+import zio.test.{Spec, TestEnvironment, TestResult}
 
 object RemoteOptionSpec extends RemoteSpecBase {
   val suite1: Spec[TestEnvironment, Any] =
     suite("RemoteOptionSpec")(
       test("HandleOption for Some") {
         val option: Remote[Option[Int]] = Remote(Option(12))
-        val optionHandled: Remote[Int]  = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled: Remote[Int]  = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
         optionHandled <-> 24
       },
       test("HandleOption for None") {
         val option        = Remote[Option[Int]](None)
-        val optionHandled = option.handleOption(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
         optionHandled <-> 0
       },
       test("isSome") {
@@ -31,7 +47,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("isNone") {
-        val op1 = Remote[Option[Int]](None) // TODO: otherwise diverging implicits. Should Remote be invariant?
+        val op1 = Remote.none
         val op2 = Remote(Option(12))
         ZIO
           .collectAll(
@@ -103,7 +119,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       },
-      test("OptionSpec") {
+      test("zip") {
         val op1 = Remote[Option[Int]](None)
         val op2 = Remote(Option(12))
         val op3 = Remote(Option(10))
@@ -117,7 +133,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       }
-    ).provide(RemoteContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   override def spec = suite("OptionSpec")(suite1)
 }

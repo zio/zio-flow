@@ -28,22 +28,28 @@ class WorkflowEndpoint(pExec: ZFlowExecutor) {
 
     // Poll for a result
     case Method.GET -> !! / "poll" / uuid =>
-      val maybeResponse = pExec.pollWorkflowDynTyped(FlowId(uuid)).flatMap {
-        case None =>
-          // Job not done yet, nothing to return
-          ZIO.succeed(Response.text("Come back later"))
-        case Some(r) =>
-          // We have a result: serialize and send back.
-          // TODO should we have a class that will convey success/failure information?
-          r.fold(
-            err =>
-              // TODO convey back that it's a failure?
-              JsonCodec.encode(Schema[DynamicValue])(err),
-            ok =>
-              // TODO convey back that it's a success?
-              JsonCodec.encode(Schema[DynamicValue])(ok)
-          ).map(bytes => Response.json(new String(bytes.toArray, StandardCharsets.UTF_8)))
-      }
+      val maybeResponse =
+        FlowId
+          .make(uuid)
+          .toZIO
+          .mapError(new IllegalArgumentException(_))
+          .flatMap(pExec.pollWorkflowDynTyped)
+          .flatMap {
+            case None =>
+              // Job not done yet, nothing to return
+              ZIO.succeed(Response.text("Come back later"))
+            case Some(r) =>
+              // We have a result: serialize and send back.
+              // TODO should we have a class that will convey success/failure information?
+              r.fold(
+                err =>
+                  // TODO convey back that it's a failure?
+                  JsonCodec.encode(Schema[DynamicValue])(err),
+                ok =>
+                  // TODO convey back that it's a success?
+                  JsonCodec.encode(Schema[DynamicValue])(ok.result)
+              ).map(bytes => Response.json(new String(bytes.toArray, StandardCharsets.UTF_8)))
+          }
 
       maybeResponse.fold(
         e => Response.text("Ran into an error while checking for a result: " + e),

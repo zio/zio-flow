@@ -1,7 +1,23 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.rocksdb
 
 import org.{rocksdb => jrocks}
-import zio.flow.internal.{KeyValueStore, RocksDbKeyValueStore}
+import zio.flow.internal.{KeyValueStore, RocksDbKeyValueStore, Timestamp}
 import zio.nio.file.Files
 import zio.rocksdb.TransactionDB
 import zio.test.Assertion.hasSameElements
@@ -57,10 +73,10 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
           ZIO.scoped {
             // The rocksdb kv store takes care of creating non-existing namespaces
             for {
-              putSucceeded1 <- KeyValueStore.put(namespace, key, value1)
-              retrieved1    <- KeyValueStore.get(namespace, key)
-              putSucceeded2 <- KeyValueStore.put(namespace, key, value2)
-              retrieved2    <- KeyValueStore.get(namespace, key)
+              putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+              retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
+              putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+              retrieved2    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
             } yield assertTrue(
               putSucceeded1,
               retrieved1.get == value1,
@@ -77,7 +93,7 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
           val nonExistentNamespace = newTimeBasedName()
 
           KeyValueStore
-            .get(nonExistentNamespace, key)
+            .getLatest(nonExistentNamespace, key, None)
             .map { retrieved =>
               assertTrue(
                 retrieved.isEmpty
@@ -97,8 +113,8 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
           ZIO.scoped {
 
             for {
-              putSucceeded <- KeyValueStore.put(namespace, key, value)
-              retrieved    <- KeyValueStore.get(namespace, nonExistingKey)
+              putSucceeded <- KeyValueStore.put(namespace, key, value, Timestamp(1L))
+              retrieved    <- KeyValueStore.getLatest(namespace, nonExistingKey, Some(Timestamp(2L)))
             } yield assertTrue(
               retrieved.isEmpty,
               putSucceeded
@@ -135,7 +151,7 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
             putSuccesses <-
               ZIO
                 .foreach(keyValuePairs) { case (key, value) =>
-                  KeyValueStore.put(uniqueTableName, key, value)
+                  KeyValueStore.put(uniqueTableName, key, value, Timestamp(1L))
                 }
             retrieved <-
               KeyValueStore
@@ -149,6 +165,40 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
             ) &&
             assert(retrieved)(
               hasSameElements(keyValuePairs)
+            )
+          }
+        }
+      },
+      test("should return all keys for a `scanAllKeys` call.") {
+        val uniqueTableName = newTimeBasedName()
+        val keyValuePairs =
+          Chunk
+            .fromIterable(1 to 1001)
+            .map { n =>
+              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
+            }
+        val expectedLength = keyValuePairs.length
+
+        ZIO.scoped {
+
+          for {
+            putSuccesses <-
+              ZIO
+                .foreach(keyValuePairs) { case (key, value) =>
+                  KeyValueStore.put(uniqueTableName, key, value, Timestamp(1L))
+                }
+            retrieved <-
+              KeyValueStore
+                .scanAllKeys(uniqueTableName)
+                .runCollect
+          } yield {
+            assertTrue(
+              putSuccesses.length == expectedLength,
+              putSuccesses.toSet == Set(true),
+              retrieved.length == expectedLength
+            ) &&
+            assert(retrieved)(
+              hasSameElements(keyValuePairs.map(_._1))
             )
           }
         }
