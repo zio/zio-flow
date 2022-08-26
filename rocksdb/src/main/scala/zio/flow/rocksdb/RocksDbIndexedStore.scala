@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
+import zio.flow.internal.IndexedStore
 import zio.flow.internal.IndexedStore.Index
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{Chunk, IO, Promise, ZIO, ZLayer}
+import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
 
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 final case class RocksDbIndexedStore(
   rocksDB: TransactionDB,
@@ -51,9 +53,15 @@ final case class RocksDbIndexedStore(
       cfHandle <- getOrCreateNamespace(topic)
       positionBytes <-
         rocksDB.get(cfHandle, ProtobufCodec.encode(Schema[String])("POSITION").toArray).orDie
-      position <- ZIO
-                    .fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes.get)))
-                    .mapError(s => new IOException(s))
+      position <-
+        positionBytes match {
+          case Some(positionBytes) =>
+            ZIO
+              .fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes)))
+              .mapError(s => new IOException(s))
+          case None => ZIO.succeed(0L)
+        }
+
     } yield Index(position))
 
   override def put(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
@@ -61,40 +69,46 @@ final case class RocksDbIndexedStore(
       colFam <- getOrCreateNamespace(topic)
       _ <- rocksDB.atomically {
              for {
-               posBytes <- Transaction
-                             .getForUpdate(
-                               colFam,
-                               ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-                               exclusive = true
-                             )
+               positionBytes <- Transaction
+                                  .getForUpdate(
+                                    colFam,
+                                    ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+                                    exclusive = true
+                                  )
+               positionBytes1 = incPosition(positionBytes)
                _ <- Transaction
                       .put(
                         colFam,
                         ProtobufCodec.encode(Schema[String])("POSITION").toArray,
-                        incPosition(posBytes)
+                        positionBytes1
                       )
                _ <-
                  Transaction
                    .put(
                      colFam,
-                     incPosition(posBytes),
+                     positionBytes1,
                      value.toArray
                    )
                    .refineToOrDie[IOException]
              } yield ()
            }.refineToOrDie[IOException]
-      newPos <- position(topic)
-    } yield newPos
+      newPosition <- position(topic)
+    } yield newPosition
 
   private def incPosition(posBytes: Option[Array[Byte]]): Array[Byte] =
-    ProtobufCodec
-      .encode(Schema[Long])(
-        ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes.get)) match {
-          case Left(error) => throw new IOException(error)
-          case Right(p)    => p + 1
-        }
-      )
-      .toArray
+    posBytes match {
+      case Some(posBytes) =>
+        ProtobufCodec
+          .encode(Schema[Long])(
+            ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes)) match {
+              case Left(error) => throw new IOException(error)
+              case Right(p)    => p + 1
+            }
+          )
+          .toArray
+      case None =>
+        ProtobufCodec.encode(Schema[Long])(1L).toArray
+    }
 
   def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]] =
     ZStream.fromZIO(getOrCreateNamespace(topic)).flatMap { cf =>
@@ -109,15 +123,27 @@ final case class RocksDbIndexedStore(
 
 object RocksDbIndexedStore {
 
-  def make: ZIO[TransactionDB, IOException, RocksDbIndexedStore] =
+  def make: ZIO[RocksDbConfig with Scope, Throwable, RocksDbIndexedStore] =
     for {
-      rocksDb           <- ZIO.service[TransactionDB]
-      initialNamespaces <- ColumnFamilyManagement.getExistingNamespaces(rocksDb)
-      namespaces        <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialNamespaces: _*).commit
+      options <- ZIO.service[RocksDbConfig]
+      rocksDb <- TransactionDB.Live.openAllColumnFamilies(
+                   options.toDBOptions,
+                   options.toColumnFamilyOptions,
+                   options.toTransactionDBOptions,
+                   options.toJRocksDbPath
+                 )
+      initialNamespaces <- rocksDb.initialHandles
+      initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
+                             val name = new String(handle.getName, StandardCharsets.UTF_8)
+                             Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
+                               promise.succeed(handle).as(name -> promise)
+                             }
+                           }
+      namespaces <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialPromiseMap: _*).commit
     } yield RocksDbIndexedStore(rocksDb, namespaces)
 
-  def layer: ZLayer[TransactionDB, Throwable, IndexedStore] = ZLayer(make)
+  def layer: ZLayer[RocksDbConfig, Throwable, IndexedStore] = ZLayer.scoped(make)
 
-  def withEmptyTopic(topicName: String): ZLayer[TransactionDB, IOException, IndexedStore] =
-    ZLayer(make.tap(store => store.addTopic(topicName)))
+  def withEmptyTopic(topicName: String): ZLayer[RocksDbConfig, Throwable, IndexedStore] =
+    ZLayer.scoped(make.tap(store => store.addTopic(topicName)))
 }

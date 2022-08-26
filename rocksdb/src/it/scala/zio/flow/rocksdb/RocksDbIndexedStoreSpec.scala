@@ -16,44 +16,40 @@
 
 package zio.flow.rocksdb
 
-import org.{rocksdb => jrocks}
+import org.{rocksdb => jrocksdb}
 import zio._
+import zio.flow.internal.IndexedStore
 import zio.flow.internal.IndexedStore.Index
-import zio.flow.internal.{ColumnFamilyManagement, IndexedStore, RocksDbIndexedStore}
-import zio.nio.file.Files
+import zio.nio.file.{Files, Path}
 import zio.rocksdb.TransactionDB
 import zio.test.Assertion.{containsString, equalTo}
 import zio.test.TestAspect.flaky
 import zio.test._
 
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+
 object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
-  private val transactionDbLayer = {
-    ZLayer
-      .scoped(for {
-        dir <- Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq())
-        db <- {
-          TransactionDB.Live.open(
-            new jrocks.Options().setCreateIfMissing(true),
-            dir.toString
-          )
-        }
-      } yield db)
+  private val transactionDbPath: ZLayer[Any, IOException, Path] =
+    ZLayer.scoped {
+      Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq())
+    }
+
+  private val config: ZLayer[Path, Nothing, RocksDbConfig] = ZLayer.scoped {
+    ZIO.service[Path].map { path =>
+      RocksDbConfig(path.toFile.toPath)
+    }
   }
 
-  private val diStore: ZLayer[TransactionDB, Throwable, IndexedStore] = RocksDbIndexedStore.layer
-  private val diStore2: ZLayer[TransactionDB, Throwable, IndexedStore] =
-    RocksDbIndexedStore.withEmptyTopic("someTopic")
-  private val customLayer: ZLayer[Any, Throwable, TransactionDB with IndexedStore] =
-    transactionDbLayer >+> diStore
-  private val customLayer2: ZLayer[Any, Throwable, TransactionDB with IndexedStore] =
-    transactionDbLayer >+> diStore2
+  private val testIndexedStore: ZLayer[Any, Throwable, IndexedStore] =
+    transactionDbPath >>> config >>> RocksDbIndexedStore.layer
 
   private val suite1 = suite("RocksDbIndexedStore")(
     test("Test single put") {
       (for {
         diStore   <- ZIO.service[IndexedStore]
         insertPos <- diStore.put("SomeTopic", Chunk.fromArray("Value1".getBytes()))
-      } yield assert(insertPos)(equalTo(1L))).provide(customLayer)
+      } yield assertTrue(insertPos == Index(1L))).provide(testIndexedStore)
     },
     test("Test sequential put") {
       (for {
@@ -62,14 +58,14 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
                      diStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                    )
         _ <- ZIO.debug(posList.mkString(","))
-      } yield assert(posList.mkString(","))(equalTo("1,2,3,4,5,6,7,8,9,10"))).provide(customLayer)
+      } yield assertTrue(posList.mkString(",") == "1,2,3,4,5,6,7,8,9,10")).provide(testIndexedStore)
     },
     test("Test scan on empty topic") {
       (for {
         diStore      <- ZIO.service[IndexedStore]
         scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
-      } yield assert(resultChunk.toList.mkString(""))(equalTo(""))).provide(customLayer)
+      } yield assertTrue(resultChunk.toList.mkString("") == "")).provide(testIndexedStore)
     },
     test("Test sequential put and scan") {
       (for {
@@ -79,9 +75,9 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
              }
         scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
-      } yield assert(resultChunk.toList.mkString(","))(
-        equalTo("Value0,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9")
-      )).provide(customLayer)
+      } yield assertTrue(
+        resultChunk.toList.mkString(",") == "Value0,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9"
+      )).provide(testIndexedStore)
     },
     test("Test concurrent put and scan") {
       val resChunk = (for {
@@ -91,17 +87,33 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
              )
         scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
-      } yield resultChunk).provide(customLayer)
+      } yield resultChunk).provide(testIndexedStore)
       assertZIO(resChunk.map(_.size))(equalTo(10)) *>
         assertZIO(resChunk.map(_.toList.mkString(",")))(containsString("Value9")) *>
         assertZIO(resChunk.map(_.toList.mkString(",")))(containsString("Value0"))
     } @@ flaky,
     test("Get namespaces") {
       (for {
-        _       <- ZIO.service[IndexedStore]
-        rocksDB <- ZIO.service[TransactionDB]
-        ns      <- ColumnFamilyManagement.getExistingNamespaces(rocksDB)
-      } yield assertTrue(ns.toMap.contains("someTopic"))).provide(customLayer2)
+        path <- ZIO.service[Path]
+        _    <- ZIO.debug(path.toString())
+        _ <-
+          ZIO
+            .service[IndexedStore]
+            .provide(ZLayer.succeed(path) >>> config >>> RocksDbIndexedStore.withEmptyTopic("someTopic"))
+        handles <-
+          ZIO
+            .serviceWithZIO[TransactionDB](_.initialHandles)
+            .provide(
+              TransactionDB.liveAllColumnFamilies(
+                new jrocksdb.DBOptions(),
+                new jrocksdb.ColumnFamilyOptions(),
+                new jrocksdb.TransactionDBOptions(),
+                path.toString
+              )
+            ) // Needs to reopen the same DB
+        ns = handles.map(handle => new String(handle.getName, StandardCharsets.UTF_8))
+        _ <- ZIO.debug(s"NS: $ns")
+      } yield assertTrue(ns.contains("someTopic"))).provide(transactionDbPath)
     }
   )
 

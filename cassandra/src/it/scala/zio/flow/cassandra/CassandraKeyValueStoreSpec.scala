@@ -17,12 +17,10 @@
 package zio.flow.cassandra
 
 import CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
-import zio.flow.internal.KeyValueStore
 import zio.{Chunk, ZIO}
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Gen, Spec, assert, assertTrue, checkN, ZIOSpecDefault}
-import zio.flow.internal.Timestamp
 import zio.test.Assertion.isNone
 
 object CassandraKeyValueStoreSpec extends ZIOSpecDefault {

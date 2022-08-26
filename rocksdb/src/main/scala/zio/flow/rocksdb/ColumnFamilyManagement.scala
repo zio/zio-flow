@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.rocksdb
 
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle}
-import zio.rocksdb.{RocksDB, TransactionDB}
+import zio.rocksdb.TransactionDB
 import zio.stm.{TMap, ZSTM}
-import zio.{IO, Promise, ZIO}
+import zio.{IO, Promise}
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -50,18 +50,4 @@ trait ColumnFamilyManagement {
         .commit
         .flatten
     }
-}
-
-object ColumnFamilyManagement {
-  private[flow] def getExistingNamespaces(
-    rocksDB: RocksDB
-  ): IO[IOException, List[(String, Promise[IOException, ColumnFamilyHandle])]] =
-    rocksDB.initialHandles.flatMap { handles =>
-      ZIO.foreach(handles) { handle =>
-        val name = new String(handle.getName, StandardCharsets.UTF_8)
-        Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
-          promise.succeed(handle).as(name -> promise)
-        }
-      }
-    }.refineToOrDie[IOException]
 }

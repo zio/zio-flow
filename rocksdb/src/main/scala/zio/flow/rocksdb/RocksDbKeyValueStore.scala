@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
+import zio.flow.internal.{KeyValueStore, Timestamp}
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
@@ -194,12 +195,24 @@ final case class RocksDbKeyValueStore(
 }
 
 object RocksDbKeyValueStore {
-  val layer: ZLayer[TransactionDB, IOException, KeyValueStore] =
-    ZLayer {
+  val layer: ZLayer[RocksDbConfig, Throwable, KeyValueStore] =
+    ZLayer.scoped {
       for {
-        rocksDb           <- ZIO.service[TransactionDB]
-        initialNamespaces <- ColumnFamilyManagement.getExistingNamespaces(rocksDb)
-        namespaces        <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialNamespaces: _*).commit
+        options <- ZIO.service[RocksDbConfig]
+        rocksDb <- TransactionDB.Live.openAllColumnFamilies(
+                     options.toDBOptions,
+                     options.toColumnFamilyOptions,
+                     options.toTransactionDBOptions,
+                     options.toJRocksDbPath
+                   )
+        initialNamespaces <- rocksDb.initialHandles
+        initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
+                               val name = new String(handle.getName, StandardCharsets.UTF_8)
+                               Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
+                                 promise.succeed(handle).as(name -> promise)
+                               }
+                             }
+        namespaces <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialPromiseMap: _*).commit
       } yield RocksDbKeyValueStore(rocksDb, namespaces)
     }
 }

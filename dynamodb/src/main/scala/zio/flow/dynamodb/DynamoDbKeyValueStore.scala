@@ -21,12 +21,10 @@ import zio.aws.dynamodb.DynamoDb
 import zio.aws.dynamodb.model.primitives._
 import zio.aws.dynamodb.model.{AttributeValue, ScanRequest, UpdateItemRequest}
 import DynamoDbKeyValueStore._
-import zio.flow.internal.KeyValueStore
 import zio.stream.ZStream
 import zio.{Chunk, IO, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
-import zio.flow.internal.Timestamp
 import java.nio.charset.StandardCharsets
 import zio.aws.dynamodb.model.QueryRequest
 import zio.aws.dynamodb.model.BatchWriteItemRequest

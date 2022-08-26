@@ -16,33 +16,23 @@
 
 package zio.flow.rocksdb
 
-import org.{rocksdb => jrocks}
-import zio.flow.internal.{KeyValueStore, RocksDbKeyValueStore, Timestamp}
+import zio.flow.internal.{KeyValueStore, Timestamp}
 import zio.nio.file.Files
-import zio.rocksdb.TransactionDB
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.ZIOSpecDefault
-import zio.test.{Gen, TestFailure, assert, assertTrue, checkN}
+import zio.test.{Gen, assert, assertTrue, checkN}
 import zio.{Chunk, ZIO, ZLayer}
 
 object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
 
-  private val transactionDbLayer = {
-    ZLayer
-      .scoped(for {
-        dir <- Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq())
-        db <- {
-          TransactionDB.Live.open(
-            new jrocks.Options().setCreateIfMissing(true),
-            dir.toString
-          )
-        }
-      } yield db)
-      .mapError(TestFailure.die)
+  private val config = ZLayer.scoped {
+    Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq()).map { path =>
+      RocksDbConfig(path.toFile.toPath)
+    }
   }
 
-  private val kVStoreLayer = transactionDbLayer >>> RocksDbKeyValueStore.layer
+  private val kVStoreLayer = config >>> RocksDbKeyValueStore.layer
 
   private def newTimeBasedName() =
     s"${java.time.Instant.now}"
