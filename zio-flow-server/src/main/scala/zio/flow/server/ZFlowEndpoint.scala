@@ -8,7 +8,7 @@ import zio.flow._
 import zio.flow.server.ZFlowEndpoint.deserializeFlow
 import zio.schema.codec.JsonCodec
 
-final class ZFlowEndpoint(flowService: ZFlowService) {
+final class ZFlowEndpoint(flowService: FlowTemplates) {
   val endpoint: HttpApp[Any, Nothing] = Http
     .collectZIO[Request] {
       case GET -> !! / "templates" / templateId =>
@@ -50,7 +50,7 @@ object ZFlowEndpoint {
 
   private def jsonToZFlow: Chunk[Byte] => Either[String, ZFlow[Any, Any, Any]] = JsonCodec.decode(ZFlow.schemaAny)
 
-  val layer: ZLayer[ZFlowService, Nothing, ZFlowEndpoint] =
+  val layer: ZLayer[FlowTemplates, Nothing, ZFlowEndpoint] =
     ZLayer.fromFunction(new ZFlowEndpoint(_))
 
   val endpoint: ZIO[ZFlowEndpoint, Nothing, HttpApp[Any, Nothing]] = ZIO.serviceWith(_.endpoint)

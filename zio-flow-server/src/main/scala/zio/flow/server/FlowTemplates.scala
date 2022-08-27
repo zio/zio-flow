@@ -6,7 +6,7 @@ import zio.flow.{ExecutionEnvironment, FlowId, TemplateId, ZFlow}
 
 import java.io.IOException
 
-final class ZFlowService(execEnv: ExecutionEnvironment, keyValueStore: KeyValueStore, flowExecutor: ZFlowExecutor) {
+final class FlowTemplates(execEnv: ExecutionEnvironment, keyValueStore: KeyValueStore, flowExecutor: ZFlowExecutor) {
   def getZFlowTemplate(templateId: TemplateId): ZIO[Any, Throwable, Option[ZFlow[Any, Any, Any]]] =
     keyValueStore.getLatest(Namespaces.workflowTemplate, templateId.toRaw, None).flatMap {
       case Some(bytes) =>
@@ -39,7 +39,7 @@ final class ZFlowService(execEnv: ExecutionEnvironment, keyValueStore: KeyValueS
     _ <- flowExecutor.start(flowId, template)
   } yield flowId
 }
-object ZFlowService {
-  val layer: ZLayer[ExecutionEnvironment with KeyValueStore with ZFlowExecutor, Nothing, ZFlowService] =
-    ZLayer.fromFunction(new ZFlowService(_, _, _))
+object FlowTemplates {
+  val layer: ZLayer[ExecutionEnvironment with KeyValueStore with ZFlowExecutor, Nothing, FlowTemplates] =
+    ZLayer.fromFunction(new FlowTemplates(_, _, _))
 }

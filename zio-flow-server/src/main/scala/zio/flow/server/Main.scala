@@ -14,7 +14,7 @@ object Main extends ZIOAppDefault {
     .provide(
       ZLayer.succeed(ExecutionEnvironment(Serializer.json, Deserializer.json)),
       KeyValueStore.inMemory,
-      ZFlowService.layer,
+      FlowTemplates.layer,
       ZFlowEndpoint.layer,
       DurableLog.live,
       IndexedStore.inMemory,
