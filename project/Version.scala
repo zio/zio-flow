@@ -7,7 +7,7 @@ object Version {
   val zio                 = "2.0.0"
   val zioNio              = "2.0.0"
   val zioAws              = "5.17.224.3"
-  val zioRocksDb          = "0.3.3+3-89a8704f-SNAPSHOT"
+  val zioRocksDb          = "0.4.1"
   val zioSchema           = "0.2.0"
   val awsSdkV1            = "1.12.141"
   val cassandraJavaDriver = "4.13.0.0"

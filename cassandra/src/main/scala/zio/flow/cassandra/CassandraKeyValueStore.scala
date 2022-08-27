@@ -24,6 +24,7 @@ import com.datastax.oss.driver.api.querybuilder.insert.InsertInto
 import com.datastax.oss.driver.api.querybuilder.select.SelectFrom
 import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
 import zio.flow.cassandra.CassandraKeyValueStore._
+import zio.flow.internal._
 import zio.stream.ZStream
 import zio.{Chunk, IO, Task, URLayer, ZIO, ZLayer}
 

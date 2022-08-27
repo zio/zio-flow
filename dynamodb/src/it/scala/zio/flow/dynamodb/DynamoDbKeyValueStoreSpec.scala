@@ -19,6 +19,7 @@ package zio.flow.dynamodb
 import DynamoDbKeyValueStore.tableName
 import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
 import zio.{Chunk, ZIO}
+import zio.flow.internal._
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}

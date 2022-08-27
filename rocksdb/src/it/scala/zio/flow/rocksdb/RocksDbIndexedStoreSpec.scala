@@ -47,33 +47,33 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
   private val suite1 = suite("RocksDbIndexedStore")(
     test("Test single put") {
       (for {
-        diStore   <- ZIO.service[IndexedStore]
-        insertPos <- diStore.put("SomeTopic", Chunk.fromArray("Value1".getBytes()))
+        indexedStore <- ZIO.service[IndexedStore]
+        insertPos    <- indexedStore.put("SomeTopic", Chunk.fromArray("Value1".getBytes()))
       } yield assertTrue(insertPos == Index(1L))).provide(testIndexedStore)
     },
     test("Test sequential put") {
       (for {
-        diStore <- ZIO.service[IndexedStore]
+        indeedStore <- ZIO.service[IndexedStore]
         posList <- ZIO.foreach((0 until 10).toList)(i =>
-                     diStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                     indeedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                    )
         _ <- ZIO.debug(posList.mkString(","))
       } yield assertTrue(posList.mkString(",") == "1,2,3,4,5,6,7,8,9,10")).provide(testIndexedStore)
     },
     test("Test scan on empty topic") {
       (for {
-        diStore      <- ZIO.service[IndexedStore]
-        scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+        indexedStore <- ZIO.service[IndexedStore]
+        scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
       } yield assertTrue(resultChunk.toList.mkString("") == "")).provide(testIndexedStore)
     },
     test("Test sequential put and scan") {
       (for {
-        diStore <- ZIO.service[IndexedStore]
+        indexedStore <- ZIO.service[IndexedStore]
         _ <- ZIO.foreachDiscard((0 until 10).toList) { i =>
-               diStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+               indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
              }
-        scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+        scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
       } yield assertTrue(
         resultChunk.toList.mkString(",") == "Value0,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9"
@@ -81,11 +81,11 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
     },
     test("Test concurrent put and scan") {
       val resChunk = (for {
-        diStore <- ZIO.service[IndexedStore]
+        indexedStore <- ZIO.service[IndexedStore]
         _ <- ZIO.foreachParDiscard((0 until 10).toList)(i =>
-               diStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+               indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
              )
-        scannedChunk <- diStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+        scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
         resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
       } yield resultChunk).provide(testIndexedStore)
       assertZIO(resChunk.map(_.size))(equalTo(10)) *>
