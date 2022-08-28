@@ -53,9 +53,9 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
     },
     test("Test sequential put") {
       (for {
-        indeedStore <- ZIO.service[IndexedStore]
+        indexedStore <- ZIO.service[IndexedStore]
         posList <- ZIO.foreach((0 until 10).toList)(i =>
-                     indeedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                     indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                    )
         _ <- ZIO.debug(posList.mkString(","))
       } yield assertTrue(posList.mkString(",") == "1,2,3,4,5,6,7,8,9,10")).provide(testIndexedStore)

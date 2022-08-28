@@ -17,7 +17,7 @@
 package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.tableName
-import DynamoDbSupport.{createDynamoDbTable, dynamoDbLayer}
+import DynamoDbSupport.{createKeyValueStoreTable, dynamoDbLayer}
 import zio.{Chunk, ZIO}
 import zio.flow.internal._
 import zio.test.Assertion.hasSameElements
@@ -52,7 +52,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           byteChunkGen
         ) { (namespace, key, value1, value2) =>
           ZIO.scoped {
-            createDynamoDbTable(tableName) *> {
+            createKeyValueStoreTable(tableName) *> {
               for {
                 putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
                 putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
@@ -75,7 +75,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           byteChunkGen
         ) { (namespace, key, value1) =>
           ZIO.scoped {
-            createDynamoDbTable(tableName) *> {
+            createKeyValueStoreTable(tableName) *> {
               for {
                 _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
                 _      <- KeyValueStore.delete(namespace, key)
@@ -92,7 +92,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
           val nonExistentNamespace = newTimeBasedName()
 
           ZIO.scoped {
-            createDynamoDbTable(tableName) *> {
+            createKeyValueStoreTable(tableName) *> {
               KeyValueStore
                 .getLatest(nonExistentNamespace, key, None)
                 .map { retrieved =>
@@ -114,7 +114,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
             Chunk.fromIterable(newTimeBasedName().getBytes)
 
           ZIO.scoped {
-            createDynamoDbTable(tableName) *> {
+            createKeyValueStoreTable(tableName) *> {
               for {
                 putSucceeded <- KeyValueStore.put(namespace, key, value, Timestamp(1L))
                 retrieved    <- KeyValueStore.getLatest(namespace, nonExistingKey, Some(Timestamp(1L)))
@@ -130,7 +130,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
         val nonExistentNamespace = newTimeBasedName()
 
         ZIO.scoped {
-          createDynamoDbTable(tableName) *> {
+          createKeyValueStoreTable(tableName) *> {
             KeyValueStore
               .scanAll(nonExistentNamespace)
               .runCollect
@@ -151,7 +151,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
         val expectedLength = keyValuePairs.length
 
         ZIO.scoped {
-          createDynamoDbTable(tableName) *> {
+          createKeyValueStoreTable(tableName) *> {
             for {
               putSuccesses <-
                 ZIO
@@ -186,7 +186,7 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
         val expectedLength = keyValuePairs.length
 
         ZIO.scoped {
-          createDynamoDbTable(tableName) *> {
+          createKeyValueStoreTable(tableName) *> {
             for {
               putSuccesses <-
                 ZIO
