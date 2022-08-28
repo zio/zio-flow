@@ -100,9 +100,10 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
           ZIO
             .service[IndexedStore]
             .provide(ZLayer.succeed(path) >>> config >>> RocksDbIndexedStore.withEmptyTopic("someTopic"))
-        handles <-
+        ns <-
           ZIO
             .serviceWithZIO[TransactionDB](_.initialHandles)
+            .map(_.map(handle => new String(handle.getName, StandardCharsets.UTF_8)))
             .provide(
               TransactionDB.liveAllColumnFamilies(
                 new jrocksdb.DBOptions(),
@@ -111,7 +112,6 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
                 path.toString
               )
             ) // Needs to reopen the same DB
-        ns = handles.map(handle => new String(handle.getName, StandardCharsets.UTF_8))
         _ <- ZIO.debug(s"NS: $ns")
       } yield assertTrue(ns.contains("someTopic"))).provide(transactionDbPath)
     }
