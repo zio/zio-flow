@@ -2,14 +2,18 @@ package zio.flow.dynamodb
 
 import zio.Scope
 import zio.flow.dynamodb.DynamoDbSupport.{createIndexedStoreTable, dynamoDbLayer}
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue, assertZIO}
+import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue, assertZIO, testEnvironment}
 import zio._
 import zio.flow.internal.IndexedStore
 import zio.flow.internal.IndexedStore.Index
+import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test.Assertion.{containsString, equalTo}
 import zio.test.TestAspect.{nondeterministic, sequential}
 
 object DynamoDbIndexedStoreSpec extends ZIOSpecDefault {
+  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+    testEnvironment ++ Slf4jBridge.initialize
+
   private val dynamoDbIndexedStore =
     dynamoDbLayer >+> DynamoDbIndexedStore.layer
 

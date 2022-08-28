@@ -18,14 +18,17 @@ package zio.flow.dynamodb
 
 import DynamoDbKeyValueStore.tableName
 import DynamoDbSupport.{createKeyValueStoreTable, dynamoDbLayer}
-import zio.{Chunk, ZIO}
+import zio._
 import zio.flow.internal._
+import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
-import zio.test.{Gen, ZIOSpecDefault, Spec, assert, assertTrue, checkN}
+import zio.test._
 import zio.test.Assertion.isNone
 
 object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
+  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+    testEnvironment ++ Slf4jBridge.initialize
 
   private val dynamoDbKeyValueStore =
     dynamoDbLayer >+> DynamoDbKeyValueStore.layer

@@ -5,10 +5,14 @@ import zio.test._
 import zio._
 import zio.flow.internal.IndexedStore
 import zio.flow.internal.IndexedStore.Index
+import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test.Assertion._
 import zio.test.TestAspect.{nondeterministic, sequential}
 
 object CassandraIndexedStoreSpec extends ZIOSpecDefault {
+
+  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+    testEnvironment ++ Slf4jBridge.initialize
 
   override def spec: Spec[Environment, Any] =
     suite("CassandraIndexedStoreSpec")(

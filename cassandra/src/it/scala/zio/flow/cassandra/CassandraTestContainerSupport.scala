@@ -82,7 +82,7 @@ object CassandraTestContainerSupport {
     val cassandraV4: String = s"$cassandra:4.0.1"
     val scyllaDb: String =
       // This nightly build supports Apple M1; Will point to a regular version when v4.6 is released.
-      "scylladb/scylla-nightly:4.6.rc1-0.20211227.283788828"
+      "scylladb/scylla:5.0.1"
   }
 
   val createKeyspaceScript: String =

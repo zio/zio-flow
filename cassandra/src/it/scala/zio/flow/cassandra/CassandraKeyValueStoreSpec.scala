@@ -17,14 +17,17 @@
 package zio.flow.cassandra
 
 import CassandraTestContainerSupport._
-import zio.{Chunk, ZIO}
+import zio._
 import zio.flow.internal._
+import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test.Assertion.hasSameElements
 import zio.test.TestAspect.{nondeterministic, sequential}
-import zio.test.{Gen, Spec, assert, assertTrue, checkN, ZIOSpecDefault}
+import zio.test._
 import zio.test.Assertion.isNone
 
 object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
+  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+    testEnvironment ++ Slf4jBridge.initialize
 
   private val cqlNameGen =
     Gen.alphaNumericStringBounded(

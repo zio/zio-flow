@@ -107,7 +107,8 @@ lazy val cassandra = project
     ) ++ (
       commonTestDependencies ++
         Seq(
-          "com.dimafeng" %% "testcontainers-scala-cassandra" % Version.testContainers
+          "com.dimafeng" %% "testcontainers-scala-cassandra" % Version.testContainers,
+          "dev.zio"      %% "zio-logging-slf4j-bridge"       % Version.zioLogging
         )
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
@@ -127,7 +128,8 @@ lazy val dynamodb = project
       commonTestDependencies ++
         Seq(
           "com.amazonaws" % "aws-java-sdk-core"                  % Version.awsSdkV1,
-          "com.dimafeng" %% "testcontainers-scala-localstack-v2" % Version.testContainers
+          "com.dimafeng" %% "testcontainers-scala-localstack-v2" % Version.testContainers,
+          "dev.zio"      %% "zio-logging-slf4j-bridge"           % Version.zioLogging
         )
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
