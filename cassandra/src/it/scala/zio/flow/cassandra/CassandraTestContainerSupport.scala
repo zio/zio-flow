@@ -39,7 +39,7 @@ object CassandraTestContainerSupport {
   private val testKeyspaceName = "CassandraKeyValueStoreSpec_Keyspace"
   private val testDataCenter   = "datacenter1"
 
-  private val createTable =
+  private val createKeyValueStoreTable =
     SchemaBuilder
       .createTable(testKeyspaceName, CassandraKeyValueStore.tableName)
       .withPartitionKey(
@@ -56,6 +56,23 @@ object CassandraTestContainerSupport {
       )
       .withColumn(
         CassandraKeyValueStore.valueColumnName,
+        DataTypes.BLOB
+      )
+      .build
+
+  private val createIndexedStoreTable =
+    SchemaBuilder
+      .createTable(testKeyspaceName, CassandraIndexedStore.tableName)
+      .withPartitionKey(
+        CassandraIndexedStore.topicColumnName,
+        DataTypes.TEXT
+      )
+      .withClusteringColumn(
+        CassandraIndexedStore.indexColumnName,
+        DataTypes.BIGINT
+      )
+      .withColumn(
+        CassandraIndexedStore.valueColumnName,
         DataTypes.BLOB
       )
       .build
@@ -146,8 +163,11 @@ object CassandraTestContainerSupport {
         )
       _ <-
         execAsync(
-          session.executeAsync(createTable)
+          session.executeAsync(createKeyValueStoreTable)
         )
+      _ <- execAsync(
+             session.executeAsync(createIndexedStoreTable)
+           )
 
     } yield session
   } { session =>

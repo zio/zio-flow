@@ -16,7 +16,7 @@
 
 package zio.flow.cassandra
 
-import CassandraTestContainerSupport.{SessionLayer, cassandraV3, cassandraV4, scyllaDb}
+import CassandraTestContainerSupport._
 import zio.{Chunk, ZIO}
 import zio.flow.internal._
 import zio.test.Assertion.hasSameElements
