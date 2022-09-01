@@ -16,7 +16,6 @@
 
 package zio.flow.dynamodb
 
-import DynamoDbKeyValueStore.{keyColumnName, timestampName, namespaceColumnName, valueColumnName}
 import LocalStackTestContainerSupport.awsContainer
 import com.dimafeng.testcontainers.LocalStackV2Container
 import zio.aws.core.config.AwsConfig
@@ -55,7 +54,9 @@ object DynamoDbSupport {
   lazy val dynamoDbLayer: DynamoDB =
     awsLayerFor(Seq(AwsService.DYNAMODB))
 
-  def createDynamoDbTable(name: TableName): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
+  def createKeyValueStoreTable(name: TableName): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
+    import DynamoDbKeyValueStore._
+
     val createTableRequest =
       CreateTableRequest(
         tableName = name,
@@ -102,6 +103,60 @@ object DynamoDbSupport {
                 writeCapacityUnits = PositiveLongObject(16L)
               )
             )
+          )
+        ),
+        provisionedThroughput = Option(
+          ProvisionedThroughput(
+            readCapacityUnits = PositiveLongObject(16L),
+            writeCapacityUnits = PositiveLongObject(16L)
+          )
+        )
+      )
+
+    ZIO
+      .acquireRelease(
+        for {
+          tableData <- DynamoDb.createTable(createTableRequest)
+          tableDesc <- tableData.getTableDescription
+        } yield tableDesc
+      )(
+        _.getTableName.flatMap { tableName =>
+          DynamoDb
+            .deleteTable(
+              DeleteTableRequest(tableName)
+            )
+            .unit
+        }
+          .catchAll(error => ZIO.die(error.toThrowable))
+          .unit
+      )
+      .mapError(_.toThrowable)
+  }
+
+  def createIndexedStoreTable(name: TableName): ZIO[DynamoDb with Scope, Throwable, TableDescription.ReadOnly] = {
+    import DynamoDbIndexedStore._
+
+    val createTableRequest =
+      CreateTableRequest(
+        tableName = name,
+        attributeDefinitions = Seq(
+          AttributeDefinition(
+            KeySchemaAttributeName(topicColumnName),
+            ScalarAttributeType.S
+          ),
+          AttributeDefinition(
+            KeySchemaAttributeName(indexColumnName),
+            ScalarAttributeType.N
+          )
+        ),
+        keySchema = List(
+          KeySchemaElement(
+            KeySchemaAttributeName(topicColumnName),
+            KeyType.HASH
+          ),
+          KeySchemaElement(
+            KeySchemaAttributeName(indexColumnName),
+            KeyType.RANGE
           )
         ),
         provisionedThroughput = Option(

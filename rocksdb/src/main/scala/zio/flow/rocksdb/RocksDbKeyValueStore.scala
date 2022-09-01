@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.rocksdb
 
-import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle}
-import zio.rocksdb.{RocksDB, Transaction, TransactionDB}
+import org.rocksdb.ColumnFamilyHandle
+import zio.flow.internal.{KeyValueStore, Timestamp}
+import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
-import zio.stm.{TMap, ZSTM}
+import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, ZIO, ZLayer}
 
@@ -30,7 +31,8 @@ import java.nio.charset.StandardCharsets
 final case class RocksDbKeyValueStore(
   rocksDB: TransactionDB,
   namespaces: TMap[String, Promise[IOException, ColumnFamilyHandle]]
-) extends KeyValueStore {
+) extends KeyValueStore
+    with ColumnFamilyManagement {
 
   override def put(
     namespace: String,
@@ -190,52 +192,27 @@ final case class RocksDbKeyValueStore(
 
   private def versionNamespace(namespace: String): String =
     s"version__$namespace"
-
-  private def getOrCreateNamespace(namespace: String): IO[IOException, ColumnFamilyHandle] =
-    Promise.make[IOException, ColumnFamilyHandle].flatMap { newPromise =>
-      namespaces
-        .get(namespace)
-        .flatMap {
-          case Some(promise) =>
-            ZSTM.succeed(promise.await)
-          case None =>
-            namespaces
-              .put(namespace, newPromise)
-              .as(
-                rocksDB
-                  .createColumnFamily(
-                    new ColumnFamilyDescriptor(namespace.getBytes(StandardCharsets.UTF_8))
-                  )
-                  .refineToOrDie[IOException]
-                  .tapBoth(error => newPromise.fail(error), handle => newPromise.succeed(handle))
-              )
-        }
-        .commit
-        .flatten
-    }
 }
 
 object RocksDbKeyValueStore {
-  val layer: ZLayer[TransactionDB, IOException, KeyValueStore] =
-    ZLayer {
+  val layer: ZLayer[RocksDbConfig, Throwable, KeyValueStore] =
+    ZLayer.scoped {
       for {
-        rocksDB           <- ZIO.service[TransactionDB]
-        initialNamespaces <- getExistingNamespaces(rocksDB)
-        namespaces        <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialNamespaces: _*).commit
-      } yield {
-        RocksDbKeyValueStore(rocksDB, namespaces)
-      }
+        options <- ZIO.service[RocksDbConfig]
+        rocksDb <- TransactionDB.Live.openAllColumnFamilies(
+                     options.toDBOptions,
+                     options.toColumnFamilyOptions,
+                     options.toTransactionDBOptions,
+                     options.toJRocksDbPath
+                   )
+        initialNamespaces <- rocksDb.initialHandles
+        initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
+                               val name = new String(handle.getName, StandardCharsets.UTF_8)
+                               Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
+                                 promise.succeed(handle).as(name -> promise)
+                               }
+                             }
+        namespaces <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialPromiseMap: _*).commit
+      } yield RocksDbKeyValueStore(rocksDb, namespaces)
     }
-
-  private def getExistingNamespaces(
-    rocksDB: RocksDB
-  ): IO[IOException, List[(String, Promise[IOException, ColumnFamilyHandle])]] =
-    rocksDB.initialHandles.flatMap { handles =>
-      ZIO.foreach(handles) { handle =>
-        val name = new String(handle.getName, StandardCharsets.UTF_8)
-        Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
-          promise.succeed(handle).as(name -> promise)
-        }
-      }
-    }.refineToOrDie[IOException]
 }

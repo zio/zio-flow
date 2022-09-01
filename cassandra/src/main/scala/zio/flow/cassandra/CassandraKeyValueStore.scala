@@ -24,13 +24,12 @@ import com.datastax.oss.driver.api.querybuilder.insert.InsertInto
 import com.datastax.oss.driver.api.querybuilder.select.SelectFrom
 import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
 import zio.flow.cassandra.CassandraKeyValueStore._
-import zio.flow.internal.KeyValueStore
+import zio.flow.internal._
 import zio.stream.ZStream
 import zio.{Chunk, IO, Task, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
 import java.nio.ByteBuffer
-import zio.flow.internal.Timestamp
 import com.datastax.oss.driver.api.core.metadata.schema.ClusteringOrder
 import scala.jdk.CollectionConverters._
 
