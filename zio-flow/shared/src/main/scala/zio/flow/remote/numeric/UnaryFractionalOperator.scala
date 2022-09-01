@@ -21,7 +21,10 @@ import zio.schema.{DeriveSchema, Schema}
 sealed trait UnaryFractionalOperator
 object UnaryFractionalOperator {
   case object Sin    extends UnaryFractionalOperator
+  case object Cos    extends UnaryFractionalOperator
   case object ArcSin extends UnaryFractionalOperator
+  case object ArcCos extends UnaryFractionalOperator
+  case object Tan    extends UnaryFractionalOperator
   case object ArcTan extends UnaryFractionalOperator
 
   implicit val schema: Schema[UnaryFractionalOperator] = DeriveSchema.gen
