@@ -16,30 +16,15 @@
 
 package zio.flow.cassandra
 
-import CassandraTestContainerSupport._
 import zio._
-import zio.flow.internal._
+import zio.flow.cassandra.CassandraTestContainerSupport._
+import zio.flow.test.KeyValueStoreTests
 import zio.logging.slf4j.bridge.Slf4jBridge
-import zio.test.Assertion.hasSameElements
-import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test._
-import zio.test.Assertion.isNone
 
 object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
   override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
     testEnvironment ++ Slf4jBridge.initialize
-
-  private val cqlNameGen =
-    Gen.alphaNumericStringBounded(
-      min = 1,
-      max = 48
-    )
-
-  private val nonEmptyByteChunkGen =
-    Gen.chunkOf1(Gen.byte)
-
-  private val byteChunkGen =
-    Gen.chunkOf(Gen.byte)
 
   override def spec: Spec[Environment, Any] =
     suite("CassandraKeyValueStoreSpec")(
@@ -48,152 +33,8 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
       testUsing(scyllaDb, "ScyllaDB")
     )
 
-  private def testUsing(database: SessionLayer, label: String) =
-    suite(label)(
-      test("should be able to `put` (upsert) a key-value pair and then `get` it back.") {
-        checkN(10)(
-          cqlNameGen,
-          nonEmptyByteChunkGen,
-          byteChunkGen,
-          byteChunkGen
-        ) { (namespace, key, value1, value2) =>
-          for {
-            putSucceeded1 <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
-            putSucceeded2 <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
-            retrieved1    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
-            retrieved2    <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
-          } yield assertTrue(
-            putSucceeded1,
-            retrieved1.get == value1,
-            putSucceeded2,
-            retrieved2.get == value2
-          )
-        }
-      },
-      test("should be able to delete a key-value pair") {
-        checkN(10)(
-          cqlNameGen,
-          nonEmptyByteChunkGen,
-          byteChunkGen
-        ) { (namespace, key, value1) =>
-          for {
-            _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
-            _      <- KeyValueStore.delete(namespace, key)
-            latest <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1)))
-          } yield assert(latest)(isNone)
-        }
-      },
-      test("should return empty result for a `get` call when the namespace does not exist.") {
-        checkN(10)(
-          nonEmptyByteChunkGen
-        ) { key =>
-          val nonExistentNamespace = newTimeBasedName()
+  private def testUsing(database: SessionLayer, label: String): Spec[TestEnvironment, Any] =
+    KeyValueStoreTests(label, initializeDb = ZIO.unit).tests
+      .provideCustomLayerShared(database >>> CassandraKeyValueStore.layer)
 
-          KeyValueStore
-            .getLatest(nonExistentNamespace, key, before = None)
-            .map { retrieved =>
-              assertTrue(
-                retrieved.isEmpty
-              )
-            }
-        }
-      },
-      test("should return empty result for a `get` call when the key does not exist.") {
-        checkN(10)(
-          cqlNameGen,
-          nonEmptyByteChunkGen,
-          byteChunkGen
-        ) { (namespace, key, value) =>
-          val nonExistingKey =
-            Chunk.fromIterable(newTimeBasedName().getBytes)
-
-          for {
-            putSucceeded <- KeyValueStore.put(namespace, key, value, Timestamp(1L))
-            retrieved    <- KeyValueStore.getLatest(namespace, nonExistingKey, Some(Timestamp(1L)))
-          } yield assertTrue(
-            retrieved.isEmpty,
-            putSucceeded
-          )
-        }
-      },
-      test("should return empty result for a `scanAll` call when the namespace does not exist.") {
-        val nonExistentNamespace = newTimeBasedName()
-
-        KeyValueStore
-          .scanAll(nonExistentNamespace)
-          .runCollect
-          .map { retrieved =>
-            assertTrue(
-              retrieved.isEmpty
-            )
-          }
-      },
-      test("should return all key-value pairs for a `scanAll` call.") {
-        val uniqueNamespace = newTimeBasedName()
-        val keyValuePairs =
-          Chunk
-            .fromIterable(1 to 5001)
-            .map { n =>
-              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
-            }
-        val expectedLength = keyValuePairs.length
-
-        for {
-          putSuccesses <-
-            ZIO
-              .foreachPar(keyValuePairs) { case (key, value) =>
-                KeyValueStore.put(uniqueNamespace, key, value, Timestamp(1L))
-              }
-          retrieved <-
-            KeyValueStore
-              .scanAll(uniqueNamespace)
-              .runCollect
-        } yield {
-          assertTrue(
-            putSuccesses.length == expectedLength,
-            putSuccesses.toSet == Set(true),
-            retrieved.length == expectedLength
-          ) &&
-          assert(retrieved)(
-            hasSameElements(keyValuePairs)
-          )
-        }
-      },
-      test("should return all keys pairs for a `scanAllKeys` call.") {
-        val uniqueNamespace = newTimeBasedName()
-        val keyValuePairs =
-          Chunk
-            .fromIterable(1 to 5001)
-            .map { n =>
-              Chunk.fromArray(s"abc_$n".getBytes) -> Chunk.fromArray(s"xyz_$n".getBytes)
-            }
-        val expectedLength = keyValuePairs.length
-
-        for {
-          putSuccesses <-
-            ZIO
-              .foreachPar(keyValuePairs) { case (key, value) =>
-                KeyValueStore.put(uniqueNamespace, key, value, Timestamp(1L))
-              }
-          retrieved <-
-            KeyValueStore
-              .scanAllKeys(uniqueNamespace)
-              .runCollect
-        } yield {
-          assertTrue(
-            putSuccesses.length == expectedLength,
-            putSuccesses.toSet == Set(true),
-            retrieved.length == expectedLength
-          ) &&
-          assert(retrieved)(
-            hasSameElements(keyValuePairs.map(_._1))
-          )
-        }
-      }
-    ).provideCustomLayerShared(database >>> CassandraKeyValueStore.layer) @@ nondeterministic @@ sequential
-
-  private def newTimeBasedName() =
-    s"${java.time.Instant.now}"
-      .replaceAll(":", "_")
-      .replaceAll(".", "_")
 }

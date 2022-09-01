@@ -43,7 +43,9 @@ lazy val root = project
     examplesJVM,
     examplesJS,
     zioFlowJVM,
-    zioFlowJS
+    zioFlowJS,
+    testJVM,
+    testJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -74,9 +76,26 @@ lazy val zioFlowJS = zioFlow.js
 
 lazy val zioFlowJVM = zioFlow.jvm
 
+lazy val test = crossProject(JSPlatform, JVMPlatform)
+  .in(file("test"))
+  .settings(stdSettings("zio-flow-test"))
+  .settings(crossProjectSettings)
+  .settings(
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio-test" % Version.zio
+    )
+  )
+  .dependsOn(zioFlow)
+
+lazy val testJS  = test.js
+lazy val testJVM = test.jvm
+
 lazy val rocksdb = project
   .in(file("rocksdb"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-rocksdb"),
@@ -88,14 +107,17 @@ lazy val rocksdb = project
         Seq(
           "org.rocksdb" % "rocksdbjni" % Version.rocksDbJni,
           "dev.zio"    %% "zio-nio"    % Version.zioNio
-        )
+        ),
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
   )
 
 lazy val cassandra = project
   .in(file("cassandra"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-cassandra"),
@@ -116,7 +138,10 @@ lazy val cassandra = project
 
 lazy val dynamodb = project
   .in(file("dynamodb"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-dynamodb"),
