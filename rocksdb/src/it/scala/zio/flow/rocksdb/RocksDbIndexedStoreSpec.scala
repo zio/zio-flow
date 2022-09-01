@@ -19,12 +19,9 @@ package zio.flow.rocksdb
 import org.{rocksdb => jrocksdb}
 import zio._
 import zio.flow.internal.IndexedStore
-import zio.flow.internal.IndexedStore.Index
 import zio.flow.test.IndexedStoreTests
 import zio.nio.file.{Files, Path}
 import zio.rocksdb.TransactionDB
-import zio.test.Assertion.{containsString, equalTo}
-import zio.test.TestAspect.flaky
 import zio.test._
 
 import java.io.IOException

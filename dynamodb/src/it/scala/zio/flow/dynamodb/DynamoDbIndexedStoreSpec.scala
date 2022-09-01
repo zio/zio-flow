@@ -1,5 +1,6 @@
 package zio.flow.dynamodb
 
+import zio.aws.dynamodb.DynamoDb
 import zio.{Scope, _}
 import zio.flow.dynamodb.DynamoDbSupport.{createIndexedStoreTable, dynamoDbLayer}
 import zio.flow.test.IndexedStoreTests
@@ -14,7 +15,7 @@ object DynamoDbIndexedStoreSpec extends ZIOSpecDefault {
     dynamoDbLayer >+> DynamoDbIndexedStore.layer
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
-    IndexedStoreTests(
+    IndexedStoreTests[DynamoDb](
       "DynamoDbIndexedStore",
       initializeDb = createIndexedStoreTable(DynamoDbIndexedStore.tableName)
     ).tests.provideCustomLayerShared(dynamoDbIndexedStore)
