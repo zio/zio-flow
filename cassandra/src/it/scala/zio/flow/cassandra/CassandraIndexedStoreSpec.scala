@@ -4,7 +4,6 @@ import zio._
 import zio.flow.cassandra.CassandraTestContainerSupport._
 import zio.flow.test.IndexedStoreTests
 import zio.logging.slf4j.bridge.Slf4jBridge
-import zio.test.TestAspect.sequential
 import zio.test._
 
 object CassandraIndexedStoreSpec extends ZIOSpecDefault {
@@ -17,7 +16,7 @@ object CassandraIndexedStoreSpec extends ZIOSpecDefault {
       testUsing(cassandraV3, "Cassandra V3"),
       testUsing(cassandraV4, "Cassandra V4"),
       testUsing(scyllaDb, "ScyllaDB")
-    ) @@ sequential
+    )
 
   private def testUsing(database: SessionLayer, label: String): Spec[TestEnvironment, Any] =
     IndexedStoreTests(label, initializeDb = ZIO.unit).tests

@@ -31,7 +31,7 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
           for {
             _            <- initializeDb
             indexedStore <- ZIO.service[IndexedStore]
-            insertPos    <- indexedStore.put("SomeTopic", Chunk.fromArray("Value1".getBytes()))
+            insertPos    <- indexedStore.put("SomeTopic1", Chunk.fromArray("Value1".getBytes()))
           } yield assertTrue(insertPos == Index(1L))
         }
       },
@@ -41,7 +41,7 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             _            <- initializeDb
             indexedStore <- ZIO.service[IndexedStore]
             posList <- ZIO.foreach((0 until 10).toList)(i =>
-                         indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                         indexedStore.put("SomeTopic2", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                        )
             _ <- ZIO.debug(posList.mkString(","))
           } yield assertTrue(posList.mkString(",") == "1,2,3,4,5,6,7,8,9,10")
@@ -52,7 +52,7 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
           for {
             _            <- initializeDb
             indexedStore <- ZIO.service[IndexedStore]
-            scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+            scannedChunk <- indexedStore.scan("SomeTopic3", Index(1L), Index(10L)).runCollect
             resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
           } yield assertTrue(resultChunk.toList.mkString("") == "")
         }
@@ -63,9 +63,9 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             _            <- initializeDb
             indexedStore <- ZIO.service[IndexedStore]
             _ <- ZIO.foreachDiscard((0 until 10).toList) { i =>
-                   indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                   indexedStore.put("SomeTopic4", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                  }
-            scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+            scannedChunk <- indexedStore.scan("SomeTopic4", Index(1L), Index(10L)).runCollect
             resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
           } yield assertTrue(
             resultChunk.toList.mkString(",") == "Value0,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9"
@@ -79,9 +79,9 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
               _            <- initializeDb
               indexedStore <- ZIO.service[IndexedStore]
               _ <- ZIO.foreachParDiscard((0 until 10).toList)(i =>
-                     indexedStore.put("SomeTopic", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                     indexedStore.put("SomeTopic5", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                    )
-              scannedChunk <- indexedStore.scan("SomeTopic", Index(1L), Index(10L)).runCollect
+              scannedChunk <- indexedStore.scan("SomeTopic5", Index(1L), Index(10L)).runCollect
               resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
             } yield resultChunk
           }
