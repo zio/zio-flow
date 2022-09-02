@@ -710,7 +710,7 @@ final case class PersistentExecutor(
     def waitForVariablesToChange(
       watchedVariables: Set[ScopedRemoteVariableName],
       watchPosition: Index
-    ): ZIO[Any, IOException, Unit] =
+    ): ZIO[Any, IOException, Timestamp] =
       durableLog
         .subscribe(
           Topics.variableChanges(state.scope.rootScope.flowId),
@@ -719,12 +719,20 @@ final case class PersistentExecutor(
         .map { raw =>
           execEnv.deserializer.deserialize[ScopedRemoteVariableName](raw)
         }
-        .filter {
-          case Right(scopedName) => watchedVariables.contains(scopedName)
-          case Left(_)           => false
+        .collect {
+          case Right(scopedName) if watchedVariables.contains(scopedName) => scopedName
         }
         .runHead
-        .unit
+        .flatMap {
+          case Some(scopedName) =>
+            remoteVariableKvStore
+              .getLatestTimestamp(scopedName.name, scopedName.scope)
+              .flatMap {
+                case Some((timestamp, _)) => ZIO.succeed(timestamp)
+                case None                 => ZIO.fail(new IOException(s"Could not get last timestamp of changed variable $scopedName"))
+              }
+          case None => ZIO.fail(new IOException("Variable change stream finished unexpectedly"))
+        }
 
     def runSteps(
       stateRef: Ref[State[E, A]]
@@ -756,8 +764,12 @@ final case class PersistentExecutor(
                       case PersistentWorkflowStatus.Done =>
                         ZIO.succeed(StepResult(StateChange.none, continue = false))
                       case PersistentWorkflowStatus.Suspended =>
-                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next)
-                          .as(StepResult(StateChange.resume, continue = true))
+                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).map { timestamp =>
+                          StepResult(
+                            StateChange.resume ++ StateChange.advanceClock(atLeastTo = timestamp),
+                            continue = true
+                          )
+                        }
                     }
                   state1  = stepResult.stateChange(state0)
                   state2 <- persistState(state.id.asFlowId, state0, stepResult.stateChange, state1, recordingContext)
@@ -882,7 +894,7 @@ final case class PersistentExecutor(
       _ <-
         ZIO
           .logInfo(
-            s"Persisting changes to ${modifiedVariables.size} remote variables\n(${modifiedVariables.mkString(", ")})"
+            s"Persisting changes to ${modifiedVariables.size} remote variables"
           )
           .when(modifiedVariables.nonEmpty)
 
