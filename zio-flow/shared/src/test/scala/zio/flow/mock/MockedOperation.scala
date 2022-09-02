@@ -18,9 +18,9 @@ package zio.flow.mock
 
 import zio.flow.Operation
 import zio.test.Assertion.anything
-
 import zio._
 import zio.flow.mock.MockedOperation.Match
+import zio.schema.{DynamicValue, Schema}
 
 // TODO: move to a separate published module to support testing user flows
 
@@ -48,7 +48,7 @@ object MockedOperation {
     override def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation) =
       (None, Empty)
   }
-  final case class Http[R, A](
+  final case class Http[R, A: Schema](
     urlMatcher: zio.test.Assertion[String] = anything,
     methodMatcher: zio.test.Assertion[String] = anything,
     headersMatcher: zio.test.Assertion[Map[String, String]] = anything,
@@ -66,7 +66,22 @@ object MockedOperation {
               input.asInstanceOf[R]
             )
           if (m.isSuccess) {
-            (Some(Match(result().asInstanceOf[A1], duration)), Empty)
+            val typedSchema = implicitly[Schema[A]]
+            val value       = result()
+            val reencoded   = DynamicValue.fromSchemaAndValue(typedSchema, value).toTypedValue(operation.resultSchema)
+            (
+              Some(
+                Match(
+                  reencoded.getOrElse(
+                    throw new IllegalStateException(
+                      s"Failed to reencode value $value with schema ${operation.resultSchema}"
+                    )
+                  ),
+                  duration
+                )
+              ),
+              Empty
+            )
           } else {
             (None, this)
           }

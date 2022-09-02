@@ -1,12 +1,16 @@
-package zio.flow
+package zio.flow.examples
 
-import zio.schema.{DeriveSchema, Schema}
-import zio.ZNothing
-import zio.test._
-
+import zio.flow.internal.executor.PersistentExecutorBaseSpec
+import zio.{ZNothing, durationInt}
+import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
+import zio.flow.mock.MockedOperation
 import zio.flow.operation.http
+import zio.flow.{Activity, ActivityError, EmailRequest, Operation, Remote, RemoteVariableReference, ZFlow}
+import zio.schema.{DeriveSchema, Schema}
+import zio.test.Assertion.equalTo
+import zio.test.{Spec, TestEnvironment, assertTrue}
 
-object GoodcoverUseCase extends ZIOSpecDefault {
+object GoodcoverUseCase extends PersistentExecutorBaseSpec {
 
   def setBoolVarAfterSleep(
     remoteBoolVar: Remote[RemoteVariableReference[Boolean]],
@@ -70,17 +74,15 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     manualEvalDone: Remote[RemoteVariableReference[Boolean]]
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.iterate(
     Remote(true),
-    (_: Remote[Boolean]) => // TODO: could be eliminated by reenabling implicit R=>F conversion
-      Remote[ZFlow[Any, ActivityError, Boolean]](
-        for {
-          bool <- manualEvalDone
-          _    <- setBoolVarAfterSleep(bool, 5, true).fork
-          _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
-          loop <- bool.get
-          // _    <- ZFlow.log("Send reminder email to evaluator")
-          // _    <- reminderEmailForManualEvaluation(emailRequest)
-        } yield !loop
-      ),
+    (_: Remote[Boolean]) =>
+      for {
+        bool <- manualEvalDone
+        _    <- setBoolVarAfterSleep(bool, 5, true).fork
+        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+        loop <- bool.get
+//           _    <- ZFlow.log("Send reminder email to evaluator")
+//           _    <- reminderEmailForManualEvaluation(emailRequest)
+      } yield !loop,
     (b: Remote[Boolean]) => b
   )
 
@@ -89,15 +91,15 @@ object GoodcoverUseCase extends ZIOSpecDefault {
   ): ZFlow[Any, ActivityError, Boolean] = ZFlow.iterate(
     Remote(true),
     (_: Remote[Boolean]) =>
-      Remote[ZFlow[Any, ActivityError, Boolean]](for {
+      for {
         _    <- ZFlow.log("Inside policy renewal reminder flow.")
         bool <- renewPolicy
         _    <- setBoolVarAfterSleep(bool, 5, true).fork
         _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
         loop <- bool.get
-        // _    <- ZFlow.log("Send reminder email to customer for payment")
-        // _    <- reminderEmailForManualEvaluation(emailRequest)
-      } yield !loop),
+//         _    <- ZFlow.log("Send reminder email to customer for payment")
+//         _    <- reminderEmailForManualEvaluation(emailRequest)
+      } yield !loop,
     (b: Remote[Boolean]) => b
   )
 
@@ -114,23 +116,44 @@ object GoodcoverUseCase extends ZIOSpecDefault {
     )
 
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
-//
-  val suite1: Spec[Annotations, TestSuccess] =
-    suite("PolicyClaimStatus")(test("PolicyClaimStatus") {
-//      val result = (for {
-//        manualEvalDone    <- ZFlow.newVar("manualEvalDone", false)
-//        paymentSuccessful <- ZFlow.newVar("paymentSuccessful", false)
-//        claimStatus       <- policyClaimStatus(policy)
-//        fireRisk          <- getFireRisk(policy)
-//        isManualEvalReq   <- isManualEvalRequired(policy, fireRisk)
-//        _                 <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(manualEvalDone))
-//        policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
-//        _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
-//      } yield ()).evaluateInMemForGCExample
-//      assertM(result)(equalTo(()))
-      assertCompletes
-    } @@ TestAspect.ignore) // TODO
 
-  override def spec =
-    suite("End to end goodcover use-case performed by in-memory executor")(suite1)
+  override def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any] =
+    suite("End to end goodcover use-case performed by in-memory executor")(
+      suite("PolicyClaimStatus")(
+        testFlow("PolicyClaimStatus", periodicAdjustClock = Some(1.second)) {
+          for {
+            manualEvalDone    <- ZFlow.newVar("manualEvalDone", false)
+            paymentSuccessful <- ZFlow.newVar("paymentSuccessful", false)
+            claimStatus       <- policyClaimStatus(policy)
+            fireRisk          <- getFireRisk(policy)
+            isManualEvalReq   <- isManualEvalRequired(policy, fireRisk)
+            _                 <- ZFlow.when(isManualEvalReq)(manualEvalReminderFlow(manualEvalDone))
+            policyOption      <- createRenewedPolicy(claimStatus, fireRisk)
+            _                 <- ZFlow.when(policyOption.isSome)(policyPaymentReminderFlow(paymentSuccessful))
+          } yield ()
+        }(
+          assert = { result =>
+            assertTrue(result == unit)
+          },
+          mock = MockedOperation.Http[Policy, Boolean](
+            urlMatcher = equalTo("getPolicyClaimStatus.com"),
+            methodMatcher = equalTo("GET"),
+            result = () => true
+          ) ++ MockedOperation.Http[Policy, Double](
+            urlMatcher = equalTo("getFireRiskForProperty.com"),
+            methodMatcher = equalTo("GET"),
+            result = () => 0.23
+          ) ++ MockedOperation.Http[Policy, Boolean](
+            urlMatcher = equalTo("isManualEvalRequired.com"),
+            methodMatcher = equalTo("GET"),
+            result = () => true
+          ) ++ MockedOperation.Http[(Boolean, Double), Option[Policy]](
+            urlMatcher = equalTo("createRenewedPolicy.com"),
+            methodMatcher = equalTo("GET"),
+            inputMatcher = equalTo((true, 0.23)),
+            result = () => Some(Policy("test policy"))
+          )
+        )
+      )
+    )
 }
