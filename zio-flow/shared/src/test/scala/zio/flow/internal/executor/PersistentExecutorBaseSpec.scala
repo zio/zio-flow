@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
 
-  private val counter = new AtomicInteger(0)
+  private val counter      = new AtomicInteger(0)
+  protected val unit: Unit = ()
 
   def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any]
 

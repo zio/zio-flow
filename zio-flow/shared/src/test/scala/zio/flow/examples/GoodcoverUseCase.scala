@@ -133,7 +133,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
           } yield ()
         }(
           assert = { result =>
-            assertTrue(result == ())
+            assertTrue(result == unit)
           },
           mock = MockedOperation.Http[Policy, Boolean](
             urlMatcher = equalTo("getPolicyClaimStatus.com"),

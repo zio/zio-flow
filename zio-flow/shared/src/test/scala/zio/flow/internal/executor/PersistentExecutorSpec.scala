@@ -48,14 +48,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           .succeed(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
       } { result =>
-        assertTrue(result == ())
+        assertTrue(result == unit)
       },
       testFlow("foldM - error side") {
         ZFlow
           .fail(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
       } { result =>
-        assertTrue(result == ())
+        assertTrue(result == unit)
       },
       testFlow("flatMap 1") {
         ZFlow
@@ -810,7 +810,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       testFlow("zip") {
         ZFlow.succeed(1).zip(ZFlow.succeed(2))
       } { result =>
-        assertTrue(result == (1, 2))
+        val expected = (1, 2)
+        assertTrue(result == expected)
       },
       testFlow("zipLeft") {
         ZFlow.succeed(1).zipLeft(ZFlow.succeed(2))
