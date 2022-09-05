@@ -4,7 +4,8 @@ import zhttp.http.Method._
 import zhttp.http._
 import zio._
 import zio.flow._
-import zio.flow.server.ZFlowEndpoint.deserializeTemplate
+import zio.flow.server.ZFlowEndpoint.{deserializeTemplate, jsonResponse}
+import zio.schema.Schema
 import zio.schema.codec.JsonCodec
 
 final class ZFlowEndpoint(flowService: FlowTemplates) {
@@ -15,16 +16,9 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
           .getZFlowTemplate(TemplateId(templateId))
           .map { flow =>
             flow.fold(
-              Response(
-                data = HttpData
-                  .fromChunk(JsonCodec.encode(ErrorResponse.schema)(ErrorResponse(s"Workflow $templateId not found"))),
-                headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
-              ).setStatus(Status.NotFound)
+              jsonResponse(ErrorResponse(s"Workflow $templateId not found"), Status.NotFound)
             ) { flow =>
-              Response(
-                data = HttpData.fromChunk(JsonCodec.encode(ZFlowTemplate.schema)(flow)),
-                headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
-              )
+              jsonResponse(flow)
             }
           }
       case request @ PUT -> !! / "templates" / templateId =>
@@ -37,21 +31,10 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
       case POST -> !! / "templates" / templateId / "trigger" =>
         flowService
           .trigger(TemplateId(templateId))
-          .map(flowId =>
-            Response(
-              data = HttpData.fromChunk(JsonCodec.encode(ZFlowTriggered.schema)(ZFlowTriggered(flowId))),
-              headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
-            )
-          )
+          .map(flowId => jsonResponse(ZFlowTriggered(flowId)))
     }
     .catchAll { error =>
-      Http.response(
-        Response(
-          data = HttpData
-            .fromChunk(JsonCodec.encode(ErrorResponse.schema)(ErrorResponse(error.getMessage))),
-          headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
-        ).setStatus(Status.InternalServerError)
-      )
+      Http.response(jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError))
     }
 }
 object ZFlowEndpoint {
@@ -70,4 +53,11 @@ object ZFlowEndpoint {
     ZLayer.fromFunction(new ZFlowEndpoint(_))
 
   val endpoint: ZIO[ZFlowEndpoint, Nothing, HttpApp[Any, Nothing]] = ZIO.serviceWith(_.endpoint)
+
+  private[server] def jsonResponse[T](body: T, status: Status = Status.Ok)(implicit schema: Schema[T]): Response =
+    Response(
+      data = HttpData.fromChunk(JsonCodec.encode(schema)(body)),
+      headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson),
+      status = status
+    )
 }
