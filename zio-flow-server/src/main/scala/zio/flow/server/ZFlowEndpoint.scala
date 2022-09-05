@@ -5,7 +5,7 @@ import zhttp.http.Method._
 import zhttp.http._
 import zio._
 import zio.flow._
-import zio.flow.server.ZFlowEndpoint.deserializeFlow
+import zio.flow.server.ZFlowEndpoint.deserializeTemplate
 import zio.schema.codec.JsonCodec
 
 final class ZFlowEndpoint(flowService: FlowTemplates) {
@@ -17,15 +17,15 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
           .map { flow =>
             flow.fold(Response.text(s"Workflow $templateId not found").setStatus(Status.NotFound)) { flow =>
               Response(
-                data = HttpData.fromChunk(JsonCodec.encode(ZFlow.schemaAny)(flow)),
+                data = HttpData.fromChunk(JsonCodec.encode(ZFlowTemplate.schema)(flow)),
                 headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
               )
             }
           }
       case request @ PUT -> !! / "templates" / templateId =>
         for {
-          flow <- deserializeFlow(request)
-          _    <- flowService.saveZFlowTemplate(TemplateId(templateId), flow)
+          flowTemplate <- deserializeTemplate(request)
+          _            <- flowService.saveZFlowTemplate(TemplateId(templateId), flowTemplate)
         } yield Response.ok
       case DELETE -> !! / "templates" / templateId =>
         flowService.deleteZFlowTemplate(TemplateId(templateId)).as(Response.status(Status.NoContent))
@@ -39,16 +39,16 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
     }
 }
 object ZFlowEndpoint {
-  private def deserializeFlow(request: Request): ZIO[Any, Throwable, ZFlow[Any, Any, Any]] =
+  private def deserializeTemplate(request: Request): ZIO[Any, Throwable, ZFlowTemplate] =
     for {
       payload <- request.body
       zFlow <- ZIO
-                 .fromEither(jsonToZFlow(payload))
+                 .fromEither(jsonToZFlowTemplate(payload))
                  // TODO custom error type? ;)
                  .mapError(str => new IllegalArgumentException(str))
     } yield zFlow
 
-  private def jsonToZFlow: Chunk[Byte] => Either[String, ZFlow[Any, Any, Any]] = JsonCodec.decode(ZFlow.schemaAny)
+  private def jsonToZFlowTemplate: Chunk[Byte] => Either[String, ZFlowTemplate] = JsonCodec.decode(ZFlowTemplate.schema)
 
   val layer: ZLayer[FlowTemplates, Nothing, ZFlowEndpoint] =
     ZLayer.fromFunction(new ZFlowEndpoint(_))
