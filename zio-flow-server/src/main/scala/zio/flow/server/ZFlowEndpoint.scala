@@ -1,6 +1,5 @@
 package zio.flow.server
 
-import zhttp.http.HttpError._
 import zhttp.http.Method._
 import zhttp.http._
 import zio._
@@ -15,7 +14,13 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
         flowService
           .getZFlowTemplate(TemplateId(templateId))
           .map { flow =>
-            flow.fold(Response.text(s"Workflow $templateId not found").setStatus(Status.NotFound)) { flow =>
+            flow.fold(
+              Response(
+                data = HttpData
+                  .fromChunk(JsonCodec.encode(ErrorResponse.schema)(ErrorResponse(s"Workflow $templateId not found"))),
+                headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
+              ).setStatus(Status.NotFound)
+            ) { flow =>
               Response(
                 data = HttpData.fromChunk(JsonCodec.encode(ZFlowTemplate.schema)(flow)),
                 headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
@@ -32,10 +37,21 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
       case POST -> !! / "templates" / templateId / "trigger" =>
         flowService
           .trigger(TemplateId(templateId))
-          .map(flowId => Response.text(FlowId.unwrap(flowId)))
+          .map(flowId =>
+            Response(
+              data = HttpData.fromChunk(JsonCodec.encode(ZFlowTriggered.schema)(ZFlowTriggered(flowId))),
+              headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
+            )
+          )
     }
     .catchAll { error =>
-      Http.error(InternalServerError(error.getMessage, Some(error)))
+      Http.response(
+        Response(
+          data = HttpData
+            .fromChunk(JsonCodec.encode(ErrorResponse.schema)(ErrorResponse(error.getMessage))),
+          headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson)
+        ).setStatus(Status.InternalServerError)
+      )
     }
 }
 object ZFlowEndpoint {
