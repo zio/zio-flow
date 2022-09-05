@@ -17,6 +17,8 @@
 package zio.flow.internal
 
 import zio.flow.internal.IndexedStore.Index
+import zio.flow.metrics
+import zio.flow.metrics.{VariableAccess, VariableKind}
 import zio.flow.{ExecutionEnvironment, RemoteVariableName}
 import zio.stm.{TRef, TSet}
 import zio.stream.ZStream
@@ -37,8 +39,9 @@ final case class RemoteVariableKeyValueStore(
     scope: RemoteVariableScope,
     value: Chunk[Byte],
     timestamp: Timestamp
-  ): IO[IOException, Boolean] =
+  ): IO[IOException, Boolean] = {
     ZIO.logDebug(s"Storing variable ${RemoteVariableName.unwrap(name)} in scope $scope with timestamp $timestamp") *>
+      metrics.variableSizeBytes(kindOf(scope)).update(value.size) *>
       keyValueStore.put(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), value, timestamp) <*
       durableLog
         .append(
@@ -49,12 +52,13 @@ final case class RemoteVariableKeyValueStore(
         .flatMap { index =>
           lastIndex.set(index).commit
         }
+  } @@ metrics.variableAccessCount(VariableAccess.Write, kindOf(scope))
 
   def getLatest(
     name: RemoteVariableName,
     scope: RemoteVariableScope,
     before: Option[Timestamp]
-  ): IO[IOException, Option[(Chunk[Byte], RemoteVariableScope)]] =
+  ): IO[IOException, Option[(Chunk[Byte], RemoteVariableScope)]] = {
     keyValueStore.getLatest(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), before).flatMap {
       case Some(value) =>
         ZIO.logDebug(s"Read variable ${RemoteVariableName.unwrap(name)} from scope $scope before $before") *>
@@ -70,6 +74,7 @@ final case class RemoteVariableKeyValueStore(
             ZIO.none
         }
     }
+  } @@ metrics.variableAccessCount(VariableAccess.Read, kindOf(scope))
 
   def getLatestTimestamp(
     name: RemoteVariableName,
@@ -88,9 +93,10 @@ final case class RemoteVariableKeyValueStore(
         }
     }
 
-  def delete(name: RemoteVariableName, scope: RemoteVariableScope): IO[IOException, Unit] =
+  def delete(name: RemoteVariableName, scope: RemoteVariableScope): IO[IOException, Unit] = {
     ZIO.logDebug(s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope") *>
       keyValueStore.delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)))
+  } @@ metrics.variableAccessCount(VariableAccess.Delete, kindOf(scope))
 
   def getReadVariables: IO[Nothing, Set[ScopedRemoteVariableName]] =
     readVariables.toSet.commit
@@ -107,6 +113,13 @@ final case class RemoteVariableKeyValueStore(
 
   private def key(name: ScopedRemoteVariableName): Chunk[Byte] =
     Chunk.fromArray(name.asString.getBytes(StandardCharsets.UTF_8))
+
+  private def kindOf(scope: RemoteVariableScope): VariableKind =
+    scope match {
+      case RemoteVariableScope.TopLevel(flowId)                   => VariableKind.TopLevel
+      case RemoteVariableScope.Fiber(flowId, parent)              => VariableKind.Forked
+      case RemoteVariableScope.Transactional(parent, transaction) => VariableKind.Transactional
+    }
 }
 
 object RemoteVariableKeyValueStore {
