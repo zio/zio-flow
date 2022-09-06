@@ -1,13 +1,26 @@
 package zio.flow.server
 
-import zio._
+import zio.{flow, _}
 import zio.flow.internal.{KeyValueStore, Namespaces, Timestamp, ZFlowExecutor}
 import zio.flow.{FlowId, TemplateId, ZFlowTemplate}
 import zio.schema.codec.JsonCodec
+import zio.stream.ZStream
 
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecutor) {
+  def getZFlowTemplates(): ZStream[Any, IOException, (flow.TemplateId.Type, ZFlowTemplate)] =
+    keyValueStore.scanAll(Namespaces.workflowTemplate).mapZIO { case (rawKey, rawFlowTemplate) =>
+      val templateId = TemplateId(new String(rawKey.toArray, StandardCharsets.UTF_8))
+      ZIO
+        .fromEither(JsonCodec.decode(ZFlowTemplate.schema)(rawFlowTemplate))
+        .mapBoth(
+          error => new IOException(s"Can not deserialize template $templateId: $error"),
+          flowTemplate => templateId -> flowTemplate
+        )
+    }
+
   def getZFlowTemplate(templateId: TemplateId): ZIO[Any, IOException, Option[ZFlowTemplate]] =
     keyValueStore.getLatest(Namespaces.workflowTemplate, templateId.toRaw, None).flatMap {
       case Some(bytes) =>

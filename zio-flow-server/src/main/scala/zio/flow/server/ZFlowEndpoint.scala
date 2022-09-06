@@ -11,6 +11,14 @@ import zio.schema.codec.JsonCodec
 final class ZFlowEndpoint(flowService: FlowTemplates) {
   val endpoint: HttpApp[Any, Nothing] = Http
     .collectZIO[Request] {
+      case GET -> !! / "templates" =>
+        flowService
+          .getZFlowTemplates()
+          .map { case (templateId, template) =>
+            ListFlowTemplatesResponse.Entry(templateId, template)
+          }
+          .runCollect
+          .map(flowTemplates => jsonResponse(ListFlowTemplatesResponse(flowTemplates)))
       case GET -> !! / "templates" / templateId =>
         flowService
           .getZFlowTemplate(TemplateId(templateId))
