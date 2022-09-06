@@ -8,12 +8,12 @@ import zio.schema.codec.JsonCodec
 import java.io.IOException
 
 final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecutor) {
-  def getZFlowTemplate(templateId: TemplateId): ZIO[Any, Throwable, Option[ZFlowTemplate]] =
+  def getZFlowTemplate(templateId: TemplateId): ZIO[Any, IOException, Option[ZFlowTemplate]] =
     keyValueStore.getLatest(Namespaces.workflowTemplate, templateId.toRaw, None).flatMap {
       case Some(bytes) =>
         ZIO
           .fromEither(JsonCodec.decode(ZFlowTemplate.schema)(bytes))
-          .mapBoth(error => new IllegalStateException(s"Can not deserialize template $templateId: $error"), Some(_))
+          .mapBoth(error => new IOException(s"Failed to deserialize template $templateId: $error"), Some(_))
       case None =>
         ZIO.none
     }
