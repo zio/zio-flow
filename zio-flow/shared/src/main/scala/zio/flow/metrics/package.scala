@@ -30,7 +30,7 @@ package object metrics {
   def flowStarted(startType: StartType): ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] =
     Metric
       .counterInt("zioflow_started_total")
-      .tagged("type", startTypeToLabel(startType))
+      .tagged("type", StartType.toLabel(startType))
       .trackAll(1)
 
   /**
@@ -56,7 +56,7 @@ package object metrics {
   def transactionOutcomeCount(transactionOutcome: TransactionOutcome): Metric[Counter, Int, MetricState.Counter] =
     Metric
       .counterInt("zioflow_transactions_total")
-      .tagged("outcome", transactionOutcomeToLabel(transactionOutcome))
+      .tagged("outcome", TransactionOutcome.toLabel(transactionOutcome))
 
   /**
    * Counter increased when a flow finishes with either success, failure or
@@ -65,7 +65,7 @@ package object metrics {
   def finishedFlowCount(result: FlowResult): Metric[Counter, Int, MetricState.Counter] =
     Metric
       .counterInt("zioflow_finished_flows_total")
-      .tagged("result", flowResultToLabel(result))
+      .tagged("result", FlowResult.toLabel(result))
 
   /** Histogram of the serialized workflow state snapshots in bytes */
   val serializedFlowStateSize: Metric.Histogram[Int] =
@@ -86,14 +86,14 @@ package object metrics {
   ): ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] =
     Metric
       .counterInt("zioflow_variable_access_total")
-      .tagged(MetricLabel("access", variableAccessToLabel(access)), MetricLabel("kind", variableKindToLabel(kind)))
+      .tagged(MetricLabel("access", VariableAccess.toLabel(access)), MetricLabel("kind", VariableKind.toLabel(kind)))
       .trackAll(1)
 
   /** Histogram of serialized size of remote variables in bytes */
   def variableSizeBytes(kind: VariableKind): Metric[Histogram, Int, MetricState.Histogram] =
     Metric
       .histogram("zioflow_variable_size_bytes", Histogram.Boundaries.exponential(512.0, 2.0, 16))
-      .tagged("kind", variableKindToLabel(kind))
+      .tagged("kind", VariableKind.toLabel(kind))
       .contramap((bytes: Int) => bytes.toDouble)
 
   /**
@@ -103,7 +103,7 @@ package object metrics {
   def finishedFlowAge(result: FlowResult): Metric[Histogram, Duration, MetricState.Histogram] =
     Metric
       .histogram("zioflow_finished_flow_age_ms", Histogram.Boundaries.exponential(1000, 2, 20))
-      .tagged("result", flowResultToLabel(result))
+      .tagged("result", FlowResult.toLabel(result))
       .contramap((duration: Duration) => duration.toMillis.toDouble)
 
   /**
@@ -114,7 +114,7 @@ package object metrics {
   def flowTotalExecutionTime(result: FlowResult): Metric[Histogram, Duration, MetricState.Histogram] =
     Metric
       .histogram("zioflow_total_execution_time_ms", Histogram.Boundaries.exponential(1000, 2, 20))
-      .tagged("result", flowResultToLabel(result))
+      .tagged("result", FlowResult.toLabel(result))
       .contramap((duration: Duration) => duration.toMillis.toDouble)
 
   /** Histogram of time fragments a workflow spends in suspended state */
@@ -135,81 +135,13 @@ package object metrics {
   val gcDeletions: ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] =
     Metric.counter("zioflow_gc_deletion").trackAll(1)
 
-  /** Counter for the number of garbage collectorions */
+  /** Counter for the number of garbage collections */
   val gcRuns: ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] = Metric.counter("zioflow_gc").trackAll(1)
-
-  sealed trait TransactionOutcome
-  object TransactionOutcome {
-    case object Success extends TransactionOutcome
-    case object Failure extends TransactionOutcome
-    case object Retry   extends TransactionOutcome
-  }
-
-  sealed trait FlowResult
-  object FlowResult {
-    case object Success extends FlowResult
-    case object Failure extends FlowResult
-    case object Death   extends FlowResult
-  }
-
-  sealed trait VariableAccess
-  object VariableAccess {
-    case object Read   extends VariableAccess
-    case object Write  extends VariableAccess
-    case object Delete extends VariableAccess
-  }
-
-  sealed trait VariableKind
-  object VariableKind {
-    case object TopLevel      extends VariableKind
-    case object Forked        extends VariableKind
-    case object Transactional extends VariableKind
-  }
-
-  sealed trait StartType
-  object StartType {
-    case object Fresh     extends StartType
-    case object Continued extends StartType
-  }
 
   private def statusToLabel(status: PersistentWorkflowStatus): String =
     status match {
       case PersistentWorkflowStatus.Running   => "running"
       case PersistentWorkflowStatus.Suspended => "suspended"
       case PersistentWorkflowStatus.Done      => "done"
-    }
-
-  private def transactionOutcomeToLabel(outcome: TransactionOutcome): String =
-    outcome match {
-      case TransactionOutcome.Success => "success"
-      case TransactionOutcome.Failure => "failure"
-      case TransactionOutcome.Retry   => "retry"
-    }
-
-  private def flowResultToLabel(result: FlowResult): String =
-    result match {
-      case FlowResult.Success => "success"
-      case FlowResult.Failure => "failure"
-      case FlowResult.Death   => "death"
-    } // TODO: categorize failures (introduce a proper error type first in place of IOException)
-
-  private def variableAccessToLabel(access: VariableAccess): String =
-    access match {
-      case VariableAccess.Read   => "read"
-      case VariableAccess.Write  => "write"
-      case VariableAccess.Delete => "delete"
-    }
-
-  private def variableKindToLabel(kind: VariableKind): String =
-    kind match {
-      case VariableKind.TopLevel      => "toplevel"
-      case VariableKind.Forked        => "forked"
-      case VariableKind.Transactional => "transactional"
-    }
-
-  private def startTypeToLabel(startType: StartType): String =
-    startType match {
-      case StartType.Fresh     => "fresh"
-      case StartType.Continued => "continued"
     }
 }

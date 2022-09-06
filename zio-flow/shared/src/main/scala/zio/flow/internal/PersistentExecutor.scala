@@ -30,7 +30,6 @@ import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, OffsetDateTime}
-import scala.annotation.nowarn
 import zio.stm.{TMap, ZSTM}
 import zio.stream.ZStream
 
