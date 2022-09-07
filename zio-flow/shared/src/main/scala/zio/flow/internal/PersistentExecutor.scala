@@ -646,7 +646,7 @@ final case class PersistentExecutor(
               )
             )
 
-          case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
+          case Die => ZIO.fail(ExecutorError.FlowDied)
 
           case RetryUntil =>
             onError(Remote.apply[TransactionFailure[ZNothing]](TransactionFailure.Retry))

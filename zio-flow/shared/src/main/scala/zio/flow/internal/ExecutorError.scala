@@ -33,7 +33,7 @@ sealed trait ExecutorError { self =>
       s"Key-value store failure in $operation: ${reason.getMessage}"
     case ExecutorError.LogError(error)           => s"Durable log failure: ${error.toMessage}"
     case ExecutorError.VariableChangeLogFinished => "Variable change log finished unexpectedly"
-    case ExecutorError.UnknownError(reason)      => s"Unknown failure: ${reason.getMessage}"
+    case ExecutorError.FlowDied                  => s"Could not evaluate ZFlow"
   }
 
   def cause: Option[Throwable] = None
@@ -64,9 +64,7 @@ object ExecutorError {
   }
   case object VariableChangeLogFinished extends ExecutorError
 
-  final case class UnknownError(reason: Throwable) extends ExecutorError {
-    override val cause: Option[Throwable] = Some(reason)
-  }
+  case object FlowDied extends ExecutorError
 
   import zio.flow.schemaThrowable
   implicit val schema: Schema[ExecutorError] = DeriveSchema.gen
