@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.metrics
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait TransactionOutcome
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+object TransactionOutcome {
+  case object Success extends TransactionOutcome
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+  case object Failure extends TransactionOutcome
+
+  case object Retry extends TransactionOutcome
+
+  def toLabel(outcome: TransactionOutcome): String =
+    outcome match {
+      case TransactionOutcome.Success => "success"
+      case TransactionOutcome.Failure => "failure"
+      case TransactionOutcome.Retry   => "retry"
+    }
 }

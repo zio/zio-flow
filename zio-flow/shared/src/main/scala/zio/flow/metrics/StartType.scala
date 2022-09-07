@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.metrics
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait StartType
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+object StartType {
+  case object Fresh extends StartType
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+  case object Continued extends StartType
+
+  def toLabel(startType: StartType): String =
+    startType match {
+      case StartType.Fresh     => "fresh"
+      case StartType.Continued => "continued"
+    }
 }

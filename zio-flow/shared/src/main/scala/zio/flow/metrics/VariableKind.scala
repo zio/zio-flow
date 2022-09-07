@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.metrics
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait VariableKind
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+object VariableKind {
+  case object TopLevel extends VariableKind
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+  case object Forked extends VariableKind
+
+  case object Transactional extends VariableKind
+
+  def toLabel(kind: VariableKind): String =
+    kind match {
+      case VariableKind.TopLevel      => "toplevel"
+      case VariableKind.Forked        => "forked"
+      case VariableKind.Transactional => "transactional"
+    }
 }

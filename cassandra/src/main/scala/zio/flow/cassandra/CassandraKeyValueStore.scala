@@ -53,12 +53,12 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
     key: Chunk[Byte],
     value: Chunk[Byte],
     timestamp: Timestamp
-  ): IO[IOException, Boolean] = {
+  ): IO[Throwable, Boolean] = {
     val insert = toInsert(namespace, key, timestamp, value)
 
     executeAsync(insert)
       .mapBoth(
-        refineToIOException(s"Error putting key-value pair for <$namespace> namespace"),
+        new IOException(s"Error putting key-value pair for <$namespace> namespace", _),
         _ => true
       )
   }
@@ -67,7 +67,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
     namespace: String,
     key: Chunk[Byte],
     before: Option[Timestamp]
-  ): IO[IOException, Option[(Chunk[Byte], Timestamp)]] = {
+  ): IO[Throwable, Option[(Chunk[Byte], Timestamp)]] = {
     val queryBuilder = cqlSelect
       .column(valueColumnName)
       .column(timestampColumnName)
@@ -107,7 +107,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         ZIO.none
       }
     }.mapError(
-      refineToIOException(s"Error retrieving or reading value for <$namespace> namespace")
+      new IOException(s"Error retrieving or reading value for <$namespace> namespace", _)
     )
   }
 
@@ -115,10 +115,10 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
     namespace: String,
     key: Chunk[Byte],
     before: Option[Timestamp]
-  ): IO[IOException, Option[Chunk[Byte]]] =
+  ): IO[Throwable, Option[Chunk[Byte]]] =
     getLatestImpl(namespace, key, before).map(_.map(_._1))
 
-  override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] = {
+  override def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])] = {
     val query = cqlSelect
       .column(keyColumnName)
       .column(valueColumnName)
@@ -127,9 +127,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         literal(namespace)
       )
       .build
-
-    lazy val errorContext =
-      s"Error scanning all key-value pairs for <$namespace> namespace"
 
     ZStream
       .paginateZIO(
@@ -145,9 +142,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
                 blobValueOf(keyColumnName, row) -> blobValueOf(valueColumnName, row)
               }
             }
-            .mapError(
-              refineToIOException(errorContext)
-            )
 
         val nextPage =
           if (result.hasMorePages)
@@ -160,12 +154,12 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         (pairs, nextPage)
       })
       .mapError(
-        refineToIOException(errorContext)
+        new IOException(s"Error scanning all key-value pairs for <$namespace> namespace", _)
       )
       .flatten
   }
 
-  override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] = {
+  override def scanAllKeys(namespace: String): ZStream[Any, Throwable, Chunk[Byte]] = {
     val query = cqlSelect
       .column(keyColumnName)
       .whereColumn(namespaceColumnName)
@@ -173,9 +167,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         literal(namespace)
       )
       .build
-
-    lazy val errorContext =
-      s"Error scanning all key-value pairs for <$namespace> namespace"
 
     ZStream
       .paginateZIO(
@@ -191,9 +182,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
                 blobValueOf(keyColumnName, row)
               }
             }
-            .mapError(
-              refineToIOException(errorContext)
-            )
 
         val nextPage =
           if (result.hasMorePages)
@@ -206,7 +194,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         (keys, nextPage)
       })
       .mapError(
-        refineToIOException(errorContext)
+        new IOException(s"Error scanning all key-value pairs for <$namespace> namespace", _)
       )
       .flatten
   }
@@ -214,10 +202,10 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   override def getLatestTimestamp(
     namespace: String,
     key: zio.Chunk[Byte]
-  ): zio.IO[java.io.IOException, Option[zio.flow.internal.Timestamp]] =
+  ): zio.IO[Throwable, Option[zio.flow.internal.Timestamp]] =
     getLatestImpl(namespace, key, before = None).map(_.map(_._2))
 
-  private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, IOException, Timestamp] = {
+  private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {
     val query = cqlSelect
       .column(timestampColumnName)
       .whereColumn(namespaceColumnName)
@@ -229,9 +217,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         byteBufferFrom(key)
       )
       .build()
-
-    lazy val errorContext =
-      s"Error scanning all key-value pairs for <$namespace> namespace"
 
     ZStream
       .paginateZIO(
@@ -245,9 +230,6 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
             .mapZIO { row =>
               ZIO.attempt(Timestamp(row.getLong(timestampColumnName)))
             }
-            .mapError(
-              refineToIOException(errorContext)
-            )
 
         val nextPage =
           if (result.hasMorePages)
@@ -260,12 +242,12 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
         (pairs, nextPage)
       })
       .mapError(
-        refineToIOException(errorContext)
+        new IOException(s"Error scanning all key-value pairs for <$namespace> namespace", _)
       )
       .flatten
   }
 
-  override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
+  override def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit] =
     getAllTimestamps(namespace, key).runCollect.flatMap { timestamps =>
       val delete = cqlDelete
         .whereColumn(namespaceColumnName)
@@ -282,7 +264,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
       executeAsync(delete)
         .mapBoth(
-          refineToIOException(s"Error deleting key-value pair from <$namespace> namespace"),
+          new IOException(s"Error deleting key-value pair from <$namespace> namespace", _),
           _ => ()
         )
     }
@@ -351,13 +333,6 @@ object CassandraKeyValueStore {
         .getByteBuffer(columnName)
         .array
     )
-
-  private def refineToIOException(errorContext: String): Throwable => IOException = {
-    case error: IOException =>
-      error
-    case error =>
-      new IOException(s"$errorContext: <${error.getMessage}>.", error)
-  }
 
   private def withColumnPrefix(s: String) =
     withDoubleQuotes("zflow_kv_" + s)

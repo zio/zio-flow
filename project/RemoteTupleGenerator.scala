@@ -64,7 +64,7 @@ object RemoteTupleGenerator extends AutoPlugin {
 
       q"""trait $name[..${model.typeParams}] {
 
-          def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+          def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
             for {
               ..$evalDynamic
 

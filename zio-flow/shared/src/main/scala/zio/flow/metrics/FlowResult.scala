@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.metrics
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait FlowResult
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+object FlowResult {
+  case object Success extends FlowResult
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+  case object Failure extends FlowResult
+
+  case object Death extends FlowResult
+
+  def toLabel(result: FlowResult): String =
+    result match {
+      case FlowResult.Success => "success"
+      case FlowResult.Failure => "failure"
+      case FlowResult.Death   => "death"
+    } // TODO: categorize failures (introduce a proper error type first in place of IOException)
 }

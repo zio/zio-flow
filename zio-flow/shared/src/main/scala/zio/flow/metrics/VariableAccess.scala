@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.metrics
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait VariableAccess
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+object VariableAccess {
+  case object Read extends VariableAccess
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+  case object Write extends VariableAccess
+
+  case object Delete extends VariableAccess
+
+  def toLabel(access: VariableAccess): String =
+    access match {
+      case VariableAccess.Read   => "read"
+      case VariableAccess.Write  => "write"
+      case VariableAccess.Delete => "delete"
+    }
 }

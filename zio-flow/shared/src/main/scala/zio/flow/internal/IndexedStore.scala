@@ -16,7 +16,6 @@
 
 package zio.flow.internal
 
-import java.io.IOException
 import zio._
 import zio.flow.internal.IndexedStore.Index
 import zio.prelude.Subtype
@@ -24,9 +23,9 @@ import zio.schema.Schema
 import zio.stream._
 
 trait IndexedStore {
-  def position(topic: String): IO[IOException, Index]
-  def put(topic: String, value: Chunk[Byte]): IO[IOException, Index]
-  def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]]
+  def position(topic: String): IO[Throwable, Index]
+  def put(topic: String, value: Chunk[Byte]): IO[Throwable, Index]
+  def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]]
 }
 
 object IndexedStore {
@@ -39,13 +38,13 @@ object IndexedStore {
     def next: Index = Index(index + 1)
   }
 
-  def position(topic: String): ZIO[IndexedStore, IOException, Index] =
+  def position(topic: String): ZIO[IndexedStore, Throwable, Index] =
     ZIO.serviceWithZIO(_.position(topic))
 
-  def put(topic: String, value: Chunk[Byte]): ZIO[IndexedStore, IOException, Index] =
+  def put(topic: String, value: Chunk[Byte]): ZIO[IndexedStore, Throwable, Index] =
     ZIO.serviceWithZIO(_.put(topic, value))
 
-  def scan(topic: String, position: Index, until: Index): ZStream[IndexedStore, IOException, Chunk[Byte]] =
+  def scan(topic: String, position: Index, until: Index): ZStream[IndexedStore, Throwable, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scan(topic, position, until))
 
   val inMemory: ZLayer[Any, Nothing, IndexedStore] =
@@ -57,7 +56,7 @@ object IndexedStore {
 
   private final case class InMemoryIndexedStore(topics: Ref[Map[String, Chunk[Chunk[Byte]]]]) extends IndexedStore {
 
-    def position(topic: String): IO[IOException, Index] =
+    def position(topic: String): IO[Throwable, Index] =
       topics.get.map { topics =>
         topics.get(topic) match {
           case Some(values) => Index(values.length.toLong)
@@ -65,7 +64,7 @@ object IndexedStore {
         }
       }
 
-    def put(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
+    def put(topic: String, value: Chunk[Byte]): IO[Throwable, Index] =
       topics.modify { topics =>
         topics.get(topic) match {
           case Some(values) => Index(values.length.toLong) -> topics.updated(topic, values :+ value)
@@ -73,7 +72,7 @@ object IndexedStore {
         }
       }
 
-    def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]] =
+    def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]] =
       ZStream.unwrap {
         topics.get.map { topics =>
           topics.get(topic) match {

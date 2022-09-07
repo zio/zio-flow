@@ -38,7 +38,7 @@ object ZFlowAssertionSyntax {
       schemaE: Schema[E]
     ): ZIO[Scope with DurableLog with KeyValueStore, E, (ZFlowExecutor, Fiber[E, A])] =
       MockExecutors.persistent(mock).flatMap { executor =>
-        executor.restartAll().orDie *>
+        executor.restartAll().orDieWith(_.toException) *>
           executor.submit(FlowId.unsafeMake(id), zflow).forkScoped.map(fiber => (executor, fiber))
       }
   }

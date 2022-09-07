@@ -26,16 +26,15 @@ import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 final case class RocksDbIndexedStore(
   rocksDB: TransactionDB,
-  namespaces: TMap[String, Promise[IOException, ColumnFamilyHandle]]
+  namespaces: TMap[String, Promise[Throwable, ColumnFamilyHandle]]
 ) extends IndexedStore
     with ColumnFamilyManagement {
 
-  def addTopic(topic: String): IO[IOException, ColumnFamilyHandle] =
+  def addTopic(topic: String): IO[Throwable, ColumnFamilyHandle] =
     for {
       //TODO : Only catch "Column Family already exists"
       colFamHandle <- getOrCreateNamespace(topic)
@@ -45,10 +44,10 @@ final case class RocksDbIndexedStore(
                ProtobufCodec.encode(Schema[String])("POSITION").toArray,
                ProtobufCodec.encode(Schema[Long])(0L).toArray
              )
-             .refineToOrDie[IOException]
+
     } yield colFamHandle
 
-  override def position(topic: String): IO[IOException, Index] =
+  override def position(topic: String): IO[Throwable, Index] =
     (for {
       cfHandle <- getOrCreateNamespace(topic)
       positionBytes <-
@@ -58,13 +57,13 @@ final case class RocksDbIndexedStore(
           case Some(positionBytes) =>
             ZIO
               .fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes)))
-              .mapError(s => new IOException(s))
+              .mapError(s => new Throwable(s))
           case None => ZIO.succeed(0L)
         }
 
     } yield Index(position))
 
-  override def put(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
+  override def put(topic: String, value: Chunk[Byte]): IO[Throwable, Index] =
     for {
       colFam <- getOrCreateNamespace(topic)
       _ <- rocksDB.atomically {
@@ -89,9 +88,9 @@ final case class RocksDbIndexedStore(
                      positionBytes1,
                      value.toArray
                    )
-                   .refineToOrDie[IOException]
+
              } yield ()
-           }.refineToOrDie[IOException]
+           }
       newPosition <- position(topic)
     } yield newPosition
 
@@ -101,7 +100,7 @@ final case class RocksDbIndexedStore(
         ProtobufCodec
           .encode(Schema[Long])(
             ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes)) match {
-              case Left(error) => throw new IOException(error)
+              case Left(error) => throw new Throwable(error)
               case Right(p)    => p + 1
             }
           )
@@ -110,13 +109,13 @@ final case class RocksDbIndexedStore(
         ProtobufCodec.encode(Schema[Long])(1L).toArray
     }
 
-  def scan(topic: String, position: Index, until: Index): ZStream[Any, IOException, Chunk[Byte]] =
+  def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]] =
     ZStream.fromZIO(getOrCreateNamespace(topic)).flatMap { cf =>
       for {
         k <- ZStream.fromIterable(position to until)
         value <-
           ZStream
-            .fromZIO(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray).refineToOrDie[IOException])
+            .fromZIO(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray))
       } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
     }
 }
@@ -135,11 +134,11 @@ object RocksDbIndexedStore {
       initialNamespaces <- rocksDb.initialHandles
       initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
                              val name = new String(handle.getName, StandardCharsets.UTF_8)
-                             Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
+                             Promise.make[Throwable, ColumnFamilyHandle].flatMap { promise =>
                                promise.succeed(handle).as(name -> promise)
                              }
                            }
-      namespaces <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialPromiseMap: _*).commit
+      namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
     } yield RocksDbIndexedStore(rocksDb, namespaces)
 
   def layer: ZLayer[RocksDbConfig, Throwable, IndexedStore] = ZLayer.scoped(make)
