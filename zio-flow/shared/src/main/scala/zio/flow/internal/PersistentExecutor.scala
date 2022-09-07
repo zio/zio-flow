@@ -845,36 +845,39 @@ final case class PersistentExecutor(
       ref       <- Ref.make[State[E, A]](state)
       startGate <- Promise.make[Nothing, Unit]
       now       <- Clock.currentDateTime
-      fiber <- (for {
-                 _ <- startGate.await
-                 _ <- runSteps(ref, executionStartedAt = now)
-                        .provide(
-                          ZLayer.succeed(execEnv),
-                          ZLayer.succeed(kvStore),
-                          ZLayer.succeed(durableLog),
-                          ZLayer(VirtualClock.make(state.lastTimestamp)),
-                          ZLayer.succeed(remoteVariableKvStore)
-                        )
-                        .catchAll { error =>
-                          for {
-                            _ <- ZIO.logErrorCause(s"Persistent executor ${state.id} failed", Cause.fail(error))
-                            _ <- state.result
-                                   .fail(Left(error))
-                                   .provideEnvironment(promiseEnv)
-                                   .catchAll { error2 =>
-                                     ZIO.logFatal(s"Failed to serialize execution failure: $error2")
-                                   }
-                            _ <- updateFinishedFlowMetrics(
-                                   metrics.FlowResult.Death,
-                                   state.startedAt,
-                                   state.totalExecutionTime
-                                 )
-                          } yield ()
-                        }
-                 _ <- deleteState(state.id.asFlowId).orDieWith(_.toException)
-               } yield ()).ensuring {
-                 workflows.delete(state.id.asFlowId).commit *> updateWorkflowMetrics()
-               }.fork
+      fiber <- {
+        for {
+          _ <- startGate.await
+          _ <- {
+            runSteps(ref, executionStartedAt = now)
+              .provide(
+                ZLayer.succeed(execEnv),
+                ZLayer.succeed(kvStore),
+                ZLayer.succeed(durableLog),
+                ZLayer(VirtualClock.make(state.lastTimestamp)),
+                ZLayer.succeed(remoteVariableKvStore)
+              ) @@ metrics.executorErrorCount
+          }.catchAll { error =>
+            for {
+              _ <- ZIO.logErrorCause(s"Persistent executor ${state.id} failed", Cause.fail(error))
+              _ <- state.result
+                     .fail(Left(error))
+                     .provideEnvironment(promiseEnv)
+                     .catchAll { error2 =>
+                       ZIO.logFatal(s"Failed to serialize execution failure: $error2")
+                     }
+              _ <- updateFinishedFlowMetrics(
+                     metrics.FlowResult.Death,
+                     state.startedAt,
+                     state.totalExecutionTime
+                   )
+            } yield ()
+          }
+          _ <- deleteState(state.id.asFlowId).orDieWith(_.toException)
+        } yield ()
+      }.ensuring {
+        workflows.delete(state.id.asFlowId).commit *> updateWorkflowMetrics()
+      }.fork
       runtimeState = PersistentExecutor.RuntimeState(
                        result = state.result,
                        fiber = fiber,

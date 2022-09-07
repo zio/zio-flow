@@ -17,7 +17,7 @@
 package zio.flow
 
 import zio.{Duration, ZIOAspect}
-import zio.flow.internal.PersistentWorkflowStatus
+import zio.flow.internal.{ExecutorError, PersistentWorkflowStatus}
 import zio.metrics.MetricKeyType.{Counter, Gauge, Histogram}
 import zio.metrics._
 
@@ -66,6 +66,14 @@ package object metrics {
     Metric
       .counterInt("zioflow_finished_flows_total")
       .tagged("result", FlowResult.toLabel(result))
+
+  /** Counter for different executor errors */
+  val executorErrorCount: ZIOAspect[Nothing, Any, Nothing, ExecutorError, Nothing, Any] =
+    Metric
+      .counterInt("zioflow_executor_error_total")
+      .contramap((_: ExecutorError) => 1)
+      .taggedWith[ExecutorError](error => Set(MetricLabel("error", error.getClass.getSimpleName)))
+      .trackError
 
   /** Histogram of the serialized workflow state snapshots in bytes */
   val serializedFlowStateSize: Metric.Histogram[Int] =
