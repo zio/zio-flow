@@ -19,21 +19,19 @@ package zio.flow.internal
 import zio.stream.ZStream
 import zio.{Chunk, IO, Ref, ZIO, ZLayer}
 
-import java.io.IOException
-
 trait KeyValueStore {
 
-  def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte], timestamp: Timestamp): IO[IOException, Boolean]
+  def put(namespace: String, key: Chunk[Byte], value: Chunk[Byte], timestamp: Timestamp): IO[Throwable, Boolean]
 
-  def getLatest(namespace: String, key: Chunk[Byte], before: Option[Timestamp]): IO[IOException, Option[Chunk[Byte]]]
+  def getLatest(namespace: String, key: Chunk[Byte], before: Option[Timestamp]): IO[Throwable, Option[Chunk[Byte]]]
 
-  def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]]
+  def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[Throwable, Option[Timestamp]]
 
-  def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])]
+  def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])]
 
-  def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]]
+  def scanAllKeys(namespace: String): ZStream[Any, Throwable, Chunk[Byte]]
 
-  def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit]
+  def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit]
 }
 
 object KeyValueStore {
@@ -56,7 +54,7 @@ object KeyValueStore {
     key: Chunk[Byte],
     value: Chunk[Byte],
     timestamp: Timestamp
-  ): ZIO[KeyValueStore, IOException, Boolean] =
+  ): ZIO[KeyValueStore, Throwable, Boolean] =
     ZIO.serviceWithZIO(
       _.put(namespace, key, value, timestamp)
     )
@@ -65,20 +63,20 @@ object KeyValueStore {
     namespace: String,
     key: Chunk[Byte],
     before: Option[Timestamp]
-  ): ZIO[KeyValueStore, IOException, Option[Chunk[Byte]]] =
+  ): ZIO[KeyValueStore, Throwable, Option[Chunk[Byte]]] =
     ZIO.serviceWithZIO(
       _.getLatest(namespace, key, before)
     )
 
-  def scanAll(namespace: String): ZStream[KeyValueStore, IOException, (Chunk[Byte], Chunk[Byte])] =
+  def scanAll(namespace: String): ZStream[KeyValueStore, Throwable, (Chunk[Byte], Chunk[Byte])] =
     ZStream.serviceWithStream(
       _.scanAll(namespace)
     )
 
-  def scanAllKeys(namespace: String): ZStream[KeyValueStore, IOException, Chunk[Byte]] =
+  def scanAllKeys(namespace: String): ZStream[KeyValueStore, Throwable, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scanAllKeys(namespace))
 
-  def delete(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, IOException, Unit] =
+  def delete(namespace: String, key: Chunk[Byte]): ZIO[KeyValueStore, Throwable, Unit] =
     ZIO.serviceWithZIO(
       _.delete(namespace, key)
     )
@@ -95,7 +93,7 @@ object KeyValueStore {
       key: Chunk[Byte],
       value: Chunk[Byte],
       timestamp: Timestamp
-    ): IO[IOException, Boolean] =
+    ): IO[Throwable, Boolean] =
 //      ZIO.logDebug(
 //        s"KVSTORE PUT [$timestamp] [$namespace] ${new String(key.toArray)}"
 //      ) *>
@@ -107,7 +105,7 @@ object KeyValueStore {
       namespace: String,
       key: Chunk[Byte],
       before: Option[Timestamp]
-    ): IO[IOException, Option[Chunk[Byte]]] =
+    ): IO[Throwable, Option[Chunk[Byte]]] =
       namespaces.get.map { ns =>
         ns.get(namespace)
           .flatMap(_.get(key))
@@ -124,7 +122,7 @@ object KeyValueStore {
 //          .logDebug(s"KVSTORE GET LATEST [$before] [$namespace] ${new String(key.toArray)}")
 //      )
 
-    override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]] =
+    override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[Throwable, Option[Timestamp]] =
       namespaces.get.map { ns =>
         ns.get(namespace)
           .flatMap(_.get(key))
@@ -138,7 +136,7 @@ object KeyValueStore {
 //          .logDebug(s"KVSTORE GET LATEST TIMESTAMP [$namespace] ${new String(key.toArray)} => $result")
 //      )
 
-    override def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
+    override def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])] =
       ZStream.unwrap {
         namespaces.get.map { ns =>
           ns.get(namespace) match {
@@ -149,7 +147,7 @@ object KeyValueStore {
         }
       }
 
-    override def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] =
+    override def scanAllKeys(namespace: String): ZStream[Any, Throwable, Chunk[Byte]] =
       ZStream.unwrap {
         namespaces.get.map { ns =>
           ns.get(namespace) match {
@@ -160,7 +158,7 @@ object KeyValueStore {
         }
       }
 
-    override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
+    override def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit] =
       namespaces.update { ns =>
         ns.get(namespace) match {
           case Some(data) =>

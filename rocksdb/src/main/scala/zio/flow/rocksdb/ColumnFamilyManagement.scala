@@ -21,15 +21,14 @@ import zio.rocksdb.TransactionDB
 import zio.stm.{TMap, ZSTM}
 import zio.{IO, Promise}
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 trait ColumnFamilyManagement {
   def rocksDB: TransactionDB
-  def namespaces: TMap[String, Promise[IOException, ColumnFamilyHandle]]
+  def namespaces: TMap[String, Promise[Throwable, ColumnFamilyHandle]]
 
-  protected def getOrCreateNamespace(namespace: String): IO[IOException, ColumnFamilyHandle] =
-    Promise.make[IOException, ColumnFamilyHandle].flatMap { newPromise =>
+  protected def getOrCreateNamespace(namespace: String): IO[Throwable, ColumnFamilyHandle] =
+    Promise.make[Throwable, ColumnFamilyHandle].flatMap { newPromise =>
       namespaces
         .get(namespace)
         .flatMap {
@@ -43,7 +42,6 @@ trait ColumnFamilyManagement {
                   .createColumnFamily(
                     new ColumnFamilyDescriptor(namespace.getBytes(StandardCharsets.UTF_8))
                   )
-                  .refineToOrDie[IOException]
                   .tapBoth(error => newPromise.fail(error), handle => newPromise.succeed(handle))
               )
         }

@@ -16,47 +16,47 @@
 
 package zio.flow
 
+import zio.ZIO
 import zio.flow.internal._
 import zio.schema.DynamicValue
 import zio.stm.TMap
-import zio.{UIO, ZIO}
 
 import java.io.IOException
 import java.util.UUID
 
 trait RemoteContext {
-  def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit]
-  def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]]
-  def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]]
-  def dropVariable(name: RemoteVariableName): UIO[Unit]
+  def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit]
+  def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]]
+  def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]]
+  def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit]
 }
 
 object RemoteContext {
   def generateFreshVariableName: RemoteVariableName =
     RemoteVariableName.unsafeMake(s"p_${UUID.randomUUID()}")
 
-  def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, Nothing, Unit] =
+  def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[RemoteContext, ExecutorError, Unit] =
     ZIO.serviceWithZIO(_.setVariable(name, value))
-  def getVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Option[DynamicValue]] =
+  def getVariable(name: RemoteVariableName): ZIO[RemoteContext, ExecutorError, Option[DynamicValue]] =
     ZIO.serviceWithZIO(_.getVariable(name))
-  def dropVariable(name: RemoteVariableName): ZIO[RemoteContext, Nothing, Unit] =
+  def dropVariable(name: RemoteVariableName): ZIO[RemoteContext, ExecutorError, Unit] =
     ZIO.serviceWithZIO(_.dropVariable(name))
 
   private final case class InMemory(
     store: TMap[RemoteVariableName, DynamicValue]
   ) extends RemoteContext {
-    override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+    override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
       store.put(name, value).commit
 
-    override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+    override def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
       store
         .get(name)
         .commit
 
-    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+    override def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]] =
       store.get(name).commit.map(_.map(_ => Timestamp(0L)))
 
-    override def dropVariable(name: RemoteVariableName): UIO[Unit] =
+    override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
       store.delete(name).commit
   }
 
@@ -73,7 +73,7 @@ object RemoteContext {
     scopeMap: TMap[RemoteVariableName, RemoteVariableScope]
   ) extends RemoteContext {
 
-    override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+    override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
       scopeMap.getOrElse(name, scope).commit.flatMap { variableScope =>
         virtualClock.current.flatMap { timestamp =>
           val serializedValue = executionEnvironment.serializer.serialize(value)
@@ -84,16 +84,14 @@ object RemoteContext {
               serializedValue,
               timestamp
             )
-            .orDie // TODO: rethink/cleanup error handling
             .unit
         }
       }
 
-    override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+    override def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
       virtualClock.current.flatMap { timestamp =>
         remoteVariableStore
           .getLatest(name, scope, Some(timestamp))
-          .orDie // TODO: rethink/cleanup error handling
           .flatMap {
             case Some((serializedValue, variableScope)) =>
               scopeMap.put(name, variableScope).commit.zipRight {
@@ -107,18 +105,17 @@ object RemoteContext {
           }
       }
 
-    override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+    override def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]] =
       remoteVariableStore
         .getLatestTimestamp(name, scope)
-        .orDie // TODO: rethink/cleanup error handling
         .flatMap {
           case Some((timestamp, variableScope)) =>
             scopeMap.put(name, variableScope).commit.as(Some(timestamp))
           case None => ZIO.none
         }
 
-    override def dropVariable(name: RemoteVariableName): UIO[Unit] =
-      remoteVariableStore.delete(name, scope).orDie // TODO: rethink/cleanup error handling
+    override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
+      remoteVariableStore.delete(name, scope)
   }
 
   def persistent(

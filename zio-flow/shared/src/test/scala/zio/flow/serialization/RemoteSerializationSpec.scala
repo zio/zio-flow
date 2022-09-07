@@ -226,9 +226,9 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
 //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     for {
-      originalEvaluated <- value.eval[A]
+      originalEvaluated <- value.eval[A].mapError(_.toMessage)
       newRemote         <- ZIO.fromEither(decoded)
-      newEvaluated      <- newRemote.asInstanceOf[Remote[A]].eval[A]
+      newEvaluated      <- newRemote.asInstanceOf[Remote[A]].eval[A].mapError(_.toMessage)
     } yield assertTrue(test(originalEvaluated, newEvaluated))
   }
 

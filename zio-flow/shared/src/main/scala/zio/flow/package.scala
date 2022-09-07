@@ -82,4 +82,9 @@ package object flow extends Syntax with Schemas {
     def toRemoteVariableName: RemoteVariableName =
       RemoteVariableName.unsafeMake(s"_!rec!_${RecursionId.unwrap(recursionId)}")
   }
+
+  type PromiseId = PromiseId.Type
+  object PromiseId extends Newtype[String] {
+    implicit val schema: Schema[PromiseId] = Schema[String].transform(wrap(_), unwrap)
+  }
 }

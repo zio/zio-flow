@@ -25,12 +25,11 @@ import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, ZIO, ZLayer}
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 final case class RocksDbKeyValueStore(
   rocksDB: TransactionDB,
-  namespaces: TMap[String, Promise[IOException, ColumnFamilyHandle]]
+  namespaces: TMap[String, Promise[Throwable, ColumnFamilyHandle]]
 ) extends KeyValueStore
     with ColumnFamilyManagement {
 
@@ -39,7 +38,7 @@ final case class RocksDbKeyValueStore(
     key: Chunk[Byte],
     value: Chunk[Byte],
     timestamp: Timestamp
-  ): IO[IOException, Boolean] =
+  ): IO[Throwable, Boolean] =
     for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
@@ -51,45 +50,44 @@ final case class RocksDbKeyValueStore(
                updatedVersions <- appendTimestamp(versions, timestamp)
                _               <- Transaction.put(versionNamespace, key.toArray, updatedVersions.toArray)
              } yield ()
-           }.refineToOrDie[IOException]
+           }
     } yield true
 
   override def getLatest(
     namespace: String,
     key: Chunk[Byte],
     before: Option[Timestamp]
-  ): IO[IOException, Option[Chunk[Byte]]] =
+  ): IO[Throwable, Option[Chunk[Byte]]] =
     for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
-      rawVersions      <- rocksDB.get(versionNamespace, key.toArray).refineToOrDie[IOException]
+      rawVersions      <- rocksDB.get(versionNamespace, key.toArray)
       lastTimestamp    <- getLastTimestamp(rawVersions, before)
       result <- lastTimestamp match {
                   case Some(lastTimestamp) =>
                     rocksDB
                       .get(dataNamespace, getVersionedKey(key, lastTimestamp).toArray)
                       .map(_.map(Chunk.fromArray))
-                      .refineToOrDie[IOException]
+
                   case None => ZIO.none
                 }
 
     } yield result
 
-  override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[IOException, Option[Timestamp]] =
+  override def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[Throwable, Option[Timestamp]] =
     for {
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
-      rawVersions      <- rocksDB.get(versionNamespace, key.toArray).refineToOrDie[IOException]
+      rawVersions      <- rocksDB.get(versionNamespace, key.toArray)
       lastTimestamp    <- getLastTimestamp(rawVersions, None)
     } yield lastTimestamp
 
-  def scanAll(namespace: String): ZStream[Any, IOException, (Chunk[Byte], Chunk[Byte])] =
+  def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])] =
     ZStream.unwrap {
       for {
         versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
         dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
         result = rocksDB
                    .newIterator(versionNamespace)
-                   .refineToOrDie[IOException]
                    .mapZIO { case (key, value) =>
                      val keyChunk = Chunk.fromArray(key)
                      getLastTimestamp(Some(value), None).flatMap {
@@ -98,7 +96,6 @@ final case class RocksDbKeyValueStore(
                        case Some(timestamp) =>
                          rocksDB
                            .get(dataNamespace, getVersionedKey(keyChunk, timestamp).toArray)
-                           .refineToOrDie[IOException]
                            .map {
                              case None       => Chunk.empty
                              case Some(data) => Chunk(keyChunk -> Chunk.fromArray(data))
@@ -109,13 +106,12 @@ final case class RocksDbKeyValueStore(
       } yield result
     }
 
-  def scanAllKeys(namespace: String): ZStream[Any, IOException, Chunk[Byte]] =
+  def scanAllKeys(namespace: String): ZStream[Any, Throwable, Chunk[Byte]] =
     ZStream.unwrap {
       for {
         versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
         result = rocksDB
                    .newIterator(versionNamespace)
-                   .refineToOrDie[IOException]
                    .mapZIO { case (key, value) =>
                      val keyChunk = Chunk.fromArray(key)
                      getLastTimestamp(Some(value), None).flatMap {
@@ -129,11 +125,11 @@ final case class RocksDbKeyValueStore(
       } yield result
     }
 
-  override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
+  override def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit] =
     (for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
-      rawVersions      <- rocksDB.get(versionNamespace, key.toArray).refineToOrDie[IOException]
+      rawVersions      <- rocksDB.get(versionNamespace, key.toArray)
       _ <- rawVersions match {
              case Some(rawVersions) =>
                for {
@@ -146,17 +142,17 @@ final case class RocksDbKeyValueStore(
              case None =>
                ZIO.unit
            }
-    } yield ()).refineToOrDie[IOException]
+    } yield ())
 
   private def getVersionedKey(key: Chunk[Byte], timestamp: Timestamp): Chunk[Byte] =
     key ++ ("_" + timestamp.value.toString).getBytes(StandardCharsets.UTF_8)
 
-  private def appendTimestamp(rawVersions: Option[Array[Byte]], timestamp: Timestamp): IO[IOException, Chunk[Byte]] =
+  private def appendTimestamp(rawVersions: Option[Array[Byte]], timestamp: Timestamp): IO[Throwable, Chunk[Byte]] =
     rawVersions match {
       case Some(rawVersions) =>
         ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
           case Left(failure) =>
-            ZIO.fail(new IOException(s"Failed to decode versions: $failure"))
+            ZIO.fail(new Throwable(s"Failed to decode versions: $failure"))
           case Right(versions) =>
             val updatedVersions = timestamp :: versions
             ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(updatedVersions))
@@ -168,7 +164,7 @@ final case class RocksDbKeyValueStore(
   private def getLastTimestamp(
     rawVersions: Option[Array[Byte]],
     before: Option[Timestamp]
-  ): ZIO[Any, IOException, Option[Timestamp]] =
+  ): ZIO[Any, Throwable, Option[Timestamp]] =
     rawVersions match {
       case Some(rawVersions) =>
         decodeRawVersions(rawVersions)
@@ -182,7 +178,7 @@ final case class RocksDbKeyValueStore(
   private def decodeRawVersions(rawVersions: Array[Byte]) =
     ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
       case Left(failure) =>
-        ZIO.fail(new IOException(s"Failed to decode versions: $failure"))
+        ZIO.fail(new Throwable(s"Failed to decode versions: $failure"))
       case Right(versions) =>
         ZIO.succeed(versions)
     }
@@ -208,11 +204,11 @@ object RocksDbKeyValueStore {
         initialNamespaces <- rocksDb.initialHandles
         initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
                                val name = new String(handle.getName, StandardCharsets.UTF_8)
-                               Promise.make[IOException, ColumnFamilyHandle].flatMap { promise =>
+                               Promise.make[Throwable, ColumnFamilyHandle].flatMap { promise =>
                                  promise.succeed(handle).as(name -> promise)
                                }
                              }
-        namespaces <- TMap.make[String, Promise[IOException, ColumnFamilyHandle]](initialPromiseMap: _*).commit
+        namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
       } yield RocksDbKeyValueStore(rocksDb, namespaces)
     }
 }

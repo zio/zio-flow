@@ -20,8 +20,6 @@ import zio._
 import zio.flow.{FlowId, ZFlow}
 import zio.schema.Schema
 
-import java.io.IOException
-
 trait ZFlowExecutor {
 
   /**
@@ -35,9 +33,9 @@ trait ZFlowExecutor {
   /**
    * Restart all known persisted running flows after recreating an executor.
    *
-   * Executors with no support for persistency should do nothing.
+   * Executors with no support for persistence should do nothing.
    */
-  def restartAll(): ZIO[Any, IOException, Unit]
+  def restartAll(): ZIO[Any, ExecutorError, Unit]
 
   /** Force a GC run manually */
   def forceGarbageCollection(): ZIO[Any, Nothing, Unit]

@@ -64,7 +64,7 @@ object RemoteSpec extends RemoteSpecBase {
           val test =
             for {
               dyn <- remote.evalDynamic.exit
-            } yield assert(dyn)(fails(equalTo("Could not find identifier test")))
+            } yield assert(dyn)(fails(equalTo(RemoteEvaluationError.VariableNotFound(name))))
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }

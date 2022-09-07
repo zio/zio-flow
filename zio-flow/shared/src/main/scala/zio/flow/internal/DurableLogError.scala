@@ -16,12 +16,17 @@
 
 package zio.flow.internal
 
-import zio.flow.{FlowId, PromiseId}
+sealed trait DurableLogError { self =>
+  def cause: Option[Throwable] = None
 
-object Topics {
-  def promise(promiseId: PromiseId): String =
-    s"_zflow_durable_promise__$promiseId"
+  def toMessage: String = self match {
+    case DurableLogError.IndexedStoreError(operation, reason) =>
+      s"Indexed store failure in $operation: ${reason.getMessage}"
+  }
+}
 
-  def variableChanges(flowId: FlowId): String =
-    s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+object DurableLogError {
+  final case class IndexedStoreError(operation: String, reason: Throwable) extends DurableLogError {
+    override val cause: Option[Throwable] = Some(reason)
+  }
 }
