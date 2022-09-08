@@ -19,6 +19,7 @@ package zio.flow.serialization
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.internal.{DurablePromise, RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
+  BinaryFractionalOperator,
   BinaryNumericOperator,
   Fractional,
   Numeric,
@@ -227,9 +228,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     Gen.oneOf(
       Gen.const(UnaryNumericOperator.Neg),
       Gen.const(UnaryNumericOperator.Abs),
-      Gen.const(UnaryNumericOperator.Floor),
-      Gen.const(UnaryNumericOperator.Ceil),
-      Gen.const(UnaryNumericOperator.Round)
+      Gen.const(UnaryNumericOperator.Sign)
     )
 
   lazy val genBinaryOperator: Gen[Any, BinaryNumericOperator] =
@@ -238,9 +237,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(BinaryNumericOperator.Mul),
       Gen.const(BinaryNumericOperator.Div),
       Gen.const(BinaryNumericOperator.Mod),
-      Gen.const(BinaryNumericOperator.Pow),
-      Gen.const(BinaryNumericOperator.Root),
-      Gen.const(BinaryNumericOperator.Log),
       Gen.const(BinaryNumericOperator.Min),
       Gen.const(BinaryNumericOperator.Max)
     )
@@ -249,7 +245,19 @@ trait Generators extends DefaultJavaTimeSchemas {
     Gen.oneOf(
       Gen.const(UnaryFractionalOperator.Sin),
       Gen.const(UnaryFractionalOperator.ArcSin),
-      Gen.const(UnaryFractionalOperator.ArcTan)
+      Gen.const(UnaryFractionalOperator.Tan),
+      Gen.const(UnaryFractionalOperator.ArcTan),
+      Gen.const(UnaryFractionalOperator.Cos),
+      Gen.const(UnaryFractionalOperator.ArcCos),
+      Gen.const(UnaryFractionalOperator.Ceil),
+      Gen.const(UnaryFractionalOperator.Round),
+      Gen.const(UnaryFractionalOperator.Floor)
+    )
+
+  lazy val genBinaryFractionalOperator: Gen[Any, BinaryFractionalOperator] =
+    Gen.oneOf(
+      Gen.const(BinaryFractionalOperator.Log),
+      Gen.const(BinaryFractionalOperator.Pow)
     )
 
   lazy val genBinaryNumeric: Gen[Sized, Remote[Any]] =
@@ -276,6 +284,15 @@ trait Generators extends DefaultJavaTimeSchemas {
       value            <- gen
       operator         <- genUnaryFractionalOperator
     } yield Remote.UnaryFractional(value, fractional, operator)
+
+  lazy val genBinaryFractional: Gen[Sized, Remote[Any]] =
+    for {
+      pair          <- genFractional
+      (numeric, gen) = pair
+      left          <- gen
+      right         <- gen
+      operator      <- genBinaryFractionalOperator
+    } yield Remote.BinaryFractional(left, right, numeric, operator)
 
   lazy val genUnboundRemoteFunction: Gen[Sized, Remote[Any]] =
     for {

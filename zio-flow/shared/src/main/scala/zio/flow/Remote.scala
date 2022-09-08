@@ -16,9 +16,8 @@
 
 package zio.flow
 
-import zio.flow.remote.DynamicValueHelpers
+import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
-import zio.flow.remote.numeric._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DynamicValue, Schema}
 import zio.{Chunk, ZIO}
@@ -69,6 +68,9 @@ sealed trait Remote[+A] { self =>
       }
 
   protected def substituteRec[B](f: Remote.Substitutions): Remote[A]
+
+  def toString[A1 >: A: Schema]: Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.ToString[A1]()))
 }
 
 object Remote {
@@ -364,102 +366,66 @@ object Remote {
       )
   }
 
-  final case class UnaryNumeric[A](
-    value: Remote[A],
-    numeric: Numeric[A],
-    operator: UnaryNumericOperator
-  ) extends Remote[A] {
+  final case class Unary[In, Out](
+    value: Remote[In],
+    operator: UnaryOperators[In, Out]
+  ) extends Remote[Out] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        v <- value.eval(numeric.schema)
-      } yield DynamicValue.fromSchemaAndValue(numeric.schema, numeric.unary(operator, v))
+        v <- value.eval(operator.inputSchema)
+      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, operator(v))
 
-    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
-      UnaryNumeric(value.substitute(f), numeric, operator)
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Out] =
+      Unary(value.substitute(f), operator)
 
     override private[flow] val variableUsage = value.variableUsage
   }
 
-  object UnaryNumeric {
-    def schema[A]: Schema[UnaryNumeric[A]] =
-      Schema.CaseClass3[Remote[A], Numeric[A], UnaryNumericOperator, UnaryNumeric[A]](
-        Schema.Field("value", Schema.defer(Remote.schema[A])),
-        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
-        Schema.Field("operator", Schema[UnaryNumericOperator]),
-        UnaryNumeric.apply,
+  object Unary {
+    def schema[In, Out]: Schema[Unary[In, Out]] =
+      Schema.CaseClass2[Remote[In], UnaryOperators[In, Out], Unary[In, Out]](
+        Schema.Field("value", Schema.defer(Remote.schema[In])),
+        Schema.Field("operator", UnaryOperators.schema[In, Out]),
+        Unary.apply,
         _.value,
-        _.numeric,
         _.operator
       )
 
-    def schemaCase[A]: Schema.Case[UnaryNumeric[A], Remote[A]] =
-      Schema.Case("UnaryNumeric", schema, _.asInstanceOf[UnaryNumeric[A]])
+    def schemaCase[In, Out]: Schema.Case[Unary[In, Out], Remote[Out]] =
+      Schema.Case("Unary", schema, _.asInstanceOf[Unary[In, Out]])
   }
 
-  final case class BinaryNumeric[A](
-    left: Remote[A],
-    right: Remote[A],
-    numeric: Numeric[A],
-    operator: BinaryNumericOperator
-  ) extends Remote[A] {
+  final case class Binary[In, Out](
+    left: Remote[In],
+    right: Remote[In],
+    operator: BinaryOperators[In, Out]
+  ) extends Remote[Out] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        l <- left.eval(numeric.schema)
-        r <- right.eval(numeric.schema)
-      } yield DynamicValue.fromSchemaAndValue(numeric.schema, numeric.binary(operator, l, r))
+        l <- left.eval(operator.inputSchema)
+        r <- right.eval(operator.inputSchema)
+      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, operator(l, r))
 
-    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
-      BinaryNumeric(left.substitute(f), right.substitute(f), numeric, operator)
+    override protected def substituteRec[B](f: Remote.Substitutions): Remote[Out] =
+      Binary(left.substitute(f), right.substitute(f), operator)
 
     override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
   }
 
-  object BinaryNumeric {
-    def schema[A]: Schema[BinaryNumeric[A]] =
-      Schema.CaseClass4[Remote[A], Remote[A], Numeric[A], BinaryNumericOperator, BinaryNumeric[A]](
-        Schema.Field("left", Schema.defer(Remote.schema[A])),
-        Schema.Field("right", Schema.defer(Remote.schema[A])),
-        Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
-        Schema.Field("operator", Schema[BinaryNumericOperator]),
-        BinaryNumeric.apply,
+  object Binary {
+    def schema[In, Out]: Schema[Binary[In, Out]] =
+      Schema.CaseClass3[Remote[In], Remote[In], BinaryOperators[In, Out], Binary[In, Out]](
+        Schema.Field("left", Schema.defer(Remote.schema[In])),
+        Schema.Field("right", Schema.defer(Remote.schema[In])),
+        Schema.Field("operator", BinaryOperators.schema[In, Out]),
+        Binary.apply,
         _.left,
         _.right,
-        _.numeric,
         _.operator
       )
 
-    def schemaCase[A]: Schema.Case[BinaryNumeric[A], Remote[A]] =
-      Schema.Case("BinaryNumeric", schema, _.asInstanceOf[BinaryNumeric[A]])
-  }
-
-  final case class UnaryFractional[A](value: Remote[A], fractional: Fractional[A], operator: UnaryFractionalOperator)
-      extends Remote[A] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        v <- value.eval(fractional.schema)
-      } yield DynamicValue.fromSchemaAndValue(fractional.schema, fractional.unary(operator, v))
-
-    override protected def substituteRec[B](f: Remote.Substitutions): Remote[A] =
-      UnaryFractional(value.substitute(f), fractional, operator)
-
-    override private[flow] val variableUsage = value.variableUsage
-  }
-
-  object UnaryFractional {
-    def schema[A]: Schema[UnaryFractional[A]] =
-      Schema.CaseClass3[Remote[A], Fractional[A], UnaryFractionalOperator, UnaryFractional[A]](
-        Schema.Field("value", Schema.defer(Remote.schema[A])),
-        Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
-        Schema.Field("operator", Schema[UnaryFractionalOperator]),
-        UnaryFractional.apply,
-        _.value,
-        _.fractional,
-        _.operator
-      )
-
-    def schemaCase[A]: Schema.Case[UnaryFractional[A], Remote[A]] =
-      Schema.Case("UnaryFractional", schema, _.asInstanceOf[UnaryFractional[A]])
+    def schemaCase[In, Out]: Schema.Case[Binary[In, Out], Remote[Out]] =
+      Schema.Case("Binary", schema, _.asInstanceOf[Binary[In, Out]])
   }
 
   final case class RemoteEither[A, B](
@@ -3287,9 +3253,8 @@ object Remote {
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
       .:+:(Unbound.schemaCase[A])
-      .:+:(UnaryNumeric.schemaCase[A])
-      .:+:(BinaryNumeric.schemaCase[A])
-      .:+:(UnaryFractional.schemaCase[A])
+      .:+:(Unary.schemaCase[Any, A])
+      .:+:(Binary.schemaCase[Any, A])
       .:+:(UnboundRemoteFunction.schemaCase[Any, A])
       .:+:(EvaluateUnboundRemoteFunction.schemaCase[Any, A])
       .:+:(RemoteEither.schemaCase[A])

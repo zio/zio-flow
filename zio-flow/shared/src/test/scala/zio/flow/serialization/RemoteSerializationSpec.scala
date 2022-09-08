@@ -93,6 +93,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
       test("unary numeric")(roundtripCheck(codec, genUnaryNumeric)),
       test("unary fractional")(roundtripCheck(codec, genUnaryFractional)),
+      test("binary fractional")(roundtripCheck(codec, genBinaryFractional)),
       test("unbound remote function")(roundtripCheck(codec, genUnboundRemoteFunction)),
       test("evaluate unbound remote function")(roundtripCheck(codec, genEvaluateUnboundRemoteFunction)),
       test("remote either")(roundtripCheck(codec, genRemoteEither)),

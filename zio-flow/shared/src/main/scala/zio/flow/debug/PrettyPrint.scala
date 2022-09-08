@@ -75,16 +75,13 @@ object PrettyPrint {
         prettyPrintRemote(f, builder, indent)
         builder.append(" called with ")
         prettyPrintRemote(a, builder, indent)
-      case Remote.UnaryNumeric(value, _, operator) =>
+      case Remote.Unary(value, operator) =>
         builder.append(operator)
         prettyPrintRemote(value, builder, indent)
-      case Remote.BinaryNumeric(left, right, _, operator) =>
+      case Remote.Binary(left, right, operator) =>
         prettyPrintRemote(left, builder, indent)
         builder.append(operator)
         prettyPrintRemote(right, builder, indent)
-      case Remote.UnaryFractional(value, _, operator) =>
-        builder.append(operator)
-        prettyPrintRemote(value, builder, indent)
       case Remote.RemoteEither(either) =>
         either match {
           case Left(value) =>

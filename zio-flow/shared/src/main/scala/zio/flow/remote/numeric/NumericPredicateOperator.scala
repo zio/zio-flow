@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.remote
+package zio.flow.remote.numeric
 
-import zio.flow._
-import zio.flow.remote.numeric._
+import zio.schema.{DeriveSchema, Schema}
 
-final class RemoteFractionalSyntax[A](private val self: Remote[A]) extends AnyVal {
-  def floor(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Floor))
+sealed trait NumericPredicateOperator
 
-  def ceil(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Ceil))
+object NumericPredicateOperator {
+  case object IsWhole      extends NumericPredicateOperator
+  case object IsValidInt   extends NumericPredicateOperator
+  case object IsValidByte  extends NumericPredicateOperator
+  case object IsValidChar  extends NumericPredicateOperator
+  case object IsValidLong  extends NumericPredicateOperator
+  case object IsValidShort extends NumericPredicateOperator
 
-  def round(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Round))
+  implicit val schema: Schema[NumericPredicateOperator] = DeriveSchema.gen
 }

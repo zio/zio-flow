@@ -27,5 +27,13 @@ object UnaryFractionalOperator {
   case object Tan    extends UnaryFractionalOperator
   case object ArcTan extends UnaryFractionalOperator
 
+  case object Floor extends UnaryFractionalOperator
+
+  case object Ceil extends UnaryFractionalOperator
+
+  case object Round extends UnaryFractionalOperator
+
+  case object Log extends UnaryFractionalOperator
+
   implicit val schema: Schema[UnaryFractionalOperator] = DeriveSchema.gen
 }
