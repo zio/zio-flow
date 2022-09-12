@@ -18,15 +18,14 @@ package zio.flow.remote.numeric
 
 import zio.schema.{DeriveSchema, Schema}
 
-sealed trait BinaryNumericOperator
-object BinaryNumericOperator {
-  case object Add      extends BinaryNumericOperator
-  case object Sub      extends BinaryNumericOperator
-  case object Mul      extends BinaryNumericOperator
-  case object Div      extends BinaryNumericOperator
-  case object Mod      extends BinaryNumericOperator
-  case object Min      extends BinaryNumericOperator
-  case object Max      extends BinaryNumericOperator
+sealed trait FractionalPredicateOperator
 
-  implicit val schema: Schema[BinaryNumericOperator] = DeriveSchema.gen
+object FractionalPredicateOperator {
+  case object IsNaN         extends FractionalPredicateOperator
+  case object IsInfinity    extends FractionalPredicateOperator
+  case object IsFinite      extends FractionalPredicateOperator
+  case object IsPosInfinity extends FractionalPredicateOperator
+  case object IsNegInifinty extends FractionalPredicateOperator
+
+  implicit val schema: Schema[FractionalPredicateOperator] = DeriveSchema.gen
 }

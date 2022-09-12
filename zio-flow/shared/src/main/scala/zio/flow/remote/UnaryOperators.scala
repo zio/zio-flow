@@ -17,8 +17,9 @@
 package zio.flow.remote
 
 import zio.flow.remote.numeric.{
+  FractionalPredicateOperator,
   NumericPredicateOperator,
-  UnaryBitwiseOperator,
+  UnaryIntegralOperator,
   UnaryFractionalOperator,
   UnaryNumericOperator
 }
@@ -36,10 +37,10 @@ object UnaryOperators {
   def apply[A](operator: UnaryNumericOperator)(implicit numeric: zio.flow.remote.numeric.Numeric[A]): Numeric[A] =
     Numeric(operator, numeric)
 
-  def apply[A](operator: UnaryBitwiseOperator)(implicit
-    bitwise: zio.flow.remote.numeric.BitwiseNumeric[A]
-  ): Bitwise[A] =
-    Bitwise(operator, bitwise)
+  def apply[A](operator: UnaryIntegralOperator)(implicit
+    bitwise: zio.flow.remote.numeric.Integral[A]
+  ): Integral[A] =
+    Integral(operator, bitwise)
 
   def apply[A](operator: UnaryFractionalOperator)(implicit
     fractional: zio.flow.remote.numeric.Fractional[A]
@@ -51,6 +52,11 @@ object UnaryOperators {
   ): NumericPredicate[A] =
     NumericPredicate(operator, numeric)
 
+  def apply[A](operator: FractionalPredicateOperator)(implicit
+    numeric: zio.flow.remote.numeric.Fractional[A]
+  ): FractionalPredicate[A] =
+    FractionalPredicate(operator, numeric)
+
   final case class Numeric[A](operator: UnaryNumericOperator, numeric: zio.flow.remote.numeric.Numeric[A])
       extends UnaryOperators[A, A] {
     override val inputSchema: Schema[A]  = numeric.schema
@@ -58,7 +64,7 @@ object UnaryOperators {
     override def apply(value: A): A =
       numeric.unary(operator, value)
   }
-  final case class Bitwise[A](operator: UnaryBitwiseOperator, bitwise: zio.flow.remote.numeric.BitwiseNumeric[A])
+  final case class Integral[A](operator: UnaryIntegralOperator, bitwise: zio.flow.remote.numeric.Integral[A])
       extends UnaryOperators[A, A] {
     override val inputSchema: Schema[A]  = bitwise.schema
     override val outputSchema: Schema[A] = bitwise.schema
@@ -80,6 +86,18 @@ object UnaryOperators {
     override def apply(value: A): Boolean =
       numeric.predicate(operator, value)
   }
+
+  final case class FractionalPredicate[A](
+    operator: FractionalPredicateOperator,
+    fractional: zio.flow.remote.numeric.Fractional[A]
+  ) extends UnaryOperators[A, Boolean] {
+    override val inputSchema: Schema[A]        = fractional.schema
+    override val outputSchema: Schema[Boolean] = Schema[Boolean]
+
+    override def apply(value: A): Boolean =
+      fractional.predicate(operator, value)
+  }
+
   final case class Conversion[In, Out](
     conversion: RemoteConversions[In, Out]
   ) extends UnaryOperators[In, Out] {
@@ -102,17 +120,17 @@ object UnaryOperators {
       _.asInstanceOf[Numeric[Any]]
     )
 
-  private val bitwiseCase: Schema.Case[Bitwise[Any], UnaryOperators[Any, Any]] =
+  private val integralCase: Schema.Case[Integral[Any], UnaryOperators[Any, Any]] =
     Schema.Case(
-      "Bitwise",
+      "Integral",
       Schema.CaseClass2(
-        Schema.Field("operator", Schema[UnaryBitwiseOperator]),
-        Schema.Field("bitwise", zio.flow.remote.numeric.BitwiseNumeric.schema),
-        (op: UnaryBitwiseOperator, b: zio.flow.remote.numeric.BitwiseNumeric[Any]) => Bitwise(op, b),
+        Schema.Field("operator", Schema[UnaryIntegralOperator]),
+        Schema.Field("integral", zio.flow.remote.numeric.Integral.schema),
+        (op: UnaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
         _.operator,
         _.bitwise
       ),
-      _.asInstanceOf[Bitwise[Any]]
+      _.asInstanceOf[Integral[Any]]
     )
 
   private val fractionalCase: Schema.Case[Fractional[Any], UnaryOperators[Any, Any]] =
@@ -141,6 +159,19 @@ object UnaryOperators {
       _.asInstanceOf[NumericPredicate[Any]]
     )
 
+  private val fractionalPredicateCase: Schema.Case[FractionalPredicate[Any], UnaryOperators[Any, Any]] =
+    Schema.Case(
+      "FractionalPredicate",
+      Schema.CaseClass2(
+        Schema.Field("operator", Schema[FractionalPredicateOperator]),
+        Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
+        (op: FractionalPredicateOperator, n: zio.flow.remote.numeric.Fractional[Any]) => FractionalPredicate(op, n),
+        _.operator,
+        _.fractional
+      ),
+      _.asInstanceOf[FractionalPredicate[Any]]
+    )
+
   private val conversionCase: Schema.Case[Conversion[Any, Any], UnaryOperators[Any, Any]] =
     Schema.Case(
       "Conversion",
@@ -160,9 +191,10 @@ object UnaryOperators {
           numericCase,
           CaseSet.Empty[UnaryOperators[Any, Any]]()
         )
-        .:+:(bitwiseCase)
+        .:+:(integralCase)
         .:+:(fractionalCase)
         .:+:(numericPredicateCase)
+        .:+:(fractionalPredicateCase)
         .:+:(conversionCase)
     )
 }

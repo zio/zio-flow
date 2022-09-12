@@ -35,7 +35,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       Remote
         .UnCons(self.widen[List[A]])
         .widen[Option[(A, List[A])]]
-        .fold(Remote.nil[A], (tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
+        .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
     (num > Remote(0)).ifThenElse(ifTrue, Remote.nil[A])
   }
 
@@ -45,10 +45,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     Remote
       .UnCons(self)
       .widen[Option[(A, List[A])]]
-      .fold(
-        Remote.nil[A],
-        (tuple: Remote[(A, List[A])]) =>
-          predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Remote.nil)
+      .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
+        predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Remote.nil)
       )
 
   def drop(num: Remote[Int]): Remote[List[A]] = {
@@ -56,7 +54,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       Remote
         .UnCons(self)
         .widen[Option[(A, List[A])]]
-        .fold(Remote.nil, (tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
+        .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) => tuple._2.drop(num - Remote(1)))
 
     (num > Remote(0)).ifThenElse(ifTrue, self)
   }
@@ -67,7 +65,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     Remote
       .UnCons(self)
       .widen[Option[(A, List[A])]]
-      .fold(Remote.nil[A], (tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
+      .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) => tuple._2.dropWhile(predicate))
 
   def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
@@ -77,7 +75,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def headOption1: Remote[Option[A]] = Remote
     .UnCons(self)
     .widen[Option[(A, List[A])]]
-    .fold[Option[A]](Remote.none[A], tuple => Remote.RemoteSome(tuple._1))
+    .fold[Option[A]](Remote.none[A])(tuple => Remote.RemoteSome(tuple._1))
 
   def headOption: Remote[Option[A]] =
     fold[Option[A]](Remote.none[A])((remoteOptionA, a) =>

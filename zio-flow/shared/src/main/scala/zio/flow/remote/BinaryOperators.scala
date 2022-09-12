@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.remote.numeric.{BinaryBitwiseOperator, BinaryFractionalOperator, BinaryNumericOperator}
+import zio.flow.remote.numeric.{BinaryIntegralOperator, BinaryFractionalOperator, BinaryNumericOperator}
 import zio.schema._
 
 sealed trait BinaryOperators[In, Out] {
@@ -37,10 +37,10 @@ object BinaryOperators {
   ): Fractional[A] =
     Fractional(operator, fractional)
 
-  def apply[A](operator: BinaryBitwiseOperator)(implicit
-    bitwise: zio.flow.remote.numeric.BitwiseNumeric[A]
-  ): Bitwise[A] =
-    Bitwise(operator, bitwise)
+  def apply[A](operator: BinaryIntegralOperator)(implicit
+                                                 bitwise: zio.flow.remote.numeric.Integral[A]
+  ): Integral[A] =
+    Integral(operator, bitwise)
 
   final case class Numeric[A](operator: BinaryNumericOperator, numeric: zio.flow.remote.numeric.Numeric[A])
       extends BinaryOperators[A, A] {
@@ -60,7 +60,7 @@ object BinaryOperators {
       fractional.binary(operator, left, right)
   }
 
-  final case class Bitwise[A](operator: BinaryBitwiseOperator, bitwise: zio.flow.remote.numeric.BitwiseNumeric[A])
+  final case class Integral[A](operator: BinaryIntegralOperator, bitwise: zio.flow.remote.numeric.Integral[A])
       extends BinaryOperators[A, A] {
     override val inputSchema: Schema[A]  = bitwise.schema
     override val outputSchema: Schema[A] = bitwise.schema
@@ -95,17 +95,17 @@ object BinaryOperators {
       _.asInstanceOf[Fractional[Any]]
     )
 
-  private val bitwiseCase: Schema.Case[Bitwise[Any], BinaryOperators[Any, Any]] =
+  private val integralCase: Schema.Case[Integral[Any], BinaryOperators[Any, Any]] =
     Schema.Case(
-      "Bitwise",
+      "Integral",
       Schema.CaseClass2(
-        Schema.Field("operator", Schema[BinaryBitwiseOperator]),
-        Schema.Field("fractional", zio.flow.remote.numeric.BitwiseNumeric.schema),
-        (op: BinaryBitwiseOperator, b: zio.flow.remote.numeric.BitwiseNumeric[Any]) => Bitwise(op, b),
+        Schema.Field("operator", Schema[BinaryIntegralOperator]),
+        Schema.Field("fractional", zio.flow.remote.numeric.Integral.schema),
+        (op: BinaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
         _.operator,
         _.bitwise
       ),
-      _.asInstanceOf[Bitwise[Any]]
+      _.asInstanceOf[Integral[Any]]
     )
 
   def schema[In, Out]: Schema[BinaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[BinaryOperators[In, Out]]]
@@ -118,6 +118,6 @@ object BinaryOperators {
           CaseSet.Empty[BinaryOperators[Any, Any]]()
         )
         .:+:(fractionalCase)
-        .:+:(bitwiseCase)
+        .:+:(integralCase)
     )
 }

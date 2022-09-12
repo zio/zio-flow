@@ -63,11 +63,40 @@ object RemoteConversions {
     override def apply(value: A): Double = numeric.toDouble(value)
   }
 
+  final case class NumericToBinaryString[A](bitwise: Integral[A]) extends RemoteConversions[A, String] {
+    override val inputSchema: Schema[A]       = bitwise.schema
+    override val outputSchema: Schema[String] = Schema[String]
+
+    override def apply(value: A): String = bitwise.toBinaryString(value)
+  }
+
+  final case class NumericToHexString[A](bitwise: Integral[A]) extends RemoteConversions[A, String] {
+    override val inputSchema: Schema[A]       = bitwise.schema
+    override val outputSchema: Schema[String] = Schema[String]
+
+    override def apply(value: A): String = bitwise.toHexString(value)
+  }
+
+  final case class NumericToOctalString[A](bitwise: Integral[A]) extends RemoteConversions[A, String] {
+    override val inputSchema: Schema[A]       = bitwise.schema
+    override val outputSchema: Schema[String] = Schema[String]
+
+    override def apply(value: A): String = bitwise.toOctalString(value)
+  }
+
   final case class ToString[A]()(implicit schema: Schema[A]) extends RemoteConversions[A, String] {
     override val inputSchema: Schema[A]       = Schema[A]
     override val outputSchema: Schema[String] = Schema[String]
 
     override def apply(value: A): String = value.toString
+  }
+
+  final case class FractionalGetExponent[A](fractional: Fractional[A]) extends RemoteConversions[A, Int] {
+    override val inputSchema: Schema[A] = fractional.schema
+    override val outputSchema: Schema[Int] = Schema[Int]
+
+    override def apply(value: A): Int =
+      fractional.getExponent(value)
   }
 
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
@@ -125,6 +154,39 @@ object RemoteConversions {
       _.asInstanceOf[NumericToDouble[Any]]
     )
 
+  private val numericToBinaryStringCase: Schema.Case[NumericToBinaryString[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToBinaryString",
+      Schema.CaseClass1(
+        Schema.Field("bitwise", Integral.schema),
+        (numeric: Integral[Any]) => NumericToBinaryString(numeric),
+        _.bitwise
+      ),
+      _.asInstanceOf[NumericToBinaryString[Any]]
+    )
+
+  private val numericToHexStringCase: Schema.Case[NumericToHexString[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToHexString",
+      Schema.CaseClass1(
+        Schema.Field("bitwise", Integral.schema),
+        (numeric: Integral[Any]) => NumericToHexString(numeric),
+        _.bitwise
+      ),
+      _.asInstanceOf[NumericToHexString[Any]]
+    )
+
+  private val numericToOctalStringCase: Schema.Case[NumericToOctalString[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToOctalString",
+      Schema.CaseClass1(
+        Schema.Field("bitwise", Integral.schema),
+        (numeric: Integral[Any]) => NumericToOctalString(numeric),
+        _.bitwise
+      ),
+      _.asInstanceOf[NumericToOctalString[Any]]
+    )
+
   private val toStringCase: Schema.Case[ToString[Any], RemoteConversions[Any, Any]] =
     Schema.Case(
       "ToString",
@@ -149,6 +211,9 @@ object RemoteConversions {
         .:+:(numericToLongCase)
         .:+:(numericToFloatCase)
         .:+:(numericToDoubleCase)
+        .:+:(numericToBinaryStringCase)
+        .:+:(numericToHexStringCase)
+        .:+:(numericToOctalStringCase)
         .:+:(toStringCase)
     )
 }

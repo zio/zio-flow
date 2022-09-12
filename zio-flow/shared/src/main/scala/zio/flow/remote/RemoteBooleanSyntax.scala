@@ -20,17 +20,24 @@ import zio.flow.Remote
 
 final class RemoteBooleanSyntax(val self: Remote[Boolean]) extends AnyVal {
 
-  def not: Remote[Boolean] = Remote.Not(self)
-
   def &&(that: Remote[Boolean]): Remote[Boolean] =
     Remote.And(self, that)
 
+  def &(that: Remote[Boolean]): Remote[Boolean] =
+    self && that
+
   def ||(that: Remote[Boolean]): Remote[Boolean] =
-    (not && that.not).not
+    !(!self && !that)
+
+  def |(that: Remote[Boolean]): Remote[Boolean] =
+    self || that
+
+  def ^(that: Remote[Boolean]): Remote[Boolean] =
+    (self && !that) || (!self && that)
 
   def ifThenElse[B](ifTrue: Remote[B], ifFalse: Remote[B]): Remote[B] =
     Remote.Branch(self, Remote.suspend(ifTrue), Remote.suspend(ifFalse))
 
   def unary_! : Remote[Boolean] =
-    not
+    Remote.Not(self)
 }

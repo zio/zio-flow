@@ -36,11 +36,11 @@ final class RemoteNumericSyntax[A](private val self: Remote[A]) extends AnyVal {
   def unary_-(implicit numeric: Numeric[A]): Remote[A] =
     Remote.Unary(self, UnaryOperators(UnaryNumericOperator.Neg))
 
-  def unary_~(implicit numeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Unary(self, UnaryOperators(UnaryBitwiseOperator.BitwiseNeg))
+  def unary_~(implicit numeric: Integral[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryIntegralOperator.BitwiseNeg))
 
   def -(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.Binary(self, -that, BinaryOperators(BinaryNumericOperator.Add))
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Sub))
 
   def abs(implicit numeric: Numeric[A]): Remote[A] =
     Remote.Unary(self, UnaryOperators(UnaryNumericOperator.Abs))
@@ -54,23 +54,23 @@ final class RemoteNumericSyntax[A](private val self: Remote[A]) extends AnyVal {
   def max(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
     Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Max))
 
-  def >>(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.RightShift))
+  def >>(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.RightShift))
 
-  def <<(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.LeftShift))
+  def <<(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.LeftShift))
 
-  def >>>(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.UnsignedRightShift))
+  def >>>(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.UnsignedRightShift))
 
-  def &(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.And))
+  def &(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.And))
 
-  def |(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.Or))
+  def |(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.Or))
 
-  def ^(that: Remote[A])(implicit bitwiseNumeric: BitwiseNumeric[A]): Remote[A] =
-    Remote.Binary(self, that, BinaryOperators(BinaryBitwiseOperator.Xor))
+  def ^(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.Xor))
 
   def toInt(implicit numeric: Numeric[A]): Remote[Int] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToInt(numeric)))
@@ -92,4 +92,13 @@ final class RemoteNumericSyntax[A](private val self: Remote[A]) extends AnyVal {
   def longValue(implicit numeric: Numeric[A]): Remote[Long]     = toLong
   def floatValue(implicit numeric: Numeric[A]): Remote[Float]   = toFloat
   def doubleValue(implicit numeric: Numeric[A]): Remote[Double] = toDouble
+
+  def toBinaryString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToBinaryString(bitwiseNumeric)))
+
+  def toHexString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToHexString(bitwiseNumeric)))
+
+  def toOctalString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToOctalString(bitwiseNumeric)))
 }

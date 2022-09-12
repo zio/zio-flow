@@ -114,6 +114,23 @@ object Remote {
       Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
   }
 
+  final case class Fail[A](message: String) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      ZIO.fail(RemoteEvaluationError.RemoteFail(message))
+
+    override private[flow] def variableUsage = VariableUsage.none
+
+    override protected def substituteRec[B](f: Substitutions): Remote[A] = this
+  }
+
+  object Fail {
+    def schema[A]: Schema[Fail[A]] =
+      Schema[String].transform(Fail(_), _.message)
+
+    def schemaCase[A]: Schema.Case[Fail[A], Remote[A]] =
+      Schema.Case("Fail", schema[A], _.asInstanceOf[Fail[A]])
+  }
+
   final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       ZIO.succeed(DynamicValue.fromSchemaAndValue(ZFlow.schema[R, E, A], flow))
@@ -3145,6 +3162,9 @@ object Remote {
         Literal(DynamicValue.fromSchemaAndValue(Schema[A], value))
     }
 
+  def fail[A](message: String): Remote[A] =
+    Remote.Fail(message)
+
   def fromDynamic[A](dynamicValue: DynamicValue): Remote[A] =
     // TODO: either avoid this or do it nicer
     dynamicValue.toTypedValue(RemoteVariableReference.schema[Any]) match {
@@ -3226,16 +3246,475 @@ object Remote {
   ): Remote[Either[A, B]] =
     RemoteEither(either)
 
+  def some[A](value: Remote[A]): Remote[Option[A]] = Remote.RemoteSome(value)
+
   def suspend[A](remote: Remote[A]): Remote[A] = Lazy(() => remote)
 
-  implicit def tuple2[A, B](t: (Remote[A], Remote[B])): Remote[(A, B)] =
+  implicit def tuple2[T1, T2](t: (Remote[T1], Remote[T2])): Remote[(T1, T2)] =
     Tuple2(t._1, t._2)
 
-  implicit def tuple3[A, B, C](t: (Remote[A], Remote[B], Remote[C])): Remote[(A, B, C)] =
+  implicit def tuple3[T1, T2, T3](t: (Remote[T1], Remote[T2], Remote[T3])): Remote[(T1, T2, T3)] =
     Tuple3(t._1, t._2, t._3)
 
-  implicit def tuple4[A, B, C, D](t: (Remote[A], Remote[B], Remote[C], Remote[D])): Remote[(A, B, C, D)] =
+  implicit def tuple4[T1, T2, T3, T4](t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4])): Remote[(T1, T2, T3, T4)] =
     Tuple4(t._1, t._2, t._3, t._4)
+
+  implicit def tuple5[T1, T2, T3, T4, T5](
+    t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4], Remote[T5])
+  ): Remote[(T1, T2, T3, T4, T5)] =
+    Tuple5(t._1, t._2, t._3, t._4, t._5)
+
+  implicit def tuple6[T1, T2, T3, T4, T5, T6](
+    t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4], Remote[T5], Remote[T6])
+  ): Remote[(T1, T2, T3, T4, T5, T6)] =
+    Tuple6(t._1, t._2, t._3, t._4, t._5, t._6)
+
+  implicit def tuple7[T1, T2, T3, T4, T5, T6, T7](
+    t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4], Remote[T5], Remote[T6], Remote[T7])
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
+    Tuple7(t._1, t._2, t._3, t._4, t._5, t._6, t._7)
+
+  implicit def tuple8[T1, T2, T3, T4, T5, T6, T7, T8](
+    t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4], Remote[T5], Remote[T6], Remote[T7], Remote[T8])
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] =
+    Tuple8(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8)
+
+  implicit def tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9](
+    t: (Remote[T1], Remote[T2], Remote[T3], Remote[T4], Remote[T5], Remote[T6], Remote[T7], Remote[T8], Remote[T9])
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] =
+    Tuple9(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9)
+
+  implicit def tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)] =
+    Tuple10(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10)
+
+  implicit def tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)] =
+    Tuple11(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11)
+
+  implicit def tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)] =
+    Tuple12(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12)
+
+  implicit def tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13)] =
+    Tuple13(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12, t._13)
+
+  implicit def tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T14],
+      Remote[T13]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14)] =
+    Tuple14(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12, t._13, t._14)
+
+  implicit def tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15)] =
+    Tuple15(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12, t._13, t._14, t._15)
+
+  implicit def tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)] =
+    Tuple16(t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12, t._13, t._14, t._15, t._16)
+
+  implicit def tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)] =
+    Tuple17(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17
+    )
+
+  implicit def tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17],
+      Remote[T18]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18)] =
+    Tuple18(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17,
+      t._18
+    )
+
+  implicit def tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17],
+      Remote[T18],
+      Remote[T19]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19)] =
+    Tuple19(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17,
+      t._18,
+      t._19
+    )
+
+  implicit def tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17],
+      Remote[T18],
+      Remote[T19],
+      Remote[T20]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20)] =
+    Tuple20(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17,
+      t._18,
+      t._19,
+      t._20
+    )
+
+  implicit def tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17],
+      Remote[T18],
+      Remote[T19],
+      Remote[T20],
+      Remote[T21]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21)] =
+    Tuple21(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17,
+      t._18,
+      t._19,
+      t._20,
+      t._21
+    )
+
+  implicit def tuple22[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    T21,
+    T22
+  ](
+    t: (
+      Remote[T1],
+      Remote[T2],
+      Remote[T3],
+      Remote[T4],
+      Remote[T5],
+      Remote[T6],
+      Remote[T7],
+      Remote[T8],
+      Remote[T9],
+      Remote[T10],
+      Remote[T11],
+      Remote[T12],
+      Remote[T13],
+      Remote[T14],
+      Remote[T15],
+      Remote[T16],
+      Remote[T17],
+      Remote[T18],
+      Remote[T19],
+      Remote[T20],
+      Remote[T21],
+      Remote[T22]
+    )
+  ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)] =
+    Tuple22(
+      t._1,
+      t._2,
+      t._3,
+      t._4,
+      t._5,
+      t._6,
+      t._7,
+      t._8,
+      t._9,
+      t._10,
+      t._11,
+      t._12,
+      t._13,
+      t._14,
+      t._15,
+      t._16,
+      t._17,
+      t._18,
+      t._19,
+      t._20,
+      t._21,
+      t._22
+    )
 
   implicit def toFlow[A](remote: Remote[A]): ZFlow[Any, Nothing, A] = remote.toFlow
 
@@ -3247,6 +3726,7 @@ object Remote {
   private def createSchema[A]: Schema[Remote[A]] = Schema.EnumN(
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
+      .:+:(Fail.schemaCase[A])
       .:+:(Flow.schemaCase[A])
       .:+:(Nested.schemaCase[A])
       .:+:(VariableReference.schemaCase[A])

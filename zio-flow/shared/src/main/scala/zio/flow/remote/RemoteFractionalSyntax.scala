@@ -28,4 +28,27 @@ final class RemoteFractionalSyntax[A](private val self: Remote[A]) extends AnyVa
 
   def round(implicit fractional: Fractional[A]): Remote[A] =
     Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Round))
+
+  def toRadians(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.ToRadians))
+
+  def toDegrees(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.ToDegrees))
+
+  def isNaN(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsNaN))
+
+  def isInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsInfinity))
+
+  def isInfinite(implicit fractional: Fractional[A]): Remote[Boolean] = isInfinity
+
+  def isFinite(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsFinite))
+
+  def isPosInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsPosInfinity))
+
+  def isNegInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsNegInifinty))
 }
