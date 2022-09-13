@@ -51,10 +51,10 @@ final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
     Remote.FoldOption(self, forNone, UnboundRemoteFunction.make(f))
 
   def foldLeft[B](z: Remote[B])(f: Remote[(B, A)] => Remote[B]): Remote[B] =
-    fold(z)(value => f(Remote.tuple2(z, value)))
+    fold(z)(value => f((z, value)))
 
   def foldRight[B](z: Remote[B])(f: Remote[(A, B)] => Remote[B]): Remote[B] =
-    fold(z)(value => f(Remote.tuple2(value, z)))
+    fold(z)(value => f((value, z)))
 
   def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     fold(Remote(false))(value => p(value))
@@ -94,13 +94,13 @@ final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
     fold(alternative)(_ => self)
 
   def toLeft[R](right: Remote[R]): Remote[Either[A, R]] =
-    fold(Remote.RemoteEither(Right(right)))(value => Remote.RemoteEither(Left(value)))
+    fold(Remote.RemoteEither[A, R](Right(right)))(value => Remote.RemoteEither[A, R](Left(value)))
 
   def toList: Remote[List[A]] =
     fold(Remote.nil[A])(value => Remote.Cons(Remote.nil[A], value))
 
   def toRight[L](left: Remote[L]): Remote[Either[L, A]] =
-    fold(Remote.RemoteEither(Left(left)))(value => Remote.RemoteEither(Right(value)))
+    fold(Remote.RemoteEither[L, A](Left(left)))(value => Remote.RemoteEither[L, A](Right(value)))
 
   def zip[B](
     that: Remote[Option[B]]

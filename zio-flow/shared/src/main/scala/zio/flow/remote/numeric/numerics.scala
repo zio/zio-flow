@@ -885,7 +885,8 @@ object Fractional {
 
     override def nextAfter(left: Float, right: Float): Float = math.nextAfter(left, right.toDouble)
 
-    override def IEEEremainder(left: Float, right: Float): Float = math.IEEEremainder(left.toDouble, right.toDouble).toFloat
+    override def IEEEremainder(left: Float, right: Float): Float =
+      math.IEEEremainder(left.toDouble, right.toDouble).toFloat
 
     override def getExponent(value: Float): Int = math.getExponent(value)
 

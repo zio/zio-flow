@@ -223,7 +223,7 @@ object RemoteSpec extends RemoteSpecBase {
         },
         test("folded flow") {
           val remote = Remote(List(1, 2))
-            .fold(ZFlow.succeed(0)) { case (flow, n) =>
+            .foldLeft(ZFlow.succeed(0)) { case (flow, n) =>
               flow.flatMap { prevFlow =>
                 ZFlow.unwrap(prevFlow).map(_ + n)
               }

@@ -92,7 +92,7 @@ object RemoteConversions {
   }
 
   final case class FractionalGetExponent[A](fractional: Fractional[A]) extends RemoteConversions[A, Int] {
-    override val inputSchema: Schema[A] = fractional.schema
+    override val inputSchema: Schema[A]    = fractional.schema
     override val outputSchema: Schema[Int] = Schema[Int]
 
     override def apply(value: A): Int =

@@ -44,7 +44,7 @@ object UnaryFractionalOperator {
   case object Sinh      extends UnaryFractionalOperator
   case object Cosh      extends UnaryFractionalOperator
   case object Tanh      extends UnaryFractionalOperator
-  case object Ulp      extends UnaryFractionalOperator
+  case object Ulp       extends UnaryFractionalOperator
 
   implicit val schema: Schema[UnaryFractionalOperator] = DeriveSchema.gen
 }

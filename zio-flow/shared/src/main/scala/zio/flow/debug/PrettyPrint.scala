@@ -47,6 +47,9 @@ object PrettyPrint {
           case Right(flow) =>
             prettyPrintFlow(flow, builder, indent)
         }
+      case Remote.Fail(message) =>
+        builder.append("fail ")
+        builder.append(message)
       case Remote.Flow(flow) =>
         builder.append("flow")
         prettyPrintFlow(flow, builder, indent + 2)

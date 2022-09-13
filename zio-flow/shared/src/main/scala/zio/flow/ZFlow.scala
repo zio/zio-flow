@@ -849,7 +849,7 @@ object ZFlow {
     values: Remote[List[A]]
   )(body: Remote[A] => ZFlow[R, E, B]): ZFlow[R, E, List[B]] =
     ZFlow.unwrap {
-      values.fold[ZFlow[R, E, List[B]]](ZFlow.succeed(Remote[List[B]](Nil))) { (bs, a) =>
+      values.foldLeft[ZFlow[R, E, List[B]]](ZFlow.succeed(Remote[List[B]](Nil))) { (bs, a) =>
         for {
           bs <- ZFlow.unwrap(bs)
           b  <- body(a)

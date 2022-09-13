@@ -16,9 +16,8 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.remote.RemoteEitherSyntax.RemoteLeftProjection
-import zio.flow.{Remote, ZFlow}
+import zio.flow.Remote
 
 import scala.util.Try
 
@@ -47,7 +46,7 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
     Remote.FoldEither[A1, B, Either[A1, B1]](
       self,
-      UnboundRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
+      Remote.UnboundRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
       f
     )
 
@@ -57,7 +56,7 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
     flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
 
   def fold[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C]): Remote[C] =
-    Remote.FoldEither[A, B, C](self, UnboundRemoteFunction.make(left), UnboundRemoteFunction.make(right))
+    Remote.FoldEither[A, B, C](self, Remote.UnboundRemoteFunction.make(left), Remote.UnboundRemoteFunction.make(right))
 
   def forall(
     f: Remote[B] => Remote[Boolean]
@@ -98,15 +97,15 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   ): Remote[Either[A, B1]] =
     Remote.FoldEither[A, B, Either[A, B1]](
       self,
-      UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
-      UnboundRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
+      Remote.UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
+      Remote.UnboundRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
     )
 
   def merge(implicit ev: Either[A, B] <:< Either[B, B]): Remote[B] =
     Remote.FoldEither[B, B, B](
       self.widen[Either[B, B]],
-      UnboundRemoteFunction.make(identity[Remote[B]]),
-      UnboundRemoteFunction.make(identity[Remote[B]])
+      Remote.UnboundRemoteFunction.make(identity[Remote[B]]),
+      Remote.UnboundRemoteFunction.make(identity[Remote[B]])
     )
 
   def orElse[A1 >: A, B1 >: B](
@@ -189,6 +188,6 @@ object RemoteEitherSyntax {
       )
 
     val nil = Remote.right[E, List[A]](Remote.nil[A])
-    finalize(values.fold(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))
+    finalize(values.foldLeft(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))
   }
 }

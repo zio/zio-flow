@@ -38,7 +38,7 @@ object BinaryOperators {
     Fractional(operator, fractional)
 
   def apply[A](operator: BinaryIntegralOperator)(implicit
-                                                 bitwise: zio.flow.remote.numeric.Integral[A]
+    bitwise: zio.flow.remote.numeric.Integral[A]
   ): Integral[A] =
     Integral(operator, bitwise)
 

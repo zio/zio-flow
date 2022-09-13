@@ -626,7 +626,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       testFlow("list fold") {
         ZFlow.succeed(
           Remote(List(1, 2, 3))
-            .fold(Remote(0))(_ + _)
+            .foldLeft(Remote(0))(_ + _)
         )
       } { res =>
         assertTrue(res == 6)
@@ -634,7 +634,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       testFlow("list fold zflows, ignore accumulator") {
         ZFlow.unwrap {
           Remote(List(1, 2, 3))
-            .fold(ZFlow.succeed(0)) { case (_, n) =>
+            .foldLeft(ZFlow.succeed(0)) { case (_, n) =>
               ZFlow.succeed(n)
             }
         }
@@ -644,7 +644,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       testFlow("list fold zflows, ignore elem") {
         ZFlow.unwrap {
           Remote(List(1, 2, 3))
-            .fold(ZFlow.succeed(0)) { case (acc, _) =>
+            .foldLeft(ZFlow.succeed(0)) { case (acc, _) =>
               acc
             }
         }
@@ -653,7 +653,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       },
       testFlow("unwrap list fold zflows") {
         val foldedFlow = Remote(List(1, 2))
-          .fold(ZFlow.succeed(0)) { case (flow, n) =>
+          .foldLeft(ZFlow.succeed(0)) { case (flow, n) =>
             flow.flatMap { prevFlow =>
               ZFlow.unwrap(prevFlow).map(_ + n)
             }
