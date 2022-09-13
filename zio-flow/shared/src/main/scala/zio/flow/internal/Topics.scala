@@ -16,10 +16,10 @@
 
 package zio.flow.internal
 
-import zio.flow.FlowId
+import zio.flow.{FlowId, PromiseId}
 
 object Topics {
-  def promise(promiseId: String): String =
+  def promise(promiseId: PromiseId): String =
     s"_zflow_durable_promise__$promiseId"
 
   def variableChanges(flowId: FlowId): String =

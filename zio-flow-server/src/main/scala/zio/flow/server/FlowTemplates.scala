@@ -10,7 +10,7 @@ import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecutor) {
-  def getZFlowTemplates(): ZStream[Any, IOException, (flow.TemplateId.Type, ZFlowTemplate)] =
+  def getZFlowTemplates(): ZStream[Any, Throwable, (flow.TemplateId.Type, ZFlowTemplate)] =
     keyValueStore.scanAll(Namespaces.workflowTemplate).mapZIO { case (rawKey, rawFlowTemplate) =>
       val templateId = TemplateId(new String(rawKey.toArray, StandardCharsets.UTF_8))
       ZIO
@@ -21,7 +21,7 @@ final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecu
         )
     }
 
-  def getZFlowTemplate(templateId: TemplateId): ZIO[Any, IOException, Option[ZFlowTemplate]] =
+  def getZFlowTemplate(templateId: TemplateId): ZIO[Any, Throwable, Option[ZFlowTemplate]] =
     keyValueStore.getLatest(Namespaces.workflowTemplate, templateId.toRaw, None).flatMap {
       case Some(bytes) =>
         ZIO
@@ -31,7 +31,7 @@ final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecu
         ZIO.none
     }
 
-  def saveZFlowTemplate(templateId: TemplateId, flowTemplate: ZFlowTemplate): ZIO[Any, IOException, Unit] =
+  def saveZFlowTemplate(templateId: TemplateId, flowTemplate: ZFlowTemplate): ZIO[Any, Throwable, Unit] =
     for {
       now <- Clock.nanoTime.map(Timestamp(_))
       _ <- keyValueStore.put(
@@ -42,7 +42,7 @@ final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecu
            )
     } yield ()
 
-  def deleteZFlowTemplate(templateId: TemplateId): ZIO[Any, IOException, Unit] =
+  def deleteZFlowTemplate(templateId: TemplateId): ZIO[Any, Throwable, Unit] =
     keyValueStore
       .delete(Namespaces.workflowTemplate, templateId.toRaw)
 
@@ -50,7 +50,7 @@ final class FlowTemplates(keyValueStore: KeyValueStore, flowExecutor: ZFlowExecu
     flowId <- FlowId.newRandom
     flowTemplate <-
       getZFlowTemplate(templateId).someOrFail(new IllegalArgumentException(s"Template $templateId is not defined"))
-    _ <- flowExecutor.start(flowId, flowTemplate.template)
+    _ <- flowExecutor.start(flowId, flowTemplate.template).mapError(_.toException)
   } yield flowId
 }
 object FlowTemplates {

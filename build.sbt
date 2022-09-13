@@ -45,7 +45,9 @@ lazy val root = project
     examplesJVM,
     examplesJS,
     zioFlowJVM,
-    zioFlowJS
+    zioFlowJS,
+    testJVM,
+    testJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -85,9 +87,26 @@ lazy val zioFlowServer = project
   .settings(fork := true)
   .settings(testFrameworks += zioTest)
 
+lazy val test = crossProject(JSPlatform, JVMPlatform)
+  .in(file("test"))
+  .settings(stdSettings("zio-flow-test"))
+  .settings(crossProjectSettings)
+  .settings(
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio-test" % Version.zio
+    )
+  )
+  .dependsOn(zioFlow)
+
+lazy val testJS  = test.js
+lazy val testJVM = test.jvm
+
 lazy val rocksdb = project
   .in(file("rocksdb"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-rocksdb"),
@@ -99,14 +118,17 @@ lazy val rocksdb = project
         Seq(
           "org.rocksdb" % "rocksdbjni" % Version.rocksDbJni,
           "dev.zio"    %% "zio-nio"    % Version.zioNio
-        )
+        ),
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
   )
 
 lazy val cassandra = project
   .in(file("cassandra"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-cassandra"),
@@ -118,7 +140,8 @@ lazy val cassandra = project
     ) ++ (
       commonTestDependencies ++
         Seq(
-          "com.dimafeng" %% "testcontainers-scala-cassandra" % Version.testContainers
+          "com.dimafeng" %% "testcontainers-scala-cassandra" % Version.testContainers,
+          "dev.zio"      %% "zio-logging-slf4j-bridge"       % Version.zioLogging
         )
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
@@ -126,7 +149,10 @@ lazy val cassandra = project
 
 lazy val dynamodb = project
   .in(file("dynamodb"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(
+    zioFlowJVM,
+    testJVM % "it->compile"
+  )
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-dynamodb"),
@@ -138,7 +164,8 @@ lazy val dynamodb = project
       commonTestDependencies ++
         Seq(
           "com.amazonaws" % "aws-java-sdk-core"                  % Version.awsSdkV1,
-          "com.dimafeng" %% "testcontainers-scala-localstack-v2" % Version.testContainers
+          "com.dimafeng" %% "testcontainers-scala-localstack-v2" % Version.testContainers,
+          "dev.zio"      %% "zio-logging-slf4j-bridge"           % Version.zioLogging
         )
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest

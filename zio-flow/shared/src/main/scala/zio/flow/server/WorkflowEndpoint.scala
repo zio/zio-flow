@@ -21,7 +21,7 @@ class WorkflowEndpoint(pExec: ZFlowExecutor) {
         flow <- deserializeFlow(req)
         fId  <- FlowId.newRandom
         // is orDie smart here?
-        _ <- pExec.start(fId, flow).orDie
+        _ <- pExec.start(fId, flow).orDieWith(_.toException)
       } yield fId
 
       fIdZ.fold(e => Response.text("Ran into error: " + e), ok => Response.text(ok.toString))

@@ -144,7 +144,7 @@ sealed trait ZFlow[-R, +E, +A] {
    *
    * The initial value is the result of this flow. The step function is called
    * with this value to produce the next flow to execute. The iteration stops
-   * when te predicate function returns true for the last step's result.
+   * when the predicate function returns true for the last step's result.
    */
   final def iterate[R1 <: R, E1 >: E, A1 >: A](step: Remote[A1] => ZFlow[R1, E1, A1])(
     predicate: Remote[A1] => Remote[Boolean]

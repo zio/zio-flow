@@ -24,16 +24,14 @@ import zio.flow.remote.DynamicValueHelpers
 import zio.flow.serialization._
 import zio.flow._
 import zio.flow.internal.PersistentExecutor.GarbageCollectionCommand
+import zio.flow.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.time.Duration
-import scala.annotation.nowarn
+import java.time.{Duration, OffsetDateTime}
 import zio.stm.{TMap, ZSTM}
 import zio.stream.ZStream
 
-// TODO: better error type than IOException
 final case class PersistentExecutor(
   execEnv: ExecutionEnvironment,
   durableLog: DurableLog,
@@ -50,17 +48,17 @@ final case class PersistentExecutor(
 
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
-  private def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, IOException, A] =
+  private def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, ExecutorError, A] =
     evalDynamic(remote).flatMap(dyn =>
       ZIO
         .fromEither(dyn.toTypedValue(implicitly[Schema[A]]))
-        .mapError(msg => new IOException(s"Failed to convert remote to typed value: $msg"))
+        .mapError(ExecutorError.TypeError("eval", _))
     )
 
-  private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, IOException, DynamicValue] =
+  private def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, ExecutorError, DynamicValue] =
     (for {
       vars0 <- LocalContext.getAllVariables
-      dyn   <- remote.evalDynamic
+      dyn   <- remote.evalDynamic.mapError(ExecutorError.RemoteEvaluationError)
       vars1 <- LocalContext.getAllVariables
       vars   = vars1.diff(vars0)
 
@@ -81,51 +79,53 @@ final case class PersistentExecutor(
                     }
       toRemove = vars.map(_.identifier).diff(usedByResult union usedByVars)
 
-      _ <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable(_))
+      _ <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable)
     } yield dyn)
-      .mapErrorCause(cause => cause.map(msg => new IOException(s"Failed to evaluate remote: $msg")))
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
   // synchronous -> will return when work is done.
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
-      resultPromise <- start(id, flow).orDie
-      promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDie
-      _             <- ZIO.log(s"${FlowId.unwrap(id)} finished with $promiseResult")
+      resultPromise <- start(id, flow).orDieWith(_.toException)
+      promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
+      _             <- ZIO.log(s"$id finished with $promiseResult")
       result <- promiseResult match {
-                  case Left(Left(fail)) => ZIO.die(fail)
+                  case Left(Left(failure)) => ZIO.die(failure.toException)
                   case Left(Right(dynamicError)) =>
                     ZIO
                       .fromEither(dynamicError.toTypedValue(Schema[E]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize error: $error")))
-                      .flatMap(success => ZIO.fail(success))
+                      .foldZIO(
+                        error => ZIO.die(ExecutorError.TypeError("error result", error).toException),
+                        success => ZIO.fail(success)
+                      )
                   case Right(dynamicSuccess) =>
                     ZIO
                       .fromEither(dynamicSuccess.result.toTypedValue(Schema[A]))
-                      .flatMapError(error => ZIO.die(new IOException(s"Failed to deserialize success: $error")))
+                      .flatMapError(error => ZIO.die(ExecutorError.TypeError("success result", error).toException))
                 }
     } yield result
 
   def start[E, A](
-                   id: FlowId,
-                   flow: ZFlow[Any, E, A]
-                 ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] =
+    id: FlowId,
+    flow: ZFlow[Any, E, A]
+  ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] =
     start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow)
 
   private def processResultDynTyped(
-    in: Either[Either[Throwable, DynamicValue], FlowResult]
+    in: Either[Either[ExecutorError, DynamicValue], FlowResult]
   ): IO[DynamicValue, FlowResult] = in match {
-    case Left(Left(fail)) => ZIO.die(fail)
+    case Left(Left(fail)) => ZIO.die(fail.toException)
     case Left(Right(dynamicError)) =>
       ZIO.fail(dynamicError)
     case Right(flowResult) =>
       ZIO.succeed(flowResult)
   }
 
-  def restartAll(): ZIO[Any, IOException, Unit] =
+  def restartAll(): ZIO[Any, ExecutorError, Unit] =
     for {
       deserializedStates <- kvStore
                               .scanAll(Namespaces.workflowState)
+                              .mapError(ExecutorError.KeyValueStoreError("scanAll", _))
                               .mapZIO { case (rawKey, rawState) =>
                                 val id = FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8))
                                 ZIO
@@ -133,9 +133,15 @@ final case class PersistentExecutor(
                                     execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
                                   )
                                   .mapBoth(
-                                    error => new IOException(s"Failed to deserialize state of $id: $error"),
+                                    error => ExecutorError.DeserializationError(s"state of $id", error),
                                     state =>
-                                      (FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8)), state)
+                                      (
+                                        FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8)),
+                                        state.copy( // TODO: describe as an initial StateChange instead
+                                          totalExecutionTime = state.totalExecutionTime + state.currentExecutionTime,
+                                          currentExecutionTime = Duration.ZERO
+                                        )
+                                      )
                                   )
                               }
                               .runCollect
@@ -144,9 +150,10 @@ final case class PersistentExecutor(
                promise <- Promise.make[Nothing, PersistentExecutor.RuntimeState]
                _       <- ZIO.log(s"Restarting $id")
                _       <- workflows.put(id, promise).commit
-               _       <- run(state, promise)
+               _       <- run(state, promise) @@ metrics.flowStarted(metrics.StartType.Continued)
              } yield ()
            }
+      _ <- updateWorkflowMetrics()
     } yield ()
 
   /** Force a GC run manually */
@@ -162,14 +169,14 @@ final case class PersistentExecutor(
   // If it's done, return the result, otherwise nothing.
   // Fails if the id is unknown
   // TODO: has some problems, see commented test in PersistentExecutorSpec
-  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, Exception, Option[IO[DynamicValue, FlowResult]]] =
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
     workflows.get(id).commit.flatMap {
       case Some(runtimeState) =>
         getResultIfCompleteDynTyped(runtimeState)
       // Check if done
       case None =>
         // Unknown workflow: let's fail
-        ZIO.fail(new Exception("Unknown flow id:" + id.toString))
+        ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + id.toString))
     }
 
   // We know that workflow, check if it's done:
@@ -178,7 +185,7 @@ final case class PersistentExecutor(
   // but we somehow still run into a timeout because looking things up takes longer than expected?
   private def getResultIfCompleteDynTyped(
     rtsPromise: Promise[Nothing, RuntimeState]
-  ): ZIO[Any, IOException, Option[IO[DynamicValue, FlowResult]]] =
+  ): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
     rtsPromise.await.flatMap(_.result.awaitEither).provideEnvironment(promiseEnv).timeout(10.millis).map {
       case None =>
         None
@@ -193,7 +200,7 @@ final case class PersistentExecutor(
     lastTimestamp: Timestamp,
     watchPosition: Index,
     flow: ZFlow[Any, E, A]
-  ): ZIO[Any, IOException, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] =
+  ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] =
     for {
       newPromise <- Promise.make[Nothing, PersistentExecutor.RuntimeState]
       promise <- workflows
@@ -204,47 +211,62 @@ final case class PersistentExecutor(
       result <- if (promise != newPromise) {
                   ZIO.logInfo(s"Flow $id is already running") *> promise.await.map(_.result)
                 } else {
-                  val durablePromise =
-                    DurablePromise.make[Either[Throwable, DynamicValue], FlowResult](id.asString + "_result")
 
-                  loadState(id.asFlowId)
-                    .map(
-                      _.getOrElse(
-                        State(
-                          id = id,
-                          lastTimestamp = lastTimestamp,
-                          current = flow,
-                          stack = Nil,
-                          result = durablePromise,
-                          envStack = Nil,
-                          transactionStack = Nil,
-                          tempVarCounter = 0,
-                          promiseIdCounter = 0,
-                          forkCounter = 0,
-                          transactionCounter = 0,
-                          status = PersistentWorkflowStatus.Running,
-                          watchedVariables = Set.empty,
-                          watchPosition = watchPosition
-                        )
-                      ).asInstanceOf[State[E, A]]
-                    )
-                    .flatMap { state =>
-                      run(state, promise)
-                    }
+                  for {
+                    now <- Clock.currentDateTime
+                    durablePromise =
+                      DurablePromise.make[Either[ExecutorError, DynamicValue], FlowResult](
+                        PromiseId(id.asString + "_result")
+                      )
+                    freshState = State(
+                                   id = id,
+                                   lastTimestamp = lastTimestamp,
+                                   current = flow,
+                                   stack = Nil,
+                                   result = durablePromise,
+                                   envStack = Nil,
+                                   transactionStack = Nil,
+                                   tempVarCounter = 0,
+                                   promiseIdCounter = 0,
+                                   forkCounter = 0,
+                                   transactionCounter = 0,
+                                   status = PersistentWorkflowStatus.Running,
+                                   watchedVariables = Set.empty,
+                                   watchPosition = watchPosition,
+                                   startedAt = now,
+                                   suspendedAt = None,
+                                   totalExecutionTime = Duration.ZERO,
+                                   currentExecutionTime = Duration.ZERO
+                                 )
+                    state <- loadState(id.asFlowId)
+                               .map(
+                                 _.getOrElse(freshState).asInstanceOf[State[E, A]]
+                               )
+                               .map(state =>
+                                 state.copy( // TODO: describe as an initial StateChange instead
+                                   totalExecutionTime = state.totalExecutionTime + state.currentExecutionTime,
+                                   currentExecutionTime = Duration.ZERO
+                                 )
+                               )
+                    result <- run(state, promise) @@ metrics.flowStarted(
+                                if (state.startedAt == now) metrics.StartType.Fresh else metrics.StartType.Continued
+                              )
+                  } yield result
                 }
+      _ <- updateWorkflowMetrics()
     } yield result
 
   private def run[E, A](
     state: State[E, A],
     promise: Promise[_, PersistentExecutor.RuntimeState]
-  ): ZIO[Any, Nothing, DurablePromise[Either[Throwable, DynamicValue], FlowResult]] = {
+  ): ZIO[Any, Nothing, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] = {
     import zio.flow.ZFlow._
 
     def step(
       state: State[E, A]
     ): ZIO[
       RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
-      IOException,
+      ExecutorError,
       StepResult
     ] = {
 
@@ -253,7 +275,7 @@ final case class PersistentExecutor(
         stateChange: StateChange = StateChange.none
       ): ZIO[
         VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
-        IOException,
+        ExecutorError,
         StepResult
       ] = {
         val updatedState = stateChange(state)
@@ -264,16 +286,17 @@ final case class PersistentExecutor(
         remoteContext {
           updatedState.stack match {
             case Nil =>
-              evalDynamic(value).flatMap { result =>
-                state.result
-                  .succeed(FlowResult(result, updatedState.lastTimestamp))
-                  .unit
-                  .provideEnvironment(promiseEnv)
-              }.as(
-                StepResult(
-                  stateChange ++ StateChange.done,
-                  continue = false
-                )
+              for {
+                result <- evalDynamic(value)
+                _      <- state.result.succeed(FlowResult(result, updatedState.lastTimestamp))
+                _ <- updateFinishedFlowMetrics(
+                       metrics.FlowResult.Success,
+                       updatedState.startedAt,
+                       updatedState.totalExecutionTime
+                     )
+              } yield StepResult(
+                stateChange ++ StateChange.done,
+                continue = false
               )
             case Instruction.PopEnv :: _ =>
               onSuccess(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
@@ -301,22 +324,26 @@ final case class PersistentExecutor(
                   commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
                 result <-
                   if (commitSucceeded) {
-                    evalDynamic(value).flatMap { evaluatedValue =>
-                      onSuccess(
-                        Remote.Literal(evaluatedValue),
-                        stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
-                      )
-                    }
+                    for {
+                      evaluatedValue <- evalDynamic(value)
+                      result <- onSuccess(
+                                  Remote.Literal(evaluatedValue),
+                                  stateChange ++ StateChange.popContinuation ++ StateChange.leaveTransaction
+                                )
+                      _ <- metrics.transactionOutcomeCount(TransactionOutcome.Success).increment
+                    } yield result
                   } else {
                     for {
-                      _ <- ZIO.logInfo("Commit failed, reverting and retrying")
+                      _   <- ZIO.logInfo("Commit failed, reverting and retrying")
+                      now <- Clock.currentDateTime
                       result = StepResult(
                                  stateChange ++
                                    StateChange.popContinuation ++
                                    StateChange.pushContinuation(Instruction.CommitTransaction) ++
-                                   StateChange.restartCurrentTransaction(suspend = false),
+                                   StateChange.restartCurrentTransaction(suspend = false, now),
                                  continue = true
                                )
+                      _ <- metrics.transactionOutcomeCount(TransactionOutcome.Retry).increment
                     } yield result
                   }
               } yield result
@@ -329,7 +356,7 @@ final case class PersistentExecutor(
         stateChange: StateChange = StateChange.none
       ): ZIO[
         KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog,
-        IOException,
+        ExecutorError,
         StepResult
       ] = {
         val updatedState = stateChange(state)
@@ -340,16 +367,17 @@ final case class PersistentExecutor(
         remoteContext {
           updatedState.stack match {
             case Nil =>
-              evalDynamic(value).flatMap { dyn =>
-                state.result
-                  .fail(Right(dyn))
-                  .unit
-                  .provideEnvironment(promiseEnv)
-              }.as(
-                StepResult(
-                  stateChange ++ StateChange.done,
-                  continue = false
-                )
+              for {
+                dyn <- evalDynamic(value)
+                _   <- state.result.fail(Right(dyn))
+                _ <- updateFinishedFlowMetrics(
+                       metrics.FlowResult.Failure,
+                       updatedState.startedAt,
+                       updatedState.totalExecutionTime
+                     )
+              } yield StepResult(
+                stateChange ++ StateChange.done,
+                continue = false
               )
             case Instruction.PopEnv :: _ =>
               onError(value, stateChange ++ StateChange.popContinuation ++ StateChange.popEnvironment)
@@ -402,31 +430,42 @@ final case class PersistentExecutor(
                   onError(value, stateChange ++ StateChange.popContinuation)
               }
             case Instruction.CommitTransaction :: _ =>
-              evalDynamic(value).map { schemaAndValue =>
+              evalDynamic(value).flatMap { schemaAndValue =>
                 // Inside a transaction this is always a TransactionFailure which we have to unwrap here
                 TransactionFailure.unwrapDynamic(schemaAndValue) match {
                   case Some(failure) =>
-                    StepResult(
-                      stateChange ++ StateChange.popContinuation ++ StateChange.revertCurrentTransaction(
-                        Remote.Literal(failure)
-                      ) ++ StateChange.leaveTransaction,
-                      continue = true
-                    )
+                    metrics
+                      .transactionOutcomeCount(TransactionOutcome.Failure)
+                      .increment
+                      .as(
+                        StepResult(
+                          stateChange ++ StateChange.popContinuation ++ StateChange.revertCurrentTransaction(
+                            Remote.Literal(failure)
+                          ) ++ StateChange.leaveTransaction,
+                          continue = true
+                        )
+                      )
                   case None =>
-                    StepResult(
-                      stateChange ++
-                        StateChange.popContinuation ++
-                        StateChange.pushContinuation(Instruction.CommitTransaction) ++
-                        StateChange.restartCurrentTransaction(suspend = true),
-                      continue = true
-                    )
+                    Clock.currentDateTime.map { now =>
+                      StepResult(
+                        stateChange ++
+                          StateChange.popContinuation ++
+                          StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                          StateChange.restartCurrentTransaction(suspend = true, now),
+                        continue = true
+                      )
+                    }
                 }
               }
           }
         }
       }
 
-      def failWith(error: DynamicValue, stateChange: StateChange = StateChange.none) =
+      def failWith(error: DynamicValue, stateChange: StateChange = StateChange.none): ZIO[
+        KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog,
+        ExecutorError,
+        StepResult
+      ] =
         onError(
           if (state.isInTransaction)
             Remote.Literal(TransactionFailure.wrapDynamic(error))
@@ -435,349 +474,362 @@ final case class PersistentExecutor(
           stateChange
         )
 
-      state.current match {
-        case Return(value) =>
-          onSuccess(value)
+      metrics.operationCount(state.current.getClass.getSimpleName).increment.zipRight {
+        state.current match {
+          case Return(value) =>
+            onSuccess(value)
 
-        case Now =>
-          Clock.instant.flatMap { currInstant =>
-            onSuccess(coerceRemote(Remote(currInstant)))
-          }
+          case Now =>
+            Clock.instant.flatMap { currInstant =>
+              onSuccess(coerceRemote(Remote(currInstant)))
+            }
 
-        case Input() =>
-          onSuccess(state.currentEnvironment)
+          case Input() =>
+            onSuccess(state.currentEnvironment)
 
-        case WaitTill(instant) =>
-          for {
-            start   <- Clock.instant
-            end     <- eval(instant)(instantSchema)
-            duration = Duration.between(start, end)
-            _       <- ZIO.logInfo(s"Sleeping for $duration")
-            _       <- Clock.sleep(duration)
-            _       <- ZIO.logInfo(s"Resuming execution after sleeping $duration")
-            result  <- onSuccess(())
-          } yield result
+          case WaitTill(instant) =>
+            for {
+              start   <- Clock.instant
+              end     <- eval(instant)(instantSchema)
+              duration = Duration.between(start, end)
+              _       <- ZIO.logInfo(s"Sleeping for $duration")
+              _       <- Clock.sleep(duration)
+              _       <- ZIO.logInfo(s"Resuming execution after sleeping $duration")
+              result  <- onSuccess(())
+            } yield result
 
-        case Read(svar) =>
-          for {
-            variableReference <- eval(svar)
-            variable           = Remote.Variable(variableReference.name)
-            stepResult        <- onSuccess(variable, StateChange.none)
-          } yield stepResult
+          case Read(svar) =>
+            for {
+              variableReference <- eval(svar)
+              variable           = Remote.Variable(variableReference.name)
+              stepResult        <- onSuccess(variable, StateChange.none)
+            } yield stepResult
 
-        case Modify(svar, f0) =>
-          val f = f0.asInstanceOf[UnboundRemoteFunction[Any, (A, Any)]]
-          for {
-            variableReference <- eval(svar)
-            variable           = Remote.Variable(variableReference.name)
-            //            _                                      <- ZIO.debug(s"Modify: ${variable.identifier}'s previous value was $value")
-            dynTuple <- evalDynamic(f(variable))
-            tuple <- dynTuple match {
-                       case DynamicValue.Tuple(dynResult, newValue) => ZIO.succeed((dynResult, newValue))
-                       case _                                       => ZIO.fail(new IOException(s"Modify's result was not a tuple"))
-                     }
-            //            _                                      <- ZIO.debug(s"Modify: result is $tuple")
-            (dynResult, newValue) = tuple
-            _ <-
-              RemoteContext.getVariable(
-                variable.identifier
-              ) // NOTE: this is needed for variable access tracking to work properly, as f0 may not access the variable at all
-            _ <- RemoteContext.setVariable(variable.identifier, newValue)
-            //            _                                      <- ZIO.debug(s"Modify: changed value of ${variable.identifier} to $newValue")
-            result = Remote.Literal(dynResult)
-            stepResult <- onSuccess(
-                            result,
-                            StateChange.none
-                          )
-          } yield stepResult
+          case Modify(svar, f0) =>
+            val f = f0.asInstanceOf[UnboundRemoteFunction[Any, (A, Any)]]
+            for {
+              variableReference <- eval(svar)
+              variable           = Remote.Variable(variableReference.name)
+              dynTuple          <- evalDynamic(f(variable))
+              tuple <- dynTuple match {
+                         case DynamicValue.Tuple(dynResult, newValue) => ZIO.succeed((dynResult, newValue))
+                         case _                                       => ZIO.fail(ExecutorError.UnexpectedDynamicValue(s"Modify's result was not a tuple"))
+                       }
+              (dynResult, newValue) = tuple
+              _ <-
+                RemoteContext.getVariable(
+                  variable.identifier
+                ) // NOTE: this is needed for variable access tracking to work properly, as f0 may not access the variable at all
+              _     <- RemoteContext.setVariable(variable.identifier, newValue)
+              result = Remote.Literal(dynResult)
+              stepResult <- onSuccess(
+                              result,
+                              StateChange.none
+                            )
+            } yield stepResult
 
-        case fold @ Fold(_, _, _) =>
-          val cont =
-            Instruction.Continuation[fold.ValueR, fold.ValueA, fold.ValueE, fold.ValueE2, fold.ValueB](
-              fold.ifError,
-              fold.ifSuccess
-            )
-          ZIO.succeed(
-            StepResult(
-              StateChange.setCurrent(fold.value) ++
-                StateChange.pushContinuation(cont),
-              continue = true
-            )
-          )
-
-        case RunActivity(input, activity) =>
-          for {
-            inp    <- eval(input)(activity.inputSchema)
-            output <- operationExecutor.execute(inp, activity.operation).either
-            result <- output match {
-                        case Left(error) => failWith(DynamicValueHelpers.of(error))
-                        case Right(success) =>
-                          val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
-                          // TODO: take advantage of activity.check
-                          onSuccess(
-                            remoteSuccess,
-                            StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
-                          )
-                      }
-          } yield result
-
-        case Transaction(flow) =>
-          val env = state.currentEnvironment
-          ZIO.succeed(
-            StepResult(
-              StateChange.enterTransaction(flow.provide(coerceRemote(env))) ++
-                StateChange.pushContinuation(Instruction.CommitTransaction) ++
-                StateChange.setCurrent(flow),
-              continue = true
-            )
-          )
-
-        case ensuring @ Ensuring(flow, finalizer) =>
-          val cont =
-            Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
-              UnboundRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
-                (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
-              },
-              UnboundRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
-                (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
-              }
+          case fold @ Fold(_, _, _) =>
+            val cont =
+              Instruction.Continuation[fold.ValueR, fold.ValueA, fold.ValueE, fold.ValueE2, fold.ValueB](
+                fold.ifError,
+                fold.ifSuccess
+              )
+            ZIO.succeed(
+              StepResult(
+                StateChange.setCurrent(fold.value) ++
+                  StateChange.pushContinuation(cont),
+                continue = true
+              )
             )
 
-          ZIO.succeed(
-            StepResult(StateChange.setCurrent(flow) ++ StateChange.pushContinuation(cont), continue = true)
-          )
+          case RunActivity(input, activity) =>
+            for {
+              inp    <- eval(input)(activity.inputSchema)
+              output <- operationExecutor.execute(inp, activity.operation).either
+              result <- output match {
+                          case Left(error) => failWith(DynamicValueHelpers.of(error))
+                          case Right(success) =>
+                            val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
+                            // TODO: take advantage of activity.check
+                            onSuccess(
+                              remoteSuccess,
+                              StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
+                            )
+                        }
+            } yield result
 
-        case Unwrap(remote) =>
-          for {
-            evaluatedFlow <- eval(remote)
-          } yield StepResult(StateChange.setCurrent(evaluatedFlow), continue = true)
+          case Transaction(flow) =>
+            val env = state.currentEnvironment
+            ZIO.succeed(
+              StepResult(
+                StateChange.enterTransaction(flow.provide(coerceRemote(env))) ++
+                  StateChange.pushContinuation(Instruction.CommitTransaction) ++
+                  StateChange.setCurrent(flow),
+                continue = true
+              )
+            )
 
-        case UnwrapRemote(remote) =>
-          for {
-            evaluated <- eval(coerceRemote(remote))(Remote.schemaAny)
-            result    <- onSuccess(evaluated)
-          } yield result
+          case ensuring @ Ensuring(flow, finalizer) =>
+            val cont =
+              Instruction.Continuation[Any, ensuring.ValueA, ensuring.ValueE, ensuring.ValueE, ensuring.ValueA](
+                UnboundRemoteFunction.make { (e: Remote[ensuring.ValueE]) =>
+                  (finalizer *> ZFlow.fail(e).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
+                },
+                UnboundRemoteFunction.make { (a: Remote[ensuring.ValueA]) =>
+                  (finalizer *> ZFlow.succeed(a).asInstanceOf[ZFlow[Any, ensuring.ValueE, ensuring.ValueA]])
+                }
+              )
 
-        case fork @ Fork(workflow) =>
-          val forkId = state.id.child(FlowId.unsafeMake(s"fork${state.forkCounter}"))
-          for {
-            resultPromise <- start[fork.ValueE, fork.ValueA](
-                               forkId,
-                               state.lastTimestamp.next,
-                               state.watchPosition,
-                               workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
-                             )
-            result <- onSuccess(
-                        Remote[ExecutingFlow[Any, Any]](ExecutingFlow(forkId.asFlowId, resultPromise)),
-                        StateChange.increaseForkCounter
+            ZIO.succeed(
+              StepResult(StateChange.setCurrent(flow) ++ StateChange.pushContinuation(cont), continue = true)
+            )
+
+          case Unwrap(remote) =>
+            for {
+              evaluatedFlow <- eval(remote)
+            } yield StepResult(StateChange.setCurrent(evaluatedFlow), continue = true)
+
+          case UnwrapRemote(remote) =>
+            for {
+              evaluated <- eval(coerceRemote(remote))(Remote.schemaAny)
+              result    <- onSuccess(evaluated)
+            } yield result
+
+          case fork @ Fork(workflow) =>
+            val forkId = state.id.child(FlowId.unsafeMake(s"fork${state.forkCounter}"))
+            for {
+              resultPromise <- start[fork.ValueE, fork.ValueA](
+                                 forkId,
+                                 state.lastTimestamp.next,
+                                 state.watchPosition,
+                                 workflow.asInstanceOf[ZFlow[Any, fork.ValueE, fork.ValueA]]
+                               )
+              result <- onSuccess(
+                          Remote[ExecutingFlow[Any, Any]](ExecutingFlow(forkId.asFlowId, resultPromise)),
+                          StateChange.increaseForkCounter
+                        )
+            } yield result
+
+          case await @ Await(execFlow) =>
+            for {
+              executingFlow <- eval(execFlow)
+              _             <- ZIO.log("Waiting for result")
+              result <-
+                executingFlow
+                  .asInstanceOf[ExecutingFlow[Either[ExecutorError, await.ValueE], await.ValueA]]
+                  .result
+                  .asInstanceOf[DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]]
+                  .awaitEither
+                  .provideEnvironment(promiseEnv)
+              _ <- ZIO.log(s"Await got result: $result")
+              stepResult <-
+                result.fold(
+                  error =>
+                    error
+                      .fold(
+                        failure => ZIO.fail(ExecutorError.AwaitedFlowDied(executingFlow.id, failure)),
+                        dynamicError => ZIO.succeed(Remote.RemoteEither(Left(Remote.Literal(dynamicError))))
                       )
-          } yield result
-
-        case await @ Await(execFlow) =>
-          for {
-            executingFlow <- eval(execFlow)
-            _             <- ZIO.log("Waiting for result")
-            result <-
-              executingFlow
-                .asInstanceOf[ExecutingFlow[Either[Throwable, await.ValueE], await.ValueA]]
-                .result
-                .asInstanceOf[DurablePromise[Either[Throwable, DynamicValue], FlowResult]]
-                .awaitEither
-                .provideEnvironment(promiseEnv)
-                .tapErrorCause(c => ZIO.log(s"Failed: $c"))
-            _ <- ZIO.log(s"Await got result: $result")
-            stepResult <-
-              result.fold(
-                error =>
-                  error
-                    .fold(
-                      die => ZIO.die(new IOException("Awaited flow died", die)),
-                      dynamicError => ZIO.succeed(Remote.RemoteEither(Left(Remote.Literal(dynamicError))))
+                      .flatMap { finishWith =>
+                        onSuccess(finishWith)
+                      },
+                  dynamicSuccess =>
+                    onSuccess(
+                      Remote.RemoteEither(Right(Remote.Literal(dynamicSuccess.result))),
+                      StateChange.advanceClock(dynamicSuccess.timestamp)
                     )
-                    .flatMap { finishWith =>
-                      onSuccess(finishWith)
-                    },
-                dynamicSuccess =>
-                  onSuccess(
-                    Remote.RemoteEither(Right(Remote.Literal(dynamicSuccess.result))),
-                    StateChange.advanceClock(dynamicSuccess.timestamp)
-                  )
-              )
-          } yield stepResult
+                )
+            } yield stepResult
 
-        case timeout @ Timeout(flow, duration) =>
-          val forkId = state.id.child(FlowId.unsafeMake(s"timeout${state.forkCounter}"))
-          for {
-            d <- eval(duration)
-            resultPromise <-
-              start[timeout.ValueE, timeout.ValueA](
-                forkId,
-                state.lastTimestamp.next,
-                state.watchPosition,
-                flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
-              )
-            result <- resultPromise.awaitEither
-                        .provideEnvironment(promiseEnv)
-                        .tapErrorCause(c => ZIO.log(s"Failed: $c"))
-                        .timeout(d)
-            stepResult <- result match {
-                            case Some(Right(dynamicSuccess)) =>
-                              // succeeded
-                              onSuccess(
-                                Remote.Literal(DynamicValue.SomeValue(dynamicSuccess.result)),
-                                StateChange.increaseForkCounter ++ StateChange.advanceClock(dynamicSuccess.timestamp)
-                              )
-                            case Some(Left(Left(fatal))) =>
-                              // failed with fatal error
-                              ZIO.die(new IOException("Awaited flow died", fatal))
-                            case Some(Left(Right(dynamicError))) =>
-                              // failed with typed error
-                              failWith(
-                                dynamicError,
-                                StateChange.increaseForkCounter
-                              )
-                            case None =>
-                              // timed out
-                              interruptFlow(forkId.asFlowId).zipRight(
+          case timeout @ Timeout(flow, duration) =>
+            val forkId = state.id.child(FlowId.unsafeMake(s"timeout${state.forkCounter}"))
+            for {
+              d <- eval(duration)
+              resultPromise <-
+                start[timeout.ValueE, timeout.ValueA](
+                  forkId,
+                  state.lastTimestamp.next,
+                  state.watchPosition,
+                  flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
+                )
+              result <- resultPromise.awaitEither
+                          .provideEnvironment(promiseEnv)
+                          .tapErrorCause(c => ZIO.log(s"Failed: $c"))
+                          .timeout(d)
+              stepResult <- result match {
+                              case Some(Right(dynamicSuccess)) =>
+                                // succeeded
                                 onSuccess(
-                                  Remote.Literal(DynamicValue.NoneValue),
+                                  Remote.Literal(DynamicValue.SomeValue(dynamicSuccess.result)),
+                                  StateChange.increaseForkCounter ++ StateChange.advanceClock(dynamicSuccess.timestamp)
+                                )
+                              case Some(Left(Left(fatal))) =>
+                                // failed with fatal error
+                                ZIO.fail(ExecutorError.AwaitedFlowDied(forkId.asFlowId, fatal))
+                              case Some(Left(Right(dynamicError))) =>
+                                // failed with typed error
+                                failWith(
+                                  dynamicError,
                                   StateChange.increaseForkCounter
                                 )
+                              case None =>
+                                // timed out
+                                interruptFlow(forkId.asFlowId).zipRight(
+                                  onSuccess(
+                                    Remote.Literal(DynamicValue.NoneValue),
+                                    StateChange.increaseForkCounter
+                                  )
+                                )
+                            }
+            } yield stepResult
+
+          case Provide(value, flow) =>
+            ZIO.succeed(
+              StepResult(
+                StateChange.setCurrent(flow) ++
+                  StateChange.pushContinuation(Instruction.PopEnv) ++
+                  StateChange.pushEnvironment(value),
+                continue = true
+              )
+            )
+
+          case Die => ZIO.fail(ExecutorError.FlowDied)
+
+          case RetryUntil =>
+            onError(Remote.apply[TransactionFailure[ZNothing]](TransactionFailure.Retry))
+
+          case OrTry(left, right) =>
+            ZIO.succeed(
+              StepResult(
+                StateChange.setCurrent(left) ++
+                  StateChange.pushContinuation(Instruction.CaptureRetry(right)),
+                continue = true
+              )
+            )
+
+          case Interrupt(remoteExecFlow) =>
+            for {
+              executingFlow          <- eval(remoteExecFlow)
+              persistentExecutingFlow = executingFlow
+              interrupted            <- interruptFlow(persistentExecutingFlow.id)
+              result <- if (interrupted)
+                          onSuccess(Remote.unit)
+                        else
+                          failWith(
+                            DynamicValueHelpers.of(
+                              ActivityError(
+                                s"Flow ${persistentExecutingFlow.id} to be interrupted is not running",
+                                None
                               )
-                          }
-          } yield stepResult
-
-        case Provide(value, flow) =>
-          ZIO.succeed(
-            StepResult(
-              StateChange.setCurrent(flow) ++
-                StateChange.pushContinuation(Instruction.PopEnv) ++
-                StateChange.pushEnvironment(value),
-              continue = true
-            )
-          )
-
-        case Die => ZIO.die(new IllegalStateException("Could not evaluate ZFlow"))
-
-        case RetryUntil =>
-          onError(Remote.apply[TransactionFailure[ZNothing]](TransactionFailure.Retry))
-
-        case OrTry(left, right) =>
-          ZIO.succeed(
-            StepResult(
-              StateChange.setCurrent(left) ++
-                StateChange.pushContinuation(Instruction.CaptureRetry(right)),
-              continue = true
-            )
-          )
-
-        case Interrupt(remoteExecFlow) =>
-          for {
-            executingFlow          <- eval(remoteExecFlow)
-            persistentExecutingFlow = executingFlow
-            interrupted            <- interruptFlow(persistentExecutingFlow.id)
-            result <- if (interrupted)
-                        onSuccess(Remote.unit)
-                      else
-                        failWith(
-                          DynamicValueHelpers.of(
-                            ActivityError(
-                              s"Flow ${persistentExecutingFlow.id} to be interrupted is not running",
-                              None
                             )
                           )
-                        )
-          } yield result
+            } yield result
 
-        case Fail(error) =>
-          // Evaluating error to make sure it contains no coped variables as it will bubble up the scope stack
-          if (state.isInTransaction)
-            evalDynamic(error).flatMap { evaluatedError =>
-              failWith(evaluatedError)
+          case Fail(error) =>
+            // Evaluating error to make sure it contains no coped variables as it will bubble up the scope stack
+            if (state.isInTransaction)
+              evalDynamic(error).flatMap { evaluatedError =>
+                failWith(evaluatedError)
+              }
+            else
+              onError(error)
+
+          case NewVar(name, initial) =>
+            for {
+              initialValue <- evalDynamic(initial)
+              remoteVariableName <-
+                RemoteVariableName
+                  .make(name)
+                  .toZIO
+                  .mapError(msg =>
+                    ExecutorError.InvalidOperationArguments(s"Failed to create remote variable with name $name: $msg")
+                  )
+              vref    = RemoteVariableReference[Any](remoteVariableName)
+              _      <- RemoteContext.setVariable(remoteVariableName, initialValue)
+              _      <- ZIO.logDebug(s"Created new variable $name")
+              result <- onSuccess(Remote(vref), StateChange.none)
+            } yield result
+
+          case i @ Iterate(initial, step0, predicate) =>
+            val tempVarCounter = state.tempVarCounter
+            val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
+
+            def iterate(
+              step: Remote.UnboundRemoteFunction[i.ValueA, ZFlow[Any, i.ValueE, i.ValueA]],
+              predicate: UnboundRemoteFunction[i.ValueA, Boolean],
+              stateVar: Remote[RemoteVariableReference[i.ValueA]],
+              boolRemote: Remote[Boolean]
+            ): ZFlow[Any, i.ValueE, i.ValueA] =
+              ZFlow.recurse[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
+                ZFlow.ifThenElse(continue)(
+                  ifTrue = for {
+                    a0       <- stateVar.get
+                    nextFlow <- step(a0)
+                    a1       <- ZFlow.unwrap(nextFlow)
+                    _        <- stateVar.set(a1)
+                    continue <- predicate(a1)
+                    result   <- rec(continue)
+                  } yield result,
+                  ifFalse = ZFlow.succeed(false)
+                )
+              } *> stateVar.get
+
+            val zFlow = for {
+              stateVar   <- ZFlow.newVar[i.ValueA](tempVarName, initial)
+              stateValue <- stateVar.get
+              boolRemote <- ZFlow(predicate(stateValue))
+              stateValue <- iterate(step0, predicate, stateVar, boolRemote)
+            } yield stateValue
+
+            ZIO.succeed(
+              StepResult(StateChange.setCurrent(zFlow) ++ StateChange.increaseTempVarCounter, continue = true)
+            )
+
+          case Log(remoteMessage) =>
+            eval(remoteMessage).flatMap { message =>
+              ZIO.log(message) *> onSuccess(())
             }
-          else
-            onError(error)
-
-        case NewVar(name, initial) =>
-          for {
-            initialValue <- evalDynamic(initial)
-            remoteVariableName <-
-              RemoteVariableName
-                .make(name)
-                .toZIO
-                .mapError(msg => new IOException(s"Failed to create remote variable with name $name: $msg"))
-            vref    = RemoteVariableReference[Any](remoteVariableName)
-            _      <- RemoteContext.setVariable(remoteVariableName, initialValue)
-            _      <- ZIO.logDebug(s"Created new variable $name")
-            result <- onSuccess(Remote(vref), StateChange.none)
-          } yield result
-
-        case i @ Iterate(initial, step0, predicate) =>
-          val tempVarCounter = state.tempVarCounter
-          val tempVarName    = s"_zflow_tempvar_${tempVarCounter}"
-
-          def iterate(
-            step: Remote.UnboundRemoteFunction[i.ValueA, ZFlow[Any, i.ValueE, i.ValueA]],
-            predicate: UnboundRemoteFunction[i.ValueA, Boolean],
-            stateVar: Remote[RemoteVariableReference[i.ValueA]],
-            boolRemote: Remote[Boolean]
-          ): ZFlow[Any, i.ValueE, i.ValueA] =
-            ZFlow.recurse[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
-              ZFlow.ifThenElse(continue)(
-                ifTrue = for {
-                  a0       <- stateVar.get
-                  nextFlow <- step(a0)
-                  a1       <- ZFlow.unwrap(nextFlow)
-                  _        <- stateVar.set(a1)
-                  continue <- predicate(a1)
-                  result   <- rec(continue)
-                } yield result,
-                ifFalse = ZFlow.succeed(false)
-              )
-            } *> stateVar.get
-
-          val zFlow = for {
-            stateVar   <- ZFlow.newVar[i.ValueA](tempVarName, initial)
-            stateValue <- stateVar.get
-            boolRemote <- ZFlow(predicate(stateValue))
-            stateValue <- iterate(step0, predicate, stateVar, boolRemote)
-          } yield stateValue
-
-          ZIO.succeed(
-            StepResult(StateChange.setCurrent(zFlow) ++ StateChange.increaseTempVarCounter, continue = true)
-          )
-
-        case Log(remoteMessage) =>
-          eval(remoteMessage).flatMap { message =>
-            ZIO.log(message) *> onSuccess(())
-          }
+        }
       }
     }
 
     def waitForVariablesToChange(
       watchedVariables: Set[ScopedRemoteVariableName],
       watchPosition: Index
-    ): ZIO[Any, IOException, Unit] =
+    ): ZIO[Any, ExecutorError, Timestamp] =
       durableLog
         .subscribe(
           Topics.variableChanges(state.scope.rootScope.flowId),
           watchPosition
         )
-        .map { raw =>
-          execEnv.deserializer.deserialize[ScopedRemoteVariableName](raw)
-        }
-        .filter {
-          case Right(scopedName) => watchedVariables.contains(scopedName)
-          case Left(_)           => false
+        .mapBoth(
+          ExecutorError.LogError,
+          raw => execEnv.deserializer.deserialize[ScopedRemoteVariableName](raw)
+        )
+        .collect {
+          case Right(scopedName) if watchedVariables.contains(scopedName) => scopedName
         }
         .runHead
-        .unit
+        .flatMap {
+          case Some(scopedName) =>
+            remoteVariableKvStore
+              .getLatestTimestamp(scopedName.name, scopedName.scope)
+              .flatMap {
+                case Some((timestamp, _)) => ZIO.succeed(timestamp)
+                case None =>
+                  ZIO.fail(
+                    ExecutorError.MissingVariable(scopedName.name, "getting latest timestamp of changed variable")
+                  )
+              }
+          case None => ZIO.fail(ExecutorError.VariableChangeLogFinished)
+        }
 
     def runSteps(
-      stateRef: Ref[State[E, A]]
+      stateRef: Ref[State[E, A]],
+      executionStartedAt: OffsetDateTime
     ): ZIO[
       VirtualClock with KeyValueStore with ExecutionEnvironment with DurableLog with RemoteVariableKeyValueStore,
-      IOException,
+      ExecutorError,
       Unit
     ] =
       stateRef.get.flatMap { state0 =>
@@ -803,50 +855,84 @@ final case class PersistentExecutor(
                       case PersistentWorkflowStatus.Done =>
                         ZIO.succeed(StepResult(StateChange.none, continue = false))
                       case PersistentWorkflowStatus.Suspended =>
-                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next)
-                          .as(StepResult(StateChange.resume, continue = true))
+                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
+                          timestamp =>
+                            Clock.currentDateTime.flatMap { now =>
+                              val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
+                              metrics.flowSuspendedTime
+                                .update(suspendedDuration)
+                                .as(
+                                  StepResult(
+                                    StateChange.resume ++ StateChange.advanceClock(atLeastTo = timestamp),
+                                    continue = true
+                                  )
+                                )
+                            }
+                        }
                     }
-                  state1  = stepResult.stateChange(state0)
-                  state2 <- persistState(state.id.asFlowId, state0, stepResult.stateChange, state1, recordingContext)
-                  _      <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                  now <- Clock.currentDateTime
+                  state2 <- persistState(
+                              state.id.asFlowId,
+                              state0,
+                              stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
+                              recordingContext
+                            )
+                  _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
                 } yield stepResult
               }
             }
             .flatMap { stepResult =>
-              runSteps(stateRef).when(stepResult.continue).unit
+              runSteps(stateRef, executionStartedAt).when(stepResult.continue).unit
             }
         }
       }
 
+    // run()
     for {
       ref       <- Ref.make[State[E, A]](state)
       startGate <- Promise.make[Nothing, Unit]
-      fiber <- (for {
-                 _ <- startGate.await
-                 _ <- runSteps(ref)
-                        .provide(
-                          ZLayer.succeed(execEnv),
-                          ZLayer.succeed(kvStore),
-                          ZLayer.succeed(durableLog),
-                          ZLayer(VirtualClock.make(state.lastTimestamp)),
-                          ZLayer.succeed(remoteVariableKvStore)
-                        )
-                        .catchAllCause { error =>
-                          ZIO.logErrorCause(s"Persistent executor ${state.id} failed", error) *>
-                            state.result
-                              .fail(Left(error.squash))
-                              .provideEnvironment(promiseEnv)
-                              .absorb
-                              .catchAll { error2 =>
-                                ZIO.logFatal(s"Failed to serialize execution failure: $error2")
-                              }
-                              .unit
-                        }
-                 _ <- deleteState(state.id.asFlowId).orDie
-               } yield ()).ensuring(workflows.delete(state.id.asFlowId).commit).fork
-      runtimeState = PersistentExecutor.RuntimeState(state.result, fiber)
-      _           <- promise.succeed(runtimeState)
-      _           <- startGate.succeed(())
+      now       <- Clock.currentDateTime
+      fiber <- {
+        for {
+          _ <- startGate.await
+          _ <- {
+            runSteps(ref, executionStartedAt = now)
+              .provide(
+                ZLayer.succeed(execEnv),
+                ZLayer.succeed(kvStore),
+                ZLayer.succeed(durableLog),
+                ZLayer(VirtualClock.make(state.lastTimestamp)),
+                ZLayer.succeed(remoteVariableKvStore)
+              ) @@ metrics.executorErrorCount
+          }.catchAll { error =>
+            for {
+              _ <- ZIO.logErrorCause(s"Persistent executor ${state.id} failed", Cause.fail(error))
+              _ <- state.result
+                     .fail(Left(error))
+                     .provideEnvironment(promiseEnv)
+                     .catchAll { error2 =>
+                       ZIO.logFatal(s"Failed to serialize execution failure: $error2")
+                     }
+              _ <- updateFinishedFlowMetrics(
+                     metrics.FlowResult.Death,
+                     state.startedAt,
+                     state.totalExecutionTime
+                   )
+            } yield ()
+          }
+          _ <- deleteState(state.id.asFlowId).orDieWith(_.toException)
+        } yield ()
+      }.ensuring {
+        workflows.delete(state.id.asFlowId).commit *> updateWorkflowMetrics()
+      }.fork
+      runtimeState = PersistentExecutor.RuntimeState(
+                       result = state.result,
+                       fiber = fiber,
+                       currentStatus = PersistentWorkflowStatus.Running,
+                       executionStartedAt = now
+                     )
+      _ <- promise.succeed(runtimeState)
+      _ <- startGate.succeed(())
     } yield state.result
   }
 
@@ -854,12 +940,13 @@ final case class PersistentExecutor(
     transactionState: TransactionState,
     currentContext: RemoteContext,
     targetContext: RemoteContext
-  ): ZIO[Any, IOException, Boolean] =
+  ): ZIO[Any, ExecutorError, Boolean] =
     ZIO.logDebug(s"Committing transaction ${transactionState.id}") *>
       ZIO
         .foreachDiscard(transactionState.accessedVariables) { case (name, access) =>
           targetContext
             .getLatestTimestamp(name)
+            .mapError(Some(_))
             .flatMap { optLatestTimestamp =>
               val latestTimestamp = optLatestTimestamp.getOrElse(Timestamp(0L))
               if (latestTimestamp > access.previousTimestamp) {
@@ -868,19 +955,18 @@ final case class PersistentExecutor(
                 ) *>
                   ZIO.fail(None)
               } else {
-                currentContext.getVariable(name).flatMap {
-                  case Some(value) =>
-                    ZIO.logDebug(
-                      s"Committing modified value for variable ${name}: ${value} (latestTimestamp: $latestTimestamp; recorded access: $access"
-                    ) *>
-                      targetContext.setVariable(name, value)
-                  case None =>
-                    ZIO.fail(
-                      Some(
-                        new IOException(s"Could not read value of variable $name in transaction ${transactionState.id}")
-                      )
-                    )
-                }
+                currentContext
+                  .getVariable(name)
+                  .flatMap {
+                    case Some(value) =>
+                      ZIO.logDebug(
+                        s"Committing modified value for variable ${name}: ${value} (latestTimestamp: $latestTimestamp; recorded access: $access"
+                      ) *>
+                        targetContext.setVariable(name, value)
+                    case None =>
+                      ZIO.fail(ExecutorError.MissingVariable(name, s"transaction ${transactionState.id}"))
+                  }
+                  .mapError(Some(_))
               }
             }
             .when(access.wasModified)
@@ -889,19 +975,19 @@ final case class PersistentExecutor(
         .map(_.isDefined)
         .ensuring(ZIO.logDebug(s"Finished committing transaction ${transactionState.id}"))
 
-  @nowarn private def persistState(
+  private def persistState(
     id: FlowId,
     state0: PersistentExecutor.State[_, _],
     stateChange: PersistentExecutor.StateChange,
-    state1: PersistentExecutor.State[_, _],
     recordingContext: RecordingRemoteContext
   ): ZIO[
     RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
-    IOException,
+    ExecutorError,
     PersistentExecutor.State[_, _]
   ] = {
     // TODO: optimization: do not persist state if there were no side effects
-    val key = id.toRaw
+    val key    = id.toRaw
+    val state1 = stateChange(state0)
     for {
       _                    <- recordingContext.virtualClock.advance(state1.lastTimestamp)
       modifiedVariables    <- recordingContext.getModifiedVariables
@@ -929,7 +1015,7 @@ final case class PersistentExecutor(
       _ <-
         ZIO
           .logInfo(
-            s"Persisting changes to ${modifiedVariables.size} remote variables\n(${modifiedVariables.mkString(", ")})"
+            s"Persisting changes to ${modifiedVariables.size} remote variables"
           )
           .when(modifiedVariables.nonEmpty)
 
@@ -946,30 +1032,36 @@ final case class PersistentExecutor(
                  .recordAccessedVariables(readVariablesWithTimestamps)
                  .recordReadVariables(readVariables)
       persistedState = execEnv.serializer.serialize(state2)
-//      _             <- ZIO.logInfo(s"Persisting flow state (${persistedState.size} bytes)")
-      _ <- kvStore.put(Namespaces.workflowState, key, persistedState, currentTimestamp)
+      _             <- metrics.serializedFlowStateSize.update(persistedState.size)
+      _ <- kvStore
+             .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
+             .mapError(ExecutorError.KeyValueStoreError("put", _))
     } yield state2
   }
 
-  private def loadState(id: FlowId): IO[IOException, Option[PersistentExecutor.State[_, _]]] =
+  private def loadState(id: FlowId): IO[ExecutorError, Option[PersistentExecutor.State[_, _]]] =
     for {
-      _              <- ZIO.logInfo(s"Looking for persisted flow state $id")
-      key             = id.toRaw
-      persistedState <- kvStore.getLatest(Namespaces.workflowState, key, None)
+      _  <- ZIO.logInfo(s"Looking for persisted flow state $id")
+      key = id.toRaw
+      persistedState <- kvStore
+                          .getLatest(Namespaces.workflowState, key, None)
+                          .mapError(ExecutorError.KeyValueStoreError("getLatest", _))
       state <- persistedState match {
                  case Some(bytes) =>
                    ZIO.logInfo(s"Using persisted state (${bytes.size} bytes)") *>
                      ZIO
                        .fromEither(execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](bytes))
-                       .mapBoth(msg => new IOException(s"Failed to deserialize persisted state: $msg"), Some(_))
+                       .mapBoth(ExecutorError.DeserializationError(s"state of $id", _), Some(_))
                  case None => ZIO.logInfo("No persisted state available").as(None)
                }
     } yield state
 
-  private def deleteState(id: FlowId): IO[IOException, Unit] =
+  private def deleteState(id: FlowId): IO[ExecutorError, Unit] =
     for {
       _ <- ZIO.logInfo(s"Deleting persisted state $id")
-      _ <- kvStore.delete(Namespaces.workflowState, id.toRaw)
+      _ <- kvStore
+             .delete(Namespaces.workflowState, id.toRaw)
+             .mapError(ExecutorError.KeyValueStoreError("delete", _))
     } yield ()
 
   private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
@@ -984,7 +1076,7 @@ final case class PersistentExecutor(
                 }
     } yield result
 
-  private def getAllReferences(name: ScopedRemoteVariableName): ZIO[Any, IOException, Set[ScopedRemoteVariableName]] =
+  private def getAllReferences(name: ScopedRemoteVariableName): ZIO[Any, ExecutorError, Set[ScopedRemoteVariableName]] =
     // NOTE: this could be optimized if we store some type information and only read variables that are known to be remote or flow
     ZIO.logDebug(s"Garbage collector checking $name") *>
       remoteVariableKvStore
@@ -1007,7 +1099,7 @@ final case class PersistentExecutor(
     topLevelVariables: Set[ScopedRemoteVariableName],
     variables: Set[ScopedRemoteVariableName],
     alreadyRead: Set[ScopedRemoteVariableName]
-  ): ZIO[Any, IOException, Set[ScopedRemoteVariableName]] = {
+  ): ZIO[Any, ExecutorError, Set[ScopedRemoteVariableName]] = {
     def withAllParents(name: ScopedRemoteVariableName): Set[ScopedRemoteVariableName] =
       name.scope.parentScope match {
         case Some(parent) => withAllParents(ScopedRemoteVariableName(name.name, parent)) + name
@@ -1087,9 +1179,69 @@ final case class PersistentExecutor(
   }.catchAllCause { cause =>
     ZIO.logErrorCause(s"Garbage collection failed", cause)
   }.ensuring(finished.succeed(())) @@ metrics.gcTimeMillis @@ metrics.gcRuns
+
+  private def updateWorkflowMetrics(): ZIO[Any, Nothing, Unit] =
+    for {
+      promises    <- workflows.values.commit
+      getStatuses <- ZIO.foreach(promises)(_.poll).map(_.flatten)
+      statuses    <- ZIO.collectAll(getStatuses)
+      byStatus     = statuses.groupBy(_.currentStatus)
+      _ <- metrics
+             .activeFlows(PersistentWorkflowStatus.Running)
+             .set(byStatus.getOrElse(PersistentWorkflowStatus.Running, List.empty).length)
+      _ <- metrics
+             .activeFlows(PersistentWorkflowStatus.Suspended)
+             .set(byStatus.getOrElse(PersistentWorkflowStatus.Suspended, List.empty).length)
+    } yield ()
+
+  private def updateFinishedFlowMetrics(
+    result: metrics.FlowResult,
+    startedAt: OffsetDateTime,
+    totalExecutionTime: Duration
+  ): ZIO[Any, Nothing, Unit] =
+    for {
+      _   <- finishedFlowCount(result).increment
+      now <- Clock.currentDateTime
+      age  = Duration.between(startedAt, now)
+      _   <- finishedFlowAge(result).update(age)
+      _   <- flowTotalExecutionTime(result).update(totalExecutionTime)
+    } yield ()
 }
 
 object PersistentExecutor {
+  def make(
+    operationExecutor: OperationExecutor[Any],
+    serializer: Serializer,
+    deserializer: Deserializer,
+    gcPeriod: Duration = 5.minutes
+  ): ZLayer[DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
+    (ZLayer.succeed(
+      ExecutionEnvironment(serializer, deserializer)
+    )) >+> (DurableLog.any ++ KeyValueStore.any ++ RemoteVariableKeyValueStore.live) >>>
+      ZLayer.scoped {
+        for {
+          durableLog            <- ZIO.service[DurableLog]
+          kvStore               <- ZIO.service[KeyValueStore]
+          remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
+          execEnv               <- ZIO.service[ExecutionEnvironment]
+          workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
+          gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
+          _ <- Promise
+                 .make[Nothing, Any]
+                 .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
+                 .scheduleFork(Schedule.fixed(gcPeriod))
+          executor = PersistentExecutor(
+                       execEnv,
+                       durableLog,
+                       kvStore,
+                       remoteVariableKvStore,
+                       operationExecutor,
+                       workflows,
+                       gcQueue
+                     )
+          _ <- executor.startGarbageCollector()
+        } yield executor
+      }
 
   sealed trait Instruction
 
@@ -1160,40 +1312,6 @@ object PersistentExecutor {
           )
       )
   }
-
-  def make(
-    operationExecutor: OperationExecutor[Any],
-    serializer: Serializer,
-    deserializer: Deserializer,
-    gcPeriod: Duration = 5.minutes
-  ): ZLayer[DurableLog with KeyValueStore, Nothing, ZFlowExecutor] =
-    (ZLayer.succeed(
-      ExecutionEnvironment(serializer, deserializer)
-    )) >+> (DurableLog.any ++ KeyValueStore.any ++ RemoteVariableKeyValueStore.live) >>>
-      ZLayer.scoped {
-        for {
-          durableLog            <- ZIO.service[DurableLog]
-          kvStore               <- ZIO.service[KeyValueStore]
-          remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
-          execEnv               <- ZIO.service[ExecutionEnvironment]
-          workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
-          gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
-          _ <- Promise
-                 .make[Nothing, Any]
-                 .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
-                 .scheduleFork(Schedule.fixed(gcPeriod))
-          executor = PersistentExecutor(
-                       execEnv,
-                       durableLog,
-                       kvStore,
-                       remoteVariableKvStore,
-                       operationExecutor,
-                       workflows,
-                       gcQueue
-                     )
-          _ <- executor.startGarbageCollector()
-        } yield executor
-      }
 
   case class GarbageCollectionCommand(finished: Promise[Nothing, Any])
 
@@ -1286,7 +1404,7 @@ object PersistentExecutor {
           case None => state
         }
     }
-    private final case class RestartCurrentTransaction(suspend: Boolean) extends StateChange {
+    private final case class RestartCurrentTransaction(suspend: Boolean, now: OffsetDateTime) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.transactionStack.headOption match {
           case Some(txState) =>
@@ -1311,7 +1429,8 @@ object PersistentExecutor {
               ) :: state.transactionStack.tail,
               status = if (suspend) PersistentWorkflowStatus.Suspended else PersistentWorkflowStatus.Running,
               watchedVariables = txState.readVariables,
-              transactionCounter = state.transactionCounter + 1
+              transactionCounter = state.transactionCounter + 1,
+              suspendedAt = if (suspend) Some(now) else None
             )
           case None => state
         }
@@ -1354,6 +1473,14 @@ object PersistentExecutor {
         )
     }
 
+    private final case class UpdateCurrentExecutionTime(now: OffsetDateTime, executionStartedAt: OffsetDateTime)
+        extends StateChange {
+      override def apply[E, A](state: State[E, A]): State[E, A] =
+        state.copy(
+          currentExecutionTime = Duration.between(executionStartedAt, now)
+        )
+    }
+
     val none: StateChange                                = NoChange
     def setCurrent(current: ZFlow[_, _, _]): StateChange = SetCurrent(current)
     def pushContinuation(cont: Instruction): StateChange = PushContinuation(cont)
@@ -1364,15 +1491,18 @@ object PersistentExecutor {
     def enterTransaction(flow: ZFlow[Any, _, _]): StateChange        = EnterTransaction(flow)
     val leaveTransaction: StateChange                                = LeaveTransaction
     def revertCurrentTransaction[E](failure: Remote[E]): StateChange = RevertCurrentTransaction(failure)
-    def restartCurrentTransaction(suspend: Boolean): StateChange     = RestartCurrentTransaction(suspend)
-    val increaseForkCounter: StateChange                             = IncreaseForkCounter
-    val increaseTempVarCounter: StateChange                          = IncreaseTempVarCounter
-    def pushEnvironment(value: Remote[_]): StateChange               = PushEnvironment(value)
-    def popEnvironment: StateChange                                  = PopEnvironment
-    def advanceClock(atLeastTo: Timestamp): StateChange              = AdvanceClock(atLeastTo)
-    val done: StateChange                                            = Done
-    val resume: StateChange                                          = Resume
-    def updateWatchPosition(index: Index): StateChange               = UpdateWatchPosition(index)
+    def restartCurrentTransaction(suspend: Boolean, now: OffsetDateTime): StateChange =
+      RestartCurrentTransaction(suspend, now)
+    val increaseForkCounter: StateChange                = IncreaseForkCounter
+    val increaseTempVarCounter: StateChange             = IncreaseTempVarCounter
+    def pushEnvironment(value: Remote[_]): StateChange  = PushEnvironment(value)
+    def popEnvironment: StateChange                     = PopEnvironment
+    def advanceClock(atLeastTo: Timestamp): StateChange = AdvanceClock(atLeastTo)
+    val done: StateChange                               = Done
+    val resume: StateChange                             = Resume
+    def updateWatchPosition(index: Index): StateChange  = UpdateWatchPosition(index)
+    def updateCurrentExecutionTime(now: OffsetDateTime, executionStartedAt: OffsetDateTime): StateChange =
+      UpdateCurrentExecutionTime(now, executionStartedAt)
   }
 
   final case class FlowResult(result: DynamicValue, timestamp: Timestamp)
@@ -1385,7 +1515,7 @@ object PersistentExecutor {
     lastTimestamp: Timestamp,
     current: ZFlow[_, _, _],
     stack: List[Instruction],
-    result: DurablePromise[Either[Throwable, DynamicValue], FlowResult],
+    result: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult],
     envStack: List[Remote[_]],
     transactionStack: List[TransactionState],
     tempVarCounter: Int,
@@ -1394,7 +1524,11 @@ object PersistentExecutor {
     transactionCounter: Int,
     status: PersistentWorkflowStatus,
     watchedVariables: Set[ScopedRemoteVariableName],
-    watchPosition: Index
+    watchPosition: Index,
+    startedAt: OffsetDateTime,
+    suspendedAt: Option[OffsetDateTime],
+    totalExecutionTime: Duration,
+    currentExecutionTime: Duration
   ) {
 
     def currentEnvironment: Remote[_] = envStack.headOption.getOrElse(
@@ -1453,12 +1587,12 @@ object PersistentExecutor {
 
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
-      Schema.CaseClass14(
+      Schema.CaseClass18(
         Schema.Field("id", Schema[ScopedFlowId]),
         Schema.Field("lastTimestamp", Schema[Timestamp]),
         Schema.Field("current", ZFlow.schemaAny),
         Schema.Field("stack", Schema[List[Instruction]]),
-        Schema.Field("result", Schema[DurablePromise[Either[Throwable, DynamicValue], FlowResult]]),
+        Schema.Field("result", Schema[DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]]),
         Schema.Field("envStack", Schema[List[Remote[_]]]),
         Schema.Field("transactionStack", Schema[List[TransactionState]]),
         Schema.Field("tempVarCounter", Schema[Int]),
@@ -1468,12 +1602,16 @@ object PersistentExecutor {
         Schema.Field("status", Schema[PersistentWorkflowStatus]),
         Schema.Field("watchedVariables", Schema[Set[ScopedRemoteVariableName]]),
         Schema.Field("watchPosition", Schema[Index]),
+        Schema.Field("startedAt", Schema[OffsetDateTime]),
+        Schema.Field("suspendedAt", Schema[Option[OffsetDateTime]]),
+        Schema.Field("totalExecutionTime", Schema[Duration]),
+        Schema.Field("currentExecutionTime", Schema[Duration]),
         (
           id: ScopedFlowId,
           lastTimestamp: Timestamp,
           current: ZFlow[_, _, _],
           stack: List[Instruction],
-          result: DurablePromise[Either[Throwable, DynamicValue], FlowResult],
+          result: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult],
           envStack: List[Remote[_]],
           transactionStack: List[TransactionState],
           tempVarCounter: Int,
@@ -1482,7 +1620,11 @@ object PersistentExecutor {
           transactionCounter: Int,
           status: PersistentWorkflowStatus,
           watchedVariables: Set[ScopedRemoteVariableName],
-          watchPosition: Index
+          watchPosition: Index,
+          startedAt: OffsetDateTime,
+          suspendedAt: Option[OffsetDateTime],
+          totalExecutionTime: Duration,
+          currentExecutionTime: Duration
         ) =>
           State(
             id,
@@ -1498,7 +1640,11 @@ object PersistentExecutor {
             transactionCounter,
             status,
             watchedVariables,
-            watchPosition
+            watchPosition,
+            startedAt,
+            suspendedAt,
+            totalExecutionTime,
+            currentExecutionTime
           ),
         _.id,
         _.lastTimestamp,
@@ -1513,7 +1659,11 @@ object PersistentExecutor {
         _.transactionCounter,
         _.status,
         _.watchedVariables,
-        _.watchPosition
+        _.watchPosition,
+        _.startedAt,
+        _.suspendedAt,
+        _.totalExecutionTime,
+        _.currentExecutionTime
       )
   }
 
@@ -1554,7 +1704,9 @@ object PersistentExecutor {
   }
 
   final case class RuntimeState(
-    result: DurablePromise[Either[Throwable, DynamicValue], FlowResult],
-    fiber: Fiber[Nothing, Unit]
+    result: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult],
+    fiber: Fiber[Nothing, Unit],
+    currentStatus: PersistentWorkflowStatus,
+    executionStartedAt: OffsetDateTime
   )
 }

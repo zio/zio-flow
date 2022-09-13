@@ -19,7 +19,7 @@ package zio.flow.internal
 import zio.flow.{RemoteContext, RemoteVariableName}
 import zio.schema.DynamicValue
 import zio.stm.TMap
-import zio.{Chunk, UIO, ZIO}
+import zio.{Chunk, ZIO}
 
 trait RecordingRemoteContext {
   def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]]
@@ -41,19 +41,19 @@ object RecordingRemoteContext {
 
             override val remoteContext: RemoteContext =
               new RemoteContext {
-                override def setVariable(name: RemoteVariableName, value: DynamicValue): UIO[Unit] =
+                override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
                   cache.put(name, value).commit
 
-                override def getVariable(name: RemoteVariableName): UIO[Option[DynamicValue]] =
+                override def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
                   cache.get(name).commit.flatMap {
                     case Some(result) => ZIO.some(result)
                     case None         => outerRemoteContext.getVariable(name)
                   }
 
-                override def getLatestTimestamp(name: RemoteVariableName): UIO[Option[Timestamp]] =
+                override def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]] =
                   outerRemoteContext.getLatestTimestamp(name)
 
-                override def dropVariable(name: RemoteVariableName): UIO[Unit] =
+                override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
                   cache.delete(name).commit
               }
 

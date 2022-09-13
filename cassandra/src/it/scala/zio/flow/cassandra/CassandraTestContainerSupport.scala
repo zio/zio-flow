@@ -39,7 +39,7 @@ object CassandraTestContainerSupport {
   private val testKeyspaceName = "CassandraKeyValueStoreSpec_Keyspace"
   private val testDataCenter   = "datacenter1"
 
-  private val createTable =
+  private val createKeyValueStoreTable =
     SchemaBuilder
       .createTable(testKeyspaceName, CassandraKeyValueStore.tableName)
       .withPartitionKey(
@@ -60,12 +60,29 @@ object CassandraTestContainerSupport {
       )
       .build
 
+  private val createIndexedStoreTable =
+    SchemaBuilder
+      .createTable(testKeyspaceName, CassandraIndexedStore.tableName)
+      .withPartitionKey(
+        CassandraIndexedStore.topicColumnName,
+        DataTypes.TEXT
+      )
+      .withClusteringColumn(
+        CassandraIndexedStore.indexColumnName,
+        DataTypes.BIGINT
+      )
+      .withColumn(
+        CassandraIndexedStore.valueColumnName,
+        DataTypes.BLOB
+      )
+      .build
+
   object DockerImageTag {
     val cassandraV3: String = s"$cassandra:3.11.11"
     val cassandraV4: String = s"$cassandra:4.0.1"
     val scyllaDb: String =
       // This nightly build supports Apple M1; Will point to a regular version when v4.6 is released.
-      "scylladb/scylla-nightly:4.6.rc1-0.20211227.283788828"
+      "scylladb/scylla:5.0.1"
   }
 
   val createKeyspaceScript: String =
@@ -146,8 +163,11 @@ object CassandraTestContainerSupport {
         )
       _ <-
         execAsync(
-          session.executeAsync(createTable)
+          session.executeAsync(createKeyValueStoreTable)
         )
+      _ <- execAsync(
+             session.executeAsync(createIndexedStoreTable)
+           )
 
     } yield session
   } { session =>
