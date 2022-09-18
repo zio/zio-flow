@@ -16,11 +16,10 @@
 
 package zio.flow
 
-import zio.{ZEnvironment, ZIO}
+import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.flow.Operation.Http
 import zio.flow.operation.http._
-import zhttp.service.EventLoopGroup
-import zhttp.service.ChannelFactory
+import zio.{ZEnvironment, ZIO, ZLayer}
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
@@ -35,6 +34,14 @@ trait OperationExecutor[-R] { self =>
       override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
         self.execute(input, operation).provideEnvironment(env)
     }
+}
+
+object OperationExecutor {
+  val live: ZLayer[Any, Nothing, OperationExecutor[Any]] = ZLayer.scoped {
+    for {
+      operationExecutorEnvironment <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build
+    } yield OperationExecutorImpl().provideEnvironment(operationExecutorEnvironment)
+  }
 }
 
 case class OperationExecutorImpl() extends OperationExecutor[EventLoopGroup with ChannelFactory] {
