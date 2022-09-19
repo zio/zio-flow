@@ -98,7 +98,6 @@ object RemoteConversions {
     override def apply(value: A): Int =
       fractional.getExponent(value)
   }
-
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
     Schema.Case(
       "NumericToInt",
@@ -198,6 +197,17 @@ object RemoteConversions {
       _.asInstanceOf[ToString[Any]]
     )
 
+  private val fractionalGetExponentCase: Schema.Case[FractionalGetExponent[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "FractionalGetExponent",
+      Schema.CaseClass1(
+        Schema.Field("fractional", Fractional.schema),
+        (fractional: Fractional[Any]) => FractionalGetExponent(fractional),
+        _.fractional
+      ),
+      _.asInstanceOf[FractionalGetExponent[Any]]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -215,5 +225,6 @@ object RemoteConversions {
         .:+:(numericToHexStringCase)
         .:+:(numericToOctalStringCase)
         .:+:(toStringCase)
+        .:+:(fractionalGetExponentCase)
     )
 }

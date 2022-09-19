@@ -785,6 +785,8 @@ object PrettyPrint {
       case Remote.FoldOption(_, _, _) => ???
       case Remote.Recurse(_, _, _)    => ???
       case Remote.RecurseWith(_, _)   => ???
+      case Remote.SetToList(_)        => ???
+      case Remote.ListToSet(_)        => ???
     }
   }
 

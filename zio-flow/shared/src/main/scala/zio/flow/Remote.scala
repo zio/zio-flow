@@ -3057,6 +3057,62 @@ object Remote {
       Schema.Case("RecurseWith", schema, _.asInstanceOf[RecurseWith[A]])
   }
 
+  final case class ListToSet[A](list: Remote[List[A]]) extends Remote[Set[A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      list.evalDynamic.flatMap {
+        case DynamicValue.Sequence(values) =>
+          ZIO.succeed(DynamicValue.SetValue(values.toSet))
+        case other: DynamicValue =>
+          ZIO.fail(
+            RemoteEvaluationError.UnexpectedDynamicValue(
+              s"Unexpected value in Remote.ListToSet of type ${other.getClass.getSimpleName}"
+            )
+          )
+      }
+
+    override private[flow] def variableUsage: VariableUsage =
+      list.variableUsage
+
+    override protected def substituteRec[B](f: Substitutions): Remote[Set[A]] =
+      ListToSet(list.substituteRec(f))
+  }
+
+  object ListToSet {
+    def schema[A]: Schema[ListToSet[A]] =
+      Schema.defer(Remote.schema[List[A]].transform(ListToSet(_), _.list))
+
+    def schemaCase[A]: Schema.Case[ListToSet[A], Remote[A]] =
+      Schema.Case("ListToSet", schema, _.asInstanceOf[ListToSet[A]])
+  }
+
+  final case class SetToList[A](set: Remote[Set[A]]) extends Remote[List[A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      set.evalDynamic.flatMap {
+        case DynamicValue.SetValue(values) =>
+          ZIO.succeed(DynamicValue.Sequence(Chunk.fromIterable(values)))
+        case other: DynamicValue =>
+          ZIO.fail(
+            RemoteEvaluationError.UnexpectedDynamicValue(
+              s"Unexpected value in Remote.SetToList of type ${other.getClass.getSimpleName}"
+            )
+          )
+      }
+
+    override private[flow] def variableUsage: VariableUsage =
+      set.variableUsage
+
+    override protected def substituteRec[B](f: Substitutions): Remote[List[A]] =
+      SetToList(set.substituteRec(f))
+  }
+
+  object SetToList {
+    def schema[A]: Schema[SetToList[A]] =
+      Schema.defer(Remote.schema[Set[A]].transform(SetToList(_), _.set))
+
+    def schemaCase[A]: Schema.Case[SetToList[A], Remote[A]] =
+      Schema.Case("SetToList", schema, _.asInstanceOf[SetToList[A]])
+  }
+
 //  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
 //    val schema: Schema[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
 //
@@ -3791,6 +3847,8 @@ object Remote {
       .:+:(FoldOption.schemaCase[A])
       .:+:(Recurse.schemaCase[A])
       .:+:(RecurseWith.schemaCase[A])
+      .:+:(ListToSet.schemaCase[A])
+      .:+:(SetToList.schemaCase[A])
   )
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
