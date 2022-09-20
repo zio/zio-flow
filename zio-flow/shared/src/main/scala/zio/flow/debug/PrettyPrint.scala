@@ -781,12 +781,13 @@ object PrettyPrint {
       case Remote.Iterate(_, _, _)              => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
-      case Remote.RemoteSome(_)       => ???
-      case Remote.FoldOption(_, _, _) => ???
-      case Remote.Recurse(_, _, _)    => ???
-      case Remote.RecurseWith(_, _)   => ???
-      case Remote.SetToList(_)        => ???
-      case Remote.ListToSet(_)        => ???
+      case Remote.RemoteSome(_)            => ???
+      case Remote.FoldOption(_, _, _)      => ???
+      case Remote.Recurse(_, _, _)         => ???
+      case Remote.RecurseWith(_, _)        => ???
+      case Remote.SetToList(_)             => ???
+      case Remote.ListToSet(_)             => ???
+      case Remote.ListToString(_, _, _, _) => ???
     }
   }
 

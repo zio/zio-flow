@@ -3113,6 +3113,50 @@ object Remote {
       Schema.Case("SetToList", schema, _.asInstanceOf[SetToList[A]])
   }
 
+  final case class ListToString(
+    list: Remote[List[String]],
+    start: Remote[String],
+    sep: Remote[String],
+    end: Remote[String]
+  ) extends Remote[String] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      for {
+        list  <- list.eval
+        start <- start.eval
+        sep   <- sep.eval
+        end   <- end.eval
+      } yield DynamicValue.fromSchemaAndValue(Schema[String], list.mkString(start, sep, end))
+
+    override private[flow] def variableUsage: VariableUsage =
+      list.variableUsage union
+        start.variableUsage union
+        sep.variableUsage union
+        end.variableUsage
+
+    override protected def substituteRec[B](f: Substitutions): Remote[String] =
+      ListToString(list.substituteRec(f), start.substituteRec(f), sep.substituteRec(f), end.substituteRec(f))
+  }
+
+  object ListToString {
+    val schema: Schema[ListToString] =
+      Schema.defer(
+        Schema.CaseClass4[Remote[List[String]], Remote[String], Remote[String], Remote[String], ListToString](
+          Schema.Field("list", Remote.schema[List[String]]),
+          Schema.Field("start", Remote.schema[String]),
+          Schema.Field("sep", Remote.schema[String]),
+          Schema.Field("end", Remote.schema[String]),
+          ListToString(_, _, _, _),
+          _.list,
+          _.start,
+          _.sep,
+          _.end
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[ListToString, Remote[A]] =
+      Schema.Case("ListToString", schema, _.asInstanceOf[ListToString])
+  }
+
 //  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
 //    val schema: Schema[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
 //
@@ -3253,6 +3297,9 @@ object Remote {
 
   def left[A, B](value: Remote[A]): Remote[Either[A, B]] =
     Remote.RemoteEither(Left(value))
+
+  def list[A](values: Remote[A]*): Remote[List[A]] =
+    values.foldLeft(nil[A])(Remote.Cons.apply)
 
   def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, Remote(0L))
 
@@ -3849,6 +3896,7 @@ object Remote {
       .:+:(RecurseWith.schemaCase[A])
       .:+:(ListToSet.schemaCase[A])
       .:+:(SetToList.schemaCase[A])
+      .:+:(ListToString.schemaCase[A])
   )
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
