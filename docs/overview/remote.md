@@ -9,7 +9,7 @@ The `Remote` data type forms the backbone of ZIO Flow and allows us to safely de
 
 In ordinary Scala we are used to working with values defined by the Scala library such as `Int` and `String` as well as user defined data types such as a `User` and interfaces such as a `UserService`. The problem with using these data types in a distributed in a setting where we need to perform distributed or resilient workflows is that these data types may not actually be safely serializable and cause our programs to fail at runtime.
 
-Even if we are extremely diligent about trying to avoid this, it can be easy to avoid acidentally closing over other variables, resulting in data that is either not serializable or takes up much more space than we intended. This is an infamous problem with frameworks like Spark despite their best efforts to avoid it.
+Even if we are extremely diligent about trying to avoid this, it can be easy to avoid accidentally closing over other variables, resulting in data that is either not serializable or takes up much more space than we intended. This is an infamous problem with frameworks like Spark despite their best efforts to avoid it.
 
 ZIO Flow handles this issue in a principled way with its `Remote` data type, which is a _description_ of a value that may potentially exist on a remote node. This way you can easily look at any value and tell just from its type whether it is a `Remote` value that is safe to use in resilient, distributed computations or an ordinary value that is fine to use on a single node but does not provide these guarantees.
 
