@@ -121,7 +121,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("duration from big decimal")(roundtripCheck(codec, genDurationFromBigDecimal)),
       test("duration to longs")(roundtripCheck(codec, genDurationToLongs)),
       test("duration plus duration")(roundtripCheck(codec, genDurationPlusDuration)),
-      test("duration multiplied by")(roundtripCheck(codec, genDurationMultipledBy)),
+      test("duration multiplied by")(roundtripCheck(codec, genDurationMultipliedBy)),
       test("iterate")(roundtripCheck(codec, genIterate)),
       test("remote some")(roundtripCheck(codec, genRemoteSome)),
       test("fold option")(roundtripCheck(codec, genFoldOption)),
