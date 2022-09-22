@@ -713,7 +713,7 @@ final case class PersistentExecutor(
               stateVar: Remote[RemoteVariableReference[i.ValueA]],
               boolRemote: Remote[Boolean]
             ): ZFlow[Any, i.ValueE, i.ValueA] =
-              ZFlow.recurse[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
+              ZFlow.recurseSimple[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
                 ZFlow.ifThenElse(continue)(
                   ifTrue = for {
                     a0       <- stateVar.get

@@ -59,7 +59,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] =
     Remote
-      .recurse((Remote(false), self.widen[List[A1]])) { case (input, rec) =>
+      .recurseSimple((Remote(false), self.widen[List[A1]])) { case (input, rec) =>
         Remote
           .UnCons(input._2)
           .fold((Remote(false), Remote.nil[A1]))((tuple: Remote[(A1, List[A1])]) =>
@@ -73,7 +73,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def containsSlice[B >: A](that: Remote[List[B]]): Remote[Boolean] =
     Remote
-      .recurse((Remote(false), that.length, self.widen[List[B]])) { case (input, rec) =>
+      .recurseSimple((Remote(false), that.length, self.widen[List[B]])) { case (input, rec) =>
         val len     = input._2
         val current = input._3
         Remote
@@ -110,7 +110,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def drop(n: Remote[Int]): Remote[List[A]] =
     Remote
-      .recurse((Remote(0), self)) { case (input, rec) =>
+      .recurseSimple((Remote(0), self)) { case (input, rec) =>
         Remote
           .UnCons(input._2)
           .fold((Remote(0), Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
@@ -126,7 +126,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
     Remote
-      .recurse(self) { case (input, rec) =>
+      .recurseSimple(self) { case (input, rec) =>
         Remote
           .UnCons(input)
           .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
@@ -145,7 +145,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def exists(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     Remote
-      .recurse((Remote(false), self)) { case (input, rec) =>
+      .recurseSimple((Remote(false), self)) { case (input, rec) =>
         Remote
           .UnCons(input._2)
           .fold((Remote(false), Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
@@ -173,7 +173,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def find(p: Remote[A] => Remote[Boolean]): Remote[Option[A]] =
     Remote
-      .recurse((Remote.none[A], self)) { case (input, rec) =>
+      .recurseSimple((Remote.none[A], self)) { case (input, rec) =>
         Remote
           .UnCons(input._2)
           .fold((Remote.none[A], Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
@@ -206,7 +206,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     Remote
-      .recurse((Remote(true), self)) { case (input, rec) =>
+      .recurseSimple((Remote(true), self)) { case (input, rec) =>
         Remote
           .UnCons(input._2)
           .fold((Remote(true), Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
@@ -239,7 +239,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def indexOfSlice[B >: A](that: Remote[List[B]], from: Remote[Int]): Remote[Int] =
     Remote
-      .recurse((Remote(-1), that.length, self.widen[List[B]].drop(from), from)) { case (input, rec) =>
+      .recurseSimple((Remote(-1), that.length, self.widen[List[B]].drop(from), from)) { case (input, rec) =>
         val len          = input._2
         val current      = input._3
         val currentIndex = input._4
@@ -267,7 +267,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def inits: Remote[List[List[A]]] =
     Remote
-      .recurse((Remote.nil[List[A]], self)) { case (input, rec) =>
+      .recurseSimple((Remote.nil[List[A]], self)) { case (input, rec) =>
         val result      = input._1
         val currentSelf = input._2
 
@@ -321,7 +321,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def max(implicit schema: Schema[A]): Remote[A] =
     Remote
-      .recurse((self.head, self)) { case (input, rec) =>
+      .recurseSimple((self.head, self)) { case (input, rec) =>
         val current   = input._1
         val remaining = input._2
         Remote
@@ -339,7 +339,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def maxBy[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[A] =
     Remote
-      .recurse((self.head, f(self.head), self)) { case (input, rec) =>
+      .recurseSimple((self.head, f(self.head), self)) { case (input, rec) =>
         val current       = input._1
         val currentMapped = input._2
         val remaining     = input._3
@@ -358,7 +358,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def maxByOption[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[Option[A]] =
     Remote
-      .recurse((self.headOption, self.headOption.map(f), self)) { case (input, rec) =>
+      .recurseSimple((self.headOption, self.headOption.map(f), self)) { case (input, rec) =>
         val current       = input._1
         val currentMapped = input._2
         val remaining     = input._3
@@ -377,7 +377,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def maxOption(implicit schema: Schema[A]): Remote[Option[A]] =
     Remote
-      .recurse((self.headOption, self)) { case (input, rec) =>
+      .recurseSimple((self.headOption, self)) { case (input, rec) =>
         val current   = input._1
         val remaining = input._2
         Remote
@@ -395,7 +395,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def min(implicit schema: Schema[A]): Remote[A] =
     Remote
-      .recurse((self.head, self)) { case (input, rec) =>
+      .recurseSimple((self.head, self)) { case (input, rec) =>
         val current   = input._1
         val remaining = input._2
         Remote
@@ -413,7 +413,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def minBy[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[A] =
     Remote
-      .recurse((self.head, f(self.head), self)) { case (input, rec) =>
+      .recurseSimple((self.head, f(self.head), self)) { case (input, rec) =>
         val current       = input._1
         val currentMapped = input._2
         val remaining     = input._3
@@ -432,7 +432,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def minByOption[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[Option[A]] =
     Remote
-      .recurse((self.headOption, self.headOption.map(f), self)) { case (input, rec) =>
+      .recurseSimple((self.headOption, self.headOption.map(f), self)) { case (input, rec) =>
         val current       = input._1
         val currentMapped = input._2
         val remaining     = input._3
@@ -451,7 +451,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def minOption(implicit schema: Schema[A]): Remote[Option[A]] =
     Remote
-      .recurse((self.headOption, self)) { case (input, rec) =>
+      .recurseSimple((self.headOption, self)) { case (input, rec) =>
         val current   = input._1
         val remaining = input._2
         Remote
@@ -498,41 +498,293 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     List.fill(count)(elem)
   }
 
+  def partition(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
+    Remote
+      .recurseSimple(Remote.tuple2((Remote.tuple2((Remote.nil[A], Remote.nil[A])), self))) { (input, rec) =>
+        val satisfies      = input._1._1
+        val doesNotSatisfy = input._1._2
+        val remaining      = input._2
+
+        Remote
+          .UnCons(remaining)
+          .fold(
+            Remote.tuple2((Remote.tuple2((satisfies, doesNotSatisfy)), Remote.nil[A]))
+          ) { tuple =>
+            p(tuple._1).ifThenElse(
+              ifTrue = rec(Remote.tuple2((Remote.tuple2((tuple._1 :: satisfies, doesNotSatisfy)), tuple._2))),
+              ifFalse = rec(Remote.tuple2((Remote.tuple2((satisfies, tuple._1 :: doesNotSatisfy)), tuple._2)))
+            )
+          }
+      }
+      ._1
+
+  def partitionMap[A1, A2](p: Remote[A] => Remote[Either[A1, A2]]): Remote[(List[A1], List[A2])] =
+    Remote
+      .recurseSimple(Remote.tuple2((Remote.tuple2((Remote.nil[A1], Remote.nil[A2])), self))) { (input, rec) =>
+        val leftList  = input._1._1
+        val rightList = input._1._2
+        val remaining = input._2
+
+        Remote
+          .UnCons(remaining)
+          .fold(
+            Remote.tuple2((Remote.tuple2((leftList, rightList)), Remote.nil[A]))
+          ) { tuple =>
+            p(tuple._1).fold(
+              left => rec(Remote.tuple2((Remote.tuple2((left :: leftList, rightList)), tuple._2))),
+              right => rec(Remote.tuple2((Remote.tuple2((leftList, right :: rightList)), tuple._2)))
+            )
+          }
+      }
+      ._1
+
+  def patch[B >: A](from: Remote[Int], other: Remote[List[B]], replaced: Remote[Int]): Remote[List[B]] = {
+    val safeFrom     = math.min(self.length, math.max(0, from))
+    val safeTo       = math.min(self.length, math.max(0, from + replaced))
+    val safeReplaced = safeTo - safeFrom
+    val selfB        = self.widen[List[B]]
+    selfB
+      .take(safeFrom)
+      .concat(other.take(safeReplaced))
+      .concat(selfB.drop(safeTo))
+  }
+
+  def permutations: Remote[List[List[A]]] =
+    Remote
+      .recurse[List[A], List[List[A]]](self) { (input, rec) =>
+        val length = input.length
+        (length >= 2).ifThenElse[List[List[A]]](
+          ifFalse = Remote.list(input),
+          ifTrue = {
+            input.zipWithIndex.flatMap { tuple =>
+              val elem: Remote[A] = tuple._1
+              val idx             = tuple._2
+
+              val subpermutations: Remote[List[List[A]]] =
+                rec((input.take(idx) ++ input.drop(idx + 1)))
+
+              subpermutations.map[List[A]] { (lst: Remote[List[A]]) =>
+                (elem :: lst)
+              }
+            }
+          }
+        )
+      }
+
+  def prepended[B >: A](elem: Remote[B]): Remote[List[B]] =
+    elem :: self
+
+  def prependedAll[B >: A](prefix: Remote[List[B]]): Remote[List[B]] =
+    prefix ::: self
+
   def product(implicit numeric: Numeric[A]): Remote[A] =
-    foldLeft[A](numeric.fromLong(1L))(_ * _)
+    self.foldLeft[A](numeric.fromLong(1L))(_ * _)
+
+  def reduce[B >: A](op: (Remote[B], Remote[B]) => Remote[B]): Remote[B] =
+    self.reduceLeft(op)
+
+  def reduceLeft[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[B] =
+    self.foldLeft[B](self.widen[List[B]].head)(op)
+
+  def reduceLeftOption[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[Option[B]] =
+    self.isEmpty.ifThenElse(
+      ifTrue = Remote.none,
+      ifFalse = Remote.some(self.reduceLeft(op))
+    )
+
+  def reduceOption[B >: A](op: (Remote[B], Remote[B]) => Remote[B]): Remote[Option[B]] =
+    self.reduceLeftOption(op)
+
+  def reduceRight[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[B] =
+    self.foldRight[B](self.widen[List[B]].head)(op)
+
+  def reduceRightOption[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[Option[B]] =
+    self.isEmpty.ifThenElse(ifTrue = Remote.none, ifFalse = Remote.some(self.reduceRight(op)))
 
   def reverse: Remote[List[A]] =
     foldLeft(Remote.nil[A])((l, a) => Remote.Cons(l, a))
 
+  def reverse_:::[B >: A](prefix: Remote[List[B]]): Remote[List[B]] =
+    prefix.reverse ::: self
+
+  def sameElements[B >: A](other: Remote[List[B]]): Remote[Boolean] =
+    self.widen[List[B]].zip(other).forall(tuple => tuple._1 === tuple._2)
+
+  def scan[B >: A](z: Remote[B])(op: (Remote[B], Remote[B]) => Remote[B]): Remote[List[B]] =
+    scanLeft(z)(op)
+
+  def scanLeft[B >: A](z: Remote[B])(op: (Remote[B], Remote[A]) => Remote[B]): Remote[List[B]] =
+    self
+      .foldLeft((z, Remote.list(z))) { case (tuple, elem) =>
+        val agg  = tuple._1
+        val lst  = tuple._2
+        val agg2 = op(agg, elem)
+        (agg2, agg2 :: lst)
+      }
+      ._2
+
+  def scanRight[B >: A](z: Remote[B])(op: (Remote[A], Remote[B]) => Remote[B]): Remote[List[B]] =
+    self
+      .foldRight((z, Remote.list(z))) { case (elem, tuple) =>
+        val agg  = tuple._1
+        val lst  = tuple._2
+        val agg2 = op(elem, agg)
+        (agg2, agg2 :: lst)
+      }
+      ._2
+
+  def segmentLength(p: Remote[A] => Remote[Boolean]): Remote[Int] =
+    self.segmentLength(p, 0)
+  def segmentLength(p: Remote[A] => Remote[Boolean], from: Remote[Int]): Remote[Int] =
+    Remote.recurse[(Int, Int, List[A]), Int](
+      (
+        Remote(0),
+        Remote(-1),
+        self.drop(from)
+      )
+    ) { (input, rec) =>
+      val currentMax = input._1
+      val currentLen = input._2
+      val remaining  = input._3
+
+      Remote
+        .UnCons(remaining)
+        .fold(
+          math.max(currentMax, currentLen + 1)
+        ) { tuple =>
+          val head = tuple._1
+          val tail = tuple._2
+
+          p(head).ifThenElse(
+            ifTrue = rec((currentMax, currentLen + 1, tail)),
+            ifFalse = rec((math.max(currentMax, currentLen + 1), Remote(-1), tail))
+          )
+        }
+    }
+
   def size: Remote[Int] =
     self.length
+
+  def slice(from: Remote[Int], until: Remote[Int]): Remote[List[A]] =
+    self.drop(from).take(until - from)
+
+  def sliding(size: Remote[Int], step: Remote[Int]): Remote[List[List[A]]] =
+    Remote
+      .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
+        val next  = remaining.drop(step)
+        val slice = remaining.take(size)
+
+        next.isEmpty.ifThenElse(
+          ifTrue = Remote.list(slice),
+          ifFalse = slice :: rec(next)
+        )
+      }
+      .reverse
+
+  def sliding(size: Remote[Int]): Remote[List[List[A]]] =
+    self.sliding(size, 1)
+
+  // TODO: sortBy (sorted, sortWith) as native remote op?
+
+  def span(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
+    (self.takeWhile(p), self.dropWhile(p))
+
+  def splitAt(n: Remote[Int]): Remote[(List[A], List[A])] =
+    (self.take(n), self.drop(n))
+
+  def startsWith[B >: A](that: Remote[List[B]], offset: Remote[Int] = Remote(0)): Remote[Boolean] =
+    (self.length >= that.length).ifThenElse(
+      ifTrue = self.widen[List[B]].drop(offset).take(that.length) === that,
+      ifFalse = Remote(false)
+    )
 
   def sum(implicit numeric: Numeric[A]): Remote[A] =
     foldLeft[A](numeric.fromLong(0L))(_ + _)
 
-  def take(num: Remote[Int]): Remote[List[A]] = {
-    val ifTrue: Remote[List[A]] =
-      Remote
-        .UnCons(self.widen[List[A]])
-        .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) => Remote.Cons(tuple._2.take(num - Remote(1)), tuple._1))
-    (num > Remote(0)).ifThenElse(ifTrue, Remote.nil[A])
-  }
-
-  def takeWhile(
-    predicate: Remote[A] => Remote[Boolean]
-  ): Remote[List[A]] =
+  def tail: Remote[List[A]] =
     Remote
       .UnCons(self)
-      .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
-        predicate(tuple._1).ifThenElse(Remote.Cons(tuple._2.takeWhile(predicate), tuple._1), Remote.nil)
-      )
+      .fold(
+        Remote.fail("List is empty")
+      )(_._2)
+
+  def tails: Remote[List[List[A]]] =
+    Remote
+      .recurse[List[A], List[List[A]]](self) { (input, rec) =>
+        input :: rec(self.tail)
+      }
+      .reverse
+
+  def take(n: Remote[Int]): Remote[List[A]] =
+    Remote
+      .recurse[(Int, List[A]), List[A]]((n, self)) { case (input, rec) =>
+        val count     = input._1
+        val remaining = input._2
+
+        Remote
+          .UnCons(remaining)
+          .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
+            (count === 0).ifThenElse(
+              ifTrue = Remote.nil[A],
+              ifFalse = tuple._1 :: rec((count - 1, tuple._2))
+            )
+          )
+      }
+
+  def takeRight(n: Remote[Int]): Remote[List[A]] =
+    self.reverse.take(n)
+
+  def takeWhile(p: Remote[A] => Remote[Boolean]): Remote[List[A]] =
+    Remote
+      .recurse[List[A], List[A]](self) { case (remaining, rec) =>
+        Remote
+          .UnCons(remaining)
+          .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
+            p(tuple._1).ifThenElse(
+              ifFalse = Remote.nil[A],
+              ifTrue = tuple._1 :: rec(tuple._2)
+            )
+          )
+      }
+
+  def toList: Remote[List[A]] = self
 
   def toSet: Remote[Set[A]] =
     Remote.ListToSet(self)
 
+  def unzip[A1, A2](implicit ev: A =:= (A1, A2)): Remote[(List[A1], List[A2])] =
+    Remote.recurse[List[A], (List[A1], List[A2])](self) { (remaining, rec) =>
+      Remote
+        .UnCons(remaining)
+        .fold(
+          (Remote.nil[A1], Remote.nil[A2])
+        ) { tuple =>
+          val head         = tuple._1.asInstanceOf[Remote.Tuple2[A1, A2]]
+          val tail         = tuple._2
+          val unzippedTail = rec(tail)
+
+          (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2)
+        }
+    }
+
+  def unzip3[A1, A2, A3](implicit ev: A =:= (A1, A2, A3)): Remote[(List[A1], List[A2], List[A3])] =
+    Remote.recurse[List[A], (List[A1], List[A2], List[A3])](self) { (remaining, rec) =>
+      Remote
+        .UnCons(remaining)
+        .fold(
+          (Remote.nil[A1], Remote.nil[A2], Remote.nil[A3])
+        ) { tuple =>
+          val head         = tuple._1.asInstanceOf[Remote.Tuple3[A1, A2, A3]]
+          val tail         = tuple._2
+          val unzippedTail = rec(tail)
+
+          (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2, head._3 :: unzippedTail._3)
+        }
+    }
+
   def zip[B](that: Remote[List[B]]): Remote[List[(A, B)]] =
     Remote
-      .recurse((Remote.nil[(A, B)], self, that)) { case (input, rec) =>
+      .recurseSimple((Remote.nil[(A, B)], self, that)) { case (input, rec) =>
         val result      = input._1
         val currentSelf = input._2
         val currentThat = input._3
@@ -550,9 +802,18 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ._1
       .reverse
 
+  def zipAll[B](that: Remote[List[B]], thisElem: Remote[A], thatElem: Remote[B]): Remote[List[(A, B)]] =
+    (self.length === that.length).ifThenElse(
+      ifTrue = self.zip(that),
+      ifFalse = (self.length < that.length).ifThenElse(
+        ifTrue = self.zip(that) ++ that.drop(self.length).map(thatElem => (thisElem, thatElem)),
+        ifFalse = self.zip(that) ++ self.drop(that.length).map(thisElem => (thisElem, thatElem))
+      )
+    )
+
   def zipWithIndex: Remote[List[(A, Int)]] =
     Remote
-      .recurse((Remote.nil[(A, Int)], self, Remote(0))) { case (input, rec) =>
+      .recurseSimple((Remote.nil[(A, Int)], self, Remote(0))) { case (input, rec) =>
         val result       = input._1
         val currentSelf  = input._2
         val currentIndex = input._3
