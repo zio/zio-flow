@@ -2723,7 +2723,7 @@ object Remote {
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
           Schema.Field("seconds", Remote.schema[Long]),
-          Schema.Field("nanoAdjusment", Remote.schema[Long]),
+          Schema.Field("nanoAdjustment", Remote.schema[Long]),
           DurationFromLongs.apply,
           _.seconds,
           _.nanoAdjustment

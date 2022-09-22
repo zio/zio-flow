@@ -495,7 +495,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       nanoAdjustment <- Gen.long
     } yield Remote.DurationPlusDuration(Remote(a), Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment)))
 
-  lazy val genDurationMultipledBy: Gen[Any, Remote[Any]] =
+  lazy val genDurationMultipliedBy: Gen[Any, Remote[Any]] =
     for {
       a <- Gen.finiteDuration
       b <- Gen.long
