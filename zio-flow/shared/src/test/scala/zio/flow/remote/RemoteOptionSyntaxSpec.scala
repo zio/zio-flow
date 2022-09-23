@@ -16,131 +16,126 @@
 
 package zio.flow.remote
 
-import zio.{Scope, ZIO, ZLayer}
-import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow._
-import zio.test.{Spec, TestEnvironment, TestResult}
+import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
+import zio.test.{Spec, TestEnvironment}
+import zio.{Scope, ZLayer}
 
 object RemoteOptionSyntaxSpec extends RemoteSpecBase {
 
-  private def optionTest(name: String)(
-    cases: ZIO[RemoteContext with LocalContext, Nothing, TestResult]*
-  ): Spec[RemoteContext with LocalContext, Nothing] =
-    test(name)(ZIO.collectAll(cases.toList).map(TestResult.all(_: _*)))
-
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("RemoteOptionSyntax")(
-      optionTest("contains")(
+      remoteTest("contains")(
         Remote.none.contains(2) <-> false,
         Remote.some(12).contains(12) <-> true,
         Remote.some(12).contains(11) <-> false
       ),
-      optionTest("exists")(
+      remoteTest("exists")(
         Remote.none[Int].exists((n: Remote[Int]) => n === 12) <-> false,
         Remote.some(12).exists((n: Remote[Int]) => n === 12) <-> true,
         Remote.some(12).exists((n: Remote[Int]) => n === 11) <-> false
       ),
-      optionTest("filter")(
+      remoteTest("filter")(
         Remote.none[Int].filter((n: Remote[Int]) => n === 12) <-> None,
         Remote.some(12).filter((n: Remote[Int]) => n === 12) <-> Some(12),
         Remote.some(12).filter((n: Remote[Int]) => n === 11) <-> None
       ),
-      optionTest("filterNot")(
+      remoteTest("filterNot")(
         Remote.none[Int].filterNot((n: Remote[Int]) => n === 12) <-> None,
         Remote.some(12).filterNot((n: Remote[Int]) => n === 12) <-> None,
         Remote.some(12).filterNot((n: Remote[Int]) => n === 11) <-> Some(12)
       ),
-      optionTest("flatMap")(
+      remoteTest("flatMap")(
         Remote.some(12).flatMap((n: Remote[Int]) => Remote.some(n + 1)) <-> Some(13),
         Remote.none[Int].flatMap((n: Remote[Int]) => Remote.some(n + 1)) <-> None,
         Remote.some(12).flatMap((_: Remote[Int]) => Remote.none[Int]) <-> None
       ),
-      optionTest("fold")(
+      remoteTest("fold")(
         Remote.some(12).fold(Remote(0))((x: Remote[Int]) => x * 2) <-> 24,
         Remote.none[Int].fold(Remote(0))((x: Remote[Int]) => x * 2) <-> 0
       ),
-      optionTest("foldLeft")(
+      remoteTest("foldLeft")(
         Remote.some(12).foldLeft(Remote(1))(t => t._1 + t._2) <-> 13,
         Remote.none[Int].foldLeft(Remote(1))(t => t._1 + t._2) <-> 1
       ),
-      optionTest("foldRight")(
+      remoteTest("foldRight")(
         Remote.some(12).foldRight(Remote(1))(t => t._1 + t._2) <-> 13,
         Remote.none[Int].foldRight(Remote(1))(t => t._1 + t._2) <-> 1
       ),
-      optionTest("forall")(
+      remoteTest("forall")(
         Remote.none[Int].forall((n: Remote[Int]) => n === 12) <-> false,
         Remote.some(12).forall((n: Remote[Int]) => n === 12) <-> true,
         Remote.some(12).forall((n: Remote[Int]) => n === 11) <-> false
       ),
-      optionTest("get")(
+      remoteTest("get")(
         Remote.some(11).get <-> 11,
         Remote.none[Int].get failsWithRemoteError "get called on empty Option"
       ),
-      optionTest("getOrElse")(
+      remoteTest("getOrElse")(
         Remote.some(11).getOrElse(12) <-> 11,
         Remote.none[Int].getOrElse(12) <-> 12
       ),
-      optionTest("head")(
+      remoteTest("head")(
         Remote.some(11).head <-> 11,
         Remote.none[Int].head failsWithRemoteError "get called on empty Option"
       ),
-      optionTest("headOption")(
+      remoteTest("headOption")(
         Remote.some(11).headOption <-> Some(11),
         Remote.none[Int].headOption <-> None
       ),
-      optionTest("isSome")(
+      remoteTest("isSome")(
         Remote.none.isSome <-> false,
         Remote.some(12).isSome <-> true
       ),
-      optionTest("isNone")(
+      remoteTest("isNone")(
         Remote.none.isNone <-> true,
         Remote.some(12).isNone <-> false
       ),
-      optionTest("isDefined")(
+      remoteTest("isDefined")(
         Remote.none.isDefined <-> false,
         Remote.some(12).isDefined <-> true
       ),
-      optionTest("isEmpty")(
+      remoteTest("isEmpty")(
         Remote.none.isEmpty <-> true,
         Remote.some(12).isEmpty <-> false
       ),
-      optionTest("knownSize")(
+      remoteTest("knownSize")(
         Remote.none[Int].knownSize <-> 0,
         Remote.some(12).knownSize <-> 1
       ),
-      optionTest("last")(
+      remoteTest("last")(
         Remote.some(11).last <-> 11,
         Remote.none[Int].last failsWithRemoteError "get called on empty Option"
       ),
-      optionTest("lastOption")(
+      remoteTest("lastOption")(
         Remote.some(11).lastOption <-> Some(11),
         Remote.none[Int].lastOption <-> None
       ),
-      optionTest("map")(
+      remoteTest("map")(
         Remote.some(12).map(_ + 1) <-> Some(13),
         Remote.none[Int].map(_ + 1) <-> None
       ),
-      optionTest("nonEmpty")(
+      remoteTest("nonEmpty")(
         Remote.none.nonEmpty <-> false,
         Remote.some(12).nonEmpty <-> true
       ),
-      optionTest("orElse")(
+      remoteTest("orElse")(
         Remote.none.orElse(Remote.some(2)) <-> Option(2),
         Remote.some(12).orElse(Remote.some(2)) <-> Option(12)
       ),
-      optionTest("toLeft")(
+      remoteTest("toLeft")(
         Remote.some(11).toLeft("x") <-> Left(11),
         Remote.none[Int].toLeft("x") <-> Right("x")
       ),
-      optionTest("toList")(
+      remoteTest("toList")(
         Remote.some(11).toList <-> List(11),
         Remote.none[Int].toList <-> List.empty[Int]
       ),
-      optionTest("toRight")(
+      remoteTest("toRight")(
         Remote.some(11).toRight("x") <-> Right(11),
         Remote.none[Int].toRight("x") <-> Left("x")
       ),
-      optionTest("zip")(
+      remoteTest("zip")(
         Remote.none[Int].zip(Remote.some(10)) <-> None,
         Remote.some(10).zip(Remote.none[Int]) <-> None,
         Remote.some(12).zip(Remote.some(10)) <-> Some((12, 10))
