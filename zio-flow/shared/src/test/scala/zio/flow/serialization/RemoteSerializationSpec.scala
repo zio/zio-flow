@@ -67,6 +67,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
           roundtrip(codec, literal)
         }
       },
+      test("fail")(roundtripCheck(codec, genFail)),
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
           val literal = Remote(data)
@@ -125,7 +126,10 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("remote some")(roundtripCheck(codec, genRemoteSome)),
       test("fold option")(roundtripCheck(codec, genFoldOption)),
       test("recurse")(roundtripCheck(codec, genRecurse)),
-      test("recurseWith")(roundtripCheck(codec, genRecurseWith))
+      test("recurseWith")(roundtripCheck(codec, genRecurseWith)),
+      test("listToSet")(roundtripCheck(codec, genListToSet)),
+      test("setToList")(roundtripCheck(codec, genSetToList)),
+      test("listToString")(roundtripCheck(codec, genListToString))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =

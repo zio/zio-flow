@@ -231,6 +231,9 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genLiteral: Gen[Sized, Remote[Any]] =
     Gen.oneOf(genDynamicValue).map(Remote.Literal(_))
 
+  lazy val genFail: Gen[Sized, Remote[Any]] =
+    Gen.alphaNumericString.map(Remote.Fail(_))
+
   lazy val genRemoteFlow: Gen[Sized, Remote[Any]] =
     Gen
       .oneOf(
@@ -747,6 +750,26 @@ trait Generators extends DefaultJavaTimeSchemas {
       id    <- Gen.uuid.map(RecursionId(_))
       value <- genLiteral
     } yield Remote.RecurseWith(id, value)
+
+  lazy val genListToSet: Gen[Sized, Remote[Any]] =
+    for {
+      lst       <- Gen.listOf(Gen.alphaNumericString)
+      remoteList = Remote(lst)
+    } yield Remote.ListToSet(remoteList)
+
+  lazy val genSetToList: Gen[Sized, Remote[Any]] =
+    for {
+      set       <- Gen.setOf(Gen.alphaNumericString)
+      remoteList = Remote(set)
+    } yield Remote.SetToList(remoteList)
+
+  lazy val genListToString: Gen[Sized, Remote[Any]] =
+    for {
+      list  <- Gen.listOf(Gen.int)
+      start <- Gen.string
+      sep   <- Gen.string
+      end   <- Gen.string
+    } yield Remote.ListToString(Remote(list).map(_.toString), Remote(start), Remote(sep), Remote(end))
 
   lazy val genZFlowReturn: Gen[Sized, ZFlow.Return[Any]] =
     Gen

@@ -838,7 +838,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assert(result)(fails(equalTo(11)))
       }
-    ) @@ TestAspect.timeout(30.seconds)
+    )
 
   private def isOdd(a: Remote[Int]): (Remote[Boolean], Remote[Int]) =
     (((a % 2) === 1), a)
