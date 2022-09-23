@@ -183,11 +183,10 @@ object RemoteSpec extends RemoteSpecBase {
             Remote(List(10, 20, 30)),
             Remote(100),
             Remote.UnboundRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
-              Remote.BinaryNumeric(
+              Remote.Binary(
                 Remote.TupleAccess(tuple, 0),
                 Remote.TupleAccess(tuple, 1),
-                Numeric.NumericInt,
-                BinaryNumericOperator.Add
+                BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
               )
             )
           )
@@ -252,7 +251,7 @@ object RemoteSpec extends RemoteSpecBase {
         test("recursive remote function") {
           val N = 1000
           val remote =
-            Remote.recurse(Remote(0)) { case (value, rec) =>
+            Remote.recurseSimple(Remote(0)) { case (value, rec) =>
               (value === N).ifThenElse(
                 value,
                 rec(value + 1)

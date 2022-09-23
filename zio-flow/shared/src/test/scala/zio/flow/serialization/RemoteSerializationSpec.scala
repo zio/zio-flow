@@ -90,10 +90,8 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
         val variable = Remote.Variable[ZNothing](RemoteVariableName("test"))
         roundtrip(codec, variable)
       },
-      test("binary numeric")(roundtripCheck(codec, genBinaryNumeric)),
-      test("unary numeric")(roundtripCheck(codec, genUnaryNumeric)),
-      test("unary fractional")(roundtripCheck(codec, genUnaryFractional)),
-      test("binary fractional")(roundtripCheck(codec, genBinaryFractional)),
+      test("binary")(roundtripCheck(codec, genBinary)),
+      test("unary")(roundtripCheck(codec, genUnary)),
       test("unbound remote function")(roundtripCheck(codec, genUnboundRemoteFunction)),
       test("evaluate unbound remote function")(roundtripCheck(codec, genEvaluateUnboundRemoteFunction)),
       test("remote either")(roundtripCheck(codec, genRemoteEither)),

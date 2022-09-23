@@ -26,7 +26,7 @@ object ScopedRemoteVariableNameSpec extends ZIOFlowBaseSpec with Generators {
           assertInvertible(name)
         }
       )
-    ) @@ TestAspect.sized(500) @@ TestAspect.samples(1000)
+    ) @@ TestAspect.size(500) @@ TestAspect.samples(1000)
 
   private def assertInvertible(name: ScopedRemoteVariableName) =
     assertTrue(

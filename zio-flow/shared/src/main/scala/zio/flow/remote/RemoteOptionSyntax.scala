@@ -23,7 +23,7 @@ import zio.schema.DeriveSchema.gen
 final class RemoteOptionSyntax[A](val self: Remote[Option[A]]) extends AnyVal {
 
   def contains[A1 >: A](elem: Remote[A1]): Remote[Boolean] =
-    fold(Remote(false))(value => value.widen[A1] == elem)
+    fold(Remote(false))(value => value.widen[A1] === elem)
 
   def exists(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     fold(Remote(false))(value => p(value))

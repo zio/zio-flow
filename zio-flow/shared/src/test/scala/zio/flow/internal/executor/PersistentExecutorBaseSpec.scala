@@ -71,7 +71,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run(logQueue.offer(message()).unit).getOrThrowFiberFailure()
                      msg
@@ -138,7 +138,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run {
                        msg match {
@@ -201,7 +201,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run {
                        msg match {

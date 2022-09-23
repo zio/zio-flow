@@ -20,10 +20,15 @@ import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.internal.{DurablePromise, RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
+  BinaryIntegralOperator,
   BinaryNumericOperator,
   Fractional,
+  FractionalPredicateOperator,
+  Integral,
   Numeric,
+  NumericPredicateOperator,
   UnaryFractionalOperator,
+  UnaryIntegralOperator,
   UnaryNumericOperator
 }
 import zio.flow.{
@@ -48,6 +53,7 @@ import zio.{Duration, ZNothing, flow}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
+import zio.flow.remote.{BinaryOperators, RemoteConversions, UnaryOperators}
 
 trait Generators extends DefaultJavaTimeSchemas {
 
@@ -153,6 +159,34 @@ trait Generators extends DefaultJavaTimeSchemas {
         )
     )
 
+  lazy val genIntegral: Gen[Any, (Integral[Any], Gen[Any, Remote[Any]])] =
+    Gen.oneOf(
+      Gen
+        .const(Numeric.NumericShort)
+        .map(n =>
+          (
+            n.asInstanceOf[Integral[Any]],
+            Gen.short.map(value => Remote.Literal(DynamicValue.fromSchemaAndValue(Schema.primitive[Short], value)))
+          )
+        ),
+      Gen
+        .const(Numeric.NumericInt)
+        .map(n =>
+          (
+            n.asInstanceOf[Integral[Any]],
+            Gen.int.map(value => Remote.Literal(DynamicValue.fromSchemaAndValue(Schema.primitive[Int], value)))
+          )
+        ),
+      Gen
+        .const(Numeric.NumericLong)
+        .map(n =>
+          (
+            n.asInstanceOf[Integral[Any]],
+            Gen.long.map(value => Remote.Literal(DynamicValue.fromSchemaAndValue(Schema.primitive[Long], value)))
+          )
+        )
+    )
+
   lazy val genFractional: Gen[Any, (Fractional[Any], Gen[Any, Remote[Any]])] =
     Gen.oneOf(
       Gen
@@ -224,21 +258,29 @@ trait Generators extends DefaultJavaTimeSchemas {
       name <- genBindingName
     } yield Remote.Unbound(name)
 
-  lazy val genUnaryOperator: Gen[Any, UnaryNumericOperator] =
+  lazy val genUnaryNumericOperator: Gen[Any, UnaryNumericOperator] =
     Gen.oneOf(
       Gen.const(UnaryNumericOperator.Neg),
       Gen.const(UnaryNumericOperator.Abs),
       Gen.const(UnaryNumericOperator.Sign)
     )
 
-  lazy val genBinaryOperator: Gen[Any, BinaryNumericOperator] =
+  lazy val genUnaryIntegralOperator: Gen[Any, UnaryIntegralOperator] =
     Gen.oneOf(
-      Gen.const(BinaryNumericOperator.Add),
-      Gen.const(BinaryNumericOperator.Mul),
-      Gen.const(BinaryNumericOperator.Div),
-      Gen.const(BinaryNumericOperator.Mod),
-      Gen.const(BinaryNumericOperator.Min),
-      Gen.const(BinaryNumericOperator.Max)
+      Gen.const(UnaryIntegralOperator.NegExact),
+      Gen.const(UnaryIntegralOperator.DecExact),
+      Gen.const(UnaryIntegralOperator.IncExact),
+      Gen.const(UnaryIntegralOperator.BitwiseNeg)
+    )
+
+  lazy val genNumericPredicate: Gen[Any, NumericPredicateOperator] =
+    Gen.oneOf(
+      Gen.const(NumericPredicateOperator.IsWhole),
+      Gen.const(NumericPredicateOperator.IsValidInt),
+      Gen.const(NumericPredicateOperator.IsValidByte),
+      Gen.const(NumericPredicateOperator.IsValidChar),
+      Gen.const(NumericPredicateOperator.IsValidLong),
+      Gen.const(NumericPredicateOperator.IsValidShort)
     )
 
   lazy val genUnaryFractionalOperator: Gen[Any, UnaryFractionalOperator] =
@@ -250,49 +292,183 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(UnaryFractionalOperator.Cos),
       Gen.const(UnaryFractionalOperator.ArcCos),
       Gen.const(UnaryFractionalOperator.Ceil),
+      Gen.const(UnaryFractionalOperator.Floor),
       Gen.const(UnaryFractionalOperator.Round),
-      Gen.const(UnaryFractionalOperator.Floor)
+      Gen.const(UnaryFractionalOperator.ToRadians),
+      Gen.const(UnaryFractionalOperator.ToDegrees),
+      Gen.const(UnaryFractionalOperator.Rint),
+      Gen.const(UnaryFractionalOperator.NextUp),
+      Gen.const(UnaryFractionalOperator.NextDown),
+      Gen.const(UnaryFractionalOperator.Sqrt),
+      Gen.const(UnaryFractionalOperator.Cbrt),
+      Gen.const(UnaryFractionalOperator.Exp),
+      Gen.const(UnaryFractionalOperator.Expm1),
+      Gen.const(UnaryFractionalOperator.Log),
+      Gen.const(UnaryFractionalOperator.Log10),
+      Gen.const(UnaryFractionalOperator.Log1p),
+      Gen.const(UnaryFractionalOperator.Sinh),
+      Gen.const(UnaryFractionalOperator.Cosh),
+      Gen.const(UnaryFractionalOperator.Tanh),
+      Gen.const(UnaryFractionalOperator.Ulp)
+    )
+
+  lazy val genFractionalPredicate: Gen[Any, FractionalPredicateOperator] =
+    Gen.oneOf(
+      Gen.const(FractionalPredicateOperator.IsNaN),
+      Gen.const(FractionalPredicateOperator.IsFinite),
+      Gen.const(FractionalPredicateOperator.IsInfinity),
+      Gen.const(FractionalPredicateOperator.IsNegInifinty),
+      Gen.const(FractionalPredicateOperator.IsPosInfinity)
+    )
+
+  lazy val genBinaryNumericOperator: Gen[Any, BinaryNumericOperator] =
+    Gen.oneOf(
+      Gen.const(BinaryNumericOperator.Add),
+      Gen.const(BinaryNumericOperator.Sub),
+      Gen.const(BinaryNumericOperator.Mul),
+      Gen.const(BinaryNumericOperator.Div),
+      Gen.const(BinaryNumericOperator.Mod),
+      Gen.const(BinaryNumericOperator.Min),
+      Gen.const(BinaryNumericOperator.Max)
+    )
+
+  lazy val genBinaryIntegralOperator: Gen[Any, BinaryIntegralOperator] =
+    Gen.oneOf(
+      Gen.const(BinaryIntegralOperator.And),
+      Gen.const(BinaryIntegralOperator.Or),
+      Gen.const(BinaryIntegralOperator.Xor),
+      Gen.const(BinaryIntegralOperator.AddExact),
+      Gen.const(BinaryIntegralOperator.FloorDiv),
+      Gen.const(BinaryIntegralOperator.FloorMod),
+      Gen.const(BinaryIntegralOperator.LeftShift),
+      Gen.const(BinaryIntegralOperator.RightShift),
+      Gen.const(BinaryIntegralOperator.UnsignedRightShift),
+      Gen.const(BinaryIntegralOperator.AddExact),
+      Gen.const(BinaryIntegralOperator.SubExact),
+      Gen.const(BinaryIntegralOperator.MulExact)
     )
 
   lazy val genBinaryFractionalOperator: Gen[Any, BinaryFractionalOperator] =
     Gen.oneOf(
-      Gen.const(BinaryFractionalOperator.Log),
-      Gen.const(BinaryFractionalOperator.Pow)
+      Gen.const(BinaryFractionalOperator.Pow),
+      Gen.const(BinaryFractionalOperator.Scalb),
+      Gen.const(BinaryFractionalOperator.Hypot),
+      Gen.const(BinaryFractionalOperator.ArcTan2),
+      Gen.const(BinaryFractionalOperator.CopySign),
+      Gen.const(BinaryFractionalOperator.IEEEremainder),
+      Gen.const(BinaryFractionalOperator.NextAfter)
     )
 
-  lazy val genBinaryNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      left          <- gen
-      right         <- gen
-      operator      <- genBinaryOperator
-    } yield Remote.BinaryNumeric(left, right, numeric, operator)
+  lazy val genRemoteConversions: Gen[Sized, (RemoteConversions[Any, Any], Gen[Sized, Remote[Any]])] =
+    Gen.oneOf(
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToInt(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToLong(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToFloat(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToShort(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToDouble(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genIntegral
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToOctalString(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genIntegral
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToHexString(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genIntegral
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToBinaryString(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.ToString()(numeric.schema).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair             <- genFractional
+        (fractional, gen) = pair
+      } yield (RemoteConversions.FractionalGetExponent(fractional).asInstanceOf[RemoteConversions[Any, Any]], gen)
+    )
 
-  lazy val genUnaryNumeric: Gen[Sized, Remote[Any]] =
-    for {
-      pair          <- genNumeric
-      (numeric, gen) = pair
-      value         <- gen
-      operator      <- genUnaryOperator
-    } yield Remote.UnaryNumeric(value, numeric, operator)
+  lazy val genUnaryOperators: Gen[Sized, (UnaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =
+    Gen.oneOf(
+      for {
+        op            <- genUnaryNumericOperator
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (UnaryOperators.Numeric(op, numeric).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        op             <- genUnaryIntegralOperator
+        pair           <- genIntegral
+        (integral, gen) = pair
+      } yield (UnaryOperators.Integral(op, integral).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        op               <- genUnaryFractionalOperator
+        pair             <- genFractional
+        (fractional, gen) = pair
+      } yield (UnaryOperators.Fractional(op, fractional).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        op            <- genNumericPredicate
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (UnaryOperators.NumericPredicate(op, numeric).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        op               <- genFractionalPredicate
+        pair             <- genFractional
+        (fractional, gen) = pair
+      } yield (UnaryOperators.FractionalPredicate(op, fractional).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        pair             <- genRemoteConversions
+        (conversion, gen) = pair
+      } yield (UnaryOperators.Conversion(conversion).asInstanceOf[UnaryOperators[Any, Any]], gen)
+    )
 
-  lazy val genUnaryFractional: Gen[Sized, Remote[Any]] =
-    for {
-      pair             <- genFractional
-      (fractional, gen) = pair
-      value            <- gen
-      operator         <- genUnaryFractionalOperator
-    } yield Remote.UnaryFractional(value, fractional, operator)
+  lazy val genBinaryOperators: Gen[Sized, (BinaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =
+    Gen.oneOf(
+      for {
+        op            <- genBinaryNumericOperator
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (BinaryOperators.Numeric(op, numeric).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      for {
+        op               <- genBinaryFractionalOperator
+        pair             <- genFractional
+        (fractinoal, gen) = pair
+      } yield (BinaryOperators.Fractional(op, fractinoal).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      for {
+        op             <- genBinaryIntegralOperator
+        pair           <- genIntegral
+        (integral, gen) = pair
+      } yield (BinaryOperators.Integral(op, integral).asInstanceOf[BinaryOperators[Any, Any]], gen)
+    )
 
-  lazy val genBinaryFractional: Gen[Sized, Remote[Any]] =
+  lazy val genUnary: Gen[Sized, Remote[Any]] =
     for {
-      pair          <- genFractional
-      (numeric, gen) = pair
-      left          <- gen
-      right         <- gen
-      operator      <- genBinaryFractionalOperator
-    } yield Remote.BinaryFractional(left, right, numeric, operator)
+      pair           <- genUnaryOperators
+      (operator, gen) = pair
+      value          <- gen
+    } yield Remote.Unary(value, operator)
+
+  lazy val genBinary: Gen[Sized, Remote[Any]] =
+    for {
+      pair           <- genBinaryOperators
+      (operator, gen) = pair
+      left           <- gen
+      right          <- gen
+    } yield Remote.Binary(left, right, operator)
 
   lazy val genUnboundRemoteFunction: Gen[Sized, Remote[Any]] =
     for {
@@ -300,7 +476,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       r <- Gen.oneOf(
              genLiteral,
              genRemoteVariable,
-             genBinaryNumeric
+             genBinary
            )
     } yield Remote.UnboundRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
 
@@ -351,13 +527,13 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genTuple2: Gen[Sized, Remote[Any]] =
     for {
       a <- genLiteral
-      b <- genBinaryNumeric
+      b <- genBinary
     } yield Remote.Tuple2(a, b)
 
   lazy val genTuple3: Gen[Sized, Remote[Any]] =
     for {
       a <- genLiteral
-      b <- genBinaryNumeric
+      b <- genBinary
       c <- genRemoteVariable
     } yield Remote.Tuple3(a, b, c)
 
@@ -365,7 +541,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       a <- genLiteral
       b <- genUnboundRemoteFunction
-      c <- genBinaryNumeric
+      c <- genBinary
       d <- genRemoteEither
     } yield Remote.Tuple4(a, b, c, d)
 
@@ -380,7 +556,9 @@ trait Generators extends DefaultJavaTimeSchemas {
       condition <- Gen.boolean.map(Remote(_))
       ifTrue    <- Gen.int.map(Remote(_))
       ifFalse <-
-        Gen.int.map(n => Remote.BinaryNumeric(Remote(10), Remote(n), Numeric.NumericInt, BinaryNumericOperator.Mul))
+        Gen.int.map(n =>
+          Remote.Binary(Remote(10), Remote(n), BinaryOperators.Numeric(BinaryNumericOperator.Mul, Numeric.NumericInt))
+        )
     } yield Remote.Branch(condition, ifTrue, ifFalse)
 
   lazy val genLength: Gen[Sized, Remote[Any]] =
@@ -418,11 +596,13 @@ trait Generators extends DefaultJavaTimeSchemas {
       list    <- Gen.listOf(Gen.double).map(Remote(_))
       initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
       fun = Remote.UnboundRemoteFunction.make((tuple: Remote[(Double, Double)]) =>
-              Remote.BinaryNumeric(
+              Remote.Binary(
                 Remote.TupleAccess(tuple, 0),
                 Remote.TupleAccess(tuple, 1),
-                Numeric.NumericDouble,
-                BinaryNumericOperator.Add
+                BinaryOperators.Numeric(
+                  BinaryNumericOperator.Add,
+                  Numeric.NumericDouble
+                )
               )
             )
     } yield Remote.Fold(list, initial, fun)
@@ -522,19 +702,23 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
-      iterate = UnboundRemoteFunction.make((a: Remote[Int]) =>
-                  Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add)
-                )
+      iterate =
+        UnboundRemoteFunction.make((a: Remote[Int]) =>
+          Remote.Binary(a, Remote(delta), BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt))
+        )
       limit <- Gen.int
       predicate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
-                      Remote.BinaryNumeric(
+                      Remote.Binary(
                         initial,
                         Remote
-                          .BinaryNumeric(Remote(delta), Remote(limit), Numeric.NumericInt, BinaryNumericOperator.Mul),
-                        Numeric.NumericInt,
-                        BinaryNumericOperator.Add
+                          .Binary(
+                            Remote(delta),
+                            Remote(limit),
+                            BinaryOperators.Numeric(BinaryNumericOperator.Mul, Numeric.NumericInt)
+                          ),
+                        BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
                       )
                     )
                   )
@@ -600,7 +784,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       f = Remote.UnboundRemoteFunction.make((a: Remote[Int]) =>
             Remote.Tuple2(
               Remote("done"),
-              Remote.BinaryNumeric(a, Remote(1), Numeric.NumericInt, BinaryNumericOperator.Add)
+              Remote.Binary(a, Remote(1), BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt))
             )
           )
     } yield ZFlow.Modify(Remote(svar), f)
@@ -700,28 +884,34 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
       name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genBinaryNumeric, genEvaluateUnboundRemoteFunction)
+      initial <- Gen.oneOf(genLiteral, genBinary, genEvaluateUnboundRemoteFunction)
     } yield ZFlow.NewVar(name, initial)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =
     for {
       initial <- Gen.int.map(Remote(_))
       delta   <- Gen.int
-      iterate = UnboundRemoteFunction.make((a: Remote[Int]) =>
-                  Remote.Flow(
-                    ZFlow.Return(Remote.BinaryNumeric(a, Remote(delta), Numeric.NumericInt, BinaryNumericOperator.Add))
-                  )
-                )
+      iterate =
+        UnboundRemoteFunction.make((a: Remote[Int]) =>
+          Remote.Flow(
+            ZFlow.Return(
+              Remote.Binary(a, Remote(delta), BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt))
+            )
+          )
+        )
       limit <- Gen.int
       predicate = UnboundRemoteFunction.make((a: Remote[Int]) =>
                     Remote.Equal(
                       a,
-                      Remote.BinaryNumeric(
+                      Remote.Binary(
                         initial,
                         Remote
-                          .BinaryNumeric(Remote(delta), Remote(limit), Numeric.NumericInt, BinaryNumericOperator.Mul),
-                        Numeric.NumericInt,
-                        BinaryNumericOperator.Add
+                          .Binary(
+                            Remote(delta),
+                            Remote(limit),
+                            BinaryOperators.Numeric(BinaryNumericOperator.Mul, Numeric.NumericInt)
+                          ),
+                        BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
                       )
                     )
                   )

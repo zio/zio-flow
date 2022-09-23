@@ -140,5 +140,5 @@ object RemoteDurationSpec extends RemoteSpecBase {
         Remote(d).isNegative <-> d.isNegative
       }
     }
-  ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+  ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 }

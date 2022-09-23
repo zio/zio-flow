@@ -26,17 +26,17 @@ object RemoteOptionSpec extends RemoteSpecBase {
     suite("RemoteOptionSpec")(
       test("HandleOption for Some") {
         val option: Remote[Option[Int]] = Remote(Option(12))
-        val optionHandled: Remote[Int]  = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled: Remote[Int]  = option.fold(Remote(0))((x: Remote[Int]) => x * 2)
         optionHandled <-> 24
       },
       test("HandleOption for None") {
         val option        = Remote[Option[Int]](None)
-        val optionHandled = option.fold(Remote(0), (x: Remote[Int]) => x * 2)
+        val optionHandled = option.fold(Remote(0))((x: Remote[Int]) => x * 2)
         optionHandled <-> 0
       },
       test("isSome") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+        val op1 = Remote.none
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -48,7 +48,7 @@ object RemoteOptionSpec extends RemoteSpecBase {
       },
       test("isNone") {
         val op1 = Remote.none
-        val op2 = Remote(Option(12))
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -59,8 +59,8 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("isEmpty") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+        val op1 = Remote.none
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -71,8 +71,8 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("isDefined") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+        val op1 = Remote.none
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -83,8 +83,8 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("knownSize") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+        val op1 = Remote.none[Int]
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -94,9 +94,9 @@ object RemoteOptionSpec extends RemoteSpecBase {
           )
           .map(TestResult.all(_: _*))
       },
-      test("knownSize") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+      test("contains") {
+        val op1 = Remote.none
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -108,8 +108,8 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("orElse") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
+        val op1 = Remote.none
+        val op2 = Remote.some(12)
         ZIO
           .collectAll(
             List(
@@ -120,9 +120,9 @@ object RemoteOptionSpec extends RemoteSpecBase {
           .map(TestResult.all(_: _*))
       },
       test("zip") {
-        val op1 = Remote[Option[Int]](None)
-        val op2 = Remote(Option(12))
-        val op3 = Remote(Option(10))
+        val op1 = Remote.none[Int]
+        val op2 = Remote.some(12)
+        val op3 = Remote.some(10)
         ZIO
           .collectAll(
             List(

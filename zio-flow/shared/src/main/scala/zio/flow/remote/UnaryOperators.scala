@@ -64,12 +64,12 @@ object UnaryOperators {
     override def apply(value: A): A =
       numeric.unary(operator, value)
   }
-  final case class Integral[A](operator: UnaryIntegralOperator, bitwise: zio.flow.remote.numeric.Integral[A])
+  final case class Integral[A](operator: UnaryIntegralOperator, integral: zio.flow.remote.numeric.Integral[A])
       extends UnaryOperators[A, A] {
-    override val inputSchema: Schema[A]  = bitwise.schema
-    override val outputSchema: Schema[A] = bitwise.schema
+    override val inputSchema: Schema[A]  = integral.schema
+    override val outputSchema: Schema[A] = integral.schema
     override def apply(value: A): A =
-      bitwise.unary(operator, value)
+      integral.unary(operator, value)
   }
   final case class Fractional[A](operator: UnaryFractionalOperator, fractional: zio.flow.remote.numeric.Fractional[A])
       extends UnaryOperators[A, A] {
@@ -128,7 +128,7 @@ object UnaryOperators {
         Schema.Field("integral", zio.flow.remote.numeric.Integral.schema),
         (op: UnaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
         _.operator,
-        _.bitwise
+        _.integral
       ),
       _.asInstanceOf[Integral[Any]]
     )

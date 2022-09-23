@@ -160,7 +160,7 @@ object RemoteEitherSpec extends RemoteSpecBase {
           )
         }
       }
-    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   // TODO: fix tests using partialLift
   //  private def partialLift[A: Schema, B: Schema](runtime: Runtime[RemoteContext], f: A => B): Remote[A] => Remote[B] =

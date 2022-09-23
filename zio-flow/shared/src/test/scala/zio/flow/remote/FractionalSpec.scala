@@ -37,10 +37,15 @@ object FractionalSpec extends RemoteSpecBase {
     fractionalA: remote.numeric.Fractional[A]
   ) =
     suite(name)(
-      testOp[R, A]("Sin", gen)(_.sin)(ops.sin),
-      testOp[R, A]("Cos", gen)(_.cos)(ops.cos) @@ TestAspect.ignore,
-      testOp[R, A]("Tan", gen)(_.tan)(ops.tan) @@ TestAspect.ignore,
-      testOp[R, A]("Tan-Inverse", gen)(_.atan)(ops.inverseTan)
+      testOp[R, A]("Sin", gen)(math.sin)(ops.sin),
+      testOp[R, A]("Cos", gen)(math.cos)(ops.cos),
+      testOp[R, A]("Tan", gen)(math.tan)(ops.tan),
+      testOp[R, A]("Tan-Inverse", gen)(math.atan)(ops.inverseTan),
+      testOp[R, A]("Floor", gen)(math.floor)(ops.floor),
+      testOp[R, A]("Ceil", gen)(math.ceil)(ops.ceil),
+      testOp[R, A]("Round", gen)(_.round)(ops.round),
+      testOp[R, A]("Log", gen)(math.log)(ops.log) @@ TestAspect.ignore,   // TODO: bigdecimal cannot handle NaN
+      testOp[R, A]("Sqrt", gen)(math.sqrt)(ops.sqrt) @@ TestAspect.ignore // TODO: bigdecimal cannot handle NaN
     )
 
   private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
@@ -56,7 +61,12 @@ object FractionalSpec extends RemoteSpecBase {
     sin: A => A,
     cos: A => A,
     tan: A => A,
-    inverseTan: A => A
+    inverseTan: A => A,
+    floor: A => A,
+    ceil: A => A,
+    round: A => A,
+    log: A => A,
+    sqrt: A => A
   )
 
   private object Operations {
@@ -65,7 +75,12 @@ object FractionalSpec extends RemoteSpecBase {
         sin = x => Math.sin(x.toDouble).toFloat,
         cos = x => Math.cos(x.toDouble).toFloat,
         tan = x => Math.tan(x.toDouble).toFloat,
-        inverseTan = x => Math.atan(x.toDouble).toFloat
+        inverseTan = x => Math.atan(x.toDouble).toFloat,
+        floor = x => Math.floor(x.toDouble).toFloat,
+        ceil = x => Math.ceil(x.toDouble).toFloat,
+        round = x => Math.round(x.toDouble).toFloat,
+        log = x => Math.log(x.toDouble).toFloat,
+        sqrt = x => Math.sqrt(x.toDouble).toFloat
       )
 
     val doubleOperations: FractionalOps[Double] =
@@ -73,7 +88,12 @@ object FractionalSpec extends RemoteSpecBase {
         sin = x => Math.sin(x),
         cos = x => Math.cos(x),
         tan = x => Math.tan(x),
-        inverseTan = x => Math.atan(x)
+        inverseTan = x => Math.atan(x),
+        floor = x => Math.floor(x),
+        ceil = x => Math.ceil(x),
+        round = x => Math.round(x).toDouble,
+        log = x => Math.log(x),
+        sqrt = x => Math.sqrt(x)
       )
 
     val bigDecimalOperations: FractionalOps[BigDecimal] =
@@ -81,7 +101,12 @@ object FractionalSpec extends RemoteSpecBase {
         sin = x => Math.sin(x.toDouble),
         cos = x => Math.cos(x.toDouble),
         tan = x => Math.tan(x.toDouble),
-        inverseTan = x => Math.atan(x.toDouble)
+        inverseTan = x => Math.atan(x.toDouble),
+        floor = x => BigDecimal(Math.floor(x.toDouble)),
+        ceil = x => BigDecimal(Math.ceil(x.toDouble)),
+        round = x => BigDecimal(Math.round(x.toDouble)),
+        log = x => BigDecimal(Math.log(x.toDouble)),
+        sqrt = x => BigDecimal(Math.sqrt(x.toDouble))
       )
 
   }
