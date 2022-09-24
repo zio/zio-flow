@@ -16,15 +16,15 @@
 
 package zio.flow.remote
 
-import zio.ZLayer
+import zio.{Scope, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{LocalContext, Remote, RemoteContext, remote}
 import zio.schema.Schema
-import zio.test.{Gen, Spec, TestAspect, TestConfig, check}
+import zio.test.{Gen, Spec, TestAspect, TestConfig, TestEnvironment, check}
 
 object FractionalSpec extends RemoteSpecBase {
 
-  override def spec =
+  override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("FractionalSpec")(
       fractionalTests("Float", Gen.float)(Operations.floatOperations),
       fractionalTests("Double", Gen.double)(Operations.doubleOperations),

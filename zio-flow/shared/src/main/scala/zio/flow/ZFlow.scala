@@ -184,8 +184,8 @@ sealed trait ZFlow[-R, +E, +A] {
     that: ZFlow[R1, E2, B]
   ): ZFlow[R1, E2, Either[A1, B]] =
     self
-      .map[Either[A1, B]](a => Remote.sequenceEither[A1, B](Left(a)))
-      .catchAll((_: Remote[E]) => that.map((b: Remote[B]) => Remote.sequenceEither[A1, B](Right(b))))
+      .map[Either[A1, B]](a => Remote.either[A1, B](Left(a)))
+      .catchAll((_: Remote[E]) => that.map((b: Remote[B]) => Remote.either[A1, B](Right(b))))
 
   /**
    * Attempts to execute this flow, but then, if this flow is suspended due to

@@ -71,6 +71,9 @@ sealed trait Remote[+A] { self =>
 
   def toString[A1 >: A: Schema]: Remote[String] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.ToString[A1]()))
+
+  def debug(message: String): Remote[A] =
+    Remote.Debug(self, message)
 }
 
 object Remote {
@@ -129,6 +132,36 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Fail[A], Remote[A]] =
       Schema.Case("Fail", schema[A], _.asInstanceOf[Fail[A]])
+  }
+
+  final case class Debug[A](inner: Remote[A], message: String) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      for {
+        result <- inner.evalDynamic
+        _      <- ZIO.debug(s"$message " + result.toString)
+      } yield result
+
+    override private[flow] def variableUsage =
+      inner.variableUsage
+
+    override protected def substituteRec(f: Substitutions): Remote[A] =
+      Debug(inner.substituteRec(f), message)
+  }
+
+  object Debug {
+    def schema[A]: Schema[Debug[A]] =
+      Schema.defer {
+        Schema.CaseClass2[Remote[A], String, Debug[A]](
+          Schema.Field("inner", Remote.schema[A]),
+          Schema.Field("message", Schema[String]),
+          Debug.apply,
+          _.inner,
+          _.message
+        )
+      }
+
+    def schemaCase[A]: Schema.Case[Debug[A], Remote[A]] =
+      Schema.Case("Debug", schema[A], _.asInstanceOf[Debug[A]])
   }
 
   final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
@@ -3299,7 +3332,7 @@ object Remote {
     Remote.RemoteEither(Left(value))
 
   def list[A](values: Remote[A]*): Remote[List[A]] =
-    values.foldLeft(nil[A])(Remote.Cons.apply)
+    values.foldRight(nil[A])((elem, lst) => Remote.Cons(lst, elem))
 
   def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, Remote(0L))
 
@@ -3351,7 +3384,7 @@ object Remote {
 
   def right[A, B](value: Remote[B]): Remote[Either[A, B]] = Remote.RemoteEither(Right(value))
 
-  def sequenceEither[A, B](
+  def either[A, B](
     either: Either[Remote[A], Remote[B]]
   ): Remote[Either[A, B]] =
     RemoteEither(either)
@@ -3837,6 +3870,7 @@ object Remote {
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Fail.schemaCase[A])
+      .:+:(Debug.schemaCase[A])
       .:+:(Flow.schemaCase[A])
       .:+:(Nested.schemaCase[A])
       .:+:(VariableReference.schemaCase[A])

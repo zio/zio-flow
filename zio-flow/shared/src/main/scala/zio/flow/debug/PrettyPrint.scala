@@ -50,6 +50,9 @@ object PrettyPrint {
       case Remote.Fail(message) =>
         builder.append("fail ")
         builder.append(message)
+      case Remote.Debug(inner, message) =>
+        builder.append(s"debug($message)")
+        prettyPrintRemote(inner)
       case Remote.Flow(flow) =>
         builder.append("flow")
         prettyPrintFlow(flow, builder, indent + 2)

@@ -25,7 +25,7 @@ import zio.schema.Schema
 final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def ++(suffix: Remote[List[A]]): Remote[List[A]] =
-    reverse.foldLeft(suffix)((l, a) => Remote.Cons(l, a))
+    self.reverse.foldLeft(suffix)((l, a) => Remote.Cons(l, a))
 
   def ++:(prefix: Remote[List[A]]): Remote[List[A]] =
     prefix ++ self
@@ -116,7 +116,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold((Remote(0), Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
             (input._1 < n).ifThenElse(
               ifTrue = rec((input._1 + 1, tuple._2)),
-              ifFalse = (Remote(0), tuple._2)
+              ifFalse = (Remote(0), input._2)
             )
           )
       }
@@ -132,7 +132,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold(Remote.nil[A])((tuple: Remote[(A, List[A])]) =>
             (predicate(tuple._1)).ifThenElse(
               ifTrue = rec(tuple._2),
-              ifFalse = tuple._2
+              ifFalse = input
             )
           )
       }
@@ -160,14 +160,14 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def filter(
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
-    foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
+    self.reverse.foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
       predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
     )
 
   def filterNot(
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
-    foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
+    self.reverse.foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
       predicate(a1).ifThenElse(a2, Remote.Cons(a2, a1))
     )
 

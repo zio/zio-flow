@@ -139,12 +139,6 @@ object RemoteEitherSyntax {
     def exists(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
       self.fold(p, _ => Remote(false))
 
-    def flatMap[A1, B1 >: B](f: Remote[A] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
-      self.fold(f, _ => self.asInstanceOf[Remote[Either[A1, B1]]])
-
-    def map[A1](f: Remote[A] => Remote[A1]): Remote[Either[A1, B]] =
-      self.fold(value => Remote.left[A1, B](f(value)), _ => self.asInstanceOf[Remote[Either[A1, B]]])
-
     def filterToOption[B1](p: Remote[A] => Remote[Boolean]): Remote[Option[Either[A, B1]]] =
       self.fold(
         value =>
@@ -154,6 +148,12 @@ object RemoteEitherSyntax {
           ),
         _ => Remote.none[Either[A, B1]]
       )
+
+    def flatMap[A1, B1 >: B](f: Remote[A] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
+      self.fold(f, _ => self.asInstanceOf[Remote[Either[A1, B1]]])
+
+    def map[A1](f: Remote[A] => Remote[A1]): Remote[Either[A1, B]] =
+      self.fold(value => Remote.left[A1, B](f(value)), _ => self.asInstanceOf[Remote[Either[A1, B]]])
 
     def toSeq: Remote[List[A]] =
       self.fold(Remote.Cons(Remote.nil[A], _), _ => Remote.nil[A])

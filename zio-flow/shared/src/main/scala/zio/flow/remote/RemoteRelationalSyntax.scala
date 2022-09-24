@@ -22,7 +22,7 @@ import zio.schema.Schema
 final class RemoteRelationalSyntax[A](val self: Remote[A]) extends AnyVal {
 
   def <(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
-    (self <= that) && (self != that)
+    (self <= that) && (self !== that)
 
   def <=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     Remote.LessThanEqual(self, that, schema)
@@ -31,13 +31,13 @@ final class RemoteRelationalSyntax[A](val self: Remote[A]) extends AnyVal {
     !(self <= that)
 
   def >=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
-    (self > that) || (self == that)
+    (self > that) || (self === that)
 
   def !=(that: Remote[A]): Remote[Boolean] =
-    !(self == that)
+    !(self === that)
 
   def !==(that: Remote[A]): Remote[Boolean] =
-    !(self == that)
+    !(self === that)
 
   def ==(that: Remote[A]): Remote[Boolean] =
     Remote.Equal(self, that)
