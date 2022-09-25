@@ -18,7 +18,6 @@ package zio.flow.remote
 
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
-import zio.flow.internal._
 import zio.flow.remote.numeric._
 import zio.schema.Schema
 
@@ -510,28 +509,24 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._1
 
-  def mkString(implicit ev: A =:= String): Remote[String] =
-    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), Remote(""), Remote(""))
+//  def mkString(implicit ev: A =:= String): Remote[String] =
+//    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), Remote(""), Remote(""))
 
-  // TODO: this should be mkString but collides with the string version
-  def mkStringS(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
+  def mkString(implicit schema: Schema[A]): Remote[String] =
     Remote.ListToString(self.map(_.toString), Remote(""), Remote(""), Remote(""))
 
-  def mkString(sep: Remote[String])(implicit ev: A =:= String): Remote[String] =
-    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), sep, Remote(""))
+//  def mkString(sep: Remote[String])(implicit ev: A =:= String): Remote[String] =
+//    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), sep, Remote(""))
 
-  // TODO: this should be mkString but collides with the string version
-  def mkStringS(sep: Remote[String])(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
+  def mkString(sep: Remote[String])(implicit schema: Schema[A]): Remote[String] =
     Remote.ListToString(self.map(_.toString), Remote(""), sep, Remote(""))
 
-  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
-    ev: A =:= String
-  ): Remote[String] =
-    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], start, sep, end)
+//  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
+//    ev: A =:= String
+//  ): Remote[String] =
+//    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], start, sep, end)
 
-  // TODO: this should be mkString but collides with the string version
-  def mkStringS(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
-    ev: A =:!= String,
+  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
     schema: Schema[A]
   ): Remote[String] =
     Remote.ListToString(self.map(_.toString), start, sep, end)
@@ -585,13 +580,12 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ._1
 
   def patch[B >: A](from: Remote[Int], other: Remote[List[B]], replaced: Remote[Int]): Remote[List[B]] = {
-    val safeFrom     = math.min(self.length, math.max(0, from))
-    val safeTo       = math.min(self.length, math.max(0, from + replaced))
-    val safeReplaced = safeTo - safeFrom
-    val selfB        = self.widen[List[B]]
+    val safeFrom = math.min(self.length, math.max(0, from))
+    val safeTo   = math.min(self.length, math.max(0, from + replaced))
+    val selfB    = self.widen[List[B]]
     selfB
       .take(safeFrom)
-      .concat(other.take(safeReplaced))
+      .concat(other)
       .concat(selfB.drop(safeTo))
   }
 
@@ -630,7 +624,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.reduceLeft(op)
 
   def reduceLeft[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[B] =
-    self.foldLeft[B](self.widen[List[B]].head)(op)
+    self.tail.foldLeft[B](self.widen[List[B]].head)(op)
 
   def reduceLeftOption[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[Option[B]] =
     self.isEmpty.ifThenElse(
@@ -642,7 +636,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.reduceLeftOption(op)
 
   def reduceRight[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[B] =
-    self.foldRight[B](self.widen[List[B]].head)(op)
+    self.reverse.reduceLeft((b: Remote[B], a: Remote[A]) => op(a, b))
 
   def reduceRightOption[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[Option[B]] =
     self.isEmpty.ifThenElse(ifTrue = Remote.none, ifFalse = Remote.some(self.reduceRight(op)))
@@ -654,7 +648,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     prefix.reverse ::: self
 
   def sameElements[B >: A](other: Remote[List[B]]): Remote[Boolean] =
-    self.widen[List[B]].zip(other).forall(tuple => tuple._1 === tuple._2)
+    self.length === other.length &&
+      self.widen[List[B]].zip(other).forall(tuple => tuple._1 === tuple._2)
 
   def scan[B >: A](z: Remote[B])(op: (Remote[B], Remote[B]) => Remote[B]): Remote[List[B]] =
     scanLeft(z)(op)

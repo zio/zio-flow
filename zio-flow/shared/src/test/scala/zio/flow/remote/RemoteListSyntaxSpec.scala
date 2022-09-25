@@ -307,12 +307,12 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
       remoteTest("mkString")(
         Remote.nil[String].mkString <-> "",
         Remote.list("hello", "world", "!!!").mkString <-> "helloworld!!!",
-        Remote.nil[Int].mkStringS <-> "",
-        Remote.list(1, 2, 3).mkStringS <-> "123",
+        Remote.nil[Int].mkString <-> "",
+        Remote.list(1, 2, 3).mkString <-> "123",
         Remote.list("hello", "world", "!!!").mkString("--") <-> "hello--world--!!!",
-        Remote.list(1, 2, 3).mkStringS("/") <-> "1/2/3",
+        Remote.list(1, 2, 3).mkString("/") <-> "1/2/3",
         Remote.list("hello", "world", "!!!").mkString("<", " ", ">") <-> "<hello world !!!>",
-        Remote.list(1, 2, 3).mkStringS("(", ", ", ")") <-> "(1, 2, 3)"
+        Remote.list(1, 2, 3).mkString("(", ", ", ")") <-> "(1, 2, 3)"
       ),
       remoteTest("nonEmpty")(
         Remote.nil[Int].nonEmpty <-> false,
@@ -339,9 +339,80 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
             (n % 2 === 0).ifThenElse(ifTrue = Remote.left(n), ifFalse = Remote.right(n.toString))
           ) <-> (List(2, 4), List("1", "3", "5"))
       ),
+      remoteTest("patch")(
+        Remote.nil[Int].patch(0, Remote.nil[Int], 0) <-> List.empty[Int],
+        Remote.nil[Int].patch(0, Remote.list(1, 2, 3), 2) <-> List(1, 2, 3),
+        Remote.list(1, 2, 3, 4).patch(0, Remote.list(5, 6, 7), 2) <-> List(5, 6, 7, 3, 4),
+        Remote.list(1, 2, 3, 4).patch(2, Remote.list(5, 6, 7), 1) <-> List(1, 2, 5, 6, 7, 4)
+      ),
+      remoteTest("permutations")(
+        Remote.nil[Int].permutations <-> List(List.empty[Int]),
+        Remote.list(1, 2, 3).permutations <-> List(
+          List(1, 2, 3),
+          List(1, 3, 2),
+          List(2, 1, 3),
+          List(2, 3, 1),
+          List(3, 1, 2),
+          List(3, 2, 1)
+        )
+      ),
+      remoteTest("prepended")(
+        Remote.nil[Int].prepended(1) <-> List(1),
+        Remote.list(2, 3).prepended(1) <-> List(1, 2, 3)
+      ),
+      remoteTest("prependedAll")(
+        Remote.nil[Int].prependedAll(Remote.list(1, 2)) <-> List(1, 2),
+        Remote.list(2, 3).prependedAll(Remote.list(0, 1)) <-> List(0, 1, 2, 3)
+      ),
+      remoteTest("product")(
+        Remote.nil[Int].product <-> 1,
+        Remote.list(1.0, 2.0, 3.0).product <-> 6.0
+      ),
+      remoteTest("reduce")(
+        Remote.nil[Int].reduce(_ + _) failsWithRemoteError "List is empty",
+        Remote.list(1, 2, 3).reduce(_ + _) <-> 6
+      ),
+      remoteTest("reduceLeft")(
+        Remote.nil[Int].reduceLeft(_ + _) failsWithRemoteError "List is empty",
+        Remote.list(1, 2, 3).reduceLeft(_ + _) <-> 6
+      ),
+      remoteTest("reduceLeftOption")(
+        Remote.nil[Int].reduceLeftOption(_ + _) <-> None,
+        Remote.list(1, 2, 3).reduceLeftOption(_ + _) <-> Some(6)
+      ),
+      remoteTest("reduceOption")(
+        Remote.nil[Int].reduceOption(_ + _) <-> None,
+        Remote.list(1, 2, 3).reduceOption(_ + _) <-> Some(6)
+      ),
+      remoteTest("reduceRight")(
+        Remote.nil[Int].reduceRight(_ + _) failsWithRemoteError "List is empty",
+        Remote.list(1.0, 2.0, 3.0).reduceRight(_ / _) <-> 1.5
+      ),
+      remoteTest("reduceRightOption")(
+        Remote.nil[Int].reduceRightOption(_ + _) <-> None,
+        Remote.list(1.0, 2.0, 3.0).reduceRightOption(_ / _) <-> Some(1.5)
+      ),
+      remoteTest("reverse")(
+        Remote.nil[Int].reverse <-> List.empty[Int],
+        Remote.list(1).reverse <-> List(1),
+        Remote.list(1, 2, 3).reverse <-> List(3, 2, 1)
+      ),
+      remoteTest("reverse_:::")(
+        Remote.list(1, 2, 3, 4).reverse_:::(Remote.list(5, 6, 7)) <-> List(7, 6, 5, 1, 2, 3, 4),
+        Remote.list(1, 2, 3, 4).reverse_:::(Remote.nil[Int]) <-> List(1, 2, 3, 4),
+        Remote.nil[Int].reverse_:::(Remote.list(1, 2, 3, 4)) <-> List(4, 3, 2, 1),
+        Remote.nil[Int].reverse_:::(Remote.nil[Int]) <-> List.empty
+      ),
       remoteTest("zipWithIndex")(
         Remote.nil[String].zipWithIndex <-> List.empty[(String, Int)],
         Remote.list("a", "b", "c").zipWithIndex <-> List("a" -> 0, "b" -> 1, "c" -> 2)
+      ),
+      remoteTest("sameElements")(
+        Remote.nil[Int].sameElements(Remote.nil[Int]) <-> true,
+        Remote.nil[Int].sameElements(Remote.list(1, 2, 3)) <-> false,
+        Remote.list(1, 2, 3, 4).sameElements(Remote.list(1, 2, 3)) <-> false,
+        Remote.list(1, 2).sameElements(Remote.list(1, 2, 3)) <-> false,
+        Remote.list(1, 2, 3).sameElements(Remote.list(1, 2, 3)) <-> true
       ),
       remoteTest("List.fill")(
         List.fill(Remote(3))(Remote(1)) <-> List(1, 1, 1)
