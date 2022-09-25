@@ -10,7 +10,7 @@ final class RemoteListCompanionSyntax(val self: List.type) extends AnyVal {
         val lst     = input._2
         (current === 0).ifThenElse(
           ifTrue = (current, lst),
-          ifFalse = (current - 1, elem :: lst)
+          ifFalse = rec((current - 1, elem :: lst))
         )
       }
       ._2

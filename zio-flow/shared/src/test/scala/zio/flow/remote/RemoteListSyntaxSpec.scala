@@ -197,11 +197,154 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
       remoteTest("indexOf")(
         Remote.nil[Int].indexOf(3) <-> -1,
         Remote.list(1, 2, 4, 5).indexOf(3) <-> -1,
-        Remote.list(1, 2, 3, 4).indexOf(3) <-> 2
+        Remote.list(1, 2, 3, 4).indexOf(3) <-> 2,
+        Remote.list(1, 2, 3, 4).indexOf(3, 2) <-> 2,
+        Remote.list(1, 2, 3, 4, 4, 3).indexOf(3, 3) <-> 5
+      ),
+      remoteTest("indexOfSlice")(
+        Remote.nil[Int].indexOfSlice(List(2, 3)) <-> -1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexOfSlice(List(2, 3)) <-> 1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexOfSlice(List(2, 3), 1) <-> 1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexOfSlice(List(2, 3), 3) <-> 5
+      ),
+      remoteTest("indexWhere")(
+        Remote.nil[Int].indexWhere(_ % 2 === 0) <-> -1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexWhere(_ % 2 === 0) <-> 1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexWhere(_ % 2 === 0, 1) <-> 1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexWhere(_ % 2 === 0, 2) <-> 3
+      ),
+      remoteTest("init")(
+        Remote.nil[Int].init failsWithRemoteError "List is empty",
+        Remote.list(1).init <-> List.empty[Int],
+        Remote.list(1, 2, 3).init <-> List(1, 2)
+      ),
+      remoteTest("inits")(
+        Remote.nil[Int].inits <-> List(List.empty[Int]),
+        Remote.list(1, 2, 3).inits <-> List(List(1, 2, 3), List(1, 2), List(1), List())
+      ),
+      remoteTest("intersect")(
+        Remote.nil[Int].intersect(Remote.list(3, 4, 5, 6)) <-> List.empty[Int],
+        Remote.list(1, 2, 3, 4).intersect(Remote.list(3, 4, 5, 6)) <-> List(3, 4),
+        Remote.list(1, 2, 3, 4).intersect(Remote.nil[Int]) <-> List.empty[Int]
+      ),
+      remoteTest("isDefinedAt")(
+        Remote.nil[Int].isDefinedAt(0) <-> false,
+        Remote.list(1, 2, 3).isDefinedAt(0) <-> true,
+        Remote.list(1, 2, 3).isDefinedAt(2) <-> true,
+        Remote.list(1, 2, 3).isDefinedAt(3) <-> false
+      ),
+      remoteTest("isEmpty")(
+        Remote.nil[Int].isEmpty <-> true,
+        Remote.list(1, 2, 3).isEmpty <-> false
+      ),
+      remoteTest("last")(
+        Remote.nil[Int].last failsWithRemoteError "List is empty",
+        Remote.list(1, 2, 3).last <-> 3
+      ),
+      remoteTest("lastIndexOf")(
+        Remote.nil[Int].lastIndexOf(3) <-> -1,
+        Remote.list(1, 2, 4, 4).lastIndexOf(3) <-> -1,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOf(3) <-> 4,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOf(3, 4) <-> 4,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOf(3, 3) <-> 2
+      ),
+      remoteTest("lastIndexOfSlice")(
+        Remote.nil[Int].lastIndexOfSlice(Remote.list(3, 4)) <-> -1,
+        Remote.list(1, 2, 4, 4).lastIndexOfSlice(Remote.list(3, 4)) <-> -1,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOfSlice(Remote.list(3, 4)) <-> 4,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOfSlice(Remote.list(3, 4), 5) <-> 4,
+        Remote.list(1, 2, 3, 4, 3, 4).lastIndexOfSlice(Remote.list(3, 4), 3) <-> 2
+      ),
+      remoteTest("lastIndexWhere")(
+        Remote.nil[Int].lastIndexWhere(_ % 2 === 0) <-> -1,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).lastIndexWhere(_ % 2 === 0) <-> 7,
+        Remote.list(1, 2, 3, 4, 5, 2, 3, 6).lastIndexWhere(_ % 2 === 0, 6) <-> 5
+      ),
+      remoteTest("lastOption")(
+        Remote.nil[Int].lastOption <-> None,
+        Remote.list(1, 2, 3).lastOption <-> Some(3)
+      ),
+      remoteTest("length")(
+        Remote.nil[Int].length <-> 0,
+        Remote.list(1, 2, 3).length <-> 3
+      ),
+      remoteTest("map")(
+        Remote.nil[Int].map(_ * 2) <-> List.empty[Int],
+        Remote.list(1, 2, 3).map(_ * 2) <-> List(2, 4, 6)
+      ),
+      remoteTest("max")(
+        Remote.nil[Int].max failsWithRemoteError "List is empty",
+        Remote.list(1, 6, 4, 3, 8, 0, 4).max <-> 8
+      ),
+      remoteTest("maxBy")(
+        Remote.nil[String].maxBy(_.length) failsWithRemoteError "List is empty",
+        Remote.list("aaa", "a", "abcd", "ab").maxBy(_.length) <-> "abcd"
+      ),
+      remoteTest("maxByOption")(
+        Remote.nil[String].maxByOption(_.length) <-> None,
+        Remote.list("aaa", "a", "abcd", "ab").maxByOption(_.length) <-> Some("abcd")
+      ),
+      remoteTest("maxOption")(
+        Remote.nil[Int].maxOption <-> None,
+        Remote.list(1, 6, 4, 3, 8, 0, 4).maxOption <-> Some(8)
+      ),
+      remoteTest("min")(
+        Remote.nil[Int].min failsWithRemoteError "List is empty",
+        Remote.list(1, 6, 4, 3, 8, 0, 4).min <-> 0
+      ),
+      remoteTest("minBy")(
+        Remote.nil[String].minBy(_.length) failsWithRemoteError "List is empty",
+        Remote.list("aaa", "a", "abcd", "ab").minBy(_.length) <-> "a"
+      ),
+      remoteTest("minByOption")(
+        Remote.nil[String].minByOption(_.length) <-> None,
+        Remote.list("aaa", "a", "abcd", "ab").minByOption(_.length) <-> Some("a")
+      ),
+      remoteTest("minOption")(
+        Remote.nil[Int].minOption <-> None,
+        Remote.list(1, 6, 4, 3, 8, 0, 4).minOption <-> Some(0)
+      ),
+      remoteTest("mkString")(
+        Remote.nil[String].mkString <-> "",
+        Remote.list("hello", "world", "!!!").mkString <-> "helloworld!!!",
+        Remote.nil[Int].mkStringS <-> "",
+        Remote.list(1, 2, 3).mkStringS <-> "123",
+        Remote.list("hello", "world", "!!!").mkString("--") <-> "hello--world--!!!",
+        Remote.list(1, 2, 3).mkStringS("/") <-> "1/2/3",
+        Remote.list("hello", "world", "!!!").mkString("<", " ", ">") <-> "<hello world !!!>",
+        Remote.list(1, 2, 3).mkStringS("(", ", ", ")") <-> "(1, 2, 3)"
+      ),
+      remoteTest("nonEmpty")(
+        Remote.nil[Int].nonEmpty <-> false,
+        Remote.list(1, 2, 3).nonEmpty <-> true
+      ),
+      remoteTest("padTo")(
+        Remote.nil[Int].padTo(3, 11) <-> List(11, 11, 11),
+        Remote.list(1, 2, 3).padTo(5, 11) <-> List(1, 2, 3, 11, 11),
+        Remote.list(1, 2, 3).padTo(3, 11) <-> List(1, 2, 3)
+      ),
+      remoteTest("partition")(
+        Remote.nil[Int].partition(_ % 2 === 0) <-> (List.empty[Int], List.empty[Int]),
+        Remote.list(1, 2, 3, 4, 5).partition(_ % 2 === 0) <-> (List(2, 4), List(1, 3, 5))
+      ),
+      remoteTest("partitionMap")(
+        Remote
+          .nil[Int]
+          .partitionMap((n: Remote[Int]) =>
+            (n % 2 === 0).ifThenElse(ifTrue = Remote.left(n), ifFalse = Remote.right(n.toString))
+          ) <-> (List.empty[Int], List.empty[String]),
+        Remote
+          .list(1, 2, 3, 4, 5)
+          .partitionMap((n: Remote[Int]) =>
+            (n % 2 === 0).ifThenElse(ifTrue = Remote.left(n), ifFalse = Remote.right(n.toString))
+          ) <-> (List(2, 4), List("1", "3", "5"))
       ),
       remoteTest("zipWithIndex")(
         Remote.nil[String].zipWithIndex <-> List.empty[(String, Int)],
         Remote.list("a", "b", "c").zipWithIndex <-> List("a" -> 0, "b" -> 1, "c" -> 2)
+      ),
+      remoteTest("List.fill")(
+        List.fill(Remote(3))(Remote(1)) <-> List(1, 1, 1)
       )
     ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 }

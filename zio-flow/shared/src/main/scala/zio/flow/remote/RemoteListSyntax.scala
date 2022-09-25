@@ -276,22 +276,22 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   // TODO: indices if there is support for Remote[Range]
 
   def init: Remote[List[A]] =
-    Remote.UnCons(self.reverse).fold(Remote.fail("List is empty"))(_._2)
+    Remote.UnCons(self.reverse).fold(Remote.fail("List is empty"))(_._2).reverse
 
   def inits: Remote[List[List[A]]] =
     Remote
-      .recurseSimple((Remote.nil[List[A]], self)) { case (input, rec) =>
+      .recurseSimple((Remote.nil[List[A]], self.reverse)) { case (input, rec) =>
         val result      = input._1
         val currentSelf = input._2
 
         Remote
           .UnCons(currentSelf)
           .fold((result, Remote.nil[A])) { tupleSelf: Remote[(A, List[A])] =>
-            rec((currentSelf :: result, tupleSelf._2))
+            rec((currentSelf.reverse :: result, tupleSelf._2))
           }
       }
       ._1
-      .reverse
+      .reverse ++ Remote.list(Remote.nil[A])
 
   def intersect[B >: A](that: Remote[List[B]]): Remote[List[A]] =
     self.filter(that.contains(_))
@@ -305,23 +305,53 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def last: Remote[A] =
     self.reverse.head
 
-  def lastIndexOf[B >: A](elem: Remote[B]): Remote[Int] =
-    self.length - 1 - self.reverse.indexOf(elem)
+  def lastIndexOf[B >: A](elem: Remote[B]): Remote[Int] = {
+    val ridx = self.reverse.indexOf(elem)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - 1 - ridx
+    )
+  }
 
-  def lastIndexOf[B >: A](elem: Remote[B], end: Remote[Int]): Remote[Int] =
-    self.length - 1 - self.reverse.indexOf(elem, self.length - 1 - end)
+  def lastIndexOf[B >: A](elem: Remote[B], end: Remote[Int]): Remote[Int] = {
+    val ridx = self.reverse.indexOf(elem, self.length - 1 - end)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - 1 - ridx
+    )
+  }
 
-  def lastIndexOfSlice[B >: A](that: Remote[List[B]]): Remote[Int] =
-    self.length - 1 - self.reverse.indexOfSlice(that)
+  def lastIndexOfSlice[B >: A](that: Remote[List[B]]): Remote[Int] = {
+    val ridx = self.reverse.indexOfSlice(that.reverse)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - ridx - that.length
+    )
+  }
 
-  def lastIndexOfSlice[B >: A](that: Remote[List[B]], end: Remote[Int]): Remote[Int] =
-    self.length - 1 - self.reverse.indexOfSlice(that, self.length - 1 - end)
+  def lastIndexOfSlice[B >: A](that: Remote[List[B]], end: Remote[Int]): Remote[Int] = {
+    val ridx = self.reverse.indexOfSlice(that.reverse, self.length - 1 - end)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - ridx - that.length
+    )
+  }
 
-  def lastIndexWhere(p: Remote[A] => Remote[Boolean]): Remote[Int] =
-    self.length - 1 - self.reverse.indexWhere(p)
+  def lastIndexWhere(p: Remote[A] => Remote[Boolean]): Remote[Int] = {
+    val ridx = self.reverse.indexWhere(p)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - 1 - ridx
+    )
+  }
 
-  def lastIndexWhere(p: Remote[A] => Remote[Boolean], end: Remote[Int]): Remote[Int] =
-    self.length - 1 - self.reverse.indexWhere(p, self.length - 1 - end)
+  def lastIndexWhere(p: Remote[A] => Remote[Boolean], end: Remote[Int]): Remote[Int] = {
+    val ridx = self.reverse.indexWhere(p, self.length - 1 - end)
+    (ridx === -1).ifThenElse(
+      ifTrue = Remote(-1),
+      ifFalse = self.length - 1 - ridx
+    )
+  }
 
   def lastOption: Remote[Option[A]] =
     self.reverse.headOption
@@ -330,7 +360,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.foldLeft[Int](0)((len, _) => len + 1)
 
   def map[B](f: Remote[A] => Remote[B]): Remote[List[B]] =
-    foldLeft[List[B]](Remote.nil[B])((res, elem) => f(elem) :: res)
+    foldLeft[List[B]](Remote.nil[B])((res, elem) => f(elem) :: res).reverse
 
   def max(implicit schema: Schema[A]): Remote[A] =
     Remote
@@ -343,7 +373,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             rec(
               (
                 (current <= tuple._1).ifThenElse(ifTrue = tuple._1, ifFalse = current),
-                remaining
+                tuple._2
               )
             )
           )
@@ -361,8 +391,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold((current, currentMapped, Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
             rec(
               (currentMapped <= f(tuple._1)).ifThenElse(
-                ifTrue = (tuple._1, f(tuple._1), remaining),
-                ifFalse = (current, currentMapped, remaining)
+                ifTrue = (tuple._1, f(tuple._1), tuple._2),
+                ifFalse = (current, currentMapped, tuple._2)
               )
             )
           )
@@ -380,8 +410,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold((current, currentMapped, Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
             rec(
               (currentMapped.getOrElse(f(tuple._1)) <= f(tuple._1)).ifThenElse(
-                ifTrue = (Remote.some[A](tuple._1), Remote.some[B](f(tuple._1)), remaining),
-                ifFalse = (current, currentMapped, remaining)
+                ifTrue = (Remote.some[A](tuple._1), Remote.some[B](f(tuple._1)), tuple._2),
+                ifFalse = (current, currentMapped, tuple._2)
               )
             )
           )
@@ -399,7 +429,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             rec(
               (
                 (current.getOrElse(tuple._1) <= tuple._1).ifThenElse(ifTrue = Remote.some(tuple._1), ifFalse = current),
-                remaining
+                tuple._2
               )
             )
           )
@@ -417,7 +447,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             rec(
               (
                 (current >= tuple._1).ifThenElse(ifTrue = tuple._1, ifFalse = current),
-                remaining
+                tuple._2
               )
             )
           )
@@ -435,8 +465,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold((current, currentMapped, Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
             rec(
               (currentMapped >= f(tuple._1)).ifThenElse(
-                ifTrue = (tuple._1, f(tuple._1), remaining),
-                ifFalse = (current, currentMapped, remaining)
+                ifTrue = (tuple._1, f(tuple._1), tuple._2),
+                ifFalse = (current, currentMapped, tuple._2)
               )
             )
           )
@@ -454,8 +484,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           .fold((current, currentMapped, Remote.nil[A]))((tuple: Remote[(A, List[A])]) =>
             rec(
               (currentMapped.getOrElse(f(tuple._1)) >= f(tuple._1)).ifThenElse(
-                ifTrue = (Remote.some[A](tuple._1), Remote.some[B](f(tuple._1)), remaining),
-                ifFalse = (current, currentMapped, remaining)
+                ifTrue = (Remote.some[A](tuple._1), Remote.some[B](f(tuple._1)), tuple._2),
+                ifFalse = (current, currentMapped, tuple._2)
               )
             )
           )
@@ -473,7 +503,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             rec(
               (
                 (current.getOrElse(tuple._1) >= tuple._1).ifThenElse(ifTrue = Remote.some(tuple._1), ifFalse = current),
-                remaining
+                tuple._2
               )
             )
           )
@@ -483,13 +513,15 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def mkString(implicit ev: A =:= String): Remote[String] =
     Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), Remote(""), Remote(""))
 
-  def mkString(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
+  // TODO: this should be mkString but collides with the string version
+  def mkStringS(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
     Remote.ListToString(self.map(_.toString), Remote(""), Remote(""), Remote(""))
 
   def mkString(sep: Remote[String])(implicit ev: A =:= String): Remote[String] =
     Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), sep, Remote(""))
 
-  def mkString(sep: Remote[String])(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
+  // TODO: this should be mkString but collides with the string version
+  def mkStringS(sep: Remote[String])(implicit ev: A =:!= String, schema: Schema[A]): Remote[String] =
     Remote.ListToString(self.map(_.toString), Remote(""), sep, Remote(""))
 
   def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
@@ -497,7 +529,8 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   ): Remote[String] =
     Remote.ListToString(self.asInstanceOf[Remote[List[String]]], start, sep, end)
 
-  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
+  // TODO: this should be mkString but collides with the string version
+  def mkStringS(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
     ev: A =:!= String,
     schema: Schema[A]
   ): Remote[String] =
@@ -508,7 +541,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def padTo[B >: A](len: Remote[Int], elem: Remote[B]): Remote[List[B]] = {
     val count = math.max(0, len - self.length)
-    List.fill(count)(elem)
+    self ::: List.fill(count)(elem)
   }
 
   def partition(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
@@ -521,7 +554,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         Remote
           .UnCons(remaining)
           .fold(
-            Remote.tuple2((Remote.tuple2((satisfies, doesNotSatisfy)), Remote.nil[A]))
+            Remote.tuple2((Remote.tuple2((satisfies.reverse, doesNotSatisfy.reverse)), Remote.nil[A]))
           ) { tuple =>
             p(tuple._1).ifThenElse(
               ifTrue = rec(Remote.tuple2((Remote.tuple2((tuple._1 :: satisfies, doesNotSatisfy)), tuple._2))),
@@ -541,7 +574,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         Remote
           .UnCons(remaining)
           .fold(
-            Remote.tuple2((Remote.tuple2((leftList, rightList)), Remote.nil[A]))
+            Remote.tuple2((Remote.tuple2((leftList.reverse, rightList.reverse)), Remote.nil[A]))
           ) { tuple =>
             p(tuple._1).fold(
               left => rec(Remote.tuple2((Remote.tuple2((left :: leftList, rightList)), tuple._2))),
