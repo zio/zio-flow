@@ -165,13 +165,15 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       },
       test("first") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
-          val first = Remote.TupleAccess[(TestCaseClass, String), TestCaseClass](Remote.Tuple2(Remote(a), Remote(b)), 0)
+          val first =
+            Remote.TupleAccess[(TestCaseClass, String), TestCaseClass](Remote.Tuple2(Remote(a), Remote(b)), 0, 2)
           roundtripEval(codec, first).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       },
       test("second") {
         check(TestCaseClass.gen zip Gen.string) { case (a, b) =>
-          val first = Remote.TupleAccess[(String, TestCaseClass), TestCaseClass](Remote.Tuple2(Remote(b), Remote(a)), 1)
+          val first =
+            Remote.TupleAccess[(String, TestCaseClass), TestCaseClass](Remote.Tuple2(Remote(b), Remote(a)), 1, 2)
           roundtripEval(codec, first).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       },

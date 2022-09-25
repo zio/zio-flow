@@ -25,6 +25,7 @@ import zio.{Chunk, ZIO}
 import java.math.BigDecimal
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
+import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
 import scala.language.implicitConversions
 
@@ -2100,55 +2101,55 @@ object Remote {
   }
   // end of generated tuple constructors
 
-  final case class TupleAccess[T, A](tuple: Remote[T], n: Int) extends Remote[A] {
+  final case class TupleAccess[T, A](tuple: Remote[T], n: Int, arity: Int) extends Remote[A] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
         dynTuple <- tuple.evalDynamic
-        value     = TupleAccess.findValueIn(dynTuple, n)
+        value <- ZIO
+                   .fromEither(TupleAccess.findValueIn(dynTuple, n, arity))
+                   .mapError(RemoteEvaluationError.UnexpectedDynamicValue)
       } yield value
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[A] =
-      TupleAccess(tuple.substitute(f), n)
+      TupleAccess(tuple.substitute(f), n, arity)
 
     override private[flow] val variableUsage = tuple.variableUsage
   }
 
   object TupleAccess {
-    private def findValueIn(value: DynamicValue, n: Int): DynamicValue = {
-      def find(value: DynamicValue, current: Int): Either[Int, DynamicValue] =
+    private[flow] def findValueIn(value: DynamicValue, n: Int, arity: Int): Either[String, DynamicValue] = {
+      @tailrec
+      def find(value: DynamicValue, current: Int): Option[DynamicValue] =
         value match {
-          case DynamicValue.Tuple(a, b) =>
-            if (current == n) {
-              find(a, current)
+          case DynamicValue.Tuple(left, right) =>
+            if (n == current) {
+              if (current == 0)
+                Some(value)
+              else
+                Some(right)
             } else {
-              find(a, current) match {
-                case Left(updated) =>
-                  find(b, updated)
-                case Right(value) =>
-                  Right(value)
-              }
+              find(left, current - 1)
             }
-          case _ if current == n =>
-            Right(value)
           case _ =>
-            Left(current + 1)
+            if (n == current)
+              Some(value)
+            else None
         }
 
-      find(value, 0) match {
-        case Left(_)      => throw new IllegalStateException(s"Cannot find value for index $n in dynamic tuple")
-        case Right(value) => value
-      }
+      find(value, arity - 1).toRight(s"Cannot find value for index $n in dynamic tuple")
     }
 
     def schema[T, A]: Schema[TupleAccess[T, A]] =
       Schema.defer(
-        Schema.CaseClass2[Remote[T], Int, TupleAccess[T, A]](
+        Schema.CaseClass3[Remote[T], Int, Int, TupleAccess[T, A]](
           Schema.Field("tuple", Remote.schema[T]),
           Schema.Field("n", Schema[Int]),
-          TupleAccess(_, _),
+          Schema.Field("arity", Schema[Int]),
+          TupleAccess(_, _, _),
           _.tuple,
-          _.n
+          _.n,
+          _.arity
         )
       )
 

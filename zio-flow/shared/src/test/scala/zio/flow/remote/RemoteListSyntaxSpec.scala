@@ -162,6 +162,46 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.nil[String].findLast(_.length === 3) <-> None,
         Remote.list("aa", "bb", "cc").findLast(_.length === 3) <-> None,
         Remote.list("aaa", "b", "ccc", "d").findLast(_.length === 3) <-> Some("ccc")
+      ),
+      remoteTest("flatMap")(
+        Remote.nil[Int].flatMap(_ => Remote.list(1, 2, 3)) <-> List.empty[Int],
+        Remote.list(1, 2, 3).flatMap((n: Remote[Int]) => n :: Remote.list(2, 3)) <-> List(1, 2, 3, 2, 2, 3, 3, 2, 3),
+        Remote.list(1, 2, 3).flatMap(_ => Remote.nil[Int]) <-> List.empty[Int]
+      ),
+      remoteTest("flatten")(
+        Remote.nil[List[Int]].flatten <-> List.empty[Int],
+        Remote.list(Remote.nil[Int], Remote.nil[Int]).flatten <-> List.empty[Int],
+        Remote.list(Remote.list(1, 2), Remote.list(3, 4)).flatten <-> List(1, 2, 3, 4)
+      ),
+      remoteTest("foldLeft")(
+        Remote.list(1.0, 2.0, 3.0).foldLeft(4.0)(_ / _) <-> List(1.0, 2.0, 3.0).foldLeft(4.0)(_ / _),
+        Remote.nil[Double].foldLeft(4.0)(_ / _) <-> 4.0
+      ),
+      remoteTest("foldRight")(
+        Remote.list(1.0, 2.0, 3.0).foldRight(4.0)(_ / _) <-> List(1.0, 2.0, 3.0).foldRight(4.0)(_ / _),
+        Remote.nil[Double].foldRight(4.0)(_ / _) <-> 4.0
+      ),
+      remoteTest("forall")(
+        Remote.nil[Int].forall(_ % 2 === 0) <-> true,
+        Remote.list(1, 2, 3, 4).forall(_ % 2 === 0) <-> false,
+        Remote.list(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
+      ),
+      remoteTest("head")(
+        Remote.nil[Int].head failsWithRemoteError "List is empty",
+        Remote.list(1, 2, 3).head <-> 1
+      ),
+      remoteTest("headOption")(
+        Remote.nil[Int].headOption <-> None,
+        Remote.list(1, 2, 3).headOption <-> Some(1)
+      ),
+      remoteTest("indexOf")(
+        Remote.nil[Int].indexOf(3) <-> -1,
+        Remote.list(1, 2, 4, 5).indexOf(3) <-> -1,
+        Remote.list(1, 2, 3, 4).indexOf(3) <-> 2
+      ),
+      remoteTest("zipWithIndex")(
+        Remote.nil[String].zipWithIndex <-> List.empty[(String, Int)],
+        Remote.list("a", "b", "c").zipWithIndex <-> List("a" -> 0, "b" -> 1, "c" -> 2)
       )
     ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 }

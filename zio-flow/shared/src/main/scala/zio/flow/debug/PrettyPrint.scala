@@ -735,7 +735,7 @@ object PrettyPrint {
         nl(indent + 2)
         prettyPrintRemote(t22, builder, indent + 2)
         builder.append(")")
-      case Remote.TupleAccess(tuple, n) =>
+      case Remote.TupleAccess(tuple, n, _) =>
         prettyPrintRemote(tuple, builder, indent)
         builder.append("(")
         builder.append(n)

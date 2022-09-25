@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow.Remote.TupleAccess
 import zio.{ZIO, ZLayer}
 import zio.flow._
 import zio.flow.remote.numeric._
@@ -184,8 +185,8 @@ object RemoteSpec extends RemoteSpecBase {
             Remote(100),
             Remote.UnboundRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
               Remote.Binary(
-                Remote.TupleAccess(tuple, 0),
-                Remote.TupleAccess(tuple, 1),
+                Remote.TupleAccess(tuple, 0, 2),
+                Remote.TupleAccess(tuple, 1, 2),
                 BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
               )
             )
@@ -206,7 +207,7 @@ object RemoteSpec extends RemoteSpecBase {
             Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
             Remote(TestCaseClass("d", 40)),
             Remote.UnboundRemoteFunction.make((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
-              Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
+              Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1, 2)
             )
           )
           val test =
@@ -268,6 +269,43 @@ object RemoteSpec extends RemoteSpecBase {
             )
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+        }
+      ),
+      suite("TupleAccess")(
+        test("tuple2") {
+          val dyn = Schema.tuple2(Schema[Int], Schema[Int]).toDynamic((1, 2))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 2).toOption.get == Schema[Int].toDynamic(1),
+            TupleAccess.findValueIn(dyn, 1, 2).toOption.get == Schema[Int].toDynamic(2)
+          )
+        },
+        test("tuple3") {
+          val dyn = Schema.tuple3(Schema[Int], Schema[Int], Schema[Int]).toDynamic((1, 2, 3))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 3).toOption.get == Schema[Int].toDynamic(1),
+            TupleAccess.findValueIn(dyn, 1, 3).toOption.get == Schema[Int].toDynamic(2),
+            TupleAccess.findValueIn(dyn, 2, 3).toOption.get == Schema[Int].toDynamic(3)
+          )
+        },
+        test("nested tuple3") {
+          val dyn = Schema
+            .tuple3(
+              Schema.tuple2(Schema[Int], Schema[Int]),
+              Schema.tuple2(Schema[Int], Schema[Int]),
+              Schema.tuple2(Schema[Int], Schema[Int])
+            )
+            .toDynamic(((1, 2), (3, 4), (5, 6)))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((1, 2)),
+            TupleAccess.findValueIn(dyn, 1, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((3, 4)),
+            TupleAccess.findValueIn(dyn, 2, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((5, 6))
+          )
         }
       )
     )

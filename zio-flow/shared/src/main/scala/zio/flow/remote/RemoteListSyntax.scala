@@ -106,7 +106,20 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.toSet.toList
 
   def distinctBy[B](f: Remote[A] => Remote[B]): Remote[List[A]] =
-    self.filterNot(self.map(f).contains(_))
+    self
+      .foldLeft((Remote.nil[A], self.map(f).distinct)) { (tuple, elem) =>
+        val result     = tuple._1
+        val allowed    = tuple._2
+        val mappedElem = f(elem)
+        allowed
+          .contains(mappedElem)
+          .ifThenElse(
+            ifTrue = (elem :: result, allowed.filterNot(_ === mappedElem)),
+            ifFalse = tuple
+          )
+      }
+      ._1
+      .reverse
 
   def drop(n: Remote[Int]): Remote[List[A]] =
     Remote
@@ -602,7 +615,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.isEmpty.ifThenElse(ifTrue = Remote.none, ifFalse = Remote.some(self.reduceRight(op)))
 
   def reverse: Remote[List[A]] =
-    foldLeft(Remote.nil[A])((l, a) => Remote.Cons(l, a))
+    self.foldLeft(Remote.nil[A])((l, a) => Remote.Cons(l, a))
 
   def reverse_:::[B >: A](prefix: Remote[List[B]]): Remote[List[B]] =
     prefix.reverse ::: self

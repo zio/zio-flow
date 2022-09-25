@@ -552,7 +552,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       tuple <- genTuple4
       n     <- Gen.int(0, 3)
-    } yield Remote.TupleAccess[(Any, Any, Any, Any), Any](tuple.asInstanceOf[Remote[(Any, Any, Any, Any)]], n)
+    } yield Remote.TupleAccess[(Any, Any, Any, Any), Any](tuple.asInstanceOf[Remote[(Any, Any, Any, Any)]], n, 4)
 
   lazy val genBranch: Gen[Sized, Remote[Any]] =
     for {
@@ -600,8 +600,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       initial <- Gen.double(-1000.0, 1000.0).map(Remote(_))
       fun = Remote.UnboundRemoteFunction.make((tuple: Remote[(Double, Double)]) =>
               Remote.Binary(
-                Remote.TupleAccess(tuple, 0),
-                Remote.TupleAccess(tuple, 1),
+                Remote.TupleAccess(tuple, 0, 2),
+                Remote.TupleAccess(tuple, 1, 2),
                 BinaryOperators.Numeric(
                   BinaryNumericOperator.Add,
                   Numeric.NumericDouble
