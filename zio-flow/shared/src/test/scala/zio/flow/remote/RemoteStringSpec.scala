@@ -26,7 +26,7 @@ object RemoteStringSpec extends RemoteSpecBase {
       test("charAt") {
         val remoteString = Remote("abcd")
         val remoteInt    = Remote(3)
-        val ch           = remoteString.charAt(remoteInt)
+        val ch           = remoteString.apply(remoteInt)
         ch <-> 'd'
       },
       test("substring") {

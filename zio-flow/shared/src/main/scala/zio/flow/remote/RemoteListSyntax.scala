@@ -134,6 +134,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._2
 
+  def dropRight(n: Remote[Int]): Remote[List[A]] =
+    self.take(self.length - n)
+
   def dropWhile(
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
@@ -205,6 +208,11 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
   def flatten[B](implicit ev: A <:< List[B]): Remote[List[B]] =
     self.flatMap((elem: Remote[A]) => elem.asInstanceOf[Remote[List[B]]])
+
+  def fold[B](initial: Remote[B])(
+    f: (Remote[B], Remote[A]) => Remote[B]
+  ): Remote[B] =
+    foldLeft(initial)(f)
 
   def foldLeft[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]

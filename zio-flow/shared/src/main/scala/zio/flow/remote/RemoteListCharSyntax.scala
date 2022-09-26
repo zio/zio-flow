@@ -21,4 +21,10 @@ import zio.flow._
 final class RemoteListCharSyntax(val self: Remote[List[Char]]) extends AnyVal {
   def mkString: Remote[String] =
     Remote.CharListToString(self)
+
+  def mkString(sep: Remote[String]): Remote[String] =
+    new RemoteListSyntax(self).mkString(sep)
+
+  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String]): Remote[String] =
+    new RemoteListSyntax(self).mkString(start, sep, end)
 }

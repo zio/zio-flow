@@ -254,6 +254,8 @@ trait Syntax {
 
   implicit def RemoteOption[A](remote: Remote[Option[A]]): RemoteOptionSyntax[A] = new RemoteOptionSyntax[A](remote)
 
+  implicit def RemoteChar(remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
+
   implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
 
   implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
