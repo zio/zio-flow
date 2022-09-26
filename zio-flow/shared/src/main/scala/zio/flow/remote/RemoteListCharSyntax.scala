@@ -19,6 +19,6 @@ package zio.flow.remote
 import zio.flow._
 
 final class RemoteListCharSyntax(val self: Remote[List[Char]]) extends AnyVal {
-  def asString: Remote[String] =
-    Remote.ListToString(self)
+  def mkString: Remote[String] =
+    Remote.CharListToString(self)
 }

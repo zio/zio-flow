@@ -2194,58 +2194,58 @@ object Remote {
       Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]])
   }
 
-  case class StringToList(remoteString: Remote[String]) extends Remote[List[Char]] {
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+  case class StringToCharList(remoteString: Remote[String]) extends Remote[List[Char]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       remoteString.eval.map { value =>
         DynamicValue.fromSchemaAndValue(Schema[List[Char]], value.toList)
       }
 
-    protected def substituteRec[B](f: Remote.Substitutions): Remote[List[Char]] =
-      StringToList(remoteString.substitute(f))
+    protected def substituteRec(f: Remote.Substitutions): Remote[List[Char]] =
+      StringToCharList(remoteString.substitute(f))
 
     private[flow] val variableUsage: VariableUsage =
       remoteString.variableUsage
   }
 
-  object StringToList {
-    val schema: Schema[StringToList] = Schema.defer(
+  object StringToCharList {
+    val schema: Schema[StringToCharList] = Schema.defer(
       Remote
         .schema[String]
         .transform(
-          StringToList.apply,
+          StringToCharList.apply,
           _.remoteString
         )
     )
 
-    def schemaCase[A]: Schema.Case[StringToList, Remote[A]] =
-      Schema.Case("StringToList", schema, _.asInstanceOf[StringToList])
+    def schemaCase[A]: Schema.Case[StringToCharList, Remote[A]] =
+      Schema.Case("StringToCharList", schema, _.asInstanceOf[StringToCharList])
   }
 
-  case class ListToString(remoteString: Remote[List[Char]]) extends Remote[String] {
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
+  case class CharListToString(remoteString: Remote[List[Char]]) extends Remote[String] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       remoteString.eval.map { value =>
         DynamicValue.fromSchemaAndValue(Schema[String], value.mkString)
       }
 
-    protected def substituteRec[B](f: Remote.Substitutions): Remote[String] =
-      ListToString(remoteString.substitute(f))
+    protected def substituteRec(f: Remote.Substitutions): Remote[String] =
+      CharListToString(remoteString.substitute(f))
 
     override private[flow] val variableUsage: VariableUsage =
       remoteString.variableUsage
   }
 
-  object ListToString {
-    val schema: Schema[ListToString] = Schema.defer(
+  object CharListToString {
+    val schema: Schema[CharListToString] = Schema.defer(
       Remote
         .schema[List[Char]]
         .transform(
-          ListToString.apply,
+          CharListToString.apply,
           _.remoteString
         )
     )
 
-    def schemaCase[A]: Schema.Case[ListToString, Remote[A]] =
-      Schema.Case("ListToString", schema, _.asInstanceOf[ListToString])
+    def schemaCase[A]: Schema.Case[CharListToString, Remote[A]] =
+      Schema.Case("CharListToString", schema, _.asInstanceOf[CharListToString])
   }
 
   case class Length(remoteString: Remote[String]) extends Remote[Int] {
@@ -2273,75 +2273,6 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Length, Remote[A]] =
       Schema.Case("Length", schema, _.asInstanceOf[Length])
-  }
-
-  case class CharAt(remoteString: Remote[String], ix: Remote[Int]) extends Remote[Option[Char]] {
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
-      for {
-        s <- remoteString.eval
-        i <- ix.eval
-      } yield DynamicValue.fromSchemaAndValue(
-        Schema[Option[Char]],
-        if (i >= 0 && i < s.length) Some(s.charAt(i)) else None
-      )
-
-    protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[Char]] =
-      CharAt(remoteString.substitute(f), ix.substitute(f))
-
-    override private[flow] val variableUsage = remoteString.variableUsage.union(ix.variableUsage)
-  }
-
-  object CharAt {
-    val schema: Schema[CharAt] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[String], Remote[Int], CharAt](
-          Schema.Field("string", Remote.schema[String]),
-          Schema.Field("index", Remote.schema[Int]),
-          { case (str, ix) => CharAt(str, ix) },
-          _.remoteString,
-          _.ix
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[CharAt, Remote[A]] =
-      Schema.Case("CharAt", schema, _.asInstanceOf[CharAt])
-  }
-
-  case class Substring(remoteString: Remote[String], begin: Remote[Int], end: Remote[Int])
-      extends Remote[Option[String]] {
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, String, DynamicValue] =
-      for {
-        s <- remoteString.eval
-        i <- begin.eval
-        j <- end.eval
-      } yield DynamicValue.fromSchemaAndValue(
-        Schema[Option[String]],
-        if (i >= 0 && i <= s.length && i <= j) Some(s.substring(i, j)) else None
-      )
-
-    protected def substituteRec[B](f: Remote.Substitutions): Remote[Option[String]] =
-      Substring(remoteString.substitute(f), begin.substitute(f), end.substitute(f))
-
-    override private[flow] val variableUsage =
-      remoteString.variableUsage.union(begin.variableUsage).union(end.variableUsage)
-  }
-
-  object Substring {
-    val schema: Schema[Substring] =
-      Schema.defer(
-        Schema.CaseClass3[Remote[String], Remote[Int], Remote[Int], Substring](
-          Schema.Field("string", Remote.schema[String]),
-          Schema.Field("begin", Remote.schema[Int]),
-          Schema.Field("end", Remote.schema[Int]),
-          { case (str, begin, end) => Substring(str, begin, end) },
-          _.remoteString,
-          _.begin,
-          _.end
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[Substring, Remote[A]] =
-      Schema.Case("Substring", schema, _.asInstanceOf[Substring])
   }
 
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A], schema: Schema[A]) extends Remote[Boolean] {
@@ -4032,11 +3963,9 @@ object Remote {
       .:+:(Tuple22.schemaCase[A])
       .:+:(TupleAccess.schemaCase[A])
       .:+:(Branch.schemaCase[A])
-      .:+:(StringToList.schemaCase[A])
-      .:+:(ListToString.schemaCase[A])
+      .:+:(StringToCharList.schemaCase[A])
+      .:+:(CharListToString.schemaCase[A])
       .:+:(Length.schemaCase[A])
-      .:+:(CharAt.schemaCase[A])
-      .:+:(Substring.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])

@@ -8,9 +8,9 @@ import zio.test.{Spec, TestEnvironment}
 object RemoteStringSpec extends RemoteSpecBase {
   val suite: Spec[TestEnvironment, Nothing] =
     suite("RemoteStringSpec")(
-      test("asString") {
+      test("mkString") {
         val remoteString = Remote(List('a', 'b', 'c'))
-        val lst          = remoteString.asString.toList.asString
+        val lst          = remoteString.mkString.toList.mkString
         lst <-> "abc"
       },
       test("toList") {
@@ -27,24 +27,19 @@ object RemoteStringSpec extends RemoteSpecBase {
         val remoteString = Remote("abcd")
         val remoteInt    = Remote(3)
         val ch           = remoteString.charAt(remoteInt)
-        ch <-> Some('d')
+        ch <-> 'd'
       },
       test("substring") {
         val remoteString = Remote("abcdefghcdxyz")
         val remoteBegin  = Remote(3)
         val remoteEnd    = Remote(7)
         val ss           = remoteString.substring(remoteBegin, remoteEnd)
-        ss <-> Some("defg")
+        ss <-> "defg"
       },
       test("isEmpty") {
         val remoteString = Remote("abcdefghcdxyz")
         val ie           = remoteString.isEmpty
         ie <-> false
-      },
-      test("each") {
-        val remoteString = Remote("abc")
-        val h            = remoteString.each(_ => "abc")
-        h <-> "abcabcabc"
       },
       // java.lang.IllegalStateException: Cannot find schema for index 1 in tuple schema
       // test("Zip") {
