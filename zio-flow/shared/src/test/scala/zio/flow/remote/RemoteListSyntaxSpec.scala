@@ -403,16 +403,151 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.nil[Int].reverse_:::(Remote.list(1, 2, 3, 4)) <-> List(4, 3, 2, 1),
         Remote.nil[Int].reverse_:::(Remote.nil[Int]) <-> List.empty
       ),
-      remoteTest("zipWithIndex")(
-        Remote.nil[String].zipWithIndex <-> List.empty[(String, Int)],
-        Remote.list("a", "b", "c").zipWithIndex <-> List("a" -> 0, "b" -> 1, "c" -> 2)
-      ),
       remoteTest("sameElements")(
         Remote.nil[Int].sameElements(Remote.nil[Int]) <-> true,
         Remote.nil[Int].sameElements(Remote.list(1, 2, 3)) <-> false,
         Remote.list(1, 2, 3, 4).sameElements(Remote.list(1, 2, 3)) <-> false,
         Remote.list(1, 2).sameElements(Remote.list(1, 2, 3)) <-> false,
         Remote.list(1, 2, 3).sameElements(Remote.list(1, 2, 3)) <-> true
+      ),
+      remoteTest("scan")(
+        Remote.nil[Int].scan(100)(_ / _) <-> List(100),
+        Remote.list(1, 2, 3).scan(100)(_ / _) <-> List(100, 100, 50, 16)
+      ),
+      remoteTest("scanLeft")(
+        Remote.nil[Int].scan(100)(_ / _) <-> List(100),
+        Remote.list(1, 2, 3).scan(100)(_ / _) <-> List(100, 100, 50, 16)
+      ),
+      remoteTest("scanRight")(
+        Remote.nil[Int].scanRight(100)(_ / _) <-> List(100),
+        Remote.list(1.0, 2.0, 3.0).scanRight(100.0)(_ / _) <-> List(0.015, 66.66666666666667, 0.03, 100.0)
+      ),
+      remoteTest("segmentLength")(
+        Remote.nil[Int].segmentLength(_ === 0) <-> 0,
+        Remote.list(1, 2, 3, 0, 0).segmentLength(_ === 0) <-> 0,
+        Remote.list(0, 0, 1, 2, 3).segmentLength(_ === 0) <-> 2,
+        Remote.list(0, 0, 1, 2, 3, 0, 0, 0).segmentLength(_ === 0, 3) <-> 0,
+        Remote.list(0, 0, 1, 2, 3, 0, 0, 0).segmentLength(_ === 0, 5) <-> 3
+      ),
+      remoteTest("size")(
+        Remote.nil[Int].length <-> 0,
+        Remote.list(1, 2, 3).length <-> 3
+      ),
+      remoteTest("slice")(
+        Remote.nil[Int].slice(2, 3) <-> List.empty[Int],
+        Remote.list(1, 2, 3, 4, 5, 6).slice(2, 3) <-> List(3),
+        Remote.list(1, 2, 3, 4, 5, 6).slice(2, 4) <-> List(3, 4)
+      ),
+      remoteTest("sliding")(
+        Remote.nil[Int].sliding(1, 1) <-> List.empty[List[Int]],
+        Remote.list(0, 1, 2, 3, 3, 2, 3, 3, 3, 4, 5).sliding(1, 1) <-> List(
+          List(0),
+          List(1),
+          List(2),
+          List(3),
+          List(3),
+          List(2),
+          List(3),
+          List(3),
+          List(3),
+          List(4),
+          List(5)
+        ),
+        Remote.list(0, 1, 2, 3, 3, 2, 3, 3, 3, 4, 5).sliding(1, 2) <-> List(
+          List(0),
+          List(2),
+          List(3),
+          List(3),
+          List(3),
+          List(5)
+        ),
+        Remote.list(0, 1, 2, 3, 3, 2, 3, 3, 3, 4, 5).sliding(3, 1) <-> List(
+          List(0, 1, 2),
+          List(1, 2, 3),
+          List(2, 3, 3),
+          List(3, 3, 2),
+          List(3, 2, 3),
+          List(2, 3, 3),
+          List(3, 3, 3),
+          List(3, 3, 4),
+          List(3, 4, 5)
+        )
+      ),
+      remoteTest("span")(
+        Remote.nil[Int].span(_ < 3) <-> (List.empty[Int], List.empty[Int]),
+        Remote.list(1, 2, 3, 4, 5).span(_ < 3) <-> (List(1, 2), List(3, 4, 5))
+      ),
+      remoteTest("splitAt")(
+        Remote.nil[Int].splitAt(3) <-> (List.empty[Int], List.empty[Int]),
+        Remote.list(1, 2, 3, 4, 5).splitAt(3) <-> (List(1, 2, 3), List(4, 5)),
+        Remote.list(1, 2, 3, 4, 5).splitAt(0) <-> (List.empty, List(1, 2, 3, 4, 5)),
+        Remote.list(1, 2, 3, 4, 5).splitAt(6) <-> (List(1, 2, 3, 4, 5), List.empty)
+      ),
+      remoteTest("startsWith")(
+        Remote.nil[Int].startsWith(Remote.list(1, 2)) <-> false,
+        Remote.list(1, 2, 3).startsWith(Remote.list(1, 2)) <-> true,
+        Remote.list(0, 0, 1, 2).startsWith(Remote.list(1, 2)) <-> false
+      ),
+      remoteTest("sum")(
+        Remote.nil[Int].sum <-> 0,
+        Remote.list(1, 2, 3, 4).sum <-> (1 + 2 + 3 + 4)
+      ),
+      remoteTest("tail")(
+        Remote.nil[Int].tail failsWithRemoteError "List is empty",
+        Remote.list(1).tail <-> List.empty[Int],
+        Remote.list(1, 2, 3).tail <-> List(2, 3)
+      ),
+      remoteTest("tails")(
+        Remote.nil[Int].tails <-> List(List.empty[Int]),
+        Remote.list(1, 2, 3).tails <-> List(List(1, 2, 3), List(2, 3), List(3), List())
+      ),
+      remoteTest("take")(
+        Remote.nil[Int].take(2) <-> List.empty[Int],
+        Remote.list(1, 2, 3, 4).take(2) <-> List(1, 2)
+      ),
+      remoteTest("takeRight")(
+        Remote.nil[Int].takeRight(2) <-> List.empty[Int],
+        Remote.list(1, 2, 3, 4).takeRight(2) <-> List(3, 4)
+      ),
+      remoteTest("takeWhile")(
+        Remote.nil[Int].takeWhile(_ < 3) <-> List.empty[Int],
+        Remote.list(1, 2, 3, 4).takeWhile(_ < 3) <-> List(1, 2)
+      ),
+      remoteTest("toList")(
+        Remote.list(1, 2, 3).toList <-> List(1, 2, 3)
+      ),
+      remoteTest("toSet")(
+        Remote.list(1, 2, 3, 3, 2, 1).toSet <-> Set(1, 2, 3)
+      ),
+      remoteTest("unzip")(
+        Remote.nil[(Int, String)].unzip <-> (List.empty[Int], List.empty[String]),
+        Remote.list((1, "x"), (2, "y"), (3, "z")).unzip <-> (List(1, 2, 3), List("x", "y", "z"))
+      ),
+      remoteTest("unzip3")(
+        Remote.nil[(Int, String, Double)].unzip3 <-> (List.empty[Int], List.empty[String], List.empty[Double]),
+        Remote
+          .list((1, "x", 0.1), (2, "y", 0.2), (3, "z", 0.3))
+          .unzip3 <-> (List(1, 2, 3), List("x", "y", "z"), List(0.1, 0.2, 0.3))
+      ),
+      remoteTest("zip")(
+        Remote.nil[Int].zip(Remote.nil[String]) <-> List.empty[(Int, String)],
+        Remote.nil[Int].zip(Remote.list("x", "y")) <-> List.empty[(Int, String)],
+        Remote.list(1, 2).zip(Remote.nil[String]) <-> List.empty[(Int, String)],
+        Remote.list(1, 2).zip(Remote.list("x", "y")) <-> List((1, "x"), (2, "y")),
+        Remote.list(1, 2, 3).zip(Remote.list("x", "y")) <-> List((1, "x"), (2, "y")),
+        Remote.list(1, 2).zip(Remote.list("x", "y", "z")) <-> List((1, "x"), (2, "y"))
+      ),
+      remoteTest("zipAll")(
+        Remote.nil[Int].zipAll(Remote.nil[String], -1, "-") <-> List.empty[(Int, String)],
+        Remote.nil[Int].zipAll(Remote.list("x", "y"), -1, "-") <-> List((-1, "x"), (-1, "y")),
+        Remote.list(1, 2).zipAll(Remote.nil[String], -1, "-") <-> List((1, "-"), (2, "-")),
+        Remote.list(1, 2).zipAll(Remote.list("x", "y"), -1, "-") <-> List((1, "x"), (2, "y")),
+        Remote.list(1, 2, 3).zipAll(Remote.list("x", "y"), -1, "-") <-> List((1, "x"), (2, "y"), (3, "-")),
+        Remote.list(1, 2).zipAll(Remote.list("x", "y", "z"), -1, "-") <-> List((1, "x"), (2, "y"), (-1, "z"))
+      ),
+      remoteTest("zipWithIndex")(
+        Remote.nil[String].zipWithIndex <-> List.empty[(String, Int)],
+        Remote.list("a", "b", "c").zipWithIndex <-> List("a" -> 0, "b" -> 1, "c" -> 2)
       ),
       remoteTest("List.fill")(
         List.fill(Remote(3))(Remote(1)) <-> List(1, 1, 1)

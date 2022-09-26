@@ -663,6 +663,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         (agg2, agg2 :: lst)
       }
       ._2
+      .reverse
 
   def scanRight[B >: A](z: Remote[B])(op: (Remote[A], Remote[B]) => Remote[B]): Remote[List[B]] =
     self
@@ -698,7 +699,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
 
           p(head).ifThenElse(
             ifTrue = rec((currentMax, currentLen + 1, tail)),
-            ifFalse = rec((math.max(currentMax, currentLen + 1), Remote(-1), tail))
+            ifFalse = math.max(currentMax, currentLen + 1)
           )
         }
     }
@@ -710,17 +711,19 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self.drop(from).take(until - from)
 
   def sliding(size: Remote[Int], step: Remote[Int]): Remote[List[List[A]]] =
-    Remote
-      .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
-        val next  = remaining.drop(step)
-        val slice = remaining.take(size)
+    self.nonEmpty.ifThenElse(
+      ifTrue = Remote
+        .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
+          val next  = remaining.drop(step)
+          val slice = remaining.take(size)
 
-        next.isEmpty.ifThenElse(
-          ifTrue = Remote.list(slice),
-          ifFalse = slice :: rec(next)
-        )
-      }
-      .reverse
+          (next.length < size).ifThenElse(
+            ifTrue = Remote.list(slice),
+            ifFalse = slice :: rec(next)
+          )
+        },
+      ifFalse = Remote.nil[List[A]]
+    )
 
   def sliding(size: Remote[Int]): Remote[List[List[A]]] =
     self.sliding(size, 1)
@@ -752,9 +755,12 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def tails: Remote[List[List[A]]] =
     Remote
       .recurse[List[A], List[List[A]]](self) { (input, rec) =>
-        input :: rec(self.tail)
+        Remote
+          .UnCons(input)
+          .fold(
+            input :: Remote.nil[List[A]]
+          )(tuple => input :: rec(tuple._2))
       }
-      .reverse
 
   def take(n: Remote[Int]): Remote[List[A]] =
     Remote
@@ -773,7 +779,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
 
   def takeRight(n: Remote[Int]): Remote[List[A]] =
-    self.reverse.take(n)
+    self.reverse.take(n).reverse
 
   def takeWhile(p: Remote[A] => Remote[Boolean]): Remote[List[A]] =
     Remote
@@ -800,7 +806,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         .fold(
           (Remote.nil[A1], Remote.nil[A2])
         ) { tuple =>
-          val head         = tuple._1.asInstanceOf[Remote.Tuple2[A1, A2]]
+          val head         = tuple._1.asInstanceOf[Remote[(A1, A2)]]
           val tail         = tuple._2
           val unzippedTail = rec(tail)
 
@@ -815,7 +821,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         .fold(
           (Remote.nil[A1], Remote.nil[A2], Remote.nil[A3])
         ) { tuple =>
-          val head         = tuple._1.asInstanceOf[Remote.Tuple3[A1, A2, A3]]
+          val head         = tuple._1.asInstanceOf[Remote[(A1, A2, A3)]]
           val tail         = tuple._2
           val unzippedTail = rec(tail)
 
