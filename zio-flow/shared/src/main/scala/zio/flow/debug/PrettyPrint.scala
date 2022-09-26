@@ -740,8 +740,31 @@ object PrettyPrint {
         builder.append("(")
         builder.append(n)
         builder.append(")")
-      case Remote.Branch(_, _, _) => ???
-      case Remote.Length(_)       => ???
+      case Remote.Branch(p, t, f) =>
+        builder.append("if(")
+        prettyPrintRemote(p, builder, indent)
+        builder.append(")")
+        prettyPrintRemote(t, builder, indent)
+        builder.append(" else ")
+        prettyPrintRemote(f, builder, indent)
+      case Remote.StringToList(x) =>
+        prettyPrintRemote(x, builder, indent)
+      case Remote.ListToString(x) =>
+        prettyPrintRemote(x, builder, indent)
+      case Remote.Length(l) =>
+        prettyPrintRemote(l, builder, indent)
+      case Remote.CharAt(c, i) =>
+        prettyPrintRemote(c, builder, indent)
+        builder.append("[")
+        prettyPrintRemote(i, builder, indent)
+        builder.append("]")
+      case Remote.Substring(s, b, e) =>
+        prettyPrintRemote(s, builder, indent)
+        builder.append("[")
+        prettyPrintRemote(b, builder, indent)
+        builder.append("-")
+        prettyPrintRemote(e, builder, indent)
+        builder.append("]")
       case Remote.LessThanEqual(left, right, _) =>
         prettyPrintRemote(left, builder, indent)
         builder.append("<=")

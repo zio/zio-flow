@@ -250,6 +250,8 @@ trait Syntax {
 
   implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] = new RemoteSetSyntax[A](remote)
 
+  implicit def RemoteListChar(remote: Remote[List[Char]]): RemoteListCharSyntax = new RemoteListCharSyntax(remote)
+
   implicit def RemoteOption[A](remote: Remote[Option[A]]): RemoteOptionSyntax[A] = new RemoteOptionSyntax[A](remote)
 
   implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)

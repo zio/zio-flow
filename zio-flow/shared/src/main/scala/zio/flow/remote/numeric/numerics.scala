@@ -174,6 +174,12 @@ object Numeric extends NumericImplicits0 {
     _.asInstanceOf[NumericShort.type]
   )
 
+  private val charCase: Schema.Case[NumericChar.type, Numeric[Any]] = Schema.Case[NumericChar.type, Numeric[Any]](
+    "NumericChar",
+    Schema.singleton[NumericChar.type](NumericChar),
+    _.asInstanceOf[NumericChar.type]
+  )
+
   private val longCase: Schema.Case[NumericLong.type, Numeric[Any]] = Schema.Case[NumericLong.type, Numeric[Any]](
     "NumericLong",
     Schema.singleton[NumericLong.type](NumericLong),
@@ -221,6 +227,7 @@ object Numeric extends NumericImplicits0 {
           CaseSet.Empty[Numeric[Any]]()
         )
         .:+:(longCase)
+        .:+:(charCase)
         .:+:(bigIntCase)
         .:+:(floatCase)
         .:+:(doubleCase)
@@ -383,6 +390,41 @@ sealed trait NumericImplicits0 {
     override def decExact(value: Long): Long = math.decrementExact(value)
   }
   implicit case object NumericLong extends NumericLong
+
+  trait NumericChar extends Numeric[Char] {
+    override def fromLong(l: Long): Remote[Char] = Remote(l.toChar)
+
+    override def add(left: Char, right: Char): Char = (left + right).toChar
+
+    override def multiply(left: Char, right: Char): Char = (left * right).toChar
+
+    override def divide(left: Char, right: Char): Char = (left / right).toChar
+
+    override def mod(left: Char, right: Char): Char = (left % right).toChar
+
+    override def pow(left: Char, right: Char): Char = (left ^ right).toChar
+
+    override def root(left: Char, right: Char): Char = (left ^ 1 / right).toChar
+
+    override def negate(left: Char): Char = (-1 * left).toChar
+
+    override def log(left: Char, right: Char): Char = (Math.log(left.toDouble) / Math.log(right.toDouble)).toChar
+
+    def schema: Schema[Char] = implicitly[Schema[Char]]
+
+    override def abs(left: Char): Char = Math.abs(left.toInt).toChar
+
+    override def min(left: Char, right: Char): Char = Math.min(left.toInt, right.toInt).toChar
+
+    override def max(left: Char, right: Char): Char = Math.max(left.toInt, right.toInt).toChar
+
+    override def floor(left: Char): Char = left
+
+    override def ceil(left: Char): Char = left
+
+    override def round(left: Char): Char = left
+  }
+  implicit case object NumericChar extends NumericChar
 
   trait NumericBigInt extends Numeric[BigInt] with Integral[BigInt] {
     override val schema: Schema[BigInt] = implicitly[Schema[BigInt]]
