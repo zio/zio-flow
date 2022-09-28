@@ -123,6 +123,85 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("flatMap")(
         Remote("").flatMap((ch: Remote[Char]) => ch.toString * 2) <-> "",
         Remote("hello").flatMap((ch: Remote[Char]) => ch.toString * 2) <-> "hheelllloo"
+      ),
+      remoteTest("fold")(
+        Remote("").fold('5')((a: Remote[Char], b: Remote[Char]) => (b.isDigit.ifThenElse(b, a))) <-> '5',
+        Remote("hell0 world").fold('5')((a: Remote[Char], b: Remote[Char]) => (b.isDigit.ifThenElse(b, a))) <-> '0'
+      ),
+      remoteTest("foldLeft")(
+        Remote("").foldLeft('5')((a: Remote[Char], b: Remote[Char]) => (b.isDigit.ifThenElse(b, a))) <-> '5',
+        Remote("hell0 world").foldLeft('5')((a: Remote[Char], b: Remote[Char]) => (b.isDigit.ifThenElse(b, a))) <-> '0'
+      ),
+      remoteTest("foldRight")(
+        Remote("").foldRight('5')((a: Remote[Char], b: Remote[Char]) => (a.isDigit.ifThenElse(a, b))) <-> '5',
+        Remote("hell0 world").foldRight('5')((a: Remote[Char], b: Remote[Char]) => (a.isDigit.ifThenElse(a, b))) <-> '0'
+      ),
+      remoteTest("forall")(
+        Remote("").forall(_.isDigit) <-> true,
+        Remote("hell0").forall(_.isDigit) <-> false,
+        Remote("1234").forall(_.isDigit) <-> true
+      ),
+      remoteTest("grouped")(
+        Remote("").grouped(2) <-> List.empty[String],
+        Remote("hello").grouped(3) <-> List("hel", "lo")
+      ),
+      remoteTest("head")(
+        Remote("").head failsWithRemoteError "List is empty",
+        Remote("hello").head <-> 'h'
+      ),
+      remoteTest("headOption")(
+        Remote("").headOption <-> None,
+        Remote("hello").headOption <-> Some('h')
+      ),
+      remoteTest("indexOf(char)")(
+        Remote("").indexOf('w') <-> -1,
+        Remote("hello").indexOf('w') <-> -1,
+        Remote("hello world").indexOf('w') <-> 6,
+        Remote("").indexOf('w', 2) <-> -1,
+        Remote("hello, 2").indexOf('w') <-> -1,
+        Remote("hello world").indexOf('w', 2) <-> 6,
+        Remote("hello world").indexOf('w', 8) <-> -1
+      ),
+      remoteTest("indexOf(string)")(
+        Remote("").indexOf("wo") <-> -1,
+        Remote("hello").indexOf("wo") <-> -1,
+        Remote("hello world").indexOf("wo") <-> 6,
+        Remote("").indexOf("wo", 2) <-> -1,
+        Remote("hello, 2").indexOf("wo") <-> -1,
+        Remote("hello world").indexOf("wo", 2) <-> 6,
+        Remote("hello world").indexOf("wo", 8) <-> -1
+      ),
+      remoteTest("indexWhere")(
+        Remote("").indexWhere(_ === 'w') <-> -1,
+        Remote("hello").indexWhere(_ === 'w') <-> -1,
+        Remote("hello world").indexWhere(_ === 'w') <-> 6,
+        Remote("").indexWhere(_ === 'w', 2) <-> -1,
+        Remote("hello, 2").indexWhere(_ === 'w') <-> -1,
+        Remote("hello world").indexWhere(_ === 'w', 2) <-> 6,
+        Remote("hello world").indexWhere(_ === 'w', 8) <-> -1
+      ),
+      remoteTest("init")(
+        Remote("").init failsWithRemoteError "List is empty",
+        Remote("hello").init <-> "hell"
+      ),
+      remoteTest("inits")(
+        Remote("").inits <-> List[String],
+        Remote("hello").inits <-> List("hello", "hell", "hel", "he", "h", "")
+      ),
+      remoteTest("intersect")(
+        Remote("hello").intersect("lol") <-> "llo"
+      ),
+      remoteTest("isEmpty")(
+        Remote("").isEmpty <-> true,
+        Remote("x").isEmpty <-> false
+      ),
+      remoteTest("knownSize")(
+        Remote("").knownSize <-> 0,
+        Remote("abc").knownSize <-> 3
+      ),
+      remoteTest("last")(
+        Remote("").last failsWithRemoteError "List is empty",
+        Remote("hello").last <-> 'o'
       )
     ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 

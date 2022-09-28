@@ -128,7 +128,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   // TODO: groupBy if we have support for Remote[Map[K, V]]
 
   def grouped(n: Remote[Int]): Remote[List[String]] =
-    ???
+    Remote.fail(s"not implemented: ${n}") // TODO
 
   def head: Remote[Char] =
     self.toList.head
