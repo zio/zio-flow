@@ -19,10 +19,11 @@ package zio.flow.remote
 import zio.flow.remote.numeric.{
   FractionalPredicateOperator,
   NumericPredicateOperator,
-  UnaryIntegralOperator,
   UnaryFractionalOperator,
+  UnaryIntegralOperator,
   UnaryNumericOperator
 }
+import zio.flow.remote.text.CharPredicateOperator
 import zio.schema.{CaseSet, Schema}
 
 sealed trait UnaryOperators[In, Out] {
@@ -56,6 +57,9 @@ object UnaryOperators {
     numeric: zio.flow.remote.numeric.Fractional[A]
   ): FractionalPredicate[A] =
     FractionalPredicate(operator, numeric)
+
+  def apply(operator: CharPredicateOperator): CharPredicate =
+    CharPredicate(operator)
 
   final case class Numeric[A](operator: UnaryNumericOperator, numeric: zio.flow.remote.numeric.Numeric[A])
       extends UnaryOperators[A, A] {
@@ -96,6 +100,14 @@ object UnaryOperators {
 
     override def apply(value: A): Boolean =
       fractional.predicate(operator, value)
+  }
+
+  final case class CharPredicate(operator: CharPredicateOperator) extends UnaryOperators[Char, Boolean] {
+    override val inputSchema: Schema[Char]     = Schema[Char]
+    override val outputSchema: Schema[Boolean] = Schema[Boolean]
+
+    override def apply(value: Char): Boolean =
+      CharPredicateOperator.evaluate(value, operator)
   }
 
   final case class Conversion[In, Out](
@@ -172,6 +184,17 @@ object UnaryOperators {
       _.asInstanceOf[FractionalPredicate[Any]]
     )
 
+  private val charPredicateCase: Schema.Case[CharPredicate, UnaryOperators[Any, Any]] =
+    Schema.Case(
+      "CharPredicate",
+      Schema.CaseClass1(
+        Schema.Field("operator", Schema[CharPredicateOperator]),
+        (op: CharPredicateOperator) => CharPredicate(op),
+        _.operator
+      ),
+      _.asInstanceOf[CharPredicate]
+    )
+
   private val conversionCase: Schema.Case[Conversion[Any, Any], UnaryOperators[Any, Any]] =
     Schema.Case(
       "Conversion",
@@ -195,6 +218,7 @@ object UnaryOperators {
         .:+:(fractionalCase)
         .:+:(numericPredicateCase)
         .:+:(fractionalPredicateCase)
+        .:+:(charPredicateCase)
         .:+:(conversionCase)
     )
 }

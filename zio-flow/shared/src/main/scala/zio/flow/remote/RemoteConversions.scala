@@ -17,6 +17,7 @@
 package zio.flow.remote
 
 import zio.flow.remote.numeric._
+import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, Schema}
 
@@ -98,6 +99,23 @@ object RemoteConversions {
     override def apply(value: A): Int =
       fractional.getExponent(value)
   }
+
+  final case class CharToCode(operator: CharToCodeConversion) extends RemoteConversions[Char, Int] {
+    override val inputSchema: Schema[Char] = Schema[Char]
+    override val outputSchema: Schema[Int] = Schema[Int]
+
+    override def apply(value: Char): Int =
+      CharToCodeConversion.evaluate(value, operator)
+  }
+
+  final case class CharToChar(operator: CharConversion) extends RemoteConversions[Char, Char] {
+    override val inputSchema: Schema[Char]  = Schema[Char]
+    override val outputSchema: Schema[Char] = Schema[Char]
+
+    override def apply(value: Char): Char =
+      CharConversion.evaluate(value, operator)
+  }
+
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
     Schema.Case(
       "NumericToInt",
@@ -208,6 +226,28 @@ object RemoteConversions {
       _.asInstanceOf[FractionalGetExponent[Any]]
     )
 
+  private val charToCodeCase: Schema.Case[CharToCode, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "CharToCode",
+      Schema.CaseClass1(
+        Schema.Field("operator", CharToCodeConversion.schema),
+        CharToCode.apply,
+        _.operator
+      ),
+      _.asInstanceOf[CharToCode]
+    )
+
+  private val charToCharCase: Schema.Case[CharToChar, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "CharToChar",
+      Schema.CaseClass1(
+        Schema.Field("operator", CharConversion.schema),
+        CharToChar.apply,
+        _.operator
+      ),
+      _.asInstanceOf[CharToChar]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -226,5 +266,7 @@ object RemoteConversions {
         .:+:(numericToOctalStringCase)
         .:+:(toStringCase)
         .:+:(fractionalGetExponentCase)
+        .:+:(charToCodeCase)
+        .:+:(charToCharCase)
     )
 }

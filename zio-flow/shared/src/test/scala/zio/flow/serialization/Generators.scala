@@ -53,6 +53,7 @@ import zio.{Duration, ZNothing, flow}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
+import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, UnaryOperators}
 
 trait Generators extends DefaultJavaTimeSchemas {
@@ -362,6 +363,22 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(BinaryFractionalOperator.NextAfter)
     )
 
+  lazy val genCharToCodeConversion: Gen[Any, CharToCodeConversion] =
+    Gen.oneOf(
+      Gen.const(CharToCodeConversion.GetType),
+      Gen.const(CharToCodeConversion.AsDigit),
+      Gen.const(CharToCodeConversion.GetNumericValue),
+      Gen.const(CharToCodeConversion.GetDirectionality)
+    )
+
+  lazy val genCharConversion: Gen[Any, CharConversion] =
+    Gen.oneOf(
+      Gen.const(CharConversion.ToUpper),
+      Gen.const(CharConversion.ToLower),
+      Gen.const(CharConversion.ToTitleCase),
+      Gen.const(CharConversion.ReverseBytes)
+    )
+
   lazy val genRemoteConversions: Gen[Sized, (RemoteConversions[Any, Any], Gen[Sized, Remote[Any]])] =
     Gen.oneOf(
       for {
@@ -403,7 +420,19 @@ trait Generators extends DefaultJavaTimeSchemas {
       for {
         pair             <- genFractional
         (fractional, gen) = pair
-      } yield (RemoteConversions.FractionalGetExponent(fractional).asInstanceOf[RemoteConversions[Any, Any]], gen)
+      } yield (RemoteConversions.FractionalGetExponent(fractional).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        op <- genCharToCodeConversion
+      } yield (
+        RemoteConversions.CharToCode(op).asInstanceOf[RemoteConversions[Any, Any]],
+        Gen.char.map(Remote.apply[Char])
+      ),
+      for {
+        op <- genCharConversion
+      } yield (
+        RemoteConversions.CharToChar(op).asInstanceOf[RemoteConversions[Any, Any]],
+        Gen.char.map(Remote.apply[Char])
+      )
     )
 
   lazy val genUnaryOperators: Gen[Sized, (UnaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =
@@ -553,6 +582,16 @@ trait Generators extends DefaultJavaTimeSchemas {
       tuple <- genTuple4
       n     <- Gen.int(0, 3)
     } yield Remote.TupleAccess[(Any, Any, Any, Any), Any](tuple.asInstanceOf[Remote[(Any, Any, Any, Any)]], n, 4)
+
+  lazy val genStringToCharList: Gen[Sized, Remote[Any]] =
+    for {
+      s <- Gen.string.map(Remote(_))
+    } yield Remote.StringToCharList(s)
+
+  lazy val genCharListToString: Gen[Sized, Remote[Any]] =
+    for {
+      s <- Gen.string.map(_.toList).map(Remote(_))
+    } yield Remote.CharListToString(s)
 
   lazy val genBranch: Gen[Sized, Remote[Any]] =
     for {

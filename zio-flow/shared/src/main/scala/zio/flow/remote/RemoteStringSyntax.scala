@@ -66,7 +66,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     apply(index)
 
   def combinations(n: Remote[Int]): Remote[List[String]] =
-    ???
+    Remote.fail(s"not implemented: ${n}") // TODO
 
   def concat(suffix: Remote[String]): Remote[String] =
     self :++ suffix
@@ -83,7 +83,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def distinct: Remote[String] =
     self.toList.distinct.mkString
 
-  def distinctBy(f: Remote[Char] => Remote[Boolean]): Remote[String] =
+  def distinctBy[B](f: Remote[Char] => Remote[B]): Remote[String] =
     self.toList.distinctBy(f).mkString
 
   def drop(n: Remote[Int]): Remote[String] =
@@ -96,7 +96,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     self.toList.dropWhile(predicate).mkString
 
   def endsWith(suffix: Remote[String]): Remote[Boolean] =
-    ???
+    self.toList.endsWith(suffix.toList)
 
   def exists(p: Remote[Char] => Remote[Boolean]): Remote[Boolean] =
     self.toList.exists(p)
@@ -136,17 +136,17 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def headOption: Remote[Option[Char]] =
     self.toList.headOption
 
-  def indexOf(ch: Remote[Char]): Remote[Int] =
-    self.toList.indexOf(ch)
+  def indexOf[X](value: Remote[X])(implicit ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+    ev.fold(
+      ch => self.toList.indexOf(ch),
+      s => self.toList.indexOfSlice(s.toList)
+    )(value)
 
-  def indexOf(ch: Remote[Char], from: Remote[Int]): Remote[Int] =
-    self.toList.indexOf(ch, from)
-
-  def indexOf(s: Remote[String]): Remote[Int] =
-    self.toList.indexOfSlice(s.toList)
-
-  def indexOf(s: Remote[String], from: Remote[Int]): Remote[Int] =
-    self.toList.indexOfSlice(s.toList, from)
+  def indexOf[X](value: Remote[X], from: Remote[Int])(implicit ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+    ev.fold(
+      ch => self.toList.indexOf(ch, from),
+      s => self.toList.indexOfSlice(s.toList, from)
+    )(value)
 
   def indexWhere(p: Remote[Char] => Remote[Boolean], from: Remote[Int] = Remote(0)): Remote[Int] =
     self.toList.indexWhere(p, from)
@@ -168,17 +168,17 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def last: Remote[Char] =
     self.toList.last
 
-  def lastIndexOf(ch: Remote[Char]): Remote[Int] =
-    self.toList.lastIndexOf(ch)
+  def lastIndexOf[X](value: Remote[X])(ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+    ev.fold(
+      ch => self.toList.lastIndexOf(ch),
+      s => self.toList.lastIndexOfSlice(s.toList)
+    )(value)
 
-  def lastIndexOf(ch: Remote[Char], from: Remote[Int]): Remote[Int] =
-    self.toList.lastIndexOf(ch, from)
-
-  def lastIndexOf(s: Remote[String]): Remote[Int] =
-    self.toList.lastIndexOfSlice(s.toList)
-
-  def lastIndexOf(s: Remote[String], from: Remote[Int]): Remote[Int] =
-    self.toList.lastIndexOfSlice(s.toList, from)
+  def lastIndexOf[X](value: Remote[X], from: Remote[Int])(ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+    ev.fold(
+      ch => self.toList.lastIndexOf(ch, from),
+      s => self.toList.lastIndexOfSlice(s.toList, from)
+    )(value)
 
   def lastIndexWhere(p: Remote[Char] => Remote[Boolean], from: Remote[Int] = Remote(0)): Remote[Int] =
     self.toList.lastIndexWhere(p, from)
@@ -257,10 +257,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     (tuple._1.mkString, tuple._2.mkString)
   }
 
-  def split(separators: Remote[List[Char]]): Remote[List[String]] =
-    ???
-
-  def split(separator: Remote[Char]): Remote[List[String]] =
+  def split[X](separators: Remote[X])(ev: RemoteTypeEither[X, Char, List[Char]]): Remote[List[String]] =
     ???
 
   def splitAt(n: Remote[Int]): (Remote[String], Remote[String]) = {
@@ -282,6 +279,9 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
 
   def stripSuffix(suffix: Remote[String]): Remote[String] =
     ???
+
+  def substring(begin: Remote[Int]): Remote[String] =
+    self.toList.drop(begin).mkString
 
   def substring(begin: Remote[Int], end: Remote[Int]): Remote[String] =
     self.toList.slice(begin, end).mkString

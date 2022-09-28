@@ -129,7 +129,9 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("recurseWith")(roundtripCheck(codec, genRecurseWith)),
       test("listToSet")(roundtripCheck(codec, genListToSet)),
       test("setToList")(roundtripCheck(codec, genSetToList)),
-      test("listToString")(roundtripCheck(codec, genListToString))
+      test("listToString")(roundtripCheck(codec, genListToString)),
+      test("stringToCharList")(roundtripCheck(codec, genStringToCharList)),
+      test("charListToString")(roundtripCheck(codec, genCharListToString))
     )
 
   private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =
