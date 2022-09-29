@@ -16,10 +16,11 @@
 
 package zio.flow
 
+import zio.flow.Remote.Debug.DebugMode
 import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
 import zio.flow.serialization.FlowSchemaAst
-import zio.schema.{CaseSet, DynamicValue, Schema}
+import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
 import zio.{Chunk, ZIO}
 
 import java.math.BigDecimal
@@ -74,7 +75,10 @@ sealed trait Remote[+A] { self =>
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.ToString[A1]()))
 
   def debug(message: String): Remote[A] =
-    Remote.Debug(self, message)
+    Remote.Debug(self, message, DebugMode.Print)
+
+  def track(message: String): Remote[A] =
+    Remote.Debug(self, message, DebugMode.Track)
 }
 
 object Remote {
@@ -135,29 +139,45 @@ object Remote {
       Schema.Case("Fail", schema[A], _.asInstanceOf[Fail[A]])
   }
 
-  final case class Debug[A](inner: Remote[A], message: String) extends Remote[A] {
+  final case class Debug[A](inner: Remote[A], message: String, debugMode: Debug.DebugMode) extends Remote[A] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        result <- inner.evalDynamic
-        _      <- ZIO.debug(s"$message " + result.toString)
-      } yield result
+      debugMode match {
+        case DebugMode.Print =>
+          for {
+            result <- inner.evalDynamic
+            _ <-
+              ZIO.debug(s"$message " + result.toString)
+          } yield result
+        case DebugMode.Track =>
+          inner.evalDynamic @@ metrics.remoteEvaluationCount(message) @@ metrics.remoteEvaluationTimeMillis(message)
+      }
 
     override private[flow] def variableUsage =
       inner.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[A] =
-      Debug(inner.substituteRec(f), message)
+      Debug(inner.substituteRec(f), message, debugMode)
   }
 
   object Debug {
+    sealed trait DebugMode
+    object DebugMode {
+      case object Print extends DebugMode
+      case object Track extends DebugMode
+
+      implicit val schema: Schema[DebugMode] = DeriveSchema.gen
+    }
+
     def schema[A]: Schema[Debug[A]] =
       Schema.defer {
-        Schema.CaseClass2[Remote[A], String, Debug[A]](
+        Schema.CaseClass3[Remote[A], String, DebugMode, Debug[A]](
           Schema.Field("inner", Remote.schema[A]),
           Schema.Field("message", Schema[String]),
+          Schema.Field("debugMode", Schema[DebugMode]),
           Debug.apply,
           _.inner,
-          _.message
+          _.message,
+          _.debugMode
         )
       }
 

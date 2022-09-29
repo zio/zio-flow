@@ -116,6 +116,13 @@ object RemoteConversions {
       CharConversion.evaluate(value, operator)
   }
 
+  final case class StringToNumeric[A](numeric: Numeric[A]) extends RemoteConversions[String, Option[A]] {
+    override val inputSchema: Schema[String]     = Schema[String]
+    override val outputSchema: Schema[Option[A]] = Schema.option(numeric.schema)
+
+    override def apply(value: String): Option[A] = numeric.parse(value)
+  }
+
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
     Schema.Case(
       "NumericToInt",
@@ -248,6 +255,17 @@ object RemoteConversions {
       _.asInstanceOf[CharToChar]
     )
 
+  private val stringToNumericCase: Schema.Case[StringToNumeric[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "StringToNumeric",
+      Schema.CaseClass1(
+        Schema.Field("numeric", Numeric.schema),
+        (numeric: Numeric[Any]) => StringToNumeric(numeric),
+        _.numeric
+      ),
+      _.asInstanceOf[StringToNumeric[Any]]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -268,5 +286,6 @@ object RemoteConversions {
         .:+:(fractionalGetExponentCase)
         .:+:(charToCodeCase)
         .:+:(charToCharCase)
+        .:+:(stringToNumericCase)
     )
 }

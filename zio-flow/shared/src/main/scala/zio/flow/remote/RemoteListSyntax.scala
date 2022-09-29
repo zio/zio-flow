@@ -102,11 +102,11 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     filter(!other.contains(_))
 
   def distinct: Remote[List[A]] =
-    self.toSet.toList
+    self.distinctBy(x => x)
 
   def distinctBy[B](f: Remote[A] => Remote[B]): Remote[List[A]] =
     self
-      .foldLeft((Remote.nil[A], self.map(f).distinct)) { (tuple, elem) =>
+      .foldLeft((Remote.nil[A], self.map(f).toSet.toList)) { (tuple, elem) =>
         val result     = tuple._1
         val allowed    = tuple._2
         val mappedElem = f(elem)

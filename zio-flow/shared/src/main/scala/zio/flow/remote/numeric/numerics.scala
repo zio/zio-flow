@@ -22,6 +22,7 @@ import zio.schema.{CaseSet, Schema}
 
 import scala.annotation.nowarn
 import scala.math.ScalaNumericAnyConversions
+import scala.util.Try
 
 sealed trait Numeric[A] {
   val schema: Schema[A]
@@ -29,6 +30,8 @@ sealed trait Numeric[A] {
   def conversions(value: A): ScalaNumericAnyConversions
 
   def fromLong(value: Long): Remote[A]
+
+  def parse(s: String): Option[A]
 
   def add(left: A, right: A): A
 
@@ -99,6 +102,9 @@ object Numeric extends NumericImplicits0 {
     override def conversions(value: Int): ScalaNumericAnyConversions = value
 
     override def fromLong(value: Long): Remote[Int] = Remote(value.toInt)
+
+    override def parse(s: String): Option[Int] =
+      s.toIntOption
 
     override def add(left: Int, right: Int): Int = left + right
 
@@ -246,6 +252,9 @@ sealed trait NumericImplicits0 {
 
     override def fromLong(value: Long): Remote[Char] = Remote(value.toChar)
 
+    override def parse(s: String): Option[Char] =
+      s.headOption
+
     override def add(left: Char, right: Char): Char = (left + right).toChar
 
     override def mul(left: Char, right: Char): Char = (left * right).toChar
@@ -322,6 +331,9 @@ sealed trait NumericImplicits0 {
 
     override def fromLong(value: Long): Remote[Short] = Remote(value.toShort)
 
+    override def parse(s: String): Option[Short] =
+      s.toShortOption
+
     override def add(left: Short, right: Short): Short = (left + right).toShort
 
     override def mul(left: Short, right: Short): Short = (left * right).toShort
@@ -396,6 +408,9 @@ sealed trait NumericImplicits0 {
     override def conversions(value: Long): ScalaNumericAnyConversions = value
 
     override def fromLong(value: Long): Remote[Long] = Remote(value)
+
+    override def parse(s: String): Option[Long] =
+      s.toLongOption
 
     override def add(left: Long, right: Long): Long = left + right
 
@@ -473,6 +488,9 @@ sealed trait NumericImplicits0 {
     override def conversions(value: BigInt): ScalaNumericAnyConversions = value
 
     override def fromLong(value: Long): Remote[BigInt] = Remote(BigInt(value))
+
+    override def parse(s: String): Option[BigInt] =
+      Try(BigInt(s)).toOption
 
     override def add(left: BigInt, right: BigInt): BigInt = left + right
 
@@ -561,6 +579,9 @@ sealed trait NumericImplicits0 {
 
     override def fromLong(value: Long): Remote[Float] = Remote(value.toFloat)
 
+    override def parse(s: String): Option[Float] =
+      s.toFloatOption
+
     override def add(left: Float, right: Float): Float = left + right
 
     override def sub(left: Float, right: Float): Float = left - right
@@ -600,6 +621,9 @@ sealed trait NumericImplicits0 {
 
     override def fromLong(value: Long): Remote[Double] = Remote(value.toDouble)
 
+    override def parse(s: String): Option[Double] =
+      s.toDoubleOption
+
     override def add(left: Double, right: Double): Double = left + right
 
     override def sub(left: Double, right: Double): Double = left - right
@@ -638,6 +662,9 @@ sealed trait NumericImplicits0 {
     override def conversions(value: BigDecimal): ScalaNumericAnyConversions = value
 
     override def fromLong(value: Long): Remote[BigDecimal] = Remote(BigDecimal(value))
+
+    override def parse(s: String): Option[BigDecimal] =
+      Try(BigDecimal(s)).toOption
 
     override def add(left: BigDecimal, right: BigDecimal): BigDecimal = left + right
 

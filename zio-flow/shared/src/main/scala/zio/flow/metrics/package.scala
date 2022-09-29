@@ -146,6 +146,18 @@ package object metrics {
   /** Counter for the number of garbage collections */
   val gcRuns: ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] = Metric.counter("zioflow_gc").trackAll(1)
 
+  def remoteEvaluationCount(name: String): ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] =
+    Metric
+      .counter("zioflow_remote_evals")
+      .tagged("name", name)
+      .trackAll(1)
+
+  def remoteEvaluationTimeMillis(name: String): ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] =
+    Metric
+      .histogram("zioflow_remote_eval_time_ms", Histogram.Boundaries.exponential(10, 2, 14))
+      .tagged("name", name)
+      .trackDurationWith(_.toMillis.toDouble)
+
   private def statusToLabel(status: PersistentWorkflowStatus): String =
     status match {
       case PersistentWorkflowStatus.Running   => "running"

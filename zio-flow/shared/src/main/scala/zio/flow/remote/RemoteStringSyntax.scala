@@ -17,6 +17,9 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.flow.remote.numeric._
+
+import scala.annotation.nowarn
 
 final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
 
@@ -24,7 +27,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     Remote.recurse[(Int, String), String]((n, self)) { (input, rec) =>
       val remaining = input._1
       val current   = input._2
-      (remaining === 0).ifThenElse(
+      (remaining === 1).ifThenElse(
         ifTrue = current,
         ifFalse = rec((remaining - 1, current + self))
       )
@@ -37,7 +40,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     self + other
 
   def ++:(other: Remote[String]): Remote[String] =
-    (self.toList ++: other.toList).mkString
+    (self.toList.++:(other.toList)).mkString
 
   def +:(c: Remote[Char]): Remote[String] =
     (c +: self.toList).mkString
@@ -65,8 +68,8 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def charAt(index: Remote[Int]): Remote[Char] =
     apply(index)
 
-  def combinations(n: Remote[Int]): Remote[List[String]] =
-    Remote.fail(s"not implemented: ${n}") // TODO
+  @nowarn def combinations(n: Remote[Int]): Remote[List[String]] =
+    Remote.fail(s"TODO: not implemented") // TODO
 
   def concat(suffix: Remote[String]): Remote[String] =
     self :++ suffix
@@ -127,8 +130,8 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
 
   // TODO: groupBy if we have support for Remote[Map[K, V]]
 
-  def grouped(n: Remote[Int]): Remote[List[String]] =
-    Remote.fail(s"not implemented: ${n}") // TODO
+  @nowarn def grouped(n: Remote[Int]): Remote[List[String]] =
+    Remote.fail(s"TODO: not implemented") // TODO
 
   def head: Remote[Char] =
     self.toList.head
@@ -168,19 +171,22 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def last: Remote[Char] =
     self.toList.last
 
-  def lastIndexOf[X](value: Remote[X])(ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+  def lastIndexOf[X](value: Remote[X])(implicit ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
     ev.fold(
       ch => self.toList.lastIndexOf(ch),
       s => self.toList.lastIndexOfSlice(s.toList)
     )(value)
 
-  def lastIndexOf[X](value: Remote[X], from: Remote[Int])(ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
+  def lastIndexOf[X](value: Remote[X], from: Remote[Int])(implicit ev: RemoteTypeEither[X, Char, String]): Remote[Int] =
     ev.fold(
       ch => self.toList.lastIndexOf(ch, from),
       s => self.toList.lastIndexOfSlice(s.toList, from)
     )(value)
 
-  def lastIndexWhere(p: Remote[Char] => Remote[Boolean], from: Remote[Int] = Remote(0)): Remote[Int] =
+  def lastIndexWhere(p: Remote[Char] => Remote[Boolean]): Remote[Int] =
+    self.toList.lastIndexWhere(p)
+
+  def lastIndexWhere(p: Remote[Char] => Remote[Boolean], from: Remote[Int]): Remote[Int] =
     self.toList.lastIndexWhere(p, from)
 
   def lastOption: Remote[Option[Char]] =
@@ -193,6 +199,7 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     self.toList.map(f).mkString
 
   def mkString: Remote[String] = self
+
   def mkString(sep: Remote[String]): Remote[String] =
     self.toList.mkString(sep)
 
@@ -205,14 +212,14 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   def padTo(len: Remote[Int], elem: Remote[Char]): Remote[String] =
     self.toList.padTo(len, elem).mkString
 
-  def partition(p: Remote[Char] => Remote[Boolean]): (Remote[String], Remote[String]) = {
+  def partition(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
     val tuple = self.toList.partition(p)
-    (tuple._1.mkString, tuple._2.mkString)
+    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
   }
 
-  def partitionMap(p: Remote[Char] => Remote[Either[Char, Char]]): (Remote[String], Remote[String]) = {
+  def partitionMap(p: Remote[Char] => Remote[Either[Char, Char]]): Remote[(String, String)] = {
     val tuple = self.toList.partitionMap(p)
-    (tuple._1.mkString, tuple._2.mkString)
+    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
   }
 
   def patch(from: Remote[Int], other: Remote[String], replaced: Remote[Int]): Remote[String] =
@@ -230,13 +237,13 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
   // TODO: convert to regex once remote regex is supported
 
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
-    ???
+    self.map(ch => (ch === oldChar).ifThenElse(newChar, ch))
 
-  def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    ???
+  @nowarn def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    Remote.fail("TODO: built-in regex replace support")
 
-  def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    ???
+  @nowarn def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    Remote.fail("TODO: built-in regex replace support")
 
   def reverse: Remote[String] =
     self.toList.reverse.mkString
@@ -252,33 +259,63 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
 
   // TODO: sortBy/sortWith/sorted when list supports sort
 
-  def span(p: Remote[Char] => Remote[Boolean]): (Remote[String], Remote[String]) = {
+  def span(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
     val tuple = self.toList.span(p)
-    (tuple._1.mkString, tuple._2.mkString)
+    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
   }
 
-  def split[X](separators: Remote[X])(ev: RemoteTypeEither[X, Char, List[Char]]): Remote[List[String]] =
-    ???
+  def split[X](separators: Remote[X])(implicit ev: RemoteTypeEither[X, Char, List[Char]]): Remote[List[String]] =
+    ev.fold(
+      ch => self.split(Remote.list(ch)),
+      chs =>
+        Remote.recurse[String, List[String]](self) { (remaining, rec) =>
+          val tuple = remaining.toList.span(!chs.contains(_))
+          val next  = tuple._2.drop(1).mkString
+          (tuple._1.mkString :: next.isEmpty.ifThenElse(Remote.nil[String], rec(tuple._2.drop(1).mkString)))
+        }
+    )(separators)
 
-  def splitAt(n: Remote[Int]): (Remote[String], Remote[String]) = {
+  def splitAt(n: Remote[Int]): Remote[(String, String)] = {
     val tuple = self.toList.splitAt(n)
-    (tuple._1.mkString, tuple._2.mkString)
+    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
   }
 
   def startsWith(prefix: Remote[String]): Remote[Boolean] =
-    ???
+    self.toList.startsWith(prefix.toList)
+
+  def strip(): Remote[String] =
+    self.stripLeading().stripTrailing()
+
+  def stripLeading(): Remote[String] =
+    self.dropWhile(_.isWhitespace)
 
   def stripLineEnd: Remote[String] =
-    ???
+    self.reverse.dropWhile(ch => (ch === '\n') || (ch === '\r')).reverse
 
-  def stripMargin: Remote[String] =
-    ???
+  def stripMargin(char: Remote[Char]): Remote[String] =
+    self
+      .split('\n')
+      .map(line => line.dropWhile(ch => ch.isWhitespace && (ch !== char)).drop(1))
+      .mkString("\n")
 
   def stripPrefix(prefix: Remote[String]): Remote[String] =
-    ???
+    (self
+      .startsWith(prefix))
+      .ifThenElse(
+        ifTrue = self.drop(prefix.length),
+        ifFalse = self
+      )
+
+  def stripTrailing(): Remote[String] =
+    self.reverse.dropWhile(_.isWhitespace).reverse
 
   def stripSuffix(suffix: Remote[String]): Remote[String] =
-    ???
+    (self
+      .endsWith(suffix))
+      .ifThenElse(
+        ifTrue = self.take(self.length - suffix.length),
+        ifFalse = self
+      )
 
   def substring(begin: Remote[Int]): Remote[String] =
     self.toList.drop(begin).mkString
@@ -302,56 +339,62 @@ final class RemoteStringSyntax(val self: Remote[String]) extends AnyVal {
     self.toList.takeWhile(p).mkString
 
   def toBoolean: Remote[Boolean] =
-    ???
+    toBooleanOption.fold(Remote.fail("Invalid boolean"))(n => n)
 
   def toBooleanOption: Remote[Option[Boolean]] =
-    ???
+    (self === "true").ifThenElse(
+      ifTrue = Remote.some(true),
+      ifFalse = (self === "false").ifThenElse(
+        ifTrue = Remote.some(false),
+        ifFalse = Remote.none[Boolean]
+      )
+    )
 
   def toByte: Remote[Byte] =
-    ???
+    Remote.fail("TODO: byte not supported")
 
   def toByteOption: Remote[Option[Byte]] =
-    ???
+    Remote.fail("TODO: byte not supported")
 
   def toDouble: Remote[Double] =
-    ???
+    toDoubleOption.fold(Remote.fail("Invalid double"))(n => n)
 
   def toDoubleOption: Remote[Option[Double]] =
-    ???
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericDouble)))
 
   def toFloat: Remote[Float] =
-    ???
+    toFloatOption.fold(Remote.fail("Invalid float"))(n => n)
 
   def toFloatOption: Remote[Option[Float]] =
-    ???
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericFloat)))
 
   def toInt: Remote[Int] =
-    ???
+    toIntOption.fold(Remote.fail("Invalid int"))(n => n)
 
   def toIntOption: Remote[Option[Int]] =
-    ???
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericInt)))
 
   def toList: Remote[List[Char]] =
     Remote.StringToCharList(self)
 
   def toLong: Remote[Long] =
-    ???
+    toLongOption.fold(Remote.fail("Invalid long"))(n => n)
 
   def toLongOption: Remote[Option[Long]] =
-    ???
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericLong)))
 
   def toLowerCase: Remote[String] =
     self.toList.map(_.toLower).mkString
 
   def toShort: Remote[Short] =
-    ???
+    toShortOption.fold(Remote.fail("Invalid short"))(n => n)
 
   def toShortOption: Remote[Option[Short]] =
-    ???
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericShort)))
 
   def toUpperCase: Remote[String] =
     self.toList.map(_.toUpper).mkString
 
-  def trim: Remote[String] =
-    ???
+  def trim(): Remote[String] =
+    self.strip()
 }
