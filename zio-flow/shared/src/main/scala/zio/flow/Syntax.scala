@@ -258,6 +258,10 @@ trait Syntax {
 
   implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
 
+  implicit def remoteStringInterpolator(ctx: StringContext): RemoteStringInterpolator = new RemoteStringInterpolator(
+    ctx
+  )
+
   implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
     new RemoteExecutingFlowSyntax[E, A](remote)
 

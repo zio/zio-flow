@@ -495,6 +495,11 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("").toUpperCase <-> "",
         Remote("hello").toUpperCase <-> "HELLO",
         Remote("HELLO").toUpperCase <-> "HELLO"
+      ),
+      remoteTest("remote string interpolator")(
+        rs"hello world" <-> "hello world",
+        rs"hello ${Remote("world")}!" <-> "hello world!",
+        rs"hello ${Remote(1).toString}${Remote("!") * 3}" <-> "hello 1!!!"
       )
     ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
