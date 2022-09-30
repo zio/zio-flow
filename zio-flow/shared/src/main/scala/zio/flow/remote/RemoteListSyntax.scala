@@ -21,10 +21,11 @@ import zio.flow._
 import zio.flow.remote.numeric._
 import zio.schema.Schema
 
-final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
+final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Boolean) {
+  implicit private val remoteTracking: InternalRemoteTracking = InternalRemoteTracking(trackingEnabled)
 
   def ++(suffix: Remote[List[A]]): Remote[List[A]] =
-    self.reverse.foldLeft(suffix)((l, a) => Remote.Cons(l, a))
+    self.reverse.foldLeft(suffix)((l, a) => Remote.Cons(l, a)).trackInternal("List#++")
 
   def ++:(prefix: Remote[List[A]]): Remote[List[A]] =
     prefix ++ self
@@ -33,13 +34,13 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     elem :: self
 
   def :+[B >: A](elem: Remote[B]): Remote[List[B]] =
-    Remote.Cons(reverse.widen[List[B]], elem).reverse
+    Remote.Cons(reverse.widen[List[B]], elem).reverse.trackInternal("List#:+")
 
   def :++[B >: A](suffix: Remote[List[B]]): Remote[List[B]] =
     self.widen[List[B]] ++ suffix
 
   def ::[B >: A](elem: Remote[B]): Remote[List[B]] =
-    Remote.Cons(self.widen[List[B]], elem)
+    Remote.Cons(self.widen[List[B]], elem).trackInternal("List#::")
 
   def :::[B >: A](prefix: Remote[List[B]]): Remote[List[B]] =
     prefix ++ self.widen[List[B]]
@@ -51,7 +52,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     self :++ suffix
 
   def apply(n: Remote[Int]): Remote[A] =
-    self.drop(n).headOption.get
+    self.drop(n).headOption.get.trackInternal("List#apply")
 
   def concat[B >: A](suffix: Remote[List[B]]): Remote[List[B]] =
     self :++ suffix
@@ -69,6 +70,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#contains")
 
   def containsSlice[B >: A](that: Remote[List[B]]): Remote[Boolean] =
     Remote
@@ -85,10 +87,11 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#containsSlice")
 
   def corresponds[B](that: Remote[List[B]])(p: (Remote[A], Remote[B]) => Remote[Boolean]): Remote[Boolean] =
-    (self.length === that.length) &&
-      self.zip(that).forall((tuple: Remote[(A, B)]) => p(tuple._1, tuple._2))
+    ((self.length === that.length) &&
+      self.zip(that).forall((tuple: Remote[(A, B)]) => p(tuple._1, tuple._2))).trackInternal("List#corresponds")
 
   def count(p: Remote[A] => Remote[Boolean]): Remote[Int] =
     foldLeft(Remote(0)) { case (total, elem) =>
@@ -96,10 +99,10 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         ifTrue = total + 1,
         ifFalse = total
       )
-    }
+    }.trackInternal("List#count")
 
   def diff[B >: A](other: Remote[List[B]]): Remote[List[A]] =
-    filter(!other.contains(_))
+    filter(!other.contains(_)).trackInternal("List#diff")
 
   def distinct: Remote[List[A]] =
     self.distinctBy(x => x)
@@ -119,6 +122,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._1
       .reverse
+      .trackInternal("List#distinctBy")
 
   def drop(n: Remote[Int]): Remote[List[A]] =
     Remote
@@ -133,9 +137,10 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._2
+      .trackInternal("List#drop")
 
   def dropRight(n: Remote[Int]): Remote[List[A]] =
-    self.take(self.length - n)
+    self.take(self.length - n).trackInternal("List#dropRight")
 
   def dropWhile(
     predicate: Remote[A] => Remote[Boolean]
@@ -151,12 +156,15 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             )
           )
       }
+      .trackInternal("List#dropWhile")
 
   def endsWith[B >: A](that: Remote[List[B]]): Remote[Boolean] =
-    (self.length >= that.length).ifThenElse(
-      ifTrue = self.drop(self.length - that.length).widen[List[B]] === that,
-      ifFalse = Remote(false)
-    )
+    (self.length >= that.length)
+      .ifThenElse(
+        ifTrue = self.drop(self.length - that.length).widen[List[B]] === that,
+        ifFalse = Remote(false)
+      )
+      .trackInternal("List#endsWith")
 
   def exists(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     Remote
@@ -171,20 +179,25 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#exists")
 
   def filter(
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
-    self.reverse.foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
-      predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
-    )
+    self.reverse
+      .foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
+        predicate(a1).ifThenElse(Remote.Cons(a2, a1), a2)
+      )
+      .trackInternal("List#filter")
 
   def filterNot(
     predicate: Remote[A] => Remote[Boolean]
   ): Remote[List[A]] =
-    self.reverse.foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
-      predicate(a1).ifThenElse(a2, Remote.Cons(a2, a1))
-    )
+    self.reverse
+      .foldLeft[List[A]](Remote.nil[A])((a2: Remote[List[A]], a1: Remote[A]) =>
+        predicate(a1).ifThenElse(a2, Remote.Cons(a2, a1))
+      )
+      .trackInternal("List#filterNot")
 
   def find(p: Remote[A] => Remote[Boolean]): Remote[Option[A]] =
     Remote
@@ -199,15 +212,16 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#find")
 
   def findLast(p: Remote[A] => Remote[Boolean]): Remote[Option[A]] =
-    self.reverse.find(p)
+    self.reverse.find(p).trackInternal("List#findLast")
 
   def flatMap[B](f: Remote[A] => Remote[List[B]]): Remote[List[B]] =
-    self.foldLeft(Remote.nil[B])((lst, elem) => lst ++ f(elem))
+    self.foldLeft(Remote.nil[B])((lst, elem) => lst ++ f(elem)).trackInternal("List#flatMap")
 
   def flatten[B](implicit ev: A <:< List[B]): Remote[List[B]] =
-    self.flatMap((elem: Remote[A]) => elem.asInstanceOf[Remote[List[B]]])
+    self.flatMap((elem: Remote[A]) => elem.asInstanceOf[Remote[List[B]]]).trackInternal("List#flatten")
 
   def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
@@ -217,12 +231,16 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def foldLeft[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
   ): Remote[B] =
-    Remote.Fold(self, initial, UnboundRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._1, tuple._2)))
+    Remote
+      .Fold(self, initial, UnboundRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._1, tuple._2)))
+      .trackInternal("List#foldLeft")
 
   def foldRight[B](initial: Remote[B])(
     f: (Remote[A], Remote[B]) => Remote[B]
   ): Remote[B] =
-    Remote.Fold(self.reverse, initial, UnboundRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._2, tuple._1)))
+    Remote
+      .Fold(self.reverse, initial, UnboundRemoteFunction.make((tuple: Remote[(B, A)]) => f(tuple._2, tuple._1)))
+      .trackInternal("List#foldRight")
 
   def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     Remote
@@ -237,22 +255,33 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#forall")
 
   // TODO: groupBy etc if we have support for Remote[Map[K, V]]
 
   def head: Remote[A] =
-    self.headOption.fold(Remote.fail(s"List is empty"))((h: Remote[A]) => h)
+    self.headOption.fold(Remote.fail(s"List is empty"))((h: Remote[A]) => h).trackInternal("List#head")
 
   def headOption: Remote[Option[A]] =
     Remote
       .UnCons(self)
       .fold[Option[A]](Remote.none[A])(tuple => Remote.RemoteSome(tuple._1))
+      .trackInternal("List#headOption")
 
   def indexOf[B >: A](elem: Remote[B]): Remote[Int] =
-    self.zipWithIndex.find(tuple => tuple._1.widen[B] === elem).map(_._2).getOrElse(Remote(-1))
+    self.zipWithIndex
+      .find(tuple => tuple._1.widen[B] === elem)
+      .map(_._2)
+      .getOrElse(Remote(-1))
+      .trackInternal("List#indexOf")
 
   def indexOf[B >: A](elem: Remote[B], from: Remote[Int]): Remote[Int] =
-    self.zipWithIndex.drop(from).find(tuple => tuple._1.widen[B] === elem).map(_._2).getOrElse(Remote(-1))
+    self.zipWithIndex
+      .drop(from)
+      .find(tuple => tuple._1.widen[B] === elem)
+      .map(_._2)
+      .getOrElse(Remote(-1))
+      .trackInternal("List#indexOf")
 
   def indexOfSlice[B >: A](that: Remote[List[B]]): Remote[Int] =
     indexOfSlice(that, 0)
@@ -273,20 +302,26 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#indexOfSlice")
 
   def indexWhere(p: Remote[A] => Remote[Boolean]): Remote[Int] =
-    self.zipWithIndex.find(tuple => p(tuple._1)).map(_._2).getOrElse(Remote(-1))
+    self.zipWithIndex.find(tuple => p(tuple._1)).map(_._2).getOrElse(Remote(-1)).trackInternal("List#indexWhere")
 
   def indexWhere(p: Remote[A] => Remote[Boolean], from: Remote[Int]): Remote[Int] =
-    self.zipWithIndex.drop(from).find(tuple => p(tuple._1)).map(_._2).getOrElse(Remote(-1))
+    self.zipWithIndex
+      .drop(from)
+      .find(tuple => p(tuple._1))
+      .map(_._2)
+      .getOrElse(Remote(-1))
+      .trackInternal("List#indexWhere")
 
   // TODO: indices if there is support for Remote[Range]
 
   def init: Remote[List[A]] =
-    Remote.UnCons(self.reverse).fold(Remote.fail("List is empty"))(_._2).reverse
+    Remote.UnCons(self.reverse).fold(Remote.fail("List is empty"))(_._2).reverse.trackInternal("List#init")
 
   def inits: Remote[List[List[A]]] =
-    Remote
+    (Remote
       .recurseSimple((Remote.nil[List[A]], self.reverse)) { case (input, rec) =>
         val result      = input._1
         val currentSelf = input._2
@@ -298,19 +333,19 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           }
       }
       ._1
-      .reverse ++ Remote.list(Remote.nil[A])
+      .reverse ++ Remote.list(Remote.nil[A])).trackInternal("List#inits")
 
   def intersect[B >: A](that: Remote[List[B]]): Remote[List[A]] =
-    self.filter(that.contains(_))
+    self.filter(that.contains(_)).trackInternal("List#intersect")
 
   def isDefinedAt(x: Remote[Int]): Remote[Boolean] =
-    (x >= 0) && (x < self.length)
+    ((x >= 0) && (x < self.length)).trackInternal("List#isDefinedAt")
 
   def isEmpty: Remote[Boolean] =
-    self.headOption.isNone.ifThenElse(Remote(true), Remote(false))
+    self.headOption.isNone.ifThenElse(Remote(true), Remote(false)).trackInternal("List#isEmpty")
 
   def last: Remote[A] =
-    self.reverse.head
+    self.reverse.head.trackInternal("List#last")
 
   def lastIndexOf[B >: A](elem: Remote[B]): Remote[Int] = {
     val ridx = self.reverse.indexOf(elem)
@@ -318,7 +353,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - 1 - ridx
     )
-  }
+  }.trackInternal("List#lastIndexOf")
 
   def lastIndexOf[B >: A](elem: Remote[B], end: Remote[Int]): Remote[Int] = {
     val ridx = self.reverse.indexOf(elem, self.length - 1 - end)
@@ -326,7 +361,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - 1 - ridx
     )
-  }
+  }.trackInternal("List#lastIndexOf")
 
   def lastIndexOfSlice[B >: A](that: Remote[List[B]]): Remote[Int] = {
     val ridx = self.reverse.indexOfSlice(that.reverse)
@@ -334,7 +369,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - ridx - that.length
     )
-  }
+  }.trackInternal("List#lastIndexOfSlice")
 
   def lastIndexOfSlice[B >: A](that: Remote[List[B]], end: Remote[Int]): Remote[Int] = {
     val ridx = self.reverse.indexOfSlice(that.reverse, self.length - 1 - end)
@@ -342,7 +377,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - ridx - that.length
     )
-  }
+  }.trackInternal("List#lastIndexOfSlice")
 
   def lastIndexWhere(p: Remote[A] => Remote[Boolean]): Remote[Int] = {
     val ridx = self.reverse.indexWhere(p)
@@ -350,7 +385,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - 1 - ridx
     )
-  }
+  }.trackInternal("List#lastIndexWhere")
 
   def lastIndexWhere(p: Remote[A] => Remote[Boolean], end: Remote[Int]): Remote[Int] = {
     val ridx = self.reverse.indexWhere(p, self.length - 1 - end)
@@ -358,16 +393,16 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       ifTrue = Remote(-1),
       ifFalse = self.length - 1 - ridx
     )
-  }
+  }.trackInternal("List#lastIndexWhere")
 
   def lastOption: Remote[Option[A]] =
-    self.reverse.headOption
+    self.reverse.headOption.trackInternal("List#lastOption")
 
   def length: Remote[Int] =
-    self.foldLeft[Int](0)((len, _) => len + 1)
+    self.foldLeft[Int](0)((len, _) => len + 1).trackInternal("List#length")
 
   def map[B](f: Remote[A] => Remote[B]): Remote[List[B]] =
-    foldLeft[List[B]](Remote.nil[B])((res, elem) => f(elem) :: res).reverse
+    foldLeft[List[B]](Remote.nil[B])((res, elem) => f(elem) :: res).reverse.trackInternal("List#map")
 
   def max(implicit schema: Schema[A]): Remote[A] =
     Remote
@@ -386,6 +421,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#max")
 
   def maxBy[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[A] =
     Remote
@@ -405,6 +441,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#maxBy")
 
   def maxByOption[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[Option[A]] =
     Remote
@@ -424,6 +461,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#maxByOption")
 
   def maxOption(implicit schema: Schema[A]): Remote[Option[A]] =
     Remote
@@ -442,6 +480,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#maxByOption")
 
   def min(implicit schema: Schema[A]): Remote[A] =
     Remote
@@ -460,6 +499,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#min")
 
   def minBy[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[A] =
     Remote
@@ -479,6 +519,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#minBy")
 
   def minByOption[B](f: Remote[A] => Remote[B])(implicit schema: Schema[B]): Remote[Option[A]] =
     Remote
@@ -498,6 +539,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#minByOption")
 
   def minOption(implicit schema: Schema[A]): Remote[Option[A]] =
     Remote
@@ -516,18 +558,19 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           )
       }
       ._1
+      .trackInternal("List#minByOption")
 
 //  def mkString(implicit ev: A =:= String): Remote[String] =
 //    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), Remote(""), Remote(""))
 
   def mkString(implicit schema: Schema[A]): Remote[String] =
-    Remote.ListToString(self.map(_.toString), Remote(""), Remote(""), Remote(""))
+    Remote.ListToString(self.map(_.toString), Remote(""), Remote(""), Remote("")).trackInternal("List#mkString")
 
 //  def mkString(sep: Remote[String])(implicit ev: A =:= String): Remote[String] =
 //    Remote.ListToString(self.asInstanceOf[Remote[List[String]]], Remote(""), sep, Remote(""))
 
   def mkString(sep: Remote[String])(implicit schema: Schema[A]): Remote[String] =
-    Remote.ListToString(self.map(_.toString), Remote(""), sep, Remote(""))
+    Remote.ListToString(self.map(_.toString), Remote(""), sep, Remote("")).trackInternal("List#mkString")
 
 //  def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
 //    ev: A =:= String
@@ -537,15 +580,15 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   def mkString(start: Remote[String], sep: Remote[String], end: Remote[String])(implicit
     schema: Schema[A]
   ): Remote[String] =
-    Remote.ListToString(self.map(_.toString), start, sep, end)
+    Remote.ListToString(self.map(_.toString), start, sep, end).trackInternal("List#mkString")
 
   def nonEmpty: Remote[Boolean] =
-    !self.isEmpty
+    (!self.isEmpty).trackInternal("List#nonEmpty")
 
   def padTo[B >: A](len: Remote[Int], elem: Remote[B]): Remote[List[B]] = {
     val count = math.max(0, len - self.length)
     self ::: List.fill(count)(elem)
-  }
+  }.trackInternal("List#padTo")
 
   def partition(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
     Remote
@@ -566,6 +609,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           }
       }
       ._1
+      .trackInternal("List#partition")
 
   def partitionMap[A1, A2](p: Remote[A] => Remote[Either[A1, A2]]): Remote[(List[A1], List[A2])] =
     Remote
@@ -586,6 +630,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           }
       }
       ._1
+      .trackInternal("List#partitionMap")
 
   def patch[B >: A](from: Remote[Int], other: Remote[List[B]], replaced: Remote[Int]): Remote[List[B]] = {
     val safeFrom = math.min(self.length, math.max(0, from))
@@ -595,7 +640,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       .take(safeFrom)
       .concat(other)
       .concat(selfB.drop(safeTo))
-  }
+  }.trackInternal("List#patch")
 
   def permutations: Remote[List[List[A]]] =
     Remote
@@ -618,6 +663,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
           }
         )
       }
+      .trackInternal("List#permutations")
 
   def prepended[B >: A](elem: Remote[B]): Remote[List[B]] =
     elem :: self
@@ -626,38 +672,42 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
     prefix ::: self
 
   def product(implicit numeric: Numeric[A]): Remote[A] =
-    self.foldLeft[A](numeric.fromLong(1L))(_ * _)
+    self.foldLeft[A](numeric.fromLong(1L))(_ * _).trackInternal("List#product")
 
   def reduce[B >: A](op: (Remote[B], Remote[B]) => Remote[B]): Remote[B] =
-    self.reduceLeft(op)
+    self.reduceLeft(op).trackInternal("List#reduce")
 
   def reduceLeft[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[B] =
-    self.tail.foldLeft[B](self.widen[List[B]].head)(op)
+    self.tail.foldLeft[B](self.widen[List[B]].head)(op).trackInternal("List#reduceLeft")
 
   def reduceLeftOption[B >: A](op: (Remote[B], Remote[A]) => Remote[B]): Remote[Option[B]] =
-    self.isEmpty.ifThenElse(
-      ifTrue = Remote.none,
-      ifFalse = Remote.some(self.reduceLeft(op))
-    )
+    self.isEmpty
+      .ifThenElse(
+        ifTrue = Remote.none,
+        ifFalse = Remote.some(self.reduceLeft(op))
+      )
+      .trackInternal("List#reduceLeftOption")
 
   def reduceOption[B >: A](op: (Remote[B], Remote[B]) => Remote[B]): Remote[Option[B]] =
     self.reduceLeftOption(op)
 
   def reduceRight[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[B] =
-    self.reverse.reduceLeft((b: Remote[B], a: Remote[A]) => op(a, b))
+    self.reverse.reduceLeft((b: Remote[B], a: Remote[A]) => op(a, b)).trackInternal("List#reduceRight")
 
   def reduceRightOption[B >: A](op: (Remote[A], Remote[B]) => Remote[B]): Remote[Option[B]] =
-    self.isEmpty.ifThenElse(ifTrue = Remote.none, ifFalse = Remote.some(self.reduceRight(op)))
+    self.isEmpty
+      .ifThenElse(ifTrue = Remote.none, ifFalse = Remote.some(self.reduceRight(op)))
+      .trackInternal("List#reduceRightOption")
 
   def reverse: Remote[List[A]] =
-    self.foldLeft(Remote.nil[A])((l, a) => Remote.Cons(l, a))
+    self.foldLeft(Remote.nil[A])((l, a) => Remote.Cons(l, a)).trackInternal("List#reverse")
 
   def reverse_:::[B >: A](prefix: Remote[List[B]]): Remote[List[B]] =
-    prefix.reverse ::: self
+    (prefix.reverse ::: self).trackInternal("List#reverse_:::")
 
   def sameElements[B >: A](other: Remote[List[B]]): Remote[Boolean] =
-    self.length === other.length &&
-      self.widen[List[B]].zip(other).forall(tuple => tuple._1 === tuple._2)
+    (self.length === other.length &&
+      self.widen[List[B]].zip(other).forall(tuple => tuple._1 === tuple._2)).trackInternal("List#sameElements")
 
   def scan[B >: A](z: Remote[B])(op: (Remote[B], Remote[B]) => Remote[B]): Remote[List[B]] =
     scanLeft(z)(op)
@@ -672,6 +722,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._2
       .reverse
+      .trackInternal("List#scanLeft")
 
   def scanRight[B >: A](z: Remote[B])(op: (Remote[A], Remote[B]) => Remote[B]): Remote[List[B]] =
     self
@@ -682,56 +733,62 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
         (agg2, agg2 :: lst)
       }
       ._2
+      .trackInternal("List#scanRight")
 
   def segmentLength(p: Remote[A] => Remote[Boolean]): Remote[Int] =
     self.segmentLength(p, 0)
+
   def segmentLength(p: Remote[A] => Remote[Boolean], from: Remote[Int]): Remote[Int] =
-    Remote.recurse[(Int, Int, List[A]), Int](
-      (
-        Remote(0),
-        Remote(-1),
-        self.drop(from)
-      )
-    ) { (input, rec) =>
-      val currentMax = input._1
-      val currentLen = input._2
-      val remaining  = input._3
+    Remote
+      .recurse[(Int, Int, List[A]), Int](
+        (
+          Remote(0),
+          Remote(-1),
+          self.drop(from)
+        )
+      ) { (input, rec) =>
+        val currentMax = input._1
+        val currentLen = input._2
+        val remaining  = input._3
 
-      Remote
-        .UnCons(remaining)
-        .fold(
-          math.max(currentMax, currentLen + 1)
-        ) { tuple =>
-          val head = tuple._1
-          val tail = tuple._2
+        Remote
+          .UnCons(remaining)
+          .fold(
+            math.max(currentMax, currentLen + 1)
+          ) { tuple =>
+            val head = tuple._1
+            val tail = tuple._2
 
-          p(head).ifThenElse(
-            ifTrue = rec((currentMax, currentLen + 1, tail)),
-            ifFalse = math.max(currentMax, currentLen + 1)
-          )
-        }
-    }
+            p(head).ifThenElse(
+              ifTrue = rec((currentMax, currentLen + 1, tail)),
+              ifFalse = math.max(currentMax, currentLen + 1)
+            )
+          }
+      }
+      .trackInternal("List#segmentLength")
 
   def size: Remote[Int] =
     self.length
 
   def slice(from: Remote[Int], until: Remote[Int]): Remote[List[A]] =
-    self.drop(from).take(until - from)
+    self.drop(from).take(until - from).trackInternal("List#slice")
 
   def sliding(size: Remote[Int], step: Remote[Int]): Remote[List[List[A]]] =
-    self.nonEmpty.ifThenElse(
-      ifTrue = Remote
-        .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
-          val next  = remaining.drop(step)
-          val slice = remaining.take(size)
+    self.nonEmpty
+      .ifThenElse(
+        ifTrue = Remote
+          .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
+            val next  = remaining.drop(step)
+            val slice = remaining.take(size)
 
-          (next.length < size).ifThenElse(
-            ifTrue = Remote.list(slice),
-            ifFalse = slice :: rec(next)
-          )
-        },
-      ifFalse = Remote.nil[List[A]]
-    )
+            (next.length < size).ifThenElse(
+              ifTrue = Remote.list(slice),
+              ifFalse = slice :: rec(next)
+            )
+          },
+        ifFalse = Remote.nil[List[A]]
+      )
+      .trackInternal("List#sliding")
 
   def sliding(size: Remote[Int]): Remote[List[List[A]]] =
     self.sliding(size, 1)
@@ -739,19 +796,21 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
   // TODO: sortBy (sorted, sortWith) as native remote op?
 
   def span(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
-    (self.takeWhile(p), self.dropWhile(p))
+    (self.takeWhile(p), self.dropWhile(p)).trackInternal("List#span")
 
   def splitAt(n: Remote[Int]): Remote[(List[A], List[A])] =
-    (self.take(n), self.drop(n))
+    (self.take(n), self.drop(n)).trackInternal("List#splitAt")
 
   def startsWith[B >: A](that: Remote[List[B]], offset: Remote[Int] = Remote(0)): Remote[Boolean] =
-    (self.length >= that.length).ifThenElse(
-      ifTrue = self.widen[List[B]].drop(offset).take(that.length) === that,
-      ifFalse = Remote(false)
-    )
+    (self.length >= that.length)
+      .ifThenElse(
+        ifTrue = self.widen[List[B]].drop(offset).take(that.length) === that,
+        ifFalse = Remote(false)
+      )
+      .trackInternal("List#startsWith")
 
   def sum(implicit numeric: Numeric[A]): Remote[A] =
-    foldLeft[A](numeric.fromLong(0L))(_ + _)
+    foldLeft[A](numeric.fromLong(0L))(_ + _).trackInternal("List#sum")
 
   def tail: Remote[List[A]] =
     Remote
@@ -759,6 +818,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       .fold(
         Remote.fail("List is empty")
       )(_._2)
+      .trackInternal("List#tail")
 
   def tails: Remote[List[List[A]]] =
     Remote
@@ -769,6 +829,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             input :: Remote.nil[List[A]]
           )(tuple => input :: rec(tuple._2))
       }
+      .trackInternal("List#tails")
 
   def take(n: Remote[Int]): Remote[List[A]] =
     Remote
@@ -785,9 +846,10 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             )
           )
       }
+      .trackInternal("List#take")
 
   def takeRight(n: Remote[Int]): Remote[List[A]] =
-    self.reverse.take(n).reverse
+    self.reverse.take(n).reverse.trackInternal("List#takeRight")
 
   def takeWhile(p: Remote[A] => Remote[Boolean]): Remote[List[A]] =
     Remote
@@ -801,41 +863,46 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
             )
           )
       }
+      .trackInternal("List#takeWhile")
 
   def toList: Remote[List[A]] = self
 
   def toSet: Remote[Set[A]] =
-    Remote.ListToSet(self)
+    Remote.ListToSet(self).trackInternal("List#toSet")
 
   def unzip[A1, A2](implicit ev: A =:= (A1, A2)): Remote[(List[A1], List[A2])] =
-    Remote.recurse[List[A], (List[A1], List[A2])](self) { (remaining, rec) =>
-      Remote
-        .UnCons(remaining)
-        .fold(
-          (Remote.nil[A1], Remote.nil[A2])
-        ) { tuple =>
-          val head         = tuple._1.asInstanceOf[Remote[(A1, A2)]]
-          val tail         = tuple._2
-          val unzippedTail = rec(tail)
+    Remote
+      .recurse[List[A], (List[A1], List[A2])](self) { (remaining, rec) =>
+        Remote
+          .UnCons(remaining)
+          .fold(
+            (Remote.nil[A1], Remote.nil[A2])
+          ) { tuple =>
+            val head         = tuple._1.asInstanceOf[Remote[(A1, A2)]]
+            val tail         = tuple._2
+            val unzippedTail = rec(tail)
 
-          (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2)
-        }
-    }
+            (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2)
+          }
+      }
+      .trackInternal("List#unzip")
 
   def unzip3[A1, A2, A3](implicit ev: A =:= (A1, A2, A3)): Remote[(List[A1], List[A2], List[A3])] =
-    Remote.recurse[List[A], (List[A1], List[A2], List[A3])](self) { (remaining, rec) =>
-      Remote
-        .UnCons(remaining)
-        .fold(
-          (Remote.nil[A1], Remote.nil[A2], Remote.nil[A3])
-        ) { tuple =>
-          val head         = tuple._1.asInstanceOf[Remote[(A1, A2, A3)]]
-          val tail         = tuple._2
-          val unzippedTail = rec(tail)
+    Remote
+      .recurse[List[A], (List[A1], List[A2], List[A3])](self) { (remaining, rec) =>
+        Remote
+          .UnCons(remaining)
+          .fold(
+            (Remote.nil[A1], Remote.nil[A2], Remote.nil[A3])
+          ) { tuple =>
+            val head         = tuple._1.asInstanceOf[Remote[(A1, A2, A3)]]
+            val tail         = tuple._2
+            val unzippedTail = rec(tail)
 
-          (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2, head._3 :: unzippedTail._3)
-        }
-    }
+            (head._1 :: unzippedTail._1, head._2 :: unzippedTail._2, head._3 :: unzippedTail._3)
+          }
+      }
+      .trackInternal("List#unzip3")
 
   def zip[B](that: Remote[List[B]]): Remote[List[(A, B)]] =
     Remote
@@ -856,15 +923,18 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._1
       .reverse
+      .trackInternal("List#zip")
 
   def zipAll[B](that: Remote[List[B]], thisElem: Remote[A], thatElem: Remote[B]): Remote[List[(A, B)]] =
-    (self.length === that.length).ifThenElse(
-      ifTrue = self.zip(that),
-      ifFalse = (self.length < that.length).ifThenElse(
-        ifTrue = self.zip(that) ++ that.drop(self.length).map(thatElem => (thisElem, thatElem)),
-        ifFalse = self.zip(that) ++ self.drop(that.length).map(thisElem => (thisElem, thatElem))
+    (self.length === that.length)
+      .ifThenElse(
+        ifTrue = self.zip(that),
+        ifFalse = (self.length < that.length).ifThenElse(
+          ifTrue = self.zip(that) ++ that.drop(self.length).map(thatElem => (thisElem, thatElem)),
+          ifFalse = self.zip(that) ++ self.drop(that.length).map(thisElem => (thisElem, thatElem))
+        )
       )
-    )
+      .trackInternal("List#zipAll")
 
   def zipWithIndex: Remote[List[(A, Int)]] =
     Remote
@@ -881,4 +951,5 @@ final class RemoteListSyntax[A](val self: Remote[List[A]]) extends AnyVal {
       }
       ._1
       .reverse
+      .trackInternal("List#zipWithIndex")
 }

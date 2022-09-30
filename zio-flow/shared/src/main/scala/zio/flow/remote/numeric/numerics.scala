@@ -18,7 +18,7 @@ package zio.flow.remote.numeric
 
 import zio.flow.Remote
 import zio.flow.remote.numeric.Numeric.NumericInt
-import zio.schema.{CaseSet, Schema}
+import zio.schema.{CaseSet, Schema, TypeId}
 
 import scala.annotation.nowarn
 import scala.math.ScalaNumericAnyConversions
@@ -227,6 +227,7 @@ object Numeric extends NumericImplicits0 {
 
   implicit val schema: Schema[Numeric[Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.numeric.Numeric"),
       CaseSet
         .Cons(
           shortCase,
@@ -781,6 +782,7 @@ object Integral {
 
   implicit val schema: Schema[Integral[Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.numeric.Integral"),
       CaseSet
         .Cons(
           shortCase,
@@ -1197,6 +1199,7 @@ object Fractional {
 
   implicit val schema: Schema[Fractional[Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.numeric.Fractional"),
       CaseSet
         .Cons(
           floatCase,

@@ -73,6 +73,7 @@ object BinaryOperators {
     Schema.Case(
       "Numeric",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.BinaryOperators.Numeric"),
         Schema.Field("operator", Schema[BinaryNumericOperator]),
         Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
         (op: BinaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n),
@@ -86,6 +87,7 @@ object BinaryOperators {
     Schema.Case(
       "Fractional",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.BinaryOperators.Fractional"),
         Schema.Field("operator", Schema[BinaryFractionalOperator]),
         Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
         (op: BinaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f),
@@ -99,6 +101,7 @@ object BinaryOperators {
     Schema.Case(
       "Integral",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.BinaryOperators.Integral"),
         Schema.Field("operator", Schema[BinaryIntegralOperator]),
         Schema.Field("fractional", zio.flow.remote.numeric.Integral.schema),
         (op: BinaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
@@ -112,6 +115,7 @@ object BinaryOperators {
 
   val schemaAny: Schema[BinaryOperators[Any, Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.BinaryOperators"),
       CaseSet
         .Cons(
           numericCase,

@@ -24,8 +24,11 @@ import zio.schema.Schema
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-package object flow extends Syntax with Schemas {
+package object flow extends Syntax with Schemas { self =>
   type RemoteVariableName = RemoteVariableName.Type
+
+  private[flow] val syntax: Syntax = self
+
   object RemoteVariableName extends Newtype[String] {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(wrap(_), unwrap)
 

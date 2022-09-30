@@ -18,7 +18,7 @@ package zio.flow
 
 import zio.ZNothing
 import zio.flow.Remote._
-import zio.schema.{CaseSet, Schema}
+import zio.schema.{CaseSet, Schema, TypeId}
 
 import java.time.{Duration, Instant}
 
@@ -277,8 +277,11 @@ object ZFlow {
   }
 
   object Await {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Await")
+
     def schema[E, A]: Schema[Await[E, A]] =
       Schema.CaseClass1[Remote[ExecutingFlow[E, A]], Await[E, A]](
+        typeId,
         Schema.Field("exFlow", Remote.schema[ExecutingFlow[E, A]]),
         { case (exFlow) =>
           Await(exFlow)
@@ -315,9 +318,12 @@ object ZFlow {
   }
 
   object Ensuring {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Ensuring")
+
     def schema[R, E, A]: Schema[Ensuring[R, E, A]] =
       Schema.defer(
         Schema.CaseClass2[ZFlow[R, E, A], ZFlow[Any, Nothing, Unit], Ensuring[R, E, A]](
+          typeId,
           Schema.Field("flow", ZFlow.schema[R, E, A]),
           Schema.Field("finalizer", ZFlow.schema[Any, Nothing, Unit]),
           { case (flow, finalizer) => Ensuring(flow, finalizer) },
@@ -374,12 +380,15 @@ object ZFlow {
   }
 
   object Fold {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Fold")
+
     def schema[R, E, E2, A, B]: Schema[Fold[R, E, E2, A, B]] =
       Schema.defer(
         Schema.CaseClass3[ZFlow[R, E, A], UnboundRemoteFunction[E, ZFlow[R, E2, B]], UnboundRemoteFunction[
           A,
           ZFlow[R, E2, B]
         ], Fold[R, E, E2, A, B]](
+          typeId,
           Schema.Field("value", ZFlow.schema[R, E, A]),
           Schema.Field("ifError", UnboundRemoteFunction.schema[E, ZFlow[R, E2, B]]),
           Schema.Field("ifSuccess", UnboundRemoteFunction.schema[A, ZFlow[R, E2, B]]),
@@ -459,6 +468,7 @@ object ZFlow {
       Schema.Case("Interrupt", schema[E, A], _.asInstanceOf[Interrupt[E, A]])
   }
 
+  // TODO: do we need this or is recurse enough?
   final case class Iterate[R, E, A](
     initial: Remote[A],
     step: UnboundRemoteFunction[A, ZFlow[R, E, A]],
@@ -479,12 +489,15 @@ object ZFlow {
   }
 
   object Iterate {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Iterate")
+
     def schema[R, E, A]: Schema[Iterate[R, E, A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, ZFlow[R, E, A]], UnboundRemoteFunction[
           A,
           Boolean
         ], Iterate[R, E, A]](
+          typeId,
           Schema.Field("initial", Remote.schema[A]),
           Schema.Field("step", UnboundRemoteFunction.schema[A, ZFlow[R, E, A]]),
           Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
@@ -531,11 +544,14 @@ object ZFlow {
   }
 
   object Modify {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Modify")
+
     def schema[A, B]: Schema[Modify[A, B]] =
       Schema.CaseClass2[Remote[RemoteVariableReference[A]], UnboundRemoteFunction[A, (B, A)], Modify[
         A,
         B
       ]](
+        typeId,
         Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
         Schema.Field("f", UnboundRemoteFunction.schema[A, (B, A)]),
         { case (svar, f) =>
@@ -558,8 +574,11 @@ object ZFlow {
   }
 
   object NewVar {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.NewVar")
+
     def schema[A]: Schema[NewVar[A]] =
       Schema.CaseClass2[String, Remote[A], NewVar[A]](
+        typeId,
         Schema.Field("name", Schema[String]),
         Schema.Field("initial", Remote.schema[A]),
         { case (name, initial) => NewVar(name, initial) },
@@ -592,9 +611,12 @@ object ZFlow {
   }
 
   object OrTry {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.OrTry")
+
     def schema[R, E, A]: Schema[OrTry[R, E, A]] =
       Schema.defer(
         Schema.CaseClass2[ZFlow[R, E, A], ZFlow[R, E, A], OrTry[R, E, A]](
+          typeId,
           Schema.Field("left", ZFlow.schema[R, E, A]),
           Schema.Field("right", ZFlow.schema[R, E, A]),
           { case (left, right) => OrTry(left, right) },
@@ -618,9 +640,12 @@ object ZFlow {
   }
 
   object Provide {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Provide")
+
     def schema[R, E, A]: Schema[Provide[R, E, A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[R], ZFlow[R, E, A], Provide[R, E, A]](
+          typeId,
           Schema.Field("value", Remote.schema[R]),
           Schema.Field("flow", ZFlow.schema[R, E, A]),
           { case (value, flow) => Provide(value, flow) },
@@ -641,8 +666,11 @@ object ZFlow {
   }
 
   object Read {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Read")
+
     def schema[A]: Schema[Read[A]] =
       Schema.CaseClass1[Remote[RemoteVariableReference[A]], Read[A]](
+        typeId,
         Schema.Field("svar", Remote.schema[RemoteVariableReference[A]]),
         { case (svar) => Read(svar) },
         _.svar
@@ -694,9 +722,12 @@ object ZFlow {
   }
 
   object RunActivity {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.RunActivity")
+
     def schema[R, A]: Schema[RunActivity[R, A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[R], Activity[R, A], RunActivity[R, A]](
+          typeId,
           Schema.Field("input", Remote.schema[R]),
           Schema.Field("activity", Activity.schema[R, A]),
           { case (input, activity) => RunActivity(input, activity) },
@@ -720,9 +751,12 @@ object ZFlow {
   }
 
   object Timeout {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Timeout")
+
     def schema[R, E, A]: Schema[Timeout[R, E, A]] =
       Schema.defer(
         Schema.CaseClass2[ZFlow[R, E, A], Remote[Duration], Timeout[R, E, A]](
+          typeId,
           Schema.Field("flow", ZFlow.schema[R, E, A]),
           Schema.Field("duration", Remote.schema[Duration]),
           { case (workflow, duration) =>
@@ -769,8 +803,11 @@ object ZFlow {
   }
 
   object Unwrap {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.Unwrap")
+
     def schema[R, E, A]: Schema[Unwrap[R, E, A]] =
       Schema.CaseClass1[Remote[ZFlow[R, E, A]], Unwrap[R, E, A]](
+        typeId,
         Schema.Field("remote", Remote.schema[ZFlow[R, E, A]]),
         { case (remote) =>
           Unwrap(remote)
@@ -791,8 +828,11 @@ object ZFlow {
   }
 
   object UnwrapRemote {
+    private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.UnwrapRemote")
+
     def schema[A]: Schema[UnwrapRemote[A]] =
       Schema.CaseClass1[Remote[Remote[A]], UnwrapRemote[A]](
+        typeId,
         Schema.Field("remote", Remote.schema[Remote[A]]),
         { case (remote) =>
           UnwrapRemote(remote)
@@ -1027,8 +1067,11 @@ object ZFlow {
   ): ZFlow[R, E, Unit] =
     ZFlow.ifThenElse[R, E, Unit](predicate)(flow.unit, ZFlow.unit)
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow")
+
   private def createSchema[R, E, A]: Schema[ZFlow[R, E, A]] =
     Schema.EnumN(
+      typeId,
       CaseSet
         .Cons(Return.schemaCase[R, E, A], CaseSet.Empty[ZFlow[R, E, A]]())
         .:+:(Now.schemaCase[R, E, A])

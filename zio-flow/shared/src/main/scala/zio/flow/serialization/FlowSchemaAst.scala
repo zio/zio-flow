@@ -19,7 +19,7 @@ package zio.flow.serialization
 import zio.flow.{Remote, ZFlow}
 import zio.schema.ast.SchemaAst.{Dynamic, FailNode, Lineage, Value}
 import zio.schema.ast.{NodePath, SchemaAst}
-import zio.schema.{CaseSet, DeriveSchema, Schema}
+import zio.schema.{CaseSet, DeriveSchema, Schema, TypeId}
 import zio.{Chunk, ChunkBuilder}
 
 import scala.annotation.{nowarn, tailrec}
@@ -54,10 +54,10 @@ object FlowSchemaAst {
     override def toAst: SchemaAst = toSchema.ast
   }
 
-  final case class Product(path: NodePath, fields: Chunk[(String, FlowSchemaAst)], optional: Boolean)
+  final case class Product(id: TypeId, path: NodePath, fields: Chunk[(String, FlowSchemaAst)], optional: Boolean)
       extends FlowSchemaAst {
     override def toAst: SchemaAst =
-      SchemaAst.Product(path, fields.map { case (label, fieldAst) => (label, fieldAst.toAst) }, optional)
+      SchemaAst.Product(id, path, fields.map { case (label, fieldAst) => (label, fieldAst.toAst) }, optional)
   }
 
   final case class Tuple(path: NodePath, left: FlowSchemaAst, right: FlowSchemaAst, optional: Boolean)
@@ -66,9 +66,10 @@ object FlowSchemaAst {
       SchemaAst.Tuple(path, left.toAst, right.toAst, optional)
   }
 
-  final case class Sum(path: NodePath, cases: Chunk[(String, FlowSchemaAst)], optional: Boolean) extends FlowSchemaAst {
+  final case class Sum(id: TypeId, path: NodePath, cases: Chunk[(String, FlowSchemaAst)], optional: Boolean)
+      extends FlowSchemaAst {
     override def toAst: SchemaAst =
-      SchemaAst.Sum(path, cases.map { case (label, caseAst) => (label, caseAst.toAst) }, optional)
+      SchemaAst.Sum(id, path, cases.map { case (label, caseAst) => (label, caseAst.toAst) }, optional)
   }
 
   final case class Either(path: NodePath, left: FlowSchemaAst, right: FlowSchemaAst, optional: Boolean)
@@ -137,13 +138,13 @@ object FlowSchemaAst {
             .foldLeft(NodeBuilder(NodePath.root, Chunk(s.hashCode() -> NodePath.root))) { (node, field) =>
               node.addLabelledSubtree(field.label, field.schema)
             }
-            .buildProduct()
+            .buildProduct(s.id)
         case s: Schema.Enum[A] =>
           s.structure
             .foldLeft(NodeBuilder(NodePath.root, Chunk(s.hashCode() -> NodePath.root))) { case (node, (id, schema)) =>
               node.addLabelledSubtree(id, schema)
             }
-            .buildSum()
+            .buildSum(s.id)
         case Schema.Meta(ast, _)      => fromAst(ast)
         case Schema.Dynamic(_)        => Other(Dynamic(withSchema = false, NodePath.root))
         case Schema.SemiDynamic(_, _) => Other(Dynamic(withSchema = true, NodePath.root))
@@ -161,9 +162,9 @@ object FlowSchemaAst {
       self
     }
 
-    def buildProduct(): Product = Product(path, children.result(), optional)
+    def buildProduct(id: TypeId): Product = Product(id, path, children.result(), optional)
 
-    def buildSum(): Sum = Sum(path, children.result(), optional)
+    def buildSum(id: TypeId): Sum = Sum(id, path, children.result(), optional)
   }
 
   private def subtree(
@@ -218,13 +219,13 @@ object FlowSchemaAst {
                 .foldLeft(NodeBuilder(path, lineage :+ (s.hashCode() -> path), optional)) { (node, field) =>
                   node.addLabelledSubtree(field.label, field.schema)
                 }
-                .buildProduct()
+                .buildProduct(s.id)
             case s: Schema.Enum[_] =>
               s.structure
                 .foldLeft(NodeBuilder(path, lineage :+ (s.hashCode() -> path), optional)) { case (node, (id, schema)) =>
                   node.addLabelledSubtree(id, schema)
                 }
-                .buildSum()
+                .buildSum(s.id)
             case Schema.Fail(message, _)  => Other(FailNode(message, path))
             case Schema.Meta(ast, _)      => fromAst(ast)
             case Schema.Dynamic(_)        => Other(Dynamic(withSchema = false, path, optional))
@@ -234,12 +235,12 @@ object FlowSchemaAst {
 
   def fromAst(ast: SchemaAst): FlowSchemaAst =
     ast match {
-      case SchemaAst.Product(path, fields, optional) =>
-        Product(path, fields.map { case (label, fieldAst) => (label, fromAst(fieldAst)) }, optional)
+      case SchemaAst.Product(id, path, fields, optional) =>
+        Product(id, path, fields.map { case (label, fieldAst) => (label, fromAst(fieldAst)) }, optional)
       case SchemaAst.Tuple(path, left, right, optional) =>
         Tuple(path, fromAst(left), fromAst(right), optional)
-      case SchemaAst.Sum(path, cases, optional) =>
-        Sum(path, cases.map { case (label, caseAst) => (label, fromAst(caseAst)) }, optional)
+      case SchemaAst.Sum(id, path, cases, optional) =>
+        Sum(id, path, cases.map { case (label, caseAst) => (label, fromAst(caseAst)) }, optional)
       case SchemaAst.Either(path, left, right, optional) =>
         Either(path, fromAst(left), fromAst(right), optional)
       case SchemaAst.FailNode(_, _, _) =>
@@ -264,8 +265,9 @@ object FlowSchemaAst {
         )
       case FlowSchemaAst.Other(ast) =>
         ast.toSchema
-      case FlowSchemaAst.Product(_, elems, _) =>
+      case FlowSchemaAst.Product(id, _, elems, _) =>
         Schema.record(
+          id,
           elems.map { case (label, ast) =>
             Schema.Field(label, materialize(ast, refs))
           }: _*
@@ -275,8 +277,9 @@ object FlowSchemaAst {
           materialize(left, refs),
           materialize(right, refs)
         )
-      case FlowSchemaAst.Sum(_, elems, _) =>
+      case FlowSchemaAst.Sum(id, _, elems, _) =>
         Schema.enumeration[Any, CaseSet.Aux[Any]](
+          id,
           elems.foldRight[CaseSet.Aux[Any]](CaseSet.Empty[Any]()) { case ((label, ast), acc) =>
             val _case: Schema.Case[Any, Any] = Schema
               .Case[Any, Any](

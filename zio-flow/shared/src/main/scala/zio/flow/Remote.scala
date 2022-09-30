@@ -17,10 +17,10 @@
 package zio.flow
 
 import zio.flow.Remote.Debug.DebugMode
-import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, RemoteConversions, UnaryOperators}
+import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, InternalRemoteTracking, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
 import zio.flow.serialization.FlowSchemaAst
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
+import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.{Chunk, ZIO}
 
 import java.math.BigDecimal
@@ -79,6 +79,12 @@ sealed trait Remote[+A] { self =>
 
   def track(message: String): Remote[A] =
     Remote.Debug(self, message, DebugMode.Track)
+
+  private[flow] def trackInternal(message: String)(implicit remoteTracking: InternalRemoteTracking): Remote[A] =
+    if (remoteTracking.enabled)
+      Remote.Debug(self, message, DebugMode.Track)
+    else
+      self
 }
 
 object Remote {
@@ -168,9 +174,12 @@ object Remote {
       implicit val schema: Schema[DebugMode] = DeriveSchema.gen
     }
 
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Debug")
+
     def schema[A]: Schema[Debug[A]] =
       Schema.defer {
         Schema.CaseClass3[Remote[A], String, DebugMode, Debug[A]](
+          typeId,
           Schema.Field("inner", Remote.schema[A]),
           Schema.Field("message", Schema[String]),
           Schema.Field("debugMode", Schema[DebugMode]),
@@ -254,10 +263,12 @@ object Remote {
   }
 
   object VariableReference {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.VariableReference")
 
     // NOTE: must be kept identifiable from DynamicValues in Remote.fromDynamic
     def schema[A]: Schema[VariableReference[A]] =
       Schema.CaseClass1[RemoteVariableReference[A], VariableReference[A]](
+        typeId,
         Schema.Field("ref", Schema[RemoteVariableReference[A]]),
         VariableReference(_),
         _.ref
@@ -309,8 +320,11 @@ object Remote {
   }
 
   object Variable {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Variable")
+
     def schema[A]: Schema[Variable[A]] =
       Schema.CaseClass1[RemoteVariableName, Variable[A]](
+        typeId,
         Schema.Field("identifier", Schema[RemoteVariableName]),
         construct = (identifier: RemoteVariableName) => Variable(identifier),
         extractField = (variable: Variable[A]) => variable.identifier
@@ -341,8 +355,11 @@ object Remote {
   }
 
   object Unbound {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Unbound")
+
     def schema[A]: Schema[Unbound[A]] =
       Schema.CaseClass1[BindingName, Unbound[A]](
+        typeId,
         Schema.Field("identifier", Schema[BindingName]),
         construct = (identifier: BindingName) => Unbound(identifier),
         extractField = (variable: Unbound[A]) => variable.identifier
@@ -369,6 +386,8 @@ object Remote {
   }
 
   object UnboundRemoteFunction {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.UnboundRemoteFunction")
+
     def make[A, B](fn: Remote[A] => Remote[B]): UnboundRemoteFunction[A, B] = {
       val input = Unbound[A](LocalContext.generateFreshBinding)
       UnboundRemoteFunction(
@@ -379,6 +398,7 @@ object Remote {
 
     def schema[A, B]: Schema[UnboundRemoteFunction[A, B]] =
       Schema.CaseClass2[Unbound[A], Remote[B], UnboundRemoteFunction[A, B]](
+        typeId,
         Schema.Field("variable", Unbound.schema[A]),
         Schema.Field("result", Schema.defer(Remote.schema[B])),
         UnboundRemoteFunction.apply(_, _),
@@ -420,8 +440,11 @@ object Remote {
   }
 
   object EvaluateUnboundRemoteFunction {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.EvaluateUnboundRemoteFunction")
+
     def schema[A, B]: Schema[EvaluateUnboundRemoteFunction[A, B]] =
       Schema.CaseClass2[UnboundRemoteFunction[A, B], Remote[A], EvaluateUnboundRemoteFunction[A, B]](
+        typeId,
         Schema.Field("f", UnboundRemoteFunction.schema[A, B]),
         Schema.Field("a", Schema.defer(Remote.schema[A])),
         EvaluateUnboundRemoteFunction.apply,
@@ -453,8 +476,11 @@ object Remote {
   }
 
   object Unary {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Unary")
+
     def schema[In, Out]: Schema[Unary[In, Out]] =
       Schema.CaseClass2[Remote[In], UnaryOperators[In, Out], Unary[In, Out]](
+        typeId,
         Schema.Field("value", Schema.defer(Remote.schema[In])),
         Schema.Field("operator", UnaryOperators.schema[In, Out]),
         Unary.apply,
@@ -484,8 +510,11 @@ object Remote {
   }
 
   object Binary {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Binary")
+
     def schema[In, Out]: Schema[Binary[In, Out]] =
       Schema.CaseClass3[Remote[In], Remote[In], BinaryOperators[In, Out], Binary[In, Out]](
+        typeId,
         Schema.Field("left", Schema.defer(Remote.schema[In])),
         Schema.Field("right", Schema.defer(Remote.schema[In])),
         Schema.Field("operator", BinaryOperators.schema[In, Out]),
@@ -585,6 +614,8 @@ object Remote {
   }
 
   object FoldEither {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.FoldEither")
+
     def schema[A, B, C]: Schema[FoldEither[A, B, C]] =
       Schema.CaseClass3[
         Remote[Either[A, B]],
@@ -592,6 +623,7 @@ object Remote {
         UnboundRemoteFunction[B, C],
         FoldEither[A, B, C]
       ](
+        typeId,
         Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
         Schema.Field("left", UnboundRemoteFunction.schema[A, C]),
         Schema.Field("right", UnboundRemoteFunction.schema[B, C]),
@@ -611,6 +643,7 @@ object Remote {
       Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
   }
 
+  // TODO: delete?
   final case class SwapEither[A, B](
     either: Remote[Either[A, B]]
   ) extends Remote[Either[B, A]] {
@@ -656,11 +689,17 @@ object Remote {
       either match {
         case Left(throwable) =>
           throwable.evalDynamic.map { throwableValue =>
-            DynamicValue.Enumeration("Failure" -> DynamicValue.Record(ListMap("exception" -> throwableValue)))
+            DynamicValue.Enumeration(
+              Try.tryTypeId,
+              "Failure" -> DynamicValue.Record(Try.failureTypeId, ListMap("exception" -> throwableValue))
+            )
           }
         case Right(success) =>
           success.evalDynamic.map { successValue =>
-            DynamicValue.Enumeration("Success" -> DynamicValue.Record(ListMap("value" -> successValue)))
+            DynamicValue.Enumeration(
+              Try.tryTypeId,
+              "Success" -> DynamicValue.Record(Try.successTypeId, ListMap("value" -> successValue))
+            )
           }
       }
 
@@ -690,6 +729,10 @@ object Remote {
   }
 
   object Try {
+    private val tryTypeId: TypeId     = TypeId.parse("scala.util.Try")
+    private val failureTypeId: TypeId = TypeId.parse("scala.util.Failure")
+    private val successTypeId: TypeId = TypeId.parse("scala.util.Success")
+
     def schema[A]: Schema[Try[A]] =
       Schema.defer(
         Schema
@@ -2160,9 +2203,12 @@ object Remote {
       find(value, arity - 1).toRight(s"Cannot find value for index $n in dynamic tuple")
     }
 
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.TupleAccess")
+
     def schema[T, A]: Schema[TupleAccess[T, A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[T], Int, Int, TupleAccess[T, A]](
+          typeId,
           Schema.Field("tuple", Remote.schema[T]),
           Schema.Field("n", Schema[Int]),
           Schema.Field("arity", Schema[Int]),
@@ -2197,9 +2243,12 @@ object Remote {
   }
 
   object Branch {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Branch")
+
     def schema[A]: Schema[Branch[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[Boolean], Remote[A], Remote[A], Branch[A]](
+          typeId,
           Schema.Field("predicate", Remote.schema[Boolean]),
           Schema.Field("ifTrue", Remote.schema[A]),
           Schema.Field("ifFalse", Remote.schema[A]),
@@ -2281,6 +2330,7 @@ object Remote {
     override private[flow] val variableUsage = remoteString.variableUsage
   }
 
+  // TODO: delete
   object Length {
     val schema: Schema[Length] = Schema.defer(
       Remote
@@ -2295,6 +2345,7 @@ object Remote {
       Schema.Case("Length", schema, _.asInstanceOf[Length])
   }
 
+  // TODO: merge into Binary?
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A], schema: Schema[A]) extends Remote[Boolean] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2312,9 +2363,12 @@ object Remote {
   }
 
   object LessThanEqual {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.LessThanEqual")
+
     def schema[A]: Schema[LessThanEqual[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[A], Remote[A], FlowSchemaAst, LessThanEqual[A]](
+          typeId,
           Schema.Field("left", Remote.schema[A]),
           Schema.Field("right", Remote.schema[A]),
           Schema.Field("schema", FlowSchemaAst.schema),
@@ -2329,6 +2383,7 @@ object Remote {
       Schema.Case("LessThanEqual", schema[Any], _.asInstanceOf[LessThanEqual[Any]])
   }
 
+  // TODO: merge into Binary?
   final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2345,9 +2400,12 @@ object Remote {
   }
 
   object Equal {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Equal")
+
     def schema[A]: Schema[Equal[A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[A], Remote[A], Equal[A]](
+          typeId,
           Schema.Field("left", Remote.schema[A]),
           Schema.Field("right", Remote.schema[A]),
           { case (left, right) => Equal(left, right) },
@@ -2360,6 +2418,7 @@ object Remote {
       Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]])
   }
 
+  // TODO: merge into unary
   final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2387,6 +2446,7 @@ object Remote {
       Schema.Case("Not", schema, _.asInstanceOf[Not])
   }
 
+  // TODO: merge into binary
   final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2402,9 +2462,12 @@ object Remote {
   }
 
   object And {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.And")
+
     val schema: Schema[And] =
       Schema.defer(
         Schema.CaseClass2[Remote[Boolean], Remote[Boolean], And](
+          typeId,
           Schema.Field("left", Remote.schema[Boolean]),
           Schema.Field("right", Remote.schema[Boolean]),
           { case (left, right) => And(left, right) },
@@ -2458,9 +2521,12 @@ object Remote {
   }
 
   object Fold {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Fold")
+
     def schema[A, B]: Schema[Fold[A, B]] =
       Schema.defer(
         Schema.CaseClass3[Remote[List[A]], Remote[B], UnboundRemoteFunction[(B, A), B], Fold[A, B]](
+          typeId,
           Schema.Field("list", Remote.schema[List[A]]),
           Schema.Field("initial", Remote.schema[B]),
           Schema.Field("body", UnboundRemoteFunction.schema[(B, A), B]),
@@ -2498,9 +2564,12 @@ object Remote {
   }
 
   object Cons {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Cons")
+
     def schema[A]: Schema[Cons[A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[List[A]], Remote[A], Cons[A]](
+          typeId,
           Schema.Field("list", Remote.schema[List[A]]),
           Schema.Field("head", Remote.schema[A]),
           Cons.apply,
@@ -2571,10 +2640,12 @@ object Remote {
   }
 
   object InstantFromLongs {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantFromLongs")
 
     val schema: Schema[InstantFromLongs] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[Long], InstantFromLongs](
+          typeId,
           Schema.Field("seconds", Remote.schema[Long]),
           Schema.Field("nanos", Remote.schema[Long]),
           InstantFromLongs.apply,
@@ -2656,9 +2727,12 @@ object Remote {
   }
 
   object InstantPlusDuration {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantPlusDuration")
+
     val schema: Schema[InstantPlusDuration] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantPlusDuration](
+          typeId,
           Schema.Field("instant", Remote.schema[Instant]),
           Schema.Field("duration", Remote.schema[Duration]),
           InstantPlusDuration.apply,
@@ -2687,9 +2761,12 @@ object Remote {
   }
 
   object InstantTruncate {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantTruncate")
+
     val schema: Schema[InstantTruncate] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[ChronoUnit], InstantTruncate](
+          typeId,
           Schema.Field("instant", Remote.schema[Instant]),
           Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
           InstantTruncate.apply,
@@ -2747,9 +2824,12 @@ object Remote {
   }
 
   object DurationBetweenInstants {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationBetweenInstants")
+
     val schema: Schema[DurationBetweenInstants] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[Instant], DurationBetweenInstants](
+          typeId,
           Schema.Field("startInclusive", Remote.schema[Instant]),
           Schema.Field("endExclusive", Remote.schema[Instant]),
           DurationBetweenInstants.apply,
@@ -2810,9 +2890,12 @@ object Remote {
   }
 
   object DurationFromLongs {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationFromLongs")
+
     val schema: Schema[DurationFromLongs] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
+          typeId,
           Schema.Field("seconds", Remote.schema[Long]),
           Schema.Field("nanoAdjusment", Remote.schema[Long]),
           DurationFromLongs.apply,
@@ -2841,9 +2924,12 @@ object Remote {
   }
 
   object DurationFromAmount {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationFromAmount")
+
     val schema: Schema[DurationFromAmount] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[ChronoUnit], DurationFromAmount](
+          typeId,
           Schema.Field("amount", Remote.schema[Long]),
           Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
           DurationFromAmount.apply,
@@ -2900,9 +2986,12 @@ object Remote {
   }
 
   object DurationPlusDuration {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationPlusDuration")
+
     val schema: Schema[DurationPlusDuration] =
       Schema.defer(
         Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationPlusDuration](
+          typeId,
           Schema.Field("left", Remote.schema[Duration]),
           Schema.Field("right", Remote.schema[Duration]),
           DurationPlusDuration.apply,
@@ -2930,9 +3019,12 @@ object Remote {
   }
 
   object DurationMultipliedBy {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationMultipliedBy")
+
     val schema: Schema[DurationMultipliedBy] =
       Schema.defer(
         Schema.CaseClass2[Remote[Duration], Remote[Long], DurationMultipliedBy](
+          typeId,
           Schema.Field("left", Remote.schema[Duration]),
           Schema.Field("right", Remote.schema[Long]),
           DurationMultipliedBy.apply,
@@ -2945,6 +3037,7 @@ object Remote {
       Schema.Case("DurationMultipliedBy", schema, _.asInstanceOf[DurationMultipliedBy])
   }
 
+  // TODO: delete and use recurse only?
   final case class Iterate[A](
     initial: Remote[A],
     iterate: UnboundRemoteFunction[A, A],
@@ -2973,9 +3066,12 @@ object Remote {
   }
 
   object Iterate {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Iterate")
+
     def schema[A]: Schema[Iterate[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, A], UnboundRemoteFunction[A, Boolean], Iterate[A]](
+          typeId,
           Schema.Field("initial", Remote.schema[A]),
           Schema.Field("iterate", UnboundRemoteFunction.schema[A, A]),
           Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
@@ -3062,9 +3158,12 @@ object Remote {
   }
 
   object FoldOption {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.FoldOption")
+
     def schema[A, B]: Schema[FoldOption[A, B]] =
       Schema.defer(
         Schema.CaseClass3[Remote[Option[A]], Remote[B], UnboundRemoteFunction[A, B], FoldOption[A, B]](
+          typeId,
           Schema.Field("option", Remote.schema[Option[A]]),
           Schema.Field("ifEmpty", Remote.schema[B]),
           Schema.Field("ifNonEmpty", UnboundRemoteFunction.schema[A, B]),
@@ -3107,10 +3206,13 @@ object Remote {
   }
 
   object Recurse {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Recurse")
+
     def schema[A, B]: Schema[Recurse[A, B]] =
       Schema.defer {
         Schema
           .CaseClass3[RecursionId, Remote[A], UnboundRemoteFunction[A, B], Recurse[A, B]](
+            typeId,
             Schema.Field("id", Schema[RecursionId]),
             Schema.Field("initial", Remote.schema[A]),
             Schema.Field("body", UnboundRemoteFunction.schema[A, B]),
@@ -3150,9 +3252,12 @@ object Remote {
   }
 
   object RecurseWith {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.RecurseWith")
+
     def schema[A, B]: Schema[RecurseWith[A, B]] =
       Schema.defer {
         Schema.CaseClass2[RecursionId, Remote[A], RecurseWith[A, B]](
+          typeId,
           Schema.Field("id", Schema[RecursionId]),
           Schema.Field("value", Remote.schema[A]),
           RecurseWith(_, _),
@@ -3246,9 +3351,12 @@ object Remote {
   }
 
   object ListToString {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.ListToString")
+
     val schema: Schema[ListToString] =
       Schema.defer(
         Schema.CaseClass4[Remote[List[String]], Remote[String], Remote[String], Remote[String], ListToString](
+          typeId,
           Schema.Field("list", Remote.schema[List[String]]),
           Schema.Field("start", Remote.schema[String]),
           Schema.Field("sep", Remote.schema[String]),
@@ -3375,13 +3483,13 @@ object Remote {
 
   def fromDynamic[A](dynamicValue: DynamicValue): Remote[A] =
     // TODO: either avoid this or do it nicer
-    dynamicValue.toTypedValue(RemoteVariableReference.schema[Any]) match {
-      case Left(_) =>
-        dynamicValue.toTypedValue(ZFlow.schemaAny) match {
-          case Left(_) =>
+    dynamicValue.toTypedValueOption(RemoteVariableReference.schema[Any]) match {
+      case None =>
+        dynamicValue.toTypedValueOption(ZFlow.schemaAny) match {
+          case None =>
             // Not a ZFlow
-            dynamicValue.toTypedValue(Remote.schemaAny) match {
-              case Left(_) =>
+            dynamicValue.toTypedValueOption(Remote.schemaAny) match {
+              case None =>
                 // Not a Remote
                 dynamicValue match {
                   case dynamicTuple: DynamicValue.Tuple =>
@@ -3393,13 +3501,13 @@ object Remote {
                   case _ =>
                     Literal(dynamicValue)
                 }
-              case Right(remote) =>
+              case Some(remote) =>
                 Nested(remote).asInstanceOf[Remote[A]]
             }
-          case Right(zflow) =>
+          case Some(zflow) =>
             Flow(zflow).asInstanceOf[Remote[A]]
         }
-      case Right(ref) =>
+      case Some(ref) =>
         VariableReference(ref).asInstanceOf[Remote[A]]
     }
 
@@ -3941,7 +4049,10 @@ object Remote {
 
   val unit: Remote[Unit] = Remote.Ignore()
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.Remote")
+
   private def createSchema[A]: Schema[Remote[A]] = Schema.EnumN(
+    typeId,
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Fail.schemaCase[A])

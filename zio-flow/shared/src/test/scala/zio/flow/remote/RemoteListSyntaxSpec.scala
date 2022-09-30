@@ -18,7 +18,8 @@ package zio.flow.remote
 
 import zio.{Scope, ZLayer}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow._
+import zio.flow.debug.TrackRemotes._
+import zio.flow.{LocalContext, Remote, RemoteContext}
 import zio.test.{Spec, TestEnvironment}
 
 object RemoteListSyntaxSpec extends RemoteSpecBase {

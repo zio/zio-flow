@@ -245,7 +245,8 @@ trait Syntax {
     T22
   ] = new RemoteTuple22.Syntax(remote)
 
-  implicit def RemoteList[A](remote: Remote[List[A]]): RemoteListSyntax[A]     = new RemoteListSyntax[A](remote)
+  implicit def RemoteList[A](remote: Remote[List[A]]): RemoteListSyntax[A] =
+    new RemoteListSyntax[A](remote, trackingEnabled = false)
   implicit def RemoteListCompanion(list: List.type): RemoteListCompanionSyntax = new RemoteListCompanionSyntax(list)
 
   implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] = new RemoteSetSyntax[A](remote)
@@ -256,7 +257,8 @@ trait Syntax {
 
   implicit def RemoteChar(remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
 
-  implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
+  implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax =
+    new RemoteStringSyntax(remote, trackingEnabled = false)
 
   implicit def remoteStringInterpolator(ctx: StringContext): RemoteStringInterpolator = new RemoteStringInterpolator(
     ctx

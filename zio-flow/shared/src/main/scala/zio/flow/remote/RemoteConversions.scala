@@ -19,7 +19,7 @@ package zio.flow.remote
 import zio.flow.remote.numeric._
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
-import zio.schema.{CaseSet, Schema}
+import zio.schema.{CaseSet, Schema, TypeId}
 
 sealed trait RemoteConversions[In, Out] {
   val inputSchema: Schema[In]
@@ -127,6 +127,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToInt",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToInt"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => NumericToInt(numeric),
         _.numeric
@@ -138,6 +139,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToShort",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToShort"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => NumericToShort(numeric),
         _.numeric
@@ -149,6 +151,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToLong",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToLong"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => NumericToLong(numeric),
         _.numeric
@@ -160,6 +163,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToFloat",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToFloat"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => NumericToFloat(numeric),
         _.numeric
@@ -171,6 +175,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToDouble",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToDouble"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => NumericToDouble(numeric),
         _.numeric
@@ -182,6 +187,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToBinaryString",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToBinaryString"),
         Schema.Field("bitwise", Integral.schema),
         (numeric: Integral[Any]) => NumericToBinaryString(numeric),
         _.bitwise
@@ -193,6 +199,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToHexString",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToHexString"),
         Schema.Field("bitwise", Integral.schema),
         (numeric: Integral[Any]) => NumericToHexString(numeric),
         _.bitwise
@@ -204,6 +211,7 @@ object RemoteConversions {
     Schema.Case(
       "NumericToOctalString",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToOctalString"),
         Schema.Field("bitwise", Integral.schema),
         (numeric: Integral[Any]) => NumericToOctalString(numeric),
         _.bitwise
@@ -215,6 +223,7 @@ object RemoteConversions {
     Schema.Case(
       "ToString",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.ToString"),
         Schema.Field("schema", Schema[FlowSchemaAst]),
         (schemaAst: FlowSchemaAst) => ToString()(schemaAst.toSchema[Any]),
         conv => FlowSchemaAst.fromSchema(conv.inputSchema)
@@ -226,6 +235,7 @@ object RemoteConversions {
     Schema.Case(
       "FractionalGetExponent",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.GetExponent"),
         Schema.Field("fractional", Fractional.schema),
         (fractional: Fractional[Any]) => FractionalGetExponent(fractional),
         _.fractional
@@ -237,6 +247,7 @@ object RemoteConversions {
     Schema.Case(
       "CharToCode",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.CharToCode"),
         Schema.Field("operator", CharToCodeConversion.schema),
         CharToCode.apply,
         _.operator
@@ -248,6 +259,7 @@ object RemoteConversions {
     Schema.Case(
       "CharToChar",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.CharToChar"),
         Schema.Field("operator", CharConversion.schema),
         CharToChar.apply,
         _.operator
@@ -259,6 +271,7 @@ object RemoteConversions {
     Schema.Case(
       "StringToNumeric",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.StringToNumeric"),
         Schema.Field("numeric", Numeric.schema),
         (numeric: Numeric[Any]) => StringToNumeric(numeric),
         _.numeric
@@ -270,6 +283,7 @@ object RemoteConversions {
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.RemoteConversions"),
       CaseSet
         .Cons(
           numericToIntCase,

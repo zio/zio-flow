@@ -24,7 +24,7 @@ import zio.flow.remote.numeric.{
   UnaryNumericOperator
 }
 import zio.flow.remote.text.CharPredicateOperator
-import zio.schema.{CaseSet, Schema}
+import zio.schema.{CaseSet, Schema, TypeId}
 
 sealed trait UnaryOperators[In, Out] {
   type Output = Out
@@ -123,6 +123,7 @@ object UnaryOperators {
     Schema.Case(
       "Numeric",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Numeric"),
         Schema.Field("operator", Schema[UnaryNumericOperator]),
         Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
         (op: UnaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n),
@@ -136,6 +137,7 @@ object UnaryOperators {
     Schema.Case(
       "Integral",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Integral"),
         Schema.Field("operator", Schema[UnaryIntegralOperator]),
         Schema.Field("integral", zio.flow.remote.numeric.Integral.schema),
         (op: UnaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
@@ -149,6 +151,7 @@ object UnaryOperators {
     Schema.Case(
       "Fractional",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Fractional"),
         Schema.Field("operator", Schema[UnaryFractionalOperator]),
         Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
         (op: UnaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f),
@@ -162,6 +165,7 @@ object UnaryOperators {
     Schema.Case(
       "NumericPredicate",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.UnaryOperators.NumericPredicate"),
         Schema.Field("operator", Schema[NumericPredicateOperator]),
         Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
         (op: NumericPredicateOperator, n: zio.flow.remote.numeric.Numeric[Any]) => NumericPredicate(op, n),
@@ -175,6 +179,7 @@ object UnaryOperators {
     Schema.Case(
       "FractionalPredicate",
       Schema.CaseClass2(
+        TypeId.parse("zio.flow.remote.UnaryOperators.FractionalPredicate"),
         Schema.Field("operator", Schema[FractionalPredicateOperator]),
         Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
         (op: FractionalPredicateOperator, n: zio.flow.remote.numeric.Fractional[Any]) => FractionalPredicate(op, n),
@@ -188,6 +193,7 @@ object UnaryOperators {
     Schema.Case(
       "CharPredicate",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.UnaryOperators.CharPredicate"),
         Schema.Field("operator", Schema[CharPredicateOperator]),
         (op: CharPredicateOperator) => CharPredicate(op),
         _.operator
@@ -199,6 +205,7 @@ object UnaryOperators {
     Schema.Case(
       "Conversion",
       Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Conversion"),
         Schema.Field("conversion", RemoteConversions.schemaAny),
         (conversion: RemoteConversions[Any, Any]) => Conversion(conversion),
         _.conversion
@@ -209,6 +216,7 @@ object UnaryOperators {
   def schema[In, Out]: Schema[UnaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[UnaryOperators[In, Out]]]
   val schemaAny: Schema[UnaryOperators[Any, Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.remote.UnaryOperators"),
       CaseSet
         .Cons(
           numericCase,
