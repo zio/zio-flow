@@ -17,27 +17,28 @@
 package zio.flow.remote
 
 import zio.flow.Remote
+import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 
 final class RemoteBooleanSyntax(val self: Remote[Boolean]) extends AnyVal {
 
   def &&(that: Remote[Boolean]): Remote[Boolean] =
-    Remote.And(self, that)
+    Remote.Binary(self, that, BinaryOperators.Bool(BinaryBooleanOperator.And))
 
   def &(that: Remote[Boolean]): Remote[Boolean] =
     self && that
 
   def ||(that: Remote[Boolean]): Remote[Boolean] =
-    !(!self && !that)
+    Remote.Binary(self, that, BinaryOperators.Bool(BinaryBooleanOperator.Or))
 
   def |(that: Remote[Boolean]): Remote[Boolean] =
     self || that
 
   def ^(that: Remote[Boolean]): Remote[Boolean] =
-    (self && !that) || (!self && that)
+    Remote.Binary(self, that, BinaryOperators.Bool(BinaryBooleanOperator.Xor))
 
   def ifThenElse[B](ifTrue: Remote[B], ifFalse: Remote[B]): Remote[B] =
     Remote.Branch(self, Remote.suspend(ifTrue), Remote.suspend(ifFalse))
 
   def unary_! : Remote[Boolean] =
-    Remote.Not(self)
+    Remote.Unary(self, UnaryOperators.Bool(UnaryBooleanOperator.Not))
 }

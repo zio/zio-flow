@@ -2309,68 +2309,6 @@ object Remote {
       Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]])
   }
 
-  // TODO: merge into unary
-  final case class Not(value: Remote[Boolean]) extends Remote[Boolean] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      value.eval.map { boolValue =>
-        DynamicValue.fromSchemaAndValue(Schema[Boolean], !boolValue)
-      }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Boolean] =
-      Not(value.substitute(f))
-
-    override private[flow] val variableUsage = value.variableUsage
-  }
-
-  object Not {
-    val schema: Schema[Not] = Schema.defer(
-      Remote
-        .schema[Boolean]
-        .transform(
-          Not.apply,
-          _.value
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[Not, Remote[A]] =
-      Schema.Case("Not", schema, _.asInstanceOf[Not])
-  }
-
-  // TODO: merge into binary
-  final case class And(left: Remote[Boolean], right: Remote[Boolean]) extends Remote[Boolean] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        lval <- left.eval
-        rval <- right.eval
-      } yield DynamicValue.fromSchemaAndValue(Schema[Boolean], lval && rval)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Boolean] =
-      And(left.substitute(f), right.substitute(f))
-
-    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
-  }
-
-  object And {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.And")
-
-    val schema: Schema[And] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Boolean], Remote[Boolean], And](
-          typeId,
-          Schema.Field("left", Remote.schema[Boolean]),
-          Schema.Field("right", Remote.schema[Boolean]),
-          { case (left, right) => And(left, right) },
-          _.left,
-          _.right
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[And, Remote[A]] =
-      Schema.Case("And", schema, _.asInstanceOf[And])
-  }
-
   final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: UnboundRemoteFunction[(B, A), B])
       extends Remote[B] {
 
@@ -3987,8 +3925,6 @@ object Remote {
       .:+:(StringToCharList.schemaCase[A])
       .:+:(CharListToString.schemaCase[A])
       .:+:(Equal.schemaCase[A])
-      .:+:(Not.schemaCase[A])
-      .:+:(And.schemaCase[A])
       .:+:(Fold.schemaCase[A])
       .:+:(Cons.schemaCase[A])
       .:+:(UnCons.schemaCase[A])

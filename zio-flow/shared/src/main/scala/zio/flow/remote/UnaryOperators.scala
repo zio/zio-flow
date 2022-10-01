@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow.remote.boolean.UnaryBooleanOperator
 import zio.flow.remote.numeric.{
   FractionalPredicateOperator,
   NumericPredicateOperator,
@@ -110,6 +111,14 @@ object UnaryOperators {
       CharPredicateOperator.evaluate(value, operator)
   }
 
+  final case class Bool(operator: UnaryBooleanOperator) extends UnaryOperators[Boolean, Boolean] {
+    override val inputSchema: Schema[Boolean]  = Schema[Boolean]
+    override val outputSchema: Schema[Boolean] = Schema[Boolean]
+
+    override def apply(value: Boolean): Boolean =
+      UnaryBooleanOperator.evaluate(value, operator)
+  }
+
   final case class Conversion[In, Out](
     conversion: RemoteConversions[In, Out]
   ) extends UnaryOperators[In, Out] {
@@ -201,6 +210,18 @@ object UnaryOperators {
       _.asInstanceOf[CharPredicate]
     )
 
+  private val boolCase: Schema.Case[Bool, UnaryOperators[Any, Any]] =
+    Schema.Case(
+      "Bool",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Bool"),
+        Schema.Field("operator", Schema[UnaryBooleanOperator]),
+        (op: UnaryBooleanOperator) => Bool(op),
+        _.operator
+      ),
+      _.asInstanceOf[Bool]
+    )
+
   private val conversionCase: Schema.Case[Conversion[Any, Any], UnaryOperators[Any, Any]] =
     Schema.Case(
       "Conversion",
@@ -227,6 +248,7 @@ object UnaryOperators {
         .:+:(numericPredicateCase)
         .:+:(fractionalPredicateCase)
         .:+:(charPredicateCase)
+        .:+:(boolCase)
         .:+:(conversionCase)
     )
 }

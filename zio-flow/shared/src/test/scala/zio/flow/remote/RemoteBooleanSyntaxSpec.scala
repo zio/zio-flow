@@ -23,29 +23,29 @@ import zio.flow.{LocalContext, Remote, RemoteContext}
 object RemoteBooleanSyntaxSpec extends RemoteSpecBase {
   override def spec =
     suite("RemoteBooleanSyntax")(
-      remoteTest("And")(
+      remoteTest("&&")(
         (Remote(true) && Remote(false)) <-> false,
         (Remote(true) && Remote(true)) <-> true,
         (Remote(false) && Remote(false)) <-> false,
         (Remote(false) && Remote(true)) <-> false
       ),
-      remoteTest("Or")(
+      remoteTest("||")(
         (Remote(true) || Remote(false)) <-> true,
         (Remote(true) || Remote(true)) <-> true,
         (Remote(false) || Remote(false)) <-> false,
         (Remote(false) || Remote(true)) <-> true
       ),
-      remoteTest("Xor")(
+      remoteTest("^")(
         (Remote(true) ^ Remote(false)) <-> true,
         (Remote(true) ^ Remote(true)) <-> false,
         (Remote(false) ^ Remote(false)) <-> false,
         (Remote(false) ^ Remote(true)) <-> true
       ),
-      remoteTest("Not")(
+      remoteTest("!")(
         !Remote(true) <-> false,
         !Remote(false) <-> true
       ),
-      remoteTest("IfThenElse")(
+      remoteTest("ifThenElse")(
         Remote(false).ifThenElse(Remote(1), Remote(12)) <-> 12,
         Remote(true).ifThenElse(Remote(1), Remote(12)) <-> 1
       )

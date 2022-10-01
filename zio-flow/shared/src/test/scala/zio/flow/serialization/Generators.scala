@@ -53,6 +53,7 @@ import zio.{Duration, ZNothing, flow}
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
+import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, UnaryOperators}
 
@@ -325,6 +326,11 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(FractionalPredicateOperator.IsPosInfinity)
     )
 
+  lazy val genUnaryBooleanOperator: Gen[Any, UnaryBooleanOperator] =
+    Gen.oneOf(
+      Gen.const(UnaryBooleanOperator.Not)
+    )
+
   lazy val genBinaryNumericOperator: Gen[Any, BinaryNumericOperator] =
     Gen.oneOf(
       Gen.const(BinaryNumericOperator.Add),
@@ -377,6 +383,13 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(CharConversion.ToLower),
       Gen.const(CharConversion.ToTitleCase),
       Gen.const(CharConversion.ReverseBytes)
+    )
+
+  lazy val genBinaryBooleanOperator: Gen[Any, BinaryBooleanOperator] =
+    Gen.oneOf(
+      Gen.const(BinaryBooleanOperator.And),
+      Gen.const(BinaryBooleanOperator.Or),
+      Gen.const(BinaryBooleanOperator.Xor)
     )
 
   lazy val genRemoteConversions: Gen[Sized, (RemoteConversions[Any, Any], Gen[Sized, Remote[Any]])] =
@@ -465,7 +478,10 @@ trait Generators extends DefaultJavaTimeSchemas {
       for {
         pair             <- genRemoteConversions
         (conversion, gen) = pair
-      } yield (UnaryOperators.Conversion(conversion).asInstanceOf[UnaryOperators[Any, Any]], gen)
+      } yield (UnaryOperators.Conversion(conversion).asInstanceOf[UnaryOperators[Any, Any]], gen),
+      for {
+        op <- genUnaryBooleanOperator
+      } yield (UnaryOperators.Bool(op).asInstanceOf[UnaryOperators[Any, Any]], Gen.boolean.map(Remote(_)))
     )
 
   lazy val genBinaryOperators: Gen[Sized, (BinaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =
@@ -488,7 +504,10 @@ trait Generators extends DefaultJavaTimeSchemas {
       for {
         pair          <- genNumeric
         (numeric, gen) = pair
-      } yield (BinaryOperators.LessThanEqual(numeric.schema).asInstanceOf[BinaryOperators[Any, Any]], gen)
+      } yield (BinaryOperators.LessThanEqual(numeric.schema).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      for {
+        op <- genBinaryBooleanOperator
+      } yield (BinaryOperators.Bool(op).asInstanceOf[BinaryOperators[Any, Any]], Gen.boolean.map(Remote(_)))
     )
 
   lazy val genUnary: Gen[Sized, Remote[Any]] =
@@ -611,17 +630,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       lLit = Remote(lv)
       rLit = Remote(rv)
     } yield Remote.Equal(lLit, rLit)
-
-  lazy val genNot: Gen[Sized, Remote[Any]] =
-    for {
-      value <- Gen.boolean.map(Remote(_))
-    } yield Remote.Not(value)
-
-  lazy val genAnd: Gen[Sized, Remote[Any]] =
-    for {
-      left <- Gen.boolean.map(Remote(_))
-      right = Remote.UnboundRemoteFunction.make((b: Remote[Boolean]) => Remote.Not(b))
-    } yield Remote.And(left, right(Remote(false)))
 
   lazy val genFold: Gen[Sized, Remote[Any]] =
     for {

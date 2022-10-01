@@ -104,8 +104,6 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("tupleAccess")(roundtripCheck(codec, genTupleAccess)),
       test("branch")(roundtripCheck(codec, genBranch)),
       test("equal")(roundtripCheck(codec, genEqual)),
-      test("not")(roundtripCheck(codec, genNot)),
-      test("and")(roundtripCheck(codec, genAnd)),
       test("fold")(roundtripCheck(codec, genFold)),
       test("cons")(roundtripCheck(codec, genCons)),
       test("uncons")(roundtripCheck(codec, genUnCons)),

@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow.remote.boolean.BinaryBooleanOperator
 import zio.flow.remote.numeric.{BinaryFractionalOperator, BinaryIntegralOperator, BinaryNumericOperator}
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema._
@@ -78,6 +79,14 @@ object BinaryOperators {
       schema.ordering.compare(left, right) <= 0
   }
 
+  final case class Bool(operator: BinaryBooleanOperator) extends BinaryOperators[Boolean, Boolean] {
+    override val inputSchema: Schema[Boolean]  = Schema[Boolean]
+    override val outputSchema: Schema[Boolean] = Schema[Boolean]
+
+    override def apply(left: Boolean, right: Boolean): Boolean =
+      BinaryBooleanOperator.evaluate(left, right, operator)
+  }
+
   private val numericCase: Schema.Case[Numeric[Any], BinaryOperators[Any, Any]] =
     Schema.Case(
       "Numeric",
@@ -132,6 +141,18 @@ object BinaryOperators {
       _.asInstanceOf[LessThanEqual[Any]]
     )
 
+  private val boolCase: Schema.Case[Bool, BinaryOperators[Any, Any]] =
+    Schema.Case(
+      "Bool",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.BinaryOperators.Bool"),
+        Schema.Field("operator", Schema[BinaryBooleanOperator]),
+        (op: BinaryBooleanOperator) => Bool(op),
+        _.operator
+      ),
+      _.asInstanceOf[Bool]
+    )
+
   def schema[In, Out]: Schema[BinaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[BinaryOperators[In, Out]]]
 
   val schemaAny: Schema[BinaryOperators[Any, Any]] =
@@ -145,5 +166,6 @@ object BinaryOperators {
         .:+:(fractionalCase)
         .:+:(integralCase)
         .:+:(lessThenEqualCase)
+        .:+:(boolCase)
     )
 }

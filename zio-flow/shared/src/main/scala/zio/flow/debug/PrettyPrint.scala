@@ -752,13 +752,6 @@ object PrettyPrint {
         prettyPrintRemote(left, builder, indent)
         builder.append("==")
         prettyPrintRemote(right, builder, indent)
-      case Remote.Not(value) =>
-        builder.append("NOT ")
-        prettyPrintRemote(value, builder, indent)
-      case Remote.And(left, right) =>
-        prettyPrintRemote(left, builder, indent)
-        builder.append("&&")
-        prettyPrintRemote(right, builder, indent)
       case Remote.Fold(list, initial, body) =>
         builder.append("RemoteFold[")
         prettyPrintRemote(list, builder, indent + 2)
