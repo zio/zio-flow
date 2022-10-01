@@ -600,9 +600,6 @@ trait Generators extends DefaultJavaTimeSchemas {
         )
     } yield Remote.Branch(condition, ifTrue, ifFalse)
 
-  lazy val genLength: Gen[Sized, Remote[Any]] =
-    Gen.string.map(Remote(_)).map(Remote.Length(_))
-
   lazy val genLessThanEqual: Gen[Sized, Remote[Any]] =
     for {
       lv  <- Gen.int

@@ -205,7 +205,7 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
     self.toList.lastOption.trackInternal("String#lastOption")
 
   def length: Remote[Int] =
-    Remote.Length(self).trackInternal("String#length")
+    self.toList.length.trackInternal("String#length")
 
   def map(f: Remote[Char] => Remote[Char]): Remote[String] =
     self.toList.map(f).mkString.trackInternal("String#map")

@@ -748,8 +748,6 @@ object PrettyPrint {
         prettyPrintRemote(x, builder, indent)
       case Remote.CharListToString(x) =>
         prettyPrintRemote(x, builder, indent)
-      case Remote.Length(l) =>
-        prettyPrintRemote(l, builder, indent)
       case Remote.LessThanEqual(left, right, _) =>
         prettyPrintRemote(left, builder, indent)
         builder.append("<=")

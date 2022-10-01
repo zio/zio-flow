@@ -2276,34 +2276,6 @@ object Remote {
       Schema.Case("CharListToString", schema, _.asInstanceOf[CharListToString])
   }
 
-  case class Length(remoteString: Remote[String]) extends Remote[Int] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      remoteString.eval.map { value =>
-        DynamicValue.fromSchemaAndValue(Schema[Int], value.length)
-      }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Int] =
-      Length(remoteString.substitute(f))
-
-    override private[flow] val variableUsage = remoteString.variableUsage
-  }
-
-  // TODO: delete
-  object Length {
-    val schema: Schema[Length] = Schema.defer(
-      Remote
-        .schema[String]
-        .transform(
-          Length.apply,
-          _.remoteString
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[Length, Remote[A]] =
-      Schema.Case("Length", schema, _.asInstanceOf[Length])
-  }
-
   // TODO: merge into Binary?
   final case class LessThanEqual[A](left: Remote[A], right: Remote[A], schema: Schema[A]) extends Remote[Boolean] {
 
@@ -4054,7 +4026,6 @@ object Remote {
       .:+:(Branch.schemaCase[A])
       .:+:(StringToCharList.schemaCase[A])
       .:+:(CharListToString.schemaCase[A])
-      .:+:(Length.schemaCase[A])
       .:+:(LessThanEqual.schemaCase[A])
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])
