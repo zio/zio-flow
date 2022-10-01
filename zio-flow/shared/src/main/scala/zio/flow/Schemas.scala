@@ -65,7 +65,7 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit lazy val schemaStackTraceElement: Schema[StackTraceElement] =
     Schema.CaseClass4(
-      TypeId.parse("java.lang.stackTraceElement"),
+      TypeId.parse("java.lang.StackTraceElement"),
       field1 = Schema.Field("declaringClass", Schema[String]),
       field2 = Schema.Field("methodName", Schema[String]),
       field3 = Schema.Field("fileName", Schema[String]),

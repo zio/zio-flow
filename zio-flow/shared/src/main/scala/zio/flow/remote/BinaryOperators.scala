@@ -75,6 +75,14 @@ object BinaryOperators {
     override val inputSchema: Schema[A]        = schema
     override val outputSchema: Schema[Boolean] = Schema[Boolean]
 
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case lte: LessThanEqual[_] =>
+          Schema.structureEquality.equal(schema, lte.schema)
+        case _ =>
+          false
+      }
+
     override def apply(left: A, right: A): Boolean =
       schema.ordering.compare(left, right) <= 0
   }
