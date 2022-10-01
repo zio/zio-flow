@@ -494,8 +494,8 @@ trait Generators extends DefaultJavaTimeSchemas {
       for {
         op               <- genBinaryFractionalOperator
         pair             <- genFractional
-        (fractinoal, gen) = pair
-      } yield (BinaryOperators.Fractional(op, fractinoal).asInstanceOf[BinaryOperators[Any, Any]], gen),
+        (fractional, gen) = pair
+      } yield (BinaryOperators.Fractional(op, fractional).asInstanceOf[BinaryOperators[Any, Any]], gen),
       for {
         op             <- genBinaryIntegralOperator
         pair           <- genIntegral
