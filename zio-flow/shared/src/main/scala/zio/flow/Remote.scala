@@ -19,7 +19,6 @@ package zio.flow
 import zio.flow.Remote.Debug.DebugMode
 import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, InternalRemoteTracking, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
-import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.{Chunk, ZIO}
 
@@ -2276,45 +2275,6 @@ object Remote {
       Schema.Case("CharListToString", schema, _.asInstanceOf[CharListToString])
   }
 
-  // TODO: merge into Binary?
-  final case class LessThanEqual[A](left: Remote[A], right: Remote[A], schema: Schema[A]) extends Remote[Boolean] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        leftVal      <- left.eval(schema)
-        rightVal     <- right.eval(schema)
-        ordering      = schema.ordering
-        compareResult = ordering.compare(leftVal, rightVal)
-      } yield DynamicValueHelpers.of(compareResult <= 0)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Boolean] =
-      LessThanEqual(left.substitute(f), right.substitute(f), schema)
-
-    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
-  }
-
-  object LessThanEqual {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.LessThanEqual")
-
-    def schema[A]: Schema[LessThanEqual[A]] =
-      Schema.defer(
-        Schema.CaseClass3[Remote[A], Remote[A], FlowSchemaAst, LessThanEqual[A]](
-          typeId,
-          Schema.Field("left", Remote.schema[A]),
-          Schema.Field("right", Remote.schema[A]),
-          Schema.Field("schema", FlowSchemaAst.schema),
-          { case (left, right, schema) => LessThanEqual(left, right, schema.toSchema[A]) },
-          _.left,
-          _.right,
-          lte => FlowSchemaAst.fromSchema(lte.schema)
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[LessThanEqual[Any], Remote[A]] =
-      Schema.Case("LessThanEqual", schema[Any], _.asInstanceOf[LessThanEqual[Any]])
-  }
-
-  // TODO: merge into Binary?
   final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -4026,7 +3986,6 @@ object Remote {
       .:+:(Branch.schemaCase[A])
       .:+:(StringToCharList.schemaCase[A])
       .:+:(CharListToString.schemaCase[A])
-      .:+:(LessThanEqual.schemaCase[A])
       .:+:(Equal.schemaCase[A])
       .:+:(Not.schemaCase[A])
       .:+:(And.schemaCase[A])

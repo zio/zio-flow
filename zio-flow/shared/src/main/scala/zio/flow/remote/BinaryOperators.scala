@@ -16,7 +16,8 @@
 
 package zio.flow.remote
 
-import zio.flow.remote.numeric.{BinaryIntegralOperator, BinaryFractionalOperator, BinaryNumericOperator}
+import zio.flow.remote.numeric.{BinaryFractionalOperator, BinaryIntegralOperator, BinaryNumericOperator}
+import zio.flow.serialization.FlowSchemaAst
 import zio.schema._
 
 sealed trait BinaryOperators[In, Out] {
@@ -69,6 +70,14 @@ object BinaryOperators {
       bitwise.binary(operator, left, right)
   }
 
+  final case class LessThanEqual[A](schema: Schema[A]) extends BinaryOperators[A, Boolean] {
+    override val inputSchema: Schema[A]        = schema
+    override val outputSchema: Schema[Boolean] = Schema[Boolean]
+
+    override def apply(left: A, right: A): Boolean =
+      schema.ordering.compare(left, right) <= 0
+  }
+
   private val numericCase: Schema.Case[Numeric[Any], BinaryOperators[Any, Any]] =
     Schema.Case(
       "Numeric",
@@ -111,6 +120,18 @@ object BinaryOperators {
       _.asInstanceOf[Integral[Any]]
     )
 
+  private val lessThenEqualCase: Schema.Case[LessThanEqual[Any], BinaryOperators[Any, Any]] =
+    Schema.Case(
+      "LessThanEqual",
+      Schema.CaseClass1[FlowSchemaAst, LessThanEqual[Any]](
+        TypeId.parse("zio.flow.remote.BinaryOperators.LessThanEqual"),
+        Schema.Field("schema", FlowSchemaAst.schema),
+        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema[Any]),
+        lte => FlowSchemaAst.fromSchema(lte.schema)
+      ),
+      _.asInstanceOf[LessThanEqual[Any]]
+    )
+
   def schema[In, Out]: Schema[BinaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[BinaryOperators[In, Out]]]
 
   val schemaAny: Schema[BinaryOperators[Any, Any]] =
@@ -123,5 +144,6 @@ object BinaryOperators {
         )
         .:+:(fractionalCase)
         .:+:(integralCase)
+        .:+:(lessThenEqualCase)
     )
 }

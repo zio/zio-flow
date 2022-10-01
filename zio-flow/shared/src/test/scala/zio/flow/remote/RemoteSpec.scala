@@ -120,34 +120,6 @@ object RemoteSpec extends RemoteSpecBase {
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       ),
-      suite("LessThanEqual")(
-        test("evaluates correctly when less") {
-          val remote = Remote.LessThanEqual(Remote(5), Remote(10), Schema[Int])
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Boolean]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], true),
-              typ == true
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        },
-        test("evaluates correctly when greater") {
-          val remote = Remote.LessThanEqual(Remote(50), Remote(10), Schema[Int])
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Boolean]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], false),
-              typ == false
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        }
-      ),
       suite("Fold")(
         test("evaluates correctly") {
           val remote = Remote.Fold(

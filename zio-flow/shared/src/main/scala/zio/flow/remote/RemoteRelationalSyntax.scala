@@ -25,7 +25,7 @@ final class RemoteRelationalSyntax[A](val self: Remote[A]) extends AnyVal {
     (self <= that) && (self !== that)
 
   def <=(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
-    Remote.LessThanEqual(self, that, schema)
+    Remote.Binary(self, that, BinaryOperators.LessThanEqual(schema))
 
   def >(that: Remote[A])(implicit schema: Schema[A]): Remote[Boolean] =
     !(self <= that)

@@ -484,7 +484,11 @@ trait Generators extends DefaultJavaTimeSchemas {
         op             <- genBinaryIntegralOperator
         pair           <- genIntegral
         (integral, gen) = pair
-      } yield (BinaryOperators.Integral(op, integral).asInstanceOf[BinaryOperators[Any, Any]], gen)
+      } yield (BinaryOperators.Integral(op, integral).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (BinaryOperators.LessThanEqual(numeric.schema).asInstanceOf[BinaryOperators[Any, Any]], gen)
     )
 
   lazy val genUnary: Gen[Sized, Remote[Any]] =
@@ -599,14 +603,6 @@ trait Generators extends DefaultJavaTimeSchemas {
           Remote.Binary(Remote(10), Remote(n), BinaryOperators.Numeric(BinaryNumericOperator.Mul, Numeric.NumericInt))
         )
     } yield Remote.Branch(condition, ifTrue, ifFalse)
-
-  lazy val genLessThanEqual: Gen[Sized, Remote[Any]] =
-    for {
-      lv  <- Gen.int
-      rv  <- Gen.int
-      lLit = Remote(lv)
-      rLit = Remote(rv)
-    } yield Remote.LessThanEqual(lLit, rLit, Schema[Int])
 
   lazy val genEqual: Gen[Sized, Remote[Any]] =
     for {

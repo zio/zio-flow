@@ -21,7 +21,7 @@ import zio.flow.{LocalContext, Remote, RemoteContext}
 import zio.test.{Gen, Sized, TestResult, check}
 import zio.{ZIO, ZLayer}
 
-object RemoteRelationalSpec extends RemoteSpecBase {
+object RemoteRelationalSyntaxSpec extends RemoteSpecBase {
 
   val smallIntGen: Gen[Sized, Int] =
     Gen.small(Gen.const(_))
@@ -30,6 +30,22 @@ object RemoteRelationalSpec extends RemoteSpecBase {
     suite("RemoteRelationalSpec")(
       test("Int") {
         check(smallIntGen, smallIntGen) { case (x, y) =>
+          ZIO
+            .collectAll(
+              List(
+                Remote(x) < Remote(y) <-> (x < y),
+                Remote(x) <= Remote(y) <-> (x <= y),
+                (Remote(x) !== Remote(y)) <-> (x != y),
+                Remote(x) > Remote(y) <-> (x > y),
+                Remote(x) >= Remote(y) <-> (x >= y),
+                (Remote(x) === Remote(y)) <-> (x == y)
+              )
+            )
+            .map(TestResult.all(_: _*))
+        }
+      },
+      test("String") {
+        check(Gen.string, Gen.string) { case (x, y) =>
           ZIO
             .collectAll(
               List(
