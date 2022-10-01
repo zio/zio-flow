@@ -104,9 +104,11 @@ object Numeric extends NumericImplicits0 {
     override def fromLong(value: Long): Remote[Int] = Remote(value.toInt)
 
     override def parse(s: String): Option[Int] =
-      s.toIntOption
+      Try(s.toInt).toOption
 
     override def add(left: Int, right: Int): Int = left + right
+
+    override def sub(left: Int, right: Int): Int = left - right
 
     override def mul(left: Int, right: Int): Int = left * right
 
@@ -120,7 +122,7 @@ object Numeric extends NumericImplicits0 {
 
     override def abs(value: Int): Int = value.abs
 
-    override def sign(value: Int): Int = value.sign
+    override def sign(value: Int): Int = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: Int, right: Int): Int = left.min(right)
 
@@ -154,23 +156,21 @@ object Numeric extends NumericImplicits0 {
 
     override def toOctalString(value: Int): String = value.toOctalString
 
-    override def addExact(left: Int, right: Int): Int = math.addExact(left, right)
+    override def addExact(left: Int, right: Int): Int = Math.addExact(left, right)
 
-    override def sub(left: Int, right: Int): Int = left - right
+    override def subExact(left: Int, right: Int): Int = Math.subtractExact(left, right)
 
-    override def subExact(left: Int, right: Int): Int = math.subtractExact(left, right)
+    override def mulExact(left: Int, right: Int): Int = Math.multiplyExact(left, right)
 
-    override def mulExact(left: Int, right: Int): Int = math.multiplyExact(left, right)
+    override def negExact(value: Int): Int = Math.negateExact(value)
 
-    override def negExact(value: Int): Int = math.negateExact(value)
+    override def floorDiv(left: Int, right: Int): Int = Math.floorDiv(left, right)
 
-    override def floorDiv(left: Int, right: Int): Int = math.floorDiv(left, right)
+    override def floorMod(left: Int, right: Int): Int = Math.floorMod(left, right)
 
-    override def floorMod(left: Int, right: Int): Int = math.floorMod(left, right)
+    override def incExact(value: Int): Int = Math.incrementExact(value)
 
-    override def incExact(value: Int): Int = math.incrementExact(value)
-
-    override def decExact(value: Int): Int = math.decrementExact(value)
+    override def decExact(value: Int): Int = Math.decrementExact(value)
   }
   implicit object NumericInt extends NumericInt
 
@@ -258,6 +258,8 @@ sealed trait NumericImplicits0 {
 
     override def add(left: Char, right: Char): Char = (left + right).toChar
 
+    override def sub(left: Char, right: Char): Char = (left - right).toChar
+
     override def mul(left: Char, right: Char): Char = (left * right).toChar
 
     override def div(left: Char, right: Char): Char = (left / right).toChar
@@ -270,7 +272,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: Char): Char = value.abs
 
-    override def sign(value: Char): Char = value.sign
+    override def sign(value: Char): Char = if (value == 0) 0 else 1
 
     override def min(left: Char, right: Char): Char = left.min(right)
 
@@ -304,23 +306,21 @@ sealed trait NumericImplicits0 {
 
     override def toOctalString(value: Char): String = value.toInt.toOctalString
 
-    override def addExact(left: Char, right: Char): Char = math.addExact(left.toInt, right.toInt).toChar
+    override def addExact(left: Char, right: Char): Char = Math.addExact(left.toInt, right.toInt).toChar
 
-    override def sub(left: Char, right: Char): Char = (left - right).toChar
+    override def subExact(left: Char, right: Char): Char = Math.subtractExact(left.toInt, right.toInt).toChar
 
-    override def subExact(left: Char, right: Char): Char = math.subtractExact(left.toInt, right.toInt).toChar
+    override def mulExact(left: Char, right: Char): Char = Math.multiplyExact(left.toInt, right.toInt).toChar
 
-    override def mulExact(left: Char, right: Char): Char = math.multiplyExact(left.toInt, right.toInt).toChar
+    override def negExact(value: Char): Char = Math.negateExact(value.toInt).toChar
 
-    override def negExact(value: Char): Char = math.negateExact(value.toInt).toChar
+    override def floorDiv(left: Char, right: Char): Char = Math.floorDiv(left.toInt, right.toInt).toChar
 
-    override def floorDiv(left: Char, right: Char): Char = math.floorDiv(left.toInt, right.toInt).toChar
+    override def floorMod(left: Char, right: Char): Char = Math.floorMod(left.toInt, right.toInt).toChar
 
-    override def floorMod(left: Char, right: Char): Char = math.floorMod(left.toInt, right.toInt).toChar
+    override def incExact(value: Char): Char = Math.incrementExact(value.toInt).toChar
 
-    override def incExact(value: Char): Char = math.incrementExact(value.toInt).toChar
-
-    override def decExact(value: Char): Char = math.decrementExact(value.toInt).toChar
+    override def decExact(value: Char): Char = Math.decrementExact(value.toInt).toChar
   }
 
   implicit case object NumericChar extends NumericChar
@@ -333,9 +333,11 @@ sealed trait NumericImplicits0 {
     override def fromLong(value: Long): Remote[Short] = Remote(value.toShort)
 
     override def parse(s: String): Option[Short] =
-      s.toShortOption
+      Try(s.toShort).toOption
 
     override def add(left: Short, right: Short): Short = (left + right).toShort
+
+    override def sub(left: Short, right: Short): Short = (left - right).toShort
 
     override def mul(left: Short, right: Short): Short = (left * right).toShort
 
@@ -349,7 +351,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: Short): Short = value.abs
 
-    override def sign(value: Short): Short = value.sign
+    override def sign(value: Short): Short = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: Short, right: Short): Short = left.min(right)
 
@@ -383,23 +385,21 @@ sealed trait NumericImplicits0 {
 
     override def toOctalString(value: Short): String = value.toInt.toOctalString
 
-    override def addExact(left: Short, right: Short): Short = math.addExact(left.toInt, right.toInt).toShort
+    override def addExact(left: Short, right: Short): Short = Math.addExact(left.toInt, right.toInt).toShort
 
-    override def sub(left: Short, right: Short): Short = (left - right).toShort
+    override def subExact(left: Short, right: Short): Short = Math.subtractExact(left.toInt, right.toInt).toShort
 
-    override def subExact(left: Short, right: Short): Short = math.subtractExact(left.toInt, right.toInt).toShort
+    override def mulExact(left: Short, right: Short): Short = Math.multiplyExact(left.toInt, right.toInt).toShort
 
-    override def mulExact(left: Short, right: Short): Short = math.multiplyExact(left.toInt, right.toInt).toShort
+    override def negExact(value: Short): Short = Math.negateExact(value.toInt).toShort
 
-    override def negExact(value: Short): Short = math.negateExact(value.toInt).toShort
+    override def floorDiv(left: Short, right: Short): Short = Math.floorDiv(left.toInt, right.toInt).toShort
 
-    override def floorDiv(left: Short, right: Short): Short = math.floorDiv(left.toInt, right.toInt).toShort
+    override def floorMod(left: Short, right: Short): Short = Math.floorMod(left.toInt, right.toInt).toShort
 
-    override def floorMod(left: Short, right: Short): Short = math.floorMod(left.toInt, right.toInt).toShort
+    override def incExact(value: Short): Short = Math.incrementExact(value.toInt).toShort
 
-    override def incExact(value: Short): Short = math.incrementExact(value.toInt).toShort
-
-    override def decExact(value: Short): Short = math.decrementExact(value.toInt).toShort
+    override def decExact(value: Short): Short = Math.decrementExact(value.toInt).toShort
   }
   implicit case object NumericShort extends NumericShort
 
@@ -411,9 +411,11 @@ sealed trait NumericImplicits0 {
     override def fromLong(value: Long): Remote[Long] = Remote(value)
 
     override def parse(s: String): Option[Long] =
-      s.toLongOption
+      Try(s.toLong).toOption
 
     override def add(left: Long, right: Long): Long = left + right
+
+    override def sub(left: Long, right: Long): Long = left - right
 
     override def mul(left: Long, right: Long): Long = left * right
 
@@ -427,7 +429,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: Long): Long = value.abs
 
-    override def sign(value: Long): Long = value.sign
+    override def sign(value: Long): Long = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: Long, right: Long): Long = left.min(right)
 
@@ -463,23 +465,21 @@ sealed trait NumericImplicits0 {
 
     override def toOctalString(value: Long): String = value.toOctalString
 
-    override def addExact(left: Long, right: Long): Long = math.addExact(left, right)
+    override def addExact(left: Long, right: Long): Long = Math.addExact(left, right)
 
-    override def sub(left: Long, right: Long): Long = left - right
+    override def subExact(left: Long, right: Long): Long = Math.subtractExact(left, right)
 
-    override def subExact(left: Long, right: Long): Long = math.subtractExact(left, right)
+    override def mulExact(left: Long, right: Long): Long = Math.multiplyExact(left, right)
 
-    override def mulExact(left: Long, right: Long): Long = math.multiplyExact(left, right)
+    override def negExact(value: Long): Long = Math.negateExact(value)
 
-    override def negExact(value: Long): Long = math.negateExact(value)
+    override def floorDiv(left: Long, right: Long): Long = Math.floorDiv(left, right)
 
-    override def floorDiv(left: Long, right: Long): Long = math.floorDiv(left, right)
+    override def floorMod(left: Long, right: Long): Long = Math.floorMod(left, right)
 
-    override def floorMod(left: Long, right: Long): Long = math.floorMod(left, right)
+    override def incExact(value: Long): Long = Math.incrementExact(value)
 
-    override def incExact(value: Long): Long = math.incrementExact(value)
-
-    override def decExact(value: Long): Long = math.decrementExact(value)
+    override def decExact(value: Long): Long = Math.decrementExact(value)
   }
   implicit case object NumericLong extends NumericLong
 
@@ -507,7 +507,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: BigInt): BigInt = value.abs
 
-    override def sign(value: BigInt): BigInt = value.sign
+    override def sign(value: BigInt): BigInt = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: BigInt, right: BigInt): BigInt = left.min(right)
 
@@ -581,7 +581,7 @@ sealed trait NumericImplicits0 {
     override def fromLong(value: Long): Remote[Float] = Remote(value.toFloat)
 
     override def parse(s: String): Option[Float] =
-      s.toFloatOption
+      Try(s.toFloat).toOption
 
     override def add(left: Float, right: Float): Float = left + right
 
@@ -597,7 +597,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: Float): Float = value.abs
 
-    override def sign(value: Float): Float = value.sign
+    override def sign(value: Float): Float = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: Float, right: Float): Float = left.min(right)
 
@@ -623,7 +623,7 @@ sealed trait NumericImplicits0 {
     override def fromLong(value: Long): Remote[Double] = Remote(value.toDouble)
 
     override def parse(s: String): Option[Double] =
-      s.toDoubleOption
+      Try(s.toDouble).toOption
 
     override def add(left: Double, right: Double): Double = left + right
 
@@ -639,7 +639,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: Double): Double = value.abs
 
-    override def sign(value: Double): Double = value.sign
+    override def sign(value: Double): Double = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: Double, right: Double): Double = left.min(right)
 
@@ -681,7 +681,7 @@ sealed trait NumericImplicits0 {
 
     override def abs(value: BigDecimal): BigDecimal = value.abs
 
-    override def sign(value: BigDecimal): BigDecimal = value.sign
+    override def sign(value: BigDecimal): BigDecimal = if (value == 0) 0 else if (value < 0) -1 else 1
 
     override def min(left: BigDecimal, right: BigDecimal): BigDecimal = left.min(right)
 
@@ -955,7 +955,7 @@ object Fractional {
 
     override def isInfinity(value: Float): Boolean = value.isInfinity
 
-    override def isFinite(value: Float): Boolean = value.isFinite
+    override def isFinite(value: Float): Boolean = java.lang.Float.isFinite(value)
 
     override def isPosInfinity(value: Float): Boolean = value.isPosInfinity
 
@@ -963,11 +963,11 @@ object Fractional {
 
     override def rint(value: Float): Float = math.rint(value.toDouble).toFloat
 
-    override def nextUp(value: Float): Float = math.nextUp(value)
+    override def nextUp(value: Float): Float = Math.nextUp(value)
 
-    override def nextDown(value: Float): Float = math.nextDown(value)
+    override def nextDown(value: Float): Float = Math.nextDown(value)
 
-    override def scalb(left: Float, right: Float): Float = math.scalb(left, right.toInt)
+    override def scalb(left: Float, right: Float): Float = Math.scalb(left, right.toInt)
 
     override def sqrt(value: Float): Float = math.sqrt(value.toDouble).toFloat
 
@@ -993,14 +993,14 @@ object Fractional {
 
     override def hypot(left: Float, right: Float): Float = math.hypot(left.toDouble, right.toDouble).toFloat
 
-    override def copySign(left: Float, right: Float): Float = math.copySign(left, right)
+    override def copySign(left: Float, right: Float): Float = Math.copySign(left, right)
 
-    override def nextAfter(left: Float, right: Float): Float = math.nextAfter(left, right.toDouble)
+    override def nextAfter(left: Float, right: Float): Float = Math.nextAfter(left, right.toDouble)
 
     override def IEEEremainder(left: Float, right: Float): Float =
       math.IEEEremainder(left.toDouble, right.toDouble).toFloat
 
-    override def getExponent(value: Float): Int = math.getExponent(value)
+    override def getExponent(value: Float): Int = Math.getExponent(value)
 
     override def sub(left: Float, right: Float): Float = left - right
   }
@@ -1036,7 +1036,7 @@ object Fractional {
 
     override def isInfinity(value: Double): Boolean = value.isInfinity
 
-    override def isFinite(value: Double): Boolean = value.isFinite
+    override def isFinite(value: Double): Boolean = java.lang.Double.isFinite(value)
 
     override def isPosInfinity(value: Double): Boolean = value.isPosInfinity
 
@@ -1044,11 +1044,11 @@ object Fractional {
 
     override def rint(value: Double): Double = math.rint(value)
 
-    override def nextUp(value: Double): Double = math.nextUp(value)
+    override def nextUp(value: Double): Double = Math.nextUp(value)
 
-    override def nextDown(value: Double): Double = math.nextDown(value)
+    override def nextDown(value: Double): Double = Math.nextDown(value)
 
-    override def scalb(left: Double, right: Double): Double = math.scalb(left, right.toInt)
+    override def scalb(left: Double, right: Double): Double = Math.scalb(left, right.toInt)
 
     override def sqrt(value: Double): Double = math.sqrt(value)
 
@@ -1074,13 +1074,13 @@ object Fractional {
 
     override def hypot(left: Double, right: Double): Double = math.hypot(left, right)
 
-    override def copySign(left: Double, right: Double): Double = math.copySign(left, right)
+    override def copySign(left: Double, right: Double): Double = Math.copySign(left, right)
 
-    override def nextAfter(left: Double, right: Double): Double = math.nextAfter(left, right)
+    override def nextAfter(left: Double, right: Double): Double = Math.nextAfter(left, right)
 
     override def IEEEremainder(left: Double, right: Double): Double = math.IEEEremainder(left, right)
 
-    override def getExponent(value: Double): Int = math.getExponent(value)
+    override def getExponent(value: Double): Int = Math.getExponent(value)
   }
 
   implicit case object FractionalBigDecimal extends Numeric.NumericBigDecimal with Fractional[BigDecimal] {
@@ -1125,12 +1125,12 @@ object Fractional {
 
     override def rint(value: BigDecimal): BigDecimal = BigDecimal(math.rint(value.toDouble))
 
-    override def nextUp(value: BigDecimal): BigDecimal = BigDecimal(math.nextUp(value.toDouble))
+    override def nextUp(value: BigDecimal): BigDecimal = BigDecimal(Math.nextUp(value.toDouble))
 
-    override def nextDown(value: BigDecimal): BigDecimal = BigDecimal(math.nextDown(value.toDouble))
+    override def nextDown(value: BigDecimal): BigDecimal = BigDecimal(Math.nextDown(value.toDouble))
 
     override def scalb(left: BigDecimal, right: BigDecimal): BigDecimal = BigDecimal(
-      math.scalb(left.toDouble, right.toInt)
+      Math.scalb(left.toDouble, right.toInt)
     )
 
     override def sqrt(value: BigDecimal): BigDecimal = BigDecimal(math.sqrt(value.toDouble))
@@ -1162,18 +1162,18 @@ object Fractional {
     )
 
     override def copySign(left: BigDecimal, right: BigDecimal): BigDecimal = BigDecimal(
-      math.copySign(left.toDouble, right.toDouble)
+      Math.copySign(left.toDouble, right.toDouble)
     )
 
     override def nextAfter(left: BigDecimal, right: BigDecimal): BigDecimal = BigDecimal(
-      math.nextAfter(left.toDouble, right.toDouble)
+      Math.nextAfter(left.toDouble, right.toDouble)
     )
 
     override def IEEEremainder(left: BigDecimal, right: BigDecimal): BigDecimal = BigDecimal(
       math.IEEEremainder(left.toDouble, right.toDouble)
     )
 
-    override def getExponent(value: BigDecimal): Int = math.getExponent(value.toDouble)
+    override def getExponent(value: BigDecimal): Int = Math.getExponent(value.toDouble)
   }
 
   private val floatCase: Schema.Case[FractionalFloat.type, Fractional[Any]] =
