@@ -771,7 +771,6 @@ object PrettyPrint {
       case Remote.DurationFromString(_)         => ???
       case Remote.DurationBetweenInstants(_, _) => ???
       case Remote.DurationFromBigDecimal(_)     => ???
-      case Remote.DurationFromLongs(_, _)       => ???
       case Remote.DurationFromAmount(_, _)      => ???
       case Remote.DurationToLongs(_)            => ???
       case Remote.DurationPlusDuration(_, _)    => ???

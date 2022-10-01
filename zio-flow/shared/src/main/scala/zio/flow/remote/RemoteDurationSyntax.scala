@@ -16,29 +16,32 @@
 
 package zio.flow.remote
 
+import zio.Duration
 import zio.flow._
 
+import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.time.{Duration, Instant}
 
 final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
-  def isZero: Remote[Boolean]     = self.getSeconds === 0L && self.getNano === 0L
+  def abs(): Remote[Duration] =
+    ???
+
+  def addTo(temporal: Remote[Instant]): Remote[Instant] =
+    ???
+
+  def dividedBy(divisor: Remote[Long]): Remote[Duration] =
+    ???
+
+  def get(unit: Remote[ChronoUnit]): Remote[Long] =
+    ???
+
+  def getSeconds: Remote[Long] = Remote.DurationToLongs(self.widen[Duration])._1
+  def getNano: Remote[Long]    = Remote.DurationToLongs(self.widen[Duration])._2
+
   def isNegative: Remote[Boolean] = self.getSeconds < 0L
-  def getSeconds: Remote[Long]    = Remote.DurationToLongs(self.widen[Duration])._1
-  def getNano: Remote[Long]       = Remote.DurationToLongs(self.widen[Duration])._2
 
-  def plus(that: Remote[Duration]): Remote[Duration] =
-    Remote.DurationPlusDuration(self, that)
-
-  def plus(amountToAdd: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
-    plus(Remote.DurationFromAmount(amountToAdd, temporalUnit))
-
-  def plusDays(daysToAdd: Remote[Long]): Remote[Duration]       = plus(Remote.ofDays(daysToAdd))
-  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration]     = plus(Remote.ofHours(hoursToAdd))
-  def plusMinutes(minutesToAdd: Remote[Long]): Remote[Duration] = plus(Remote.ofMinutes(minutesToAdd))
-  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plus(Remote.ofSeconds(secondsToAdd))
-  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration]      = plus(Remote.ofNanos(nanoToAdd))
+  def isZero: Remote[Boolean] = self.getSeconds === 0L && self.getNano === 0L
 
   def minus(that: Remote[Duration]): Remote[Duration] =
     Remote.DurationPlusDuration(self, that.multipliedBy(-1L))
@@ -46,23 +49,54 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   def minus(amountToSubtract: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
     minus(Remote.DurationFromAmount(amountToSubtract, temporalUnit))
 
-  def minusDays(daysToSubtract: Remote[Long]): Remote[Duration]       = minus(Remote.ofDays(daysToSubtract))
-  def minusHours(hoursToSubtract: Remote[Long]): Remote[Duration]     = minus(Remote.ofHours(hoursToSubtract))
-  def minusMinutes(minutesToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofMinutes(minutesToSubtract))
-  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Duration] = minus(Remote.ofSeconds(secondsToSubtract))
-  def minusNanos(nanosToSubtract: Remote[Long]): Remote[Duration]     = minus(Remote.ofNanos(nanosToSubtract))
+  def minusDays(daysToSubtract: Remote[Long]): Remote[Duration] = minus(Duration.ofDays(daysToSubtract))
+
+  def minusHours(hoursToSubtract: Remote[Long]): Remote[Duration] = minus(Duration.ofHours(hoursToSubtract))
+
+  def minusMinutes(minutesToSubtract: Remote[Long]): Remote[Duration] = minus(Duration.ofMinutes(minutesToSubtract))
+
+  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Duration] = minus(Duration.ofSeconds(secondsToSubtract))
+
+  def minusNanos(nanosToSubtract: Remote[Long]): Remote[Duration] = minus(Duration.ofNanos(nanosToSubtract))
 
   def multipliedBy(amount: Remote[Long]): Remote[Duration] = Remote.DurationMultipliedBy(self, amount)
-}
 
-object RemoteDuration {
+  def negated(): Remote[Duration] =
+    ???
 
-  def parse(charSequence: Remote[String]): Remote[Duration] =
-    Remote.DurationFromString(charSequence)
+  def plus(that: Remote[Duration]): Remote[Duration] =
+    Remote.DurationPlusDuration(self, that)
 
-  def create(seconds: Remote[java.math.BigDecimal]): Remote[Duration] =
-    Remote.DurationFromBigDecimal(seconds)
+  def plus(amountToAdd: Remote[Long], temporalUnit: Remote[ChronoUnit]): Remote[Duration] =
+    plus(Remote.DurationFromAmount(amountToAdd, temporalUnit))
 
-  def between(startInclusive: Remote[Instant], endExclusive: Remote[Instant]): Remote[Duration] =
-    Remote.DurationBetweenInstants(startInclusive, endExclusive)
+  def plusDays(daysToAdd: Remote[Long]): Remote[Duration]       = plus(Duration.ofDays(daysToAdd))
+  def plusHours(hoursToAdd: Remote[Long]): Remote[Duration]     = plus(Duration.ofHours(hoursToAdd))
+  def plusMinutes(minutesToAdd: Remote[Long]): Remote[Duration] = plus(Duration.ofMinutes(minutesToAdd))
+  def plusSeconds(secondsToAdd: Remote[Long]): Remote[Duration] = plus(Duration.ofSeconds(secondsToAdd))
+  def plusNanos(nanoToAdd: Remote[Long]): Remote[Duration]      = plus(Duration.ofNanos(nanoToAdd))
+
+  def subtractFrom(temporal: Remote[Instant]): Remote[Instant] =
+    ???
+
+  def toDays(): Remote[Long] =
+    ???
+
+  def toHours(): Remote[Long] =
+    ???
+
+  def toMillis(): Remote[Long] =
+    ???
+
+  def toMinutes(): Remote[Long] =
+    ???
+
+  def toNanos(): Remote[Long] =
+    ???
+
+  def withNanos(nanos: Remote[Int]): Remote[Duration] =
+    ???
+
+  def withSeconds(seconds: Remote[Long]): Remote[Duration] =
+    ???
 }

@@ -2609,6 +2609,7 @@ object Remote {
       Schema.Case("InstantTruncate", schema, _.asInstanceOf[InstantTruncate])
   }
 
+  // TODO: move it to remote conversions
   final case class DurationFromString(charSeq: Remote[String]) extends Remote[Duration] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2702,40 +2703,6 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[DurationFromBigDecimal, Remote[A]] =
       Schema.Case("DurationFromBigDecimal", schema, _.asInstanceOf[DurationFromBigDecimal])
-  }
-
-  final case class DurationFromLongs(seconds: Remote[Long], nanoAdjustment: Remote[Long]) extends Remote[Duration] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        seconds        <- seconds.eval[Long]
-        nanoAdjustment <- nanoAdjustment.eval[Long]
-        result          = Duration.ofSeconds(seconds, nanoAdjustment)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationFromLongs(seconds.substitute(f), nanoAdjustment.substitute(f))
-
-    override private[flow] val variableUsage = seconds.variableUsage.union(nanoAdjustment.variableUsage)
-  }
-
-  object DurationFromLongs {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationFromLongs")
-
-    val schema: Schema[DurationFromLongs] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
-          typeId,
-          Schema.Field("seconds", Remote.schema[Long]),
-          Schema.Field("nanoAdjustment", Remote.schema[Long]),
-          DurationFromLongs.apply,
-          _.seconds,
-          _.nanoAdjustment
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[DurationFromLongs, Remote[A]] =
-      Schema.Case("DurationFromLongs", schema, _.asInstanceOf[DurationFromLongs])
   }
 
   final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
@@ -3308,22 +3275,6 @@ object Remote {
       (milliSecond % 1000L) * 1000000L
     )
 
-  def ofSeconds(seconds: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, Remote(0L))
-
-  def ofSeconds(seconds: Remote[Long], nanos: Remote[Long]): Remote[Duration] = Remote.DurationFromLongs(seconds, nanos)
-
-  def ofMinutes(minutes: Remote[Long]): Remote[Duration] = Remote.ofSeconds(minutes * Remote(60L))
-
-  def ofHours(hours: Remote[Long]): Remote[Duration] = Remote.ofMinutes(hours * Remote(60L))
-
-  def ofDays(days: Remote[Long]): Remote[Duration] = Remote.ofHours(days * Remote(24L))
-
-  def ofMillis(milliseconds: Remote[Long]): Remote[Duration] =
-    Remote.DurationFromAmount(milliseconds, Remote(ChronoUnit.MILLIS))
-
-  def ofNanos(nanoseconds: Remote[Long]): Remote[Duration] =
-    Remote.DurationFromAmount(nanoseconds, Remote(ChronoUnit.NANOS))
-
   def nil[A]: Remote[List[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
   def none[A]: Remote[Option[A]] = Remote.Literal(DynamicValue.NoneValue)
@@ -3888,7 +3839,6 @@ object Remote {
       .:+:(DurationFromString.schemaCase[A])
       .:+:(DurationBetweenInstants.schemaCase[A])
       .:+:(DurationFromBigDecimal.schemaCase[A])
-      .:+:(DurationFromLongs.schemaCase[A])
       .:+:(DurationFromAmount.schemaCase[A])
       .:+:(DurationToLongs.schemaCase[A])
       .:+:(DurationPlusDuration.schemaCase[A])

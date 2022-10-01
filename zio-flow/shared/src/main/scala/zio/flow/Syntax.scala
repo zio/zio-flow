@@ -35,6 +35,8 @@ trait Syntax {
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )
+  implicit def RemoteDurationCompanion(duration: Duration.type): RemoteDurationCompanionSyntax =
+    new RemoteDurationCompanionSyntax(duration)
   implicit def RemoteBoolean(remote: Remote[Boolean]): RemoteBooleanSyntax = new RemoteBooleanSyntax(remote)
 
   implicit def RemoteEither[A, B](remote: Remote[Either[A, B]]): RemoteEitherSyntax[A, B] = new RemoteEitherSyntax(
