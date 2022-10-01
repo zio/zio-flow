@@ -2866,55 +2866,6 @@ object Remote {
       Schema.Case("DurationMultipliedBy", schema, _.asInstanceOf[DurationMultipliedBy])
   }
 
-  // TODO: delete and use recurse only?
-  final case class Iterate[A](
-    initial: Remote[A],
-    iterate: UnboundRemoteFunction[A, A],
-    predicate: UnboundRemoteFunction[A, Boolean]
-  ) extends Remote[A] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] = {
-      def loop(current: Remote[A]): ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-        predicate(current).eval[Boolean].flatMap {
-          case false => current.evalDynamic
-          case true  => loop(iterate(current))
-        }
-
-      loop(initial)
-    }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[A] =
-      Iterate(
-        initial.substitute(f),
-        iterate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, A]],
-        predicate.substitute(f).asInstanceOf[UnboundRemoteFunction[A, Boolean]]
-      )
-
-    override private[flow] val variableUsage =
-      initial.variableUsage.union(iterate.variableUsage).union(predicate.variableUsage)
-  }
-
-  object Iterate {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Iterate")
-
-    def schema[A]: Schema[Iterate[A]] =
-      Schema.defer(
-        Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, A], UnboundRemoteFunction[A, Boolean], Iterate[A]](
-          typeId,
-          Schema.Field("initial", Remote.schema[A]),
-          Schema.Field("iterate", UnboundRemoteFunction.schema[A, A]),
-          Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
-          Iterate.apply,
-          _.initial,
-          _.iterate,
-          _.predicate
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[Iterate[A], Remote[A]] =
-      Schema.Case("Iterate", schema, _.asInstanceOf[Iterate[A]])
-  }
-
   final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -3941,7 +3892,6 @@ object Remote {
       .:+:(DurationToLongs.schemaCase[A])
       .:+:(DurationPlusDuration.schemaCase[A])
       .:+:(DurationMultipliedBy.schemaCase[A])
-      .:+:(Iterate.schemaCase[A])
       .:+:(Lazy.schemaCase[A])
       .:+:(RemoteSome.schemaCase[A])
       .:+:(FoldOption.schemaCase[A])

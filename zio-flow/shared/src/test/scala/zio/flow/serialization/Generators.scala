@@ -738,32 +738,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       b <- Gen.long
     } yield Remote.DurationMultipliedBy(Remote(a), Remote(b))
 
-  lazy val genIterate: Gen[Any, Remote[Any]] =
-    for {
-      initial <- Gen.int.map(Remote(_))
-      delta   <- Gen.int
-      iterate =
-        UnboundRemoteFunction.make((a: Remote[Int]) =>
-          Remote.Binary(a, Remote(delta), BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt))
-        )
-      limit <- Gen.int
-      predicate = UnboundRemoteFunction.make((a: Remote[Int]) =>
-                    Remote.Equal(
-                      a,
-                      Remote.Binary(
-                        initial,
-                        Remote
-                          .Binary(
-                            Remote(delta),
-                            Remote(limit),
-                            BinaryOperators.Numeric(BinaryNumericOperator.Mul, Numeric.NumericInt)
-                          ),
-                        BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
-                      )
-                    )
-                  )
-    } yield Remote.Iterate(initial, iterate, predicate)
-
   lazy val genRemoteSome: Gen[Sized, Remote[Any]] =
     for {
       value <- genLiteral
