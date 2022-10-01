@@ -98,36 +98,6 @@ object RemoteSpec extends RemoteSpecBase {
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       ),
-      suite("SwapEither")(
-        test("evaluates correctly when it is Left") {
-          val remote =
-            Remote.SwapEither(Remote.RemoteEither(Left(Remote("test"))))
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[Int, String]]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
-              typ == Right("test")
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        },
-        test("evaluates correctly when it is Right") {
-          val remote =
-            Remote.SwapEither(Remote.RemoteEither(Right(Remote("test"))))
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[String, Int]]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
-              typ == Left("test")
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        }
-      ),
       suite("Tuple3")(
         test("evaluates correctly") {
           val remote = Remote.Tuple3(

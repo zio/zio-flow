@@ -643,47 +643,6 @@ object Remote {
       Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
   }
 
-  // TODO: delete?
-  final case class SwapEither[A, B](
-    either: Remote[Either[A, B]]
-  ) extends Remote[Either[B, A]] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      either.evalDynamic.flatMap {
-        case DynamicValue.LeftValue(value) =>
-          ZIO.succeed(DynamicValue.RightValue(value))
-        case DynamicValue.RightValue(value) =>
-          ZIO.succeed(DynamicValue.LeftValue(value))
-        case other: DynamicValue =>
-          ZIO.fail(
-            RemoteEvaluationError.UnexpectedDynamicValue(
-              s"Unexpected value in Remote.SwapEither of type ${other.getClass.getSimpleName}"
-            )
-          )
-      }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Either[B, A]] =
-      SwapEither(either.substitute(f))
-
-    override private[flow] val variableUsage = either.variableUsage
-  }
-
-  object SwapEither {
-    def schema[A, B]: Schema[SwapEither[A, B]] =
-      Schema
-        .defer(
-          Remote
-            .schema[Either[A, B]]
-            .transform(
-              SwapEither(_),
-              _.either
-            )
-        )
-
-    def schemaCase[A]: Schema.Case[SwapEither[Any, Any], Remote[A]] =
-      Schema.Case("SwapEither", schema[Any, Any], _.asInstanceOf[SwapEither[Any, Any]])
-  }
-
   final case class Try[A](either: Either[Remote[Throwable], Remote[A]]) extends Remote[scala.util.Try[A]] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       either match {
@@ -4069,7 +4028,6 @@ object Remote {
       .:+:(EvaluateUnboundRemoteFunction.schemaCase[Any, A])
       .:+:(RemoteEither.schemaCase[A])
       .:+:(FoldEither.schemaCase[Any, Any, A])
-      .:+:(SwapEither.schemaCase[A])
       .:+:(Try.schemaCase[A])
       .:+:(Tuple2.schemaCase[A])
       .:+:(Tuple3.schemaCase[A])

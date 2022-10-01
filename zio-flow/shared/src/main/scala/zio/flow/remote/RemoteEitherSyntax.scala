@@ -113,7 +113,11 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
   ): Remote[Either[A1, B1]] =
     fold(_ => or, _ => self)
 
-  def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
+  def swap: Remote[Either[B, A]] =
+    self.fold(
+      (a: Remote[A]) => Remote.right[B, A](a),
+      (b: Remote[B]) => Remote.left[B, A](b)
+    )
 
   def toOption: Remote[Option[B]] =
     fold(_ => Remote.none[B], Remote.RemoteSome(_))

@@ -541,9 +541,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       rightF <- genUnboundRemoteFunction.map(_.asInstanceOf[Remote.UnboundRemoteFunction[Any, Either[Any, Any]]])
     } yield Remote.FoldEither(Remote.RemoteEither(either), leftF, rightF)
 
-  lazy val genSwapEither: Gen[Sized, Remote[Any]] =
-    genRemoteEither.map(r => Remote.SwapEither(r.asInstanceOf[Remote[Either[Any, Any]]]))
-
   lazy val genTry: Gen[Sized, Remote[Any]] =
     for {
       value <- genDynamicValue

@@ -109,9 +109,6 @@ object PrettyPrint {
         nl(indent + 2)
         builder.append("on right: ")
         prettyPrintRemote(right, builder, indent + 2)
-      case Remote.SwapEither(either) =>
-        builder.append("swap ")
-        prettyPrintRemote(either, builder, indent + 2)
       case Remote.Try(either) =>
         either match {
           case Left(value) =>
