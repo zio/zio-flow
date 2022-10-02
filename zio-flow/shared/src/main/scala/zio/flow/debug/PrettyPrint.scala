@@ -773,8 +773,6 @@ object PrettyPrint {
       case Remote.DurationFromBigDecimal(_)     => ???
       case Remote.DurationFromAmount(_, _)      => ???
       case Remote.DurationToLongs(_)            => ???
-      case Remote.DurationPlusDuration(_, _)    => ???
-      case Remote.DurationMultipliedBy(_, _)    => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
       case Remote.RemoteSome(_)            => ???

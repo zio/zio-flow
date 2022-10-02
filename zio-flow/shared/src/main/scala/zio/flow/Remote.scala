@@ -22,7 +22,6 @@ import zio.flow.remote.RemoteTuples._
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.{Chunk, ZIO}
 
-import java.math.BigDecimal
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 import scala.annotation.tailrec
@@ -2673,13 +2672,14 @@ object Remote {
       Schema.Case("DurationBetweenInstants", schema, _.asInstanceOf[DurationBetweenInstants])
   }
 
+  // TODO: move to conversions
   final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        bd     <- seconds.eval[BigDecimal]
+        bd     <- seconds.eval[BigDecimal].map(_.bigDecimal)
         seconds = bd.longValue()
-        nanos   = bd.subtract(new BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
+        nanos   = bd.subtract(new java.math.BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
         result  = Duration.ofSeconds(seconds, nanos.toLong)
       } yield DynamicValueHelpers.of(result)
 
@@ -2690,7 +2690,7 @@ object Remote {
   }
 
   object DurationFromBigDecimal {
-    private val oneBillion = new BigDecimal(1000000000L)
+    private val oneBillion = new java.math.BigDecimal(1000000000L)
 
     val schema: Schema[DurationFromBigDecimal] = Schema.defer(
       Remote
@@ -2739,6 +2739,7 @@ object Remote {
       Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
   }
 
+  // TODO: make it a conversion, nanos should be int
   final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2765,73 +2766,6 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[DurationToLongs, Remote[A]] =
       Schema.Case("DurationToLongs", schema, _.asInstanceOf[DurationToLongs])
-  }
-
-  final case class DurationPlusDuration(left: Remote[Duration], right: Remote[Duration]) extends Remote[Duration] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        left  <- left.eval[Duration]
-        right <- right.eval[Duration]
-        result = left.plus(right)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationPlusDuration(left.substitute(f), right.substitute(f))
-
-    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
-  }
-
-  object DurationPlusDuration {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationPlusDuration")
-
-    val schema: Schema[DurationPlusDuration] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationPlusDuration](
-          typeId,
-          Schema.Field("left", Remote.schema[Duration]),
-          Schema.Field("right", Remote.schema[Duration]),
-          DurationPlusDuration.apply,
-          _.left,
-          _.right
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[DurationPlusDuration, Remote[A]] =
-      Schema.Case("DurationPlusDuration", schema, _.asInstanceOf[DurationPlusDuration])
-  }
-
-  final case class DurationMultipliedBy(left: Remote[Duration], right: Remote[Long]) extends Remote[Duration] {
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        left  <- left.eval[Duration]
-        right <- right.eval[Long]
-        result = left.multipliedBy(right)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationMultipliedBy(left.substitute(f), right.substitute(f))
-
-    override private[flow] val variableUsage = left.variableUsage.union(right.variableUsage)
-  }
-
-  object DurationMultipliedBy {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationMultipliedBy")
-
-    val schema: Schema[DurationMultipliedBy] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Duration], Remote[Long], DurationMultipliedBy](
-          typeId,
-          Schema.Field("left", Remote.schema[Duration]),
-          Schema.Field("right", Remote.schema[Long]),
-          DurationMultipliedBy.apply,
-          _.left,
-          _.right
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[DurationMultipliedBy, Remote[A]] =
-      Schema.Case("DurationMultipliedBy", schema, _.asInstanceOf[DurationMultipliedBy])
   }
 
   final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
@@ -3841,8 +3775,6 @@ object Remote {
       .:+:(DurationFromBigDecimal.schemaCase[A])
       .:+:(DurationFromAmount.schemaCase[A])
       .:+:(DurationToLongs.schemaCase[A])
-      .:+:(DurationPlusDuration.schemaCase[A])
-      .:+:(DurationMultipliedBy.schemaCase[A])
       .:+:(Lazy.schemaCase[A])
       .:+:(RemoteSome.schemaCase[A])
       .:+:(FoldOption.schemaCase[A])

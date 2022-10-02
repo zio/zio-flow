@@ -65,6 +65,8 @@ sealed trait Numeric[A] {
 
   def toDouble(value: A): Double
 
+  def toBigDecimal(value: A): BigDecimal
+
   def unary(op: UnaryNumericOperator, value: A): A =
     op match {
       case UnaryNumericOperator.Neg  => neg(value)
@@ -149,6 +151,8 @@ object Numeric extends NumericImplicits0 {
     override def toFloat(value: Int): Float = value.toFloat
 
     override def toDouble(value: Int): Double = value.toDouble
+
+    override def toBigDecimal(value: Int): BigDecimal = BigDecimal(value)
 
     override def toBinaryString(value: Int): String = value.toBinaryString
 
@@ -300,6 +304,8 @@ sealed trait NumericImplicits0 {
 
     override def toDouble(value: Char): Double = value.toDouble
 
+    override def toBigDecimal(value: Char): BigDecimal = BigDecimal(value.toInt)
+
     override def toBinaryString(value: Char): String = value.toInt.toBinaryString
 
     override def toHexString(value: Char): String = value.toInt.toHexString
@@ -378,6 +384,8 @@ sealed trait NumericImplicits0 {
     override def toFloat(value: Short): Float = value.toFloat
 
     override def toDouble(value: Short): Double = value.toDouble
+
+    override def toBigDecimal(value: Short): BigDecimal = BigDecimal(value.toLong)
 
     override def toBinaryString(value: Short): String = value.toInt.toBinaryString
 
@@ -459,6 +467,8 @@ sealed trait NumericImplicits0 {
 
     override def toDouble(value: Long): Double = value.toDouble
 
+    override def toBigDecimal(value: Long): BigDecimal = BigDecimal(value)
+
     override def toBinaryString(value: Long): String = value.toBinaryString
 
     override def toHexString(value: Long): String = value.toHexString
@@ -534,6 +544,8 @@ sealed trait NumericImplicits0 {
     override def toFloat(value: BigInt): Float = value.toFloat
 
     override def toDouble(value: BigInt): Double = value.toDouble
+
+    override def toBigDecimal(value: BigInt): BigDecimal = BigDecimal(value)
 
     override def toBinaryString(value: BigInt): String = value.toString(2)
 
@@ -612,6 +624,8 @@ sealed trait NumericImplicits0 {
     override def toFloat(value: Float): Float = value
 
     override def toDouble(value: Float): Double = value.toDouble
+
+    override def toBigDecimal(value: Float): BigDecimal = BigDecimal(value.toDouble)
   }
   implicit case object NumericFloat extends NumericFloat
 
@@ -654,6 +668,8 @@ sealed trait NumericImplicits0 {
     override def toFloat(value: Double): Float = value.toFloat
 
     override def toDouble(value: Double): Double = value
+
+    override def toBigDecimal(value: Double): BigDecimal = BigDecimal(value)
   }
   implicit case object NumericDouble extends NumericDouble
 
@@ -696,6 +712,8 @@ sealed trait NumericImplicits0 {
     override def toFloat(value: BigDecimal): Float = value.toFloat
 
     override def toDouble(value: BigDecimal): Double = value.toDouble
+
+    override def toBigDecimal(value: BigDecimal): BigDecimal = value
   }
   implicit case object NumericBigDecimal extends NumericBigDecimal
 }

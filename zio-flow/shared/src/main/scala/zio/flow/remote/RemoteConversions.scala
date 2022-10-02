@@ -64,6 +64,13 @@ object RemoteConversions {
     override def apply(value: A): Double = numeric.toDouble(value)
   }
 
+  final case class NumericToBigDecimal[A](numeric: Numeric[A]) extends RemoteConversions[A, BigDecimal] {
+    override val inputSchema: Schema[A]           = numeric.schema
+    override val outputSchema: Schema[BigDecimal] = Schema[BigDecimal]
+
+    override def apply(value: A): BigDecimal = numeric.toBigDecimal(value)
+  }
+
   final case class NumericToBinaryString[A](bitwise: Integral[A]) extends RemoteConversions[A, String] {
     override val inputSchema: Schema[A]       = bitwise.schema
     override val outputSchema: Schema[String] = Schema[String]
@@ -183,6 +190,18 @@ object RemoteConversions {
       _.asInstanceOf[NumericToDouble[Any]]
     )
 
+  private val numericToBigDecimalCase: Schema.Case[NumericToBigDecimal[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToBigDecimal",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToBigDecimal"),
+        Schema.Field("numeric", Numeric.schema),
+        (numeric: Numeric[Any]) => NumericToBigDecimal(numeric),
+        _.numeric
+      ),
+      _.asInstanceOf[NumericToBigDecimal[Any]]
+    )
+
   private val numericToBinaryStringCase: Schema.Case[NumericToBinaryString[Any], RemoteConversions[Any, Any]] =
     Schema.Case(
       "NumericToBinaryString",
@@ -293,6 +312,7 @@ object RemoteConversions {
         .:+:(numericToLongCase)
         .:+:(numericToFloatCase)
         .:+:(numericToDoubleCase)
+        .:+:(numericToBigDecimalCase)
         .:+:(numericToBinaryStringCase)
         .:+:(numericToHexStringCase)
         .:+:(numericToOctalStringCase)

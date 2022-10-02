@@ -68,7 +68,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
     ) ++
       commonTestDependencies.map(_ % Test)
   )
-  .settings(fork := true)
+  .settings(fork := false)
   .settings(testFrameworks += zioTest)
   .enablePlugins(RemoteTupleGenerator)
 

@@ -19,6 +19,7 @@ package zio.flow
 import zio.Duration
 import zio.flow.remote._
 import zio.flow.remote.RemoteTuples._
+
 import java.time.Instant
 import scala.language.implicitConversions
 
@@ -274,6 +275,9 @@ trait Syntax {
   implicit def RemoteRelational[A](remote: Remote[A]): RemoteRelationalSyntax[A] = new RemoteRelationalSyntax[A](remote)
 
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
+
+  implicit def RemoteBigDecimalCompanion(bigDecimal: BigDecimal.type): RemoteBigDecimalCompanionSyntax =
+    new RemoteBigDecimalCompanionSyntax(bigDecimal)
 
   implicit class ZFlowSyntax[R, E, A](flow: ZFlow[R, E, A]) {
     def toRemote: Remote.Flow[R, E, A] = Remote.Flow(flow)

@@ -710,12 +710,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       seconds <- Gen.bigDecimal(0, BigDecimal(1000000000))
     } yield Remote.DurationFromBigDecimal(Remote(seconds.bigDecimal))
 
-  lazy val genDurationFromLongs: Gen[Any, Remote[Any]] =
-    for {
-      seconds        <- Gen.long
-      nanoAdjustment <- Gen.long
-    } yield Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment))
-
   lazy val genDurationFromAmount: Gen[Any, Remote[Any]] =
     for {
       amount <- Gen.long
@@ -724,19 +718,6 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genDurationToLongs: Gen[Any, Remote[Any]] =
     Gen.finiteDuration.map(duration => Remote.DurationToLongs(Remote(duration)))
-
-  lazy val genDurationPlusDuration: Gen[Any, Remote[Any]] =
-    for {
-      a              <- Gen.finiteDuration
-      seconds        <- Gen.long
-      nanoAdjustment <- Gen.long
-    } yield Remote.DurationPlusDuration(Remote(a), Remote.DurationFromLongs(Remote(seconds), Remote(nanoAdjustment)))
-
-  lazy val genDurationMultipliedBy: Gen[Any, Remote[Any]] =
-    for {
-      a <- Gen.finiteDuration
-      b <- Gen.long
-    } yield Remote.DurationMultipliedBy(Remote(a), Remote(b))
 
   lazy val genRemoteSome: Gen[Sized, Remote[Any]] =
     for {
@@ -884,7 +865,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowTimeout: Gen[Sized, ZFlow.Timeout[Any, Any, Any]] =
     for {
       flow     <- Gen.int.map(value => ZFlow.Return(Remote(value)).asInstanceOf[ZFlow[Any, Any, Any]])
-      duration <- genDurationFromLongs
+      duration <- genDurationFromAmount
     } yield ZFlow
       .Timeout(flow, duration.asInstanceOf[Remote[Duration]])
       .asInstanceOf[ZFlow.Timeout[Any, Any, Any]]

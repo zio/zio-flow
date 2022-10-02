@@ -582,7 +582,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           flow = ZFlow
                    .waitTill(Remote.ofEpochSecond(curr + 2L))
                    .as(1)
-                   .timeout(Remote.ofSeconds(1L))
+                   .timeout(Duration.ofSeconds(1L))
           fiber  <- flow.evaluateTestPersistent("timeout").fork
           _      <- TestClock.adjust(3.seconds)
           result <- fiber.join
@@ -595,7 +595,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           _ <- (for {
                  _ <- ZFlow.waitTill(now.plusSeconds(2L))
                  _ <- v.set(true)
-               } yield ()).timeout(Remote.ofSeconds(1L))
+               } yield ()).timeout(Duration.ofSeconds(1L))
           _ <- ZFlow.waitTill(now.plusSeconds(3L))
           r <- v.get
         } yield r

@@ -24,8 +24,8 @@ import zio.test.{Gen, TestResult, check}
 
 import java.time.temporal.ChronoUnit
 
-object RemoteDurationSpec extends RemoteSpecBase {
-  override def spec = suite("RemoteDurationSpec")(
+object RemoteDurationSyntaxSpec extends RemoteSpecBase {
+  override def spec = suite("RemoteDurationSyntax")(
     test("plus") {
       check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
         (Remote(d1) plus Remote(d2)) <-> (d1 plus d2)
@@ -122,12 +122,12 @@ object RemoteDurationSpec extends RemoteSpecBase {
     },
     test("getSeconds") {
       check(Gen.finiteDuration) { d =>
-        Remote(d).getSeconds <-> d.getSeconds
+        Remote(d).getSeconds() <-> d.getSeconds
       }
     },
     test("getNano") {
       check(Gen.finiteDuration) { d =>
-        Remote(d).getNano <-> d.getNano.toLong
+        Remote(d).getNano() <-> d.getNano
       }
     },
     test("isZero") {
