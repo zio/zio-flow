@@ -445,6 +445,25 @@ trait Generators extends DefaultJavaTimeSchemas {
       } yield (
         RemoteConversions.CharToChar(op).asInstanceOf[RemoteConversions[Any, Any]],
         Gen.char.map(Remote.apply[Char])
+      ),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (
+        RemoteConversions.StringToNumeric(numeric).asInstanceOf[RemoteConversions[Any, Any]],
+        gen.map(_.toString(numeric.schema))
+      ),
+      Gen.const(
+        (RemoteConversions.StringToDuration.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))
+      ),
+      Gen.const(
+        (
+          RemoteConversions.BigDecimalToDuration.asInstanceOf[RemoteConversions[Any, Any]],
+          Gen.bigDecimal(BigDecimal(0), BigDecimal(Long.MaxValue)).map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (RemoteConversions.DurationToTuple.asInstanceOf[RemoteConversions[Any, Any]], Gen.finiteDuration.map(Remote(_)))
       )
     )
 
@@ -694,30 +713,17 @@ trait Generators extends DefaultJavaTimeSchemas {
       chronoUnit <- genChronoUnit
     } yield Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
 
-  lazy val genDurationFromString: Gen[Any, Remote[Any]] =
-    for {
-      duration <- Gen.finiteDuration
-    } yield Remote.DurationFromString(Remote(duration.toString))
-
   lazy val genDurationBetweenInstants: Gen[Any, Remote[Any]] =
     for {
       start <- Gen.instant.map(Remote(_))
       end   <- Gen.instant.map(Remote(_))
     } yield Remote.DurationBetweenInstants(start, end)
 
-  lazy val genDurationFromBigDecimal: Gen[Any, Remote[Any]] =
-    for {
-      seconds <- Gen.bigDecimal(0, BigDecimal(1000000000))
-    } yield Remote.DurationFromBigDecimal(Remote(seconds.bigDecimal))
-
   lazy val genDurationFromAmount: Gen[Any, Remote[Any]] =
     for {
       amount <- Gen.long
       unit   <- genChronoUnit
     } yield Remote.DurationFromAmount(Remote(amount), Remote(unit))
-
-  lazy val genDurationToLongs: Gen[Any, Remote[Any]] =
-    Gen.finiteDuration.map(duration => Remote.DurationToLongs(Remote(duration)))
 
   lazy val genRemoteSome: Gen[Sized, Remote[Any]] =
     for {

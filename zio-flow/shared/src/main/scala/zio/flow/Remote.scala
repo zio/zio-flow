@@ -641,7 +641,6 @@ object Remote {
       Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
   }
 
-  // TODO: can we add either->try conversion instead?
   final case class Try[A](either: Either[Remote[Throwable], Remote[A]]) extends Remote[scala.util.Try[A]] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       either match {
@@ -2608,32 +2607,6 @@ object Remote {
       Schema.Case("InstantTruncate", schema, _.asInstanceOf[InstantTruncate])
   }
 
-  // TODO: move it to remote conversions
-  final case class DurationFromString(charSeq: Remote[String]) extends Remote[Duration] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      charSeq.eval[String].map(s => DynamicValueHelpers.of(Duration.parse(s)))
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationFromString(charSeq.substitute(f))
-
-    override private[flow] val variableUsage = charSeq.variableUsage
-  }
-
-  object DurationFromString {
-    val schema: Schema[DurationFromString] = Schema.defer(
-      Remote
-        .schema[String]
-        .transform(
-          DurationFromString.apply,
-          _.charSeq
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[DurationFromString, Remote[A]] =
-      Schema.Case("DurationFromString", schema, _.asInstanceOf[DurationFromString])
-  }
-
   final case class DurationBetweenInstants(startInclusive: Remote[Instant], endExclusive: Remote[Instant])
       extends Remote[Duration] {
 
@@ -2672,39 +2645,6 @@ object Remote {
       Schema.Case("DurationBetweenInstants", schema, _.asInstanceOf[DurationBetweenInstants])
   }
 
-  // TODO: move to conversions
-  final case class DurationFromBigDecimal(seconds: Remote[BigDecimal]) extends Remote[Duration] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        bd     <- seconds.eval[BigDecimal].map(_.bigDecimal)
-        seconds = bd.longValue()
-        nanos   = bd.subtract(new java.math.BigDecimal(seconds)).multiply(DurationFromBigDecimal.oneBillion).intValue()
-        result  = Duration.ofSeconds(seconds, nanos.toLong)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationFromBigDecimal(seconds.substitute(f))
-
-    override private[flow] val variableUsage = seconds.variableUsage
-  }
-
-  object DurationFromBigDecimal {
-    private val oneBillion = new java.math.BigDecimal(1000000000L)
-
-    val schema: Schema[DurationFromBigDecimal] = Schema.defer(
-      Remote
-        .schema[BigDecimal]
-        .transform(
-          DurationFromBigDecimal.apply,
-          _.seconds
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[DurationFromBigDecimal, Remote[A]] =
-      Schema.Case("DurationFromBigDecimal", schema, _.asInstanceOf[DurationFromBigDecimal])
-  }
-
   final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
@@ -2737,35 +2677,6 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[DurationFromAmount, Remote[A]] =
       Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
-  }
-
-  // TODO: make it a conversion, nanos should be int
-  final case class DurationToLongs(duration: Remote[Duration]) extends Remote[(Long, Long)] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      duration.eval[Duration].map { duration =>
-        DynamicValue
-          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Long]), (duration.getSeconds, duration.getNano.toLong))
-      }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[(Long, Long)] =
-      DurationToLongs(duration.substitute(f))
-
-    override private[flow] val variableUsage = duration.variableUsage
-  }
-
-  object DurationToLongs {
-    val schema: Schema[DurationToLongs] = Schema.defer(
-      Remote
-        .schema[Duration]
-        .transform(
-          DurationToLongs.apply,
-          _.duration
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[DurationToLongs, Remote[A]] =
-      Schema.Case("DurationToLongs", schema, _.asInstanceOf[DurationToLongs])
   }
 
   final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
@@ -3770,11 +3681,8 @@ object Remote {
       .:+:(InstantToTuple.schemaCase[A])
       .:+:(InstantPlusDuration.schemaCase[A])
       .:+:(InstantTruncate.schemaCase[A])
-      .:+:(DurationFromString.schemaCase[A])
       .:+:(DurationBetweenInstants.schemaCase[A])
-      .:+:(DurationFromBigDecimal.schemaCase[A])
       .:+:(DurationFromAmount.schemaCase[A])
-      .:+:(DurationToLongs.schemaCase[A])
       .:+:(Lazy.schemaCase[A])
       .:+:(RemoteSome.schemaCase[A])
       .:+:(FoldOption.schemaCase[A])

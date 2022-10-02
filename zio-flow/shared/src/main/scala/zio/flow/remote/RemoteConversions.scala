@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.Duration
 import zio.flow.remote.numeric._
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
@@ -128,6 +129,36 @@ object RemoteConversions {
     override val outputSchema: Schema[Option[A]] = Schema.option(numeric.schema)
 
     override def apply(value: String): Option[A] = numeric.parse(value)
+  }
+
+  case object StringToDuration extends RemoteConversions[String, Duration] {
+    override val inputSchema: Schema[String]    = Schema[String]
+    override val outputSchema: Schema[Duration] = Schema[Duration]
+
+    override def apply(value: String): Duration =
+      java.time.Duration.parse(value)
+  }
+
+  case object BigDecimalToDuration extends RemoteConversions[BigDecimal, Duration] {
+    override val inputSchema: Schema[BigDecimal] = Schema[BigDecimal]
+    override val outputSchema: Schema[Duration]  = Schema[Duration]
+
+    private val oneBillion = new java.math.BigDecimal(1000000000L)
+
+    override def apply(value: BigDecimal): Duration = {
+      val bd      = value.bigDecimal
+      val seconds = bd.longValue()
+      val nanos   = bd.subtract(new java.math.BigDecimal(seconds)).multiply(oneBillion).intValue()
+      java.time.Duration.ofSeconds(seconds, nanos.toLong)
+    }
+  }
+
+  case object DurationToTuple extends RemoteConversions[Duration, (Long, Int)] {
+    override val inputSchema: Schema[Duration]     = Schema[Duration]
+    override val outputSchema: Schema[(Long, Int)] = Schema.tuple2[Long, Int]
+
+    override def apply(value: Duration): (Long, Int) =
+      (value.getSeconds, value.getNano)
   }
 
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
@@ -298,6 +329,27 @@ object RemoteConversions {
       _.asInstanceOf[StringToNumeric[Any]]
     )
 
+  private val stringToDurationCase: Schema.Case[StringToDuration.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "StringToDuration",
+      Schema.singleton(StringToDuration),
+      _.asInstanceOf[StringToDuration.type]
+    )
+
+  private val bigDecimalToDurationCase: Schema.Case[BigDecimalToDuration.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "BigDecimalToDuration",
+      Schema.singleton(BigDecimalToDuration),
+      _.asInstanceOf[BigDecimalToDuration.type]
+    )
+
+  private val durationToTupleCase: Schema.Case[DurationToTuple.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "DurationToTuple",
+      Schema.singleton(DurationToTuple),
+      _.asInstanceOf[DurationToTuple.type]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -321,5 +373,8 @@ object RemoteConversions {
         .:+:(charToCodeCase)
         .:+:(charToCharCase)
         .:+:(stringToNumericCase)
+        .:+:(stringToDurationCase)
+        .:+:(bigDecimalToDurationCase)
+        .:+:(durationToTupleCase)
     )
 }

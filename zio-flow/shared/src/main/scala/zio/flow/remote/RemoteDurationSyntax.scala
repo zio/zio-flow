@@ -59,10 +59,10 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
     )
 
   def getSeconds(): Remote[Long] =
-    Remote.DurationToLongs(self.widen[Duration])._1
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple))._1
 
   def getNano(): Remote[Int] =
-    Remote.DurationToLongs(self.widen[Duration])._2.toInt
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple))._2
 
   def isNegative: Remote[Boolean] =
     self.getSeconds() < 0L

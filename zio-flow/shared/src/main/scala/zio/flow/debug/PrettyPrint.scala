@@ -768,11 +768,8 @@ object PrettyPrint {
       case Remote.InstantToTuple(_)             => ???
       case Remote.InstantPlusDuration(_, _)     => ???
       case Remote.InstantTruncate(_, _)         => ???
-      case Remote.DurationFromString(_)         => ???
       case Remote.DurationBetweenInstants(_, _) => ???
-      case Remote.DurationFromBigDecimal(_)     => ???
       case Remote.DurationFromAmount(_, _)      => ???
-      case Remote.DurationToLongs(_)            => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
       case Remote.RemoteSome(_)            => ???

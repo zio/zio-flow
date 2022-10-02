@@ -35,8 +35,8 @@ final class RemoteDurationCompanionSyntax(val self: Duration.type) {
     ofSeconds(seconds).plusNanos(nanos)
 
   private[flow] def ofSecondsBigDecimal(seconds: Remote[BigDecimal]): Remote[Duration] =
-    Remote.DurationFromBigDecimal(seconds)
+    Remote.Unary(seconds, UnaryOperators.Conversion(RemoteConversions.BigDecimalToDuration))
 
   def parse(text: Remote[String]): Remote[Duration] =
-    Remote.DurationFromString(text)
+    Remote.Unary(text, UnaryOperators.Conversion(RemoteConversions.StringToDuration))
 }
