@@ -43,7 +43,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
     flowSpec
-      .provideCustom(
+      .provideSome[TestEnvironment](
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory,

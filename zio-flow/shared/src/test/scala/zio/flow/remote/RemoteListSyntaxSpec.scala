@@ -78,7 +78,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.nil[Int].appendedAll(Remote.nil[Int]) <-> List.empty
       ),
       remoteTest("apply")(
-        Remote.nil[Int].apply(0) failsWithRemoteError ("get called on empty Option"),
+        Remote.nil[Int].apply(0) failsWithRemoteFailure ("get called on empty Option"),
         Remote.list(1, 2, 3).apply(1) <-> 2
       ),
       remoteTest("concat")(
@@ -188,7 +188,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
       ),
       remoteTest("head")(
-        Remote.nil[Int].head failsWithRemoteError "List is empty",
+        Remote.nil[Int].head failsWithRemoteFailure "List is empty",
         Remote.list(1, 2, 3).head <-> 1
       ),
       remoteTest("headOption")(
@@ -215,7 +215,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3, 4, 5, 2, 3, 6).indexWhere(_ % 2 === 0, 2) <-> 3
       ),
       remoteTest("init")(
-        Remote.nil[Int].init failsWithRemoteError "List is empty",
+        Remote.nil[Int].init failsWithRemoteFailure "List is empty",
         Remote.list(1).init <-> List.empty[Int],
         Remote.list(1, 2, 3).init <-> List(1, 2)
       ),
@@ -239,7 +239,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3).isEmpty <-> false
       ),
       remoteTest("last")(
-        Remote.nil[Int].last failsWithRemoteError "List is empty",
+        Remote.nil[Int].last failsWithRemoteFailure "List is empty",
         Remote.list(1, 2, 3).last <-> 3
       ),
       remoteTest("lastIndexOf")(
@@ -274,11 +274,11 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3).map(_ * 2) <-> List(2, 4, 6)
       ),
       remoteTest("max")(
-        Remote.nil[Int].max failsWithRemoteError "List is empty",
+        Remote.nil[Int].max failsWithRemoteFailure "List is empty",
         Remote.list(1, 6, 4, 3, 8, 0, 4).max <-> 8
       ),
       remoteTest("maxBy")(
-        Remote.nil[String].maxBy(_.length) failsWithRemoteError "List is empty",
+        Remote.nil[String].maxBy(_.length) failsWithRemoteFailure "List is empty",
         Remote.list("aaa", "a", "abcd", "ab").maxBy(_.length) <-> "abcd"
       ),
       remoteTest("maxByOption")(
@@ -290,11 +290,11 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 6, 4, 3, 8, 0, 4).maxOption <-> Some(8)
       ),
       remoteTest("min")(
-        Remote.nil[Int].min failsWithRemoteError "List is empty",
+        Remote.nil[Int].min failsWithRemoteFailure "List is empty",
         Remote.list(1, 6, 4, 3, 8, 0, 4).min <-> 0
       ),
       remoteTest("minBy")(
-        Remote.nil[String].minBy(_.length) failsWithRemoteError "List is empty",
+        Remote.nil[String].minBy(_.length) failsWithRemoteFailure "List is empty",
         Remote.list("aaa", "a", "abcd", "ab").minBy(_.length) <-> "a"
       ),
       remoteTest("minByOption")(
@@ -370,11 +370,11 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1.0, 2.0, 3.0).product <-> 6.0
       ),
       remoteTest("reduce")(
-        Remote.nil[Int].reduce(_ + _) failsWithRemoteError "List is empty",
+        Remote.nil[Int].reduce(_ + _) failsWithRemoteFailure "List is empty",
         Remote.list(1, 2, 3).reduce(_ + _) <-> 6
       ),
       remoteTest("reduceLeft")(
-        Remote.nil[Int].reduceLeft(_ + _) failsWithRemoteError "List is empty",
+        Remote.nil[Int].reduceLeft(_ + _) failsWithRemoteFailure "List is empty",
         Remote.list(1, 2, 3).reduceLeft(_ + _) <-> 6
       ),
       remoteTest("reduceLeftOption")(
@@ -386,7 +386,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3).reduceOption(_ + _) <-> Some(6)
       ),
       remoteTest("reduceRight")(
-        Remote.nil[Int].reduceRight(_ + _) failsWithRemoteError "List is empty",
+        Remote.nil[Int].reduceRight(_ + _) failsWithRemoteFailure "List is empty",
         Remote.list(1.0, 2.0, 3.0).reduceRight(_ / _) <-> 1.5
       ),
       remoteTest("reduceRightOption")(
@@ -494,7 +494,7 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3, 4).sum <-> (1 + 2 + 3 + 4)
       ),
       remoteTest("tail")(
-        Remote.nil[Int].tail failsWithRemoteError "List is empty",
+        Remote.nil[Int].tail failsWithRemoteFailure "List is empty",
         Remote.list(1).tail <-> List.empty[Int],
         Remote.list(1, 2, 3).tail <-> List(2, 3)
       ),

@@ -464,8 +464,9 @@ object Remote {
   ) extends Remote[Out] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        v <- value.eval(operator.inputSchema)
-      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, operator(v))
+        v      <- value.eval(operator.inputSchema)
+        result <- ZIO.attempt(operator(v)).mapError(RemoteEvaluationError.EvaluationException)
+      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[Out] =
       Unary(value.substitute(f), operator)
@@ -497,9 +498,10 @@ object Remote {
   ) extends Remote[Out] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        l <- left.eval(operator.inputSchema)
-        r <- right.eval(operator.inputSchema)
-      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, operator(l, r))
+        l      <- left.eval(operator.inputSchema)
+        r      <- right.eval(operator.inputSchema)
+        result <- ZIO.attempt(operator(l, r)).mapError(RemoteEvaluationError.EvaluationException)
+      } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[Out] =
       Binary(left.substitute(f), right.substitute(f), operator)

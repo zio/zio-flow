@@ -32,6 +32,6 @@ object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
   private val kVStoreLayer = config >>> RocksDbKeyValueStore.layer
 
   def spec: Spec[TestEnvironment, Any] =
-    KeyValueStoreTests("RocksDbKeyValueStoreSpec", initializeDb = ZIO.unit).tests.provideCustom(kVStoreLayer)
+    KeyValueStoreTests("RocksDbKeyValueStoreSpec", initializeDb = ZIO.unit).tests.provide(kVStoreLayer)
 
 }

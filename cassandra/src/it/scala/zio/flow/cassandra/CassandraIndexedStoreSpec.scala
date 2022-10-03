@@ -20,5 +20,5 @@ object CassandraIndexedStoreSpec extends ZIOSpecDefault {
 
   private def testUsing(database: SessionLayer, label: String): Spec[TestEnvironment, Any] =
     IndexedStoreTests(label, initializeDb = ZIO.unit).tests
-      .provideCustomLayerShared(database >>> CassandraIndexedStore.layer)
+      .provideLayerShared(database >>> CassandraIndexedStore.layer)
 }

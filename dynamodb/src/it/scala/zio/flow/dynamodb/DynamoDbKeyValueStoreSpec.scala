@@ -35,5 +35,5 @@ object DynamoDbKeyValueStoreSpec extends ZIOSpecDefault {
     KeyValueStoreTests[DynamoDb](
       "DynamoDbKeyValueStoreSpec",
       initializeDb = createKeyValueStoreTable(tableName)
-    ).tests.provideCustomLayerShared(dynamoDbKeyValueStore)
+    ).tests.provideLayerShared(dynamoDbKeyValueStore)
 }

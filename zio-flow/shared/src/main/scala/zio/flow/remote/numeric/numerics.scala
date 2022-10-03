@@ -1117,7 +1117,7 @@ object Fractional {
 
     override def ceil(value: BigDecimal): BigDecimal = Math.ceil(value.doubleValue)
 
-    override def round(value: BigDecimal): BigDecimal = Math.round(value.doubleValue)
+    override def round(value: BigDecimal): BigDecimal = value.rounded
 
     override def pow(left: BigDecimal, right: BigDecimal): BigDecimal =
       BigDecimal(

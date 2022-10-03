@@ -20,7 +20,7 @@ import zio.ZIO
 import zio.flow._
 import zio.schema.Schema
 import zio.test.Assertion.{equalTo, fails, succeeds}
-import zio.test.{TestResult, assertZIO}
+import zio.test.{Assertion, TestResult, assertZIO}
 
 object RemoteAssertionSyntax {
 
@@ -28,7 +28,12 @@ object RemoteAssertionSyntax {
     def <->[A1 <: A](that: A1): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
       assertZIO(self.eval[A].exit)(succeeds(equalTo(that)))
 
-    def failsWithRemoteError(message: String): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
-      assertZIO(self.eval[A].exit)(fails(equalTo(RemoteEvaluationError.RemoteFail(message))))
+    def failsWithRemoteFailure(message: String): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
+      failsWith(equalTo(RemoteEvaluationError.RemoteFail(message)))
+
+    def failsWith(
+      messageAssertion: Assertion[RemoteEvaluationError]
+    ): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
+      assertZIO(self.eval[A].exit)(fails(messageAssertion))
   }
 }

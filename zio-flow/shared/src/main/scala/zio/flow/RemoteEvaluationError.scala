@@ -29,6 +29,7 @@ sealed trait RemoteEvaluationError { self =>
     case RemoteEvaluationError.TypeError(message)              => s"Type error: $message"
     case RemoteEvaluationError.RemoteContextError(error)       => error.toMessage
     case RemoteEvaluationError.RemoteFail(message)             => message
+    case RemoteEvaluationError.EvaluationException(failure)    => s"Remote evaluation failed: ${failure.getMessage}"
   }
 }
 
@@ -40,6 +41,7 @@ object RemoteEvaluationError {
   final case class TypeError(message: String)                 extends RemoteEvaluationError
   final case class RemoteContextError(error: ExecutorError)   extends RemoteEvaluationError
   final case class RemoteFail(message: String)                extends RemoteEvaluationError
+  final case class EvaluationException(failure: Throwable)    extends RemoteEvaluationError
 
   implicit val schema: Schema[RemoteEvaluationError] = DeriveSchema.gen
 }

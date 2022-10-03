@@ -69,7 +69,7 @@ object RemoteOptionSyntaxSpec extends RemoteSpecBase {
       ),
       remoteTest("get")(
         Remote.some(11).get <-> 11,
-        Remote.none[Int].get failsWithRemoteError "get called on empty Option"
+        Remote.none[Int].get failsWithRemoteFailure "get called on empty Option"
       ),
       remoteTest("getOrElse")(
         Remote.some(11).getOrElse(12) <-> 11,
@@ -77,7 +77,7 @@ object RemoteOptionSyntaxSpec extends RemoteSpecBase {
       ),
       remoteTest("head")(
         Remote.some(11).head <-> 11,
-        Remote.none[Int].head failsWithRemoteError "get called on empty Option"
+        Remote.none[Int].head failsWithRemoteFailure "get called on empty Option"
       ),
       remoteTest("headOption")(
         Remote.some(11).headOption <-> Some(11),
@@ -105,7 +105,7 @@ object RemoteOptionSyntaxSpec extends RemoteSpecBase {
       ),
       remoteTest("last")(
         Remote.some(11).last <-> 11,
-        Remote.none[Int].last failsWithRemoteError "get called on empty Option"
+        Remote.none[Int].last failsWithRemoteFailure "get called on empty Option"
       ),
       remoteTest("lastOption")(
         Remote.some(11).lastOption <-> Some(11),

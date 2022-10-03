@@ -18,5 +18,5 @@ object DynamoDbIndexedStoreSpec extends ZIOSpecDefault {
     IndexedStoreTests[DynamoDb](
       "DynamoDbIndexedStore",
       initializeDb = createIndexedStoreTable(DynamoDbIndexedStore.tableName)
-    ).tests.provideCustomLayerShared(dynamoDbIndexedStore)
+    ).tests.provideLayerShared(dynamoDbIndexedStore)
 }

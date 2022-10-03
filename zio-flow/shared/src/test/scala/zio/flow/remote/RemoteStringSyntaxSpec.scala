@@ -46,7 +46,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello").appendedAll("world") <-> "helloworld"
       ),
       remoteTest("apply")(
-        Remote("").apply(1) failsWithRemoteError "get called on empty Option",
+        Remote("").apply(1) failsWithRemoteFailure "get called on empty Option",
         Remote("hello").apply(1) <-> 'e'
       ),
       remoteTest("capitalize")(
@@ -54,7 +54,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello world").capitalize <-> "Hello world"
       ),
       remoteTest("charAt")(
-        Remote("").charAt(1) failsWithRemoteError "get called on empty Option",
+        Remote("").charAt(1) failsWithRemoteFailure "get called on empty Option",
         Remote("hello").charAt(1) <-> 'e'
       ),
       remoteTest("combinations")(
@@ -149,7 +149,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello").grouped(3) <-> List("hel", "lo")
       ) @@ TestAspect.ignore, // TODO
       remoteTest("head")(
-        Remote("").head failsWithRemoteError "List is empty",
+        Remote("").head failsWithRemoteFailure "List is empty",
         Remote("hello").head <-> 'h'
       ),
       remoteTest("headOption")(
@@ -184,7 +184,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello world").indexWhere(_ === 'w', 8) <-> -1
       ),
       remoteTest("init")(
-        Remote("").init failsWithRemoteError "List is empty",
+        Remote("").init failsWithRemoteFailure "List is empty",
         Remote("hello").init <-> "hell"
       ),
       remoteTest("inits")(
@@ -203,7 +203,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("abc").knownSize <-> 3
       ),
       remoteTest("last")(
-        Remote("").last failsWithRemoteError "List is empty",
+        Remote("").last failsWithRemoteFailure "List is empty",
         Remote("hello").last <-> 'o'
       ),
       remoteTest("lastIndexOf(char)")(
@@ -392,7 +392,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello").substring(1, 3) <-> "el"
       ),
       remoteTest("tail")(
-        Remote("").tail failsWithRemoteError "List is empty",
+        Remote("").tail failsWithRemoteFailure "List is empty",
         Remote("hello").tail <-> "ello"
       ),
       remoteTest("tails")(
@@ -415,7 +415,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toBoolean")(
         Remote("false").toBoolean <-> false,
         Remote("true").toBoolean <-> true,
-        Remote("x").toBoolean failsWithRemoteError "Invalid boolean"
+        Remote("x").toBoolean failsWithRemoteFailure "Invalid boolean"
       ),
       remoteTest("toBooleanOption")(
         Remote("false").toBooleanOption <-> Some(false),
@@ -436,7 +436,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toDouble")(
         Remote("0.0").toDouble <-> 0.0,
         Remote("-12.34").toDouble <-> -12.34,
-        Remote("x").toDouble failsWithRemoteError "Invalid double"
+        Remote("x").toDouble failsWithRemoteFailure "Invalid double"
       ),
       remoteTest("toDoubleOption")(
         Remote("0.0").toDoubleOption <-> Some(0.0),
@@ -446,7 +446,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toFloat")(
         Remote("0.0").toFloat <-> 0.0f,
         Remote("-12.34").toFloat <-> -12.34f,
-        Remote("x").toFloat failsWithRemoteError "Invalid float"
+        Remote("x").toFloat failsWithRemoteFailure "Invalid float"
       ),
       remoteTest("toFloatOption")(
         Remote("0.0").toFloatOption <-> Some(0.0f),
@@ -456,7 +456,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toInt")(
         Remote("0").toInt <-> 0,
         Remote("-123456").toInt <-> -123456,
-        Remote("x").toInt failsWithRemoteError "Invalid int"
+        Remote("x").toInt failsWithRemoteFailure "Invalid int"
       ),
       remoteTest("toIntOption")(
         Remote("0").toIntOption <-> Some(0),
@@ -470,7 +470,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toLong")(
         Remote("0").toLong <-> 0L,
         Remote("-1234567891000").toLong <-> -1234567891000L,
-        Remote("x").toLong failsWithRemoteError "Invalid long"
+        Remote("x").toLong failsWithRemoteFailure "Invalid long"
       ),
       remoteTest("toLongOption")(
         Remote("0").toLongOption <-> Some(0L),
@@ -485,7 +485,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("toShort")(
         Remote("0").toShort <-> (0: Short),
         Remote("-1234").toShort <-> (-1234: Short),
-        Remote("x").toShort failsWithRemoteError "Invalid short"
+        Remote("x").toShort failsWithRemoteFailure "Invalid short"
       ),
       remoteTest("toShortOption")(
         Remote("0").toShortOption <-> Some(0: Short),

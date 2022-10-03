@@ -48,7 +48,7 @@ package object math {
     value.toDegrees
 
   def atan2[A](y: Remote[A], x: Remote[A])(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.Binary(x, y, BinaryOperators(BinaryFractionalOperator.ArcTan2))
+    Remote.Binary(y, x, BinaryOperators(BinaryFractionalOperator.ArcTan2))
 
   def hypot[A](x: Remote[A], y: Remote[A])(implicit fractional: Fractional[A]): Remote[A] =
     Remote.Binary(x, y, BinaryOperators(BinaryFractionalOperator.Hypot))

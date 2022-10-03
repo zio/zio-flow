@@ -35,6 +35,6 @@ object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
 
   private def testUsing(database: SessionLayer, label: String): Spec[TestEnvironment, Any] =
     KeyValueStoreTests(label, initializeDb = ZIO.unit).tests
-      .provideCustomLayerShared(database >>> CassandraKeyValueStore.layer)
+      .provideLayerShared(database >>> CassandraKeyValueStore.layer)
 
 }
