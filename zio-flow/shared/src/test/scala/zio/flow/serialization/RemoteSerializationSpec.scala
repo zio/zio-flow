@@ -17,7 +17,7 @@
 package zio.flow.serialization
 
 import zio.flow._
-import zio.schema.ast.SchemaAst
+import zio.schema.meta.MetaSchema
 import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
@@ -38,8 +38,8 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       ),
       test("Remote schema is serializable") {
         val schema             = Remote.schemaAny
-        val serialized         = JsonCodec.encode(SchemaAst.schema)(schema.ast)
-        val deserialized       = JsonCodec.decode(SchemaAst.schema)(serialized)
+        val serialized         = JsonCodec.encode(MetaSchema.schema)(schema.ast)
+        val deserialized       = JsonCodec.decode(MetaSchema.schema)(serialized)
         val deserializedSchema = deserialized.map(_.toSchema)
         assertTrue(
           Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)

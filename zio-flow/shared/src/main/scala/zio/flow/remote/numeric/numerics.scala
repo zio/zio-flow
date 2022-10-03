@@ -17,7 +17,7 @@
 package zio.flow.remote.numeric
 
 import zio.flow.Remote
-import zio.schema.{CaseSet, Schema}
+import zio.schema.{CaseSet, Schema, TypeId}
 
 sealed trait Numeric[A] {
   def schema: Schema[A]
@@ -158,6 +158,7 @@ object Numeric extends NumericImplicits0 {
 
   implicit val schema: Schema[Numeric[Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.Numeric"),
       CaseSet
         .Cons(
           shortCase,
@@ -491,6 +492,7 @@ object Fractional {
 
   implicit val schema: Schema[Fractional[Any]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.Fractional"),
       CaseSet
         .Cons(
           floatCase,

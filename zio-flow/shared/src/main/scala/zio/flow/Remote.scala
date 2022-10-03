@@ -20,7 +20,7 @@ import zio.flow.remote.DynamicValueHelpers
 import zio.flow.remote.RemoteTuples._
 import zio.flow.remote.numeric._
 import zio.flow.serialization.FlowSchemaAst
-import zio.schema.{CaseSet, DynamicValue, Schema}
+import zio.schema.{CaseSet, DynamicValue, Schema, TypeId}
 import zio.{Chunk, ZIO}
 
 import java.math.BigDecimal
@@ -185,6 +185,7 @@ object Remote {
     // NOTE: must be kept identifiable from DynamicValues in Remote.fromDynamic
     def schema[A]: Schema[VariableReference[A]] =
       Schema.CaseClass1[RemoteVariableReference[A], VariableReference[A]](
+        TypeId.parse("zio.flow.VariableReference"),
         Schema.Field("ref", Schema[RemoteVariableReference[A]]),
         VariableReference(_),
         _.ref
@@ -238,6 +239,7 @@ object Remote {
   object Variable {
     def schema[A]: Schema[Variable[A]] =
       Schema.CaseClass1[RemoteVariableName, Variable[A]](
+        TypeId.parse("zio.flow.Variable"),
         Schema.Field("identifier", Schema[RemoteVariableName]),
         construct = (identifier: RemoteVariableName) => Variable(identifier),
         extractField = (variable: Variable[A]) => variable.identifier
@@ -270,6 +272,7 @@ object Remote {
   object Unbound {
     def schema[A]: Schema[Unbound[A]] =
       Schema.CaseClass1[BindingName, Unbound[A]](
+        TypeId.parse("zio.flow.Unbound"),
         Schema.Field("identifier", Schema[BindingName]),
         construct = (identifier: BindingName) => Unbound(identifier),
         extractField = (variable: Unbound[A]) => variable.identifier
@@ -306,6 +309,7 @@ object Remote {
 
     def schema[A, B]: Schema[UnboundRemoteFunction[A, B]] =
       Schema.CaseClass2[Unbound[A], Remote[B], UnboundRemoteFunction[A, B]](
+        TypeId.parse("zio.flow.UnboundRemoteFunction"),
         Schema.Field("variable", Unbound.schema[A]),
         Schema.Field("result", Schema.defer(Remote.schema[B])),
         UnboundRemoteFunction.apply(_, _),
@@ -349,6 +353,7 @@ object Remote {
   object EvaluateUnboundRemoteFunction {
     def schema[A, B]: Schema[EvaluateUnboundRemoteFunction[A, B]] =
       Schema.CaseClass2[UnboundRemoteFunction[A, B], Remote[A], EvaluateUnboundRemoteFunction[A, B]](
+        TypeId.parse("zio.flow.EvaluateUnboundRemoteFunction"),
         Schema.Field("f", UnboundRemoteFunction.schema[A, B]),
         Schema.Field("a", Schema.defer(Remote.schema[A])),
         EvaluateUnboundRemoteFunction.apply,
@@ -383,6 +388,7 @@ object Remote {
   object UnaryNumeric {
     def schema[A]: Schema[UnaryNumeric[A]] =
       Schema.CaseClass3[Remote[A], Numeric[A], UnaryNumericOperator, UnaryNumeric[A]](
+        TypeId.parse("zio.flow.UnaryNumeric"),
         Schema.Field("value", Schema.defer(Remote.schema[A])),
         Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
         Schema.Field("operator", Schema[UnaryNumericOperator]),
@@ -417,6 +423,7 @@ object Remote {
   object BinaryNumeric {
     def schema[A]: Schema[BinaryNumeric[A]] =
       Schema.CaseClass4[Remote[A], Remote[A], Numeric[A], BinaryNumericOperator, BinaryNumeric[A]](
+        TypeId.parse("zio.flow.BinaryNumeric"),
         Schema.Field("left", Schema.defer(Remote.schema[A])),
         Schema.Field("right", Schema.defer(Remote.schema[A])),
         Schema.Field("numeric", Numeric.schema.asInstanceOf[Schema[Numeric[A]]]),
@@ -449,6 +456,7 @@ object Remote {
   object UnaryFractional {
     def schema[A]: Schema[UnaryFractional[A]] =
       Schema.CaseClass3[Remote[A], Fractional[A], UnaryFractionalOperator, UnaryFractional[A]](
+        TypeId.parse("zio.flow.UnaryFractional"),
         Schema.Field("value", Schema.defer(Remote.schema[A])),
         Schema.Field("numeric", Fractional.schema.asInstanceOf[Schema[Fractional[A]]]),
         Schema.Field("operator", Schema[UnaryFractionalOperator]),
@@ -555,6 +563,7 @@ object Remote {
         UnboundRemoteFunction[B, C],
         FoldEither[A, B, C]
       ](
+        TypeId.parse("zio.flow.FoldEither"),
         Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
         Schema.Field("left", UnboundRemoteFunction.schema[A, C]),
         Schema.Field("right", UnboundRemoteFunction.schema[B, C]),
@@ -619,11 +628,17 @@ object Remote {
       either match {
         case Left(throwable) =>
           throwable.evalDynamic.map { throwableValue =>
-            DynamicValue.Enumeration("Failure" -> DynamicValue.Record(ListMap("exception" -> throwableValue)))
+            DynamicValue.Enumeration(
+              TypeId.parse("zio.flow.Try"),
+              "Failure" -> DynamicValue.Record(TypeId.parse("zio.flow.Try"), ListMap("exception" -> throwableValue))
+            )
           }
         case Right(success) =>
           success.evalDynamic.map { successValue =>
-            DynamicValue.Enumeration("Success" -> DynamicValue.Record(ListMap("value" -> successValue)))
+            DynamicValue.Enumeration(
+              TypeId.parse("zio.flow.Try"),
+              "Success" -> DynamicValue.Record(TypeId.parse("zio.flow.Try"), ListMap("value" -> successValue))
+            )
           }
       }
 
@@ -2128,6 +2143,7 @@ object Remote {
     def schema[T, A]: Schema[TupleAccess[T, A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[T], Int, TupleAccess[T, A]](
+          TypeId.parse("zio.flow.TupleAccess"),
           Schema.Field("tuple", Remote.schema[T]),
           Schema.Field("n", Schema[Int]),
           TupleAccess(_, _),
@@ -2163,6 +2179,7 @@ object Remote {
     def schema[A]: Schema[Branch[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[Boolean], Remote[A], Remote[A], Branch[A]](
+          TypeId.parse("zio.flow.Branch"),
           Schema.Field("predicate", Remote.schema[Boolean]),
           Schema.Field("ifTrue", Remote.schema[A]),
           Schema.Field("ifFalse", Remote.schema[A]),
@@ -2224,6 +2241,7 @@ object Remote {
     def schema[A]: Schema[LessThanEqual[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[A], Remote[A], FlowSchemaAst, LessThanEqual[A]](
+          TypeId.parse("zio.flow.LessThanEqual"),
           Schema.Field("left", Remote.schema[A]),
           Schema.Field("right", Remote.schema[A]),
           Schema.Field("schema", FlowSchemaAst.schema),
@@ -2257,6 +2275,7 @@ object Remote {
     def schema[A]: Schema[Equal[A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[A], Remote[A], Equal[A]](
+          TypeId.parse("zio.flow.Equal"),
           Schema.Field("left", Remote.schema[A]),
           Schema.Field("right", Remote.schema[A]),
           { case (left, right) => Equal(left, right) },
@@ -2314,6 +2333,7 @@ object Remote {
     val schema: Schema[And] =
       Schema.defer(
         Schema.CaseClass2[Remote[Boolean], Remote[Boolean], And](
+          TypeId.parse("zio.flow.And"),
           Schema.Field("left", Remote.schema[Boolean]),
           Schema.Field("right", Remote.schema[Boolean]),
           { case (left, right) => And(left, right) },
@@ -2370,6 +2390,7 @@ object Remote {
     def schema[A, B]: Schema[Fold[A, B]] =
       Schema.defer(
         Schema.CaseClass3[Remote[List[A]], Remote[B], UnboundRemoteFunction[(B, A), B], Fold[A, B]](
+          TypeId.parse("zio.flow.Fold"),
           Schema.Field("list", Remote.schema[List[A]]),
           Schema.Field("initial", Remote.schema[B]),
           Schema.Field("body", UnboundRemoteFunction.schema[(B, A), B]),
@@ -2410,6 +2431,7 @@ object Remote {
     def schema[A]: Schema[Cons[A]] =
       Schema.defer(
         Schema.CaseClass2[Remote[List[A]], Remote[A], Cons[A]](
+          TypeId.parse("zio.flow.Cons"),
           Schema.Field("list", Remote.schema[List[A]]),
           Schema.Field("head", Remote.schema[A]),
           Cons.apply,
@@ -2484,6 +2506,7 @@ object Remote {
     val schema: Schema[InstantFromLongs] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[Long], InstantFromLongs](
+          TypeId.parse("zio.flow.InstantFromLongs"),
           Schema.Field("seconds", Remote.schema[Long]),
           Schema.Field("nanos", Remote.schema[Long]),
           InstantFromLongs.apply,
@@ -2568,6 +2591,7 @@ object Remote {
     val schema: Schema[InstantPlusDuration] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantPlusDuration](
+          TypeId.parse("zio.flow.InstantPlusDuration"),
           Schema.Field("instant", Remote.schema[Instant]),
           Schema.Field("duration", Remote.schema[Duration]),
           InstantPlusDuration.apply,
@@ -2599,6 +2623,7 @@ object Remote {
     val schema: Schema[InstantTruncate] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[ChronoUnit], InstantTruncate](
+          TypeId.parse("zio.flow.InstantTruncate"),
           Schema.Field("instant", Remote.schema[Instant]),
           Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
           InstantTruncate.apply,
@@ -2659,6 +2684,7 @@ object Remote {
     val schema: Schema[DurationBetweenInstants] =
       Schema.defer(
         Schema.CaseClass2[Remote[Instant], Remote[Instant], DurationBetweenInstants](
+          TypeId.parse("zio.flow.DurationBetweenInstants"),
           Schema.Field("startInclusive", Remote.schema[Instant]),
           Schema.Field("endExclusive", Remote.schema[Instant]),
           DurationBetweenInstants.apply,
@@ -2722,6 +2748,7 @@ object Remote {
     val schema: Schema[DurationFromLongs] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[Long], DurationFromLongs](
+          TypeId.parse("zio.flow.DurationFromLongs"),
           Schema.Field("seconds", Remote.schema[Long]),
           Schema.Field("nanoAdjustment", Remote.schema[Long]),
           DurationFromLongs.apply,
@@ -2753,6 +2780,7 @@ object Remote {
     val schema: Schema[DurationFromAmount] =
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[ChronoUnit], DurationFromAmount](
+          TypeId.parse("zio.flow.DurationFromAmount"),
           Schema.Field("amount", Remote.schema[Long]),
           Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
           DurationFromAmount.apply,
@@ -2812,6 +2840,7 @@ object Remote {
     val schema: Schema[DurationPlusDuration] =
       Schema.defer(
         Schema.CaseClass2[Remote[Duration], Remote[Duration], DurationPlusDuration](
+          TypeId.parse("zio.flow.DurationPlusDuration"),
           Schema.Field("left", Remote.schema[Duration]),
           Schema.Field("right", Remote.schema[Duration]),
           DurationPlusDuration.apply,
@@ -2842,6 +2871,7 @@ object Remote {
     val schema: Schema[DurationMultipliedBy] =
       Schema.defer(
         Schema.CaseClass2[Remote[Duration], Remote[Long], DurationMultipliedBy](
+          TypeId.parse("zio.flow.DurationMultipliedBy"),
           Schema.Field("left", Remote.schema[Duration]),
           Schema.Field("right", Remote.schema[Long]),
           DurationMultipliedBy.apply,
@@ -2885,6 +2915,7 @@ object Remote {
     def schema[A]: Schema[Iterate[A]] =
       Schema.defer(
         Schema.CaseClass3[Remote[A], UnboundRemoteFunction[A, A], UnboundRemoteFunction[A, Boolean], Iterate[A]](
+          TypeId.parse("zio.flow.Iterate"),
           Schema.Field("initial", Remote.schema[A]),
           Schema.Field("iterate", UnboundRemoteFunction.schema[A, A]),
           Schema.Field("predicate", UnboundRemoteFunction.schema[A, Boolean]),
@@ -2974,6 +3005,7 @@ object Remote {
     def schema[A, B]: Schema[FoldOption[A, B]] =
       Schema.defer(
         Schema.CaseClass3[Remote[Option[A]], Remote[B], UnboundRemoteFunction[A, B], FoldOption[A, B]](
+          TypeId.parse("zio.flow.FoldOption"),
           Schema.Field("option", Remote.schema[Option[A]]),
           Schema.Field("ifEmpty", Remote.schema[B]),
           Schema.Field("ifNonEmpty", UnboundRemoteFunction.schema[A, B]),
@@ -3020,6 +3052,7 @@ object Remote {
       Schema.defer {
         Schema
           .CaseClass3[RecursionId, Remote[A], UnboundRemoteFunction[A, A], Recurse[A]](
+            TypeId.parse("zio.flow.Recurse"),
             Schema.Field("id", Schema[RecursionId]),
             Schema.Field("initial", Remote.schema[A]),
             Schema.Field("body", UnboundRemoteFunction.schema[A, A]),
@@ -3062,6 +3095,7 @@ object Remote {
     def schema[A]: Schema[RecurseWith[A]] =
       Schema.defer {
         Schema.CaseClass2[RecursionId, Remote[A], RecurseWith[A]](
+          TypeId.parse("zio.flow.RecurseWith"),
           Schema.Field("id", Schema[RecursionId]),
           Schema.Field("value", Remote.schema[A]),
           RecurseWith(_, _),
@@ -3279,6 +3313,7 @@ object Remote {
   val unit: Remote[Unit] = Remote.Ignore()
 
   private def createSchema[A]: Schema[Remote[A]] = Schema.EnumN(
+    TypeId.parse("zio.flow.Remote"),
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Remote[A]]())
       .:+:(Flow.schemaCase[A])

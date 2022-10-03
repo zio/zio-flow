@@ -16,7 +16,7 @@
 
 package zio.flow.internal
 
-import zio.schema.{DynamicValue, Schema}
+import zio.schema.{DynamicValue, Schema, TypeId}
 
 sealed trait TransactionFailure[+E]
 object TransactionFailure {
@@ -25,6 +25,7 @@ object TransactionFailure {
 
   implicit def schema[E: Schema]: Schema[TransactionFailure[E]] =
     Schema.Enum2(
+      TypeId.parse("zio.flow.TransactionFailure"),
       Schema.Case[Retry.type, TransactionFailure[E]](
         "Retry",
         Schema.singleton(Retry),
@@ -40,6 +41,7 @@ object TransactionFailure {
   /** Wraps a dynamic value E with TransactionFailure.Fail(value) */
   def wrapDynamic[E](value: DynamicValue): DynamicValue =
     DynamicValue.Enumeration(
+      TypeId.parse("zio.flow.WrapDynamic"),
       "Fail" -> value
     )
 
@@ -49,7 +51,7 @@ object TransactionFailure {
    */
   def unwrapDynamic(dynamicValue: DynamicValue): Option[DynamicValue] =
     dynamicValue match {
-      case DynamicValue.Enumeration((name, value)) =>
+      case DynamicValue.Enumeration(_, (name, value)) =>
         name match {
           case "Retry" => None
           case "Fail" =>

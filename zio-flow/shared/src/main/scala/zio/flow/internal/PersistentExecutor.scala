@@ -25,7 +25,7 @@ import zio.flow.serialization._
 import zio.flow._
 import zio.flow.internal.PersistentExecutor.GarbageCollectionCommand
 import zio.flow.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
+import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, OffsetDateTime}
@@ -1218,6 +1218,7 @@ object PersistentExecutor {
 
     implicit val schema: Schema[Instruction] =
       Schema.EnumN(
+        TypeId.parse("zio.flow.Instruction"),
         CaseSet
           .Cons(
             Schema.Case[PopEnv.type, Instruction]("PopEnv", Schema.singleton(PopEnv), _.asInstanceOf[PopEnv.type]),
@@ -1237,6 +1238,7 @@ object PersistentExecutor {
                 Any,
                 ZFlow[Any, Any, Any]
               ], Continuation[Any, Any, Any, Any, Any]](
+                TypeId.parse("zio.flow.Continuation"),
                 Schema.Field("onError", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
                 Schema.Field("onSuccess", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
                 Continuation(_, _),
@@ -1541,6 +1543,7 @@ object PersistentExecutor {
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
       Schema.CaseClass18(
+        TypeId.parse("zio.flow.State"),
         Schema.Field("id", Schema[ScopedFlowId]),
         Schema.Field("lastTimestamp", Schema[Timestamp]),
         Schema.Field("current", ZFlow.schemaAny),
@@ -1636,6 +1639,7 @@ object PersistentExecutor {
   object TransactionState {
     implicit val schema: Schema[TransactionState] =
       Schema.CaseClass5(
+        TypeId.parse("zio.flow.TransactionState"),
         Schema.Field("id", Schema[TransactionId]),
         Schema.Field("accessedVariables", Schema[Map[RemoteVariableName, RecordedAccess]]),
         Schema.Field("compensations", Schema[List[ZFlow[Any, ActivityError, Unit]]]),

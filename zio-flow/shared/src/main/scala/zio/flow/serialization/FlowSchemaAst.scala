@@ -17,23 +17,23 @@
 package zio.flow.serialization
 
 import zio.flow.{Remote, ZFlow}
-import zio.schema.ast.SchemaAst.{Dynamic, FailNode, Lineage, Value}
-import zio.schema.ast.{NodePath, SchemaAst}
-import zio.schema.{CaseSet, DeriveSchema, Schema}
+import zio.schema.meta.MetaSchema.{Dynamic, FailNode, Lineage, Value}
+import zio.schema.meta.{MetaSchema, NodePath}
+import zio.schema.{CaseSet, DeriveSchema, Schema, TypeId}
 import zio.{Chunk, ChunkBuilder}
 
 import scala.annotation.{nowarn, tailrec}
 import scala.collection.mutable
 
 /**
- * Wrapper for SchemaAst to prevent serialization of some predefined zio-flow
+ * Wrapper for MetaSchema to prevent serialization of some predefined zio-flow
  * types
  */
 sealed trait FlowSchemaAst { self =>
   def path: NodePath
   def optional: Boolean
 
-  def toAst: SchemaAst
+  def toMeta: MetaSchema
   def toSchema[A]: Schema[A] = {
     val refMap = mutable.HashMap.empty[NodePath, Schema[_]]
     FlowSchemaAst.materialize(self, refMap).asInstanceOf[Schema[A]]
@@ -45,52 +45,62 @@ object FlowSchemaAst {
     override def toSchema[A]: Schema[A] =
       Remote.schemaAny.asInstanceOf[Schema[A]]
 
-    override def toAst: SchemaAst = toSchema.ast
+    override def toMeta: MetaSchema = toSchema.ast
   }
   final case class FlowAst(path: NodePath, optional: Boolean) extends FlowSchemaAst {
     override def toSchema[A]: Schema[A] =
       ZFlow.schemaAny.asInstanceOf[Schema[A]]
 
-    override def toAst: SchemaAst = toSchema.ast
+    override def toMeta: MetaSchema = toSchema.ast
   }
 
   final case class Product(path: NodePath, fields: Chunk[(String, FlowSchemaAst)], optional: Boolean)
       extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.Product(path, fields.map { case (label, fieldAst) => (label, fieldAst.toAst) }, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.Product(
+        TypeId.parse("zio.flow.serialization.Product"),
+        path,
+        fields.map { case (label, fieldAst) => (label, fieldAst.toMeta) },
+        optional
+      )
   }
 
   final case class Tuple(path: NodePath, left: FlowSchemaAst, right: FlowSchemaAst, optional: Boolean)
       extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.Tuple(path, left.toAst, right.toAst, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.Tuple(path, left.toMeta, right.toMeta, optional)
   }
 
   final case class Sum(path: NodePath, cases: Chunk[(String, FlowSchemaAst)], optional: Boolean) extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.Sum(path, cases.map { case (label, caseAst) => (label, caseAst.toAst) }, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.Sum(
+        TypeId.parse("zio.flow.serialization.Sum"),
+        path,
+        cases.map { case (label, caseAst) => (label, caseAst.toMeta) },
+        optional
+      )
   }
 
   final case class Either(path: NodePath, left: FlowSchemaAst, right: FlowSchemaAst, optional: Boolean)
       extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.Either(path, left.toAst, right.toAst, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.Either(path, left.toMeta, right.toMeta, optional)
   }
 
   final case class ListNode(item: FlowSchemaAst, path: NodePath, optional: Boolean) extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.ListNode(item.toAst, path, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.ListNode(item.toMeta, path, optional)
   }
 
   final case class Dictionary(keys: FlowSchemaAst, values: FlowSchemaAst, path: NodePath, optional: Boolean)
       extends FlowSchemaAst {
-    override def toAst: SchemaAst =
-      SchemaAst.Dictionary(keys.toAst, values.toAst, path, optional)
+    override def toMeta: MetaSchema =
+      MetaSchema.Dictionary(keys.toMeta, values.toMeta, path, optional)
   }
 
-  final case class Other(toAst: SchemaAst) extends FlowSchemaAst {
-    override def path: NodePath    = toAst.path
-    override def optional: Boolean = toAst.optional
+  final case class Other(toMeta: MetaSchema) extends FlowSchemaAst {
+    override def path: NodePath    = toMeta.path
+    override def optional: Boolean = toMeta.optional
   }
 
   @tailrec
@@ -105,14 +115,14 @@ object FlowSchemaAst {
         case Schema.Primitive(typ, _)   => Other(Value(typ, NodePath.root))
         case Schema.Fail(message, _)    => Other(FailNode(message, NodePath.root))
         case Schema.Optional(schema, _) => subtree(NodePath.root, Chunk.empty, schema, optional = true)
-        case Schema.EitherSchema(left, right, _) =>
+        case Schema.Either(left, right, _) =>
           Either(
             NodePath.root,
             subtree(NodePath.root / "left", Chunk.empty, left),
             subtree(NodePath.root / "right", Chunk.empty, right),
             optional = false
           )
-        case Schema.Tuple(left, right, _) =>
+        case Schema.Tuple2(left, right, _) =>
           Tuple(
             NodePath.root,
             subtree(NodePath.root / "left", Chunk.empty, left),
@@ -121,14 +131,14 @@ object FlowSchemaAst {
           )
         case Schema.Sequence(schema, _, _, _, _) =>
           ListNode(item = subtree(NodePath.root / "item", Chunk.empty, schema), NodePath.root, optional = false)
-        case Schema.MapSchema(ks, vs, _) =>
+        case Schema.Map(ks, vs, _) =>
           Dictionary(
             keys = subtree(NodePath.root / "keys", Chunk.empty, ks),
             values = subtree(NodePath.root / "values", Chunk.empty, vs),
             NodePath.root,
             optional = false
           )
-        case Schema.SetSchema(schema, _) =>
+        case Schema.Set(schema, _) =>
           ListNode(item = subtree(NodePath.root / "item", Chunk.empty, schema), NodePath.root, optional = false)
         case Schema.Transform(schema, _, _, _, _) => subtree(NodePath.root, Chunk.empty, schema)
         case lzy @ Schema.Lazy(_)                 => fromSchema(lzy.schema)
@@ -144,9 +154,7 @@ object FlowSchemaAst {
               node.addLabelledSubtree(id, schema)
             }
             .buildSum()
-        case Schema.Meta(ast, _)      => fromAst(ast)
-        case Schema.Dynamic(_)        => Other(Dynamic(withSchema = false, NodePath.root))
-        case Schema.SemiDynamic(_, _) => Other(Dynamic(withSchema = true, NodePath.root))
+        case Schema.Dynamic(_) => Other(Dynamic(withSchema = false, NodePath.root))
       }
 
   final private case class NodeBuilder(
@@ -175,7 +183,7 @@ object FlowSchemaAst {
     lineage
       .find(_._1 == schema.hashCode())
       .map { case (_, refPath) =>
-        Other(SchemaAst.Ref(refPath, path, optional))
+        Other(MetaSchema.Ref(refPath, path, optional))
       }
       .getOrElse {
         if (schema eq Remote.schemaAny)
@@ -184,16 +192,16 @@ object FlowSchemaAst {
           FlowAst(path, optional)
         else
           schema match {
-            case Schema.Primitive(typ, _)   => Other(SchemaAst.Value(typ, path, optional))
+            case Schema.Primitive(typ, _)   => Other(MetaSchema.Value(typ, path, optional))
             case Schema.Optional(schema, _) => subtree(path, lineage, schema, optional = true)
-            case Schema.EitherSchema(left, right, _) =>
+            case Schema.Either(left, right, _) =>
               Either(
                 path,
                 subtree(path / "left", lineage, left, optional = false),
                 subtree(path / "right", lineage, right, optional = false),
                 optional
               )
-            case Schema.Tuple(left, right, _) =>
+            case Schema.Tuple2(left, right, _) =>
               Tuple(
                 path,
                 subtree(path / "left", lineage, left, optional = false),
@@ -202,14 +210,14 @@ object FlowSchemaAst {
               )
             case Schema.Sequence(schema, _, _, _, _) =>
               ListNode(item = subtree(path / "item", lineage, schema, optional = false), path, optional)
-            case Schema.MapSchema(ks, vs, _) =>
+            case Schema.Map(ks, vs, _) =>
               Dictionary(
                 keys = subtree(path / "keys", Chunk.empty, ks, optional = false),
                 values = subtree(path / "values", Chunk.empty, vs, optional = false),
                 path,
                 optional
               )
-            case Schema.SetSchema(schema @ _, _) =>
+            case Schema.Set(schema @ _, _) =>
               ListNode(item = subtree(path / "item", lineage, schema, optional = false), path, optional)
             case Schema.Transform(schema, _, _, _, _) => subtree(path, lineage, schema, optional)
             case lzy @ Schema.Lazy(_)                 => subtree(path, lineage, lzy.schema, optional)
@@ -225,40 +233,38 @@ object FlowSchemaAst {
                   node.addLabelledSubtree(id, schema)
                 }
                 .buildSum()
-            case Schema.Fail(message, _)  => Other(FailNode(message, path))
-            case Schema.Meta(ast, _)      => fromAst(ast)
-            case Schema.Dynamic(_)        => Other(Dynamic(withSchema = false, path, optional))
-            case Schema.SemiDynamic(_, _) => Other(Dynamic(withSchema = true, path, optional))
+            case Schema.Fail(message, _) => Other(FailNode(message, path))
+            case Schema.Dynamic(_)       => Other(Dynamic(withSchema = false, path, optional))
           }
       }
 
-  def fromAst(ast: SchemaAst): FlowSchemaAst =
+  def fromAst(ast: MetaSchema): FlowSchemaAst =
     ast match {
-      case SchemaAst.Product(path, fields, optional) =>
+      case MetaSchema.Product(_, path, fields, optional) =>
         Product(path, fields.map { case (label, fieldAst) => (label, fromAst(fieldAst)) }, optional)
-      case SchemaAst.Tuple(path, left, right, optional) =>
+      case MetaSchema.Tuple(path, left, right, optional) =>
         Tuple(path, fromAst(left), fromAst(right), optional)
-      case SchemaAst.Sum(path, cases, optional) =>
+      case MetaSchema.Sum(_, path, cases, optional) =>
         Sum(path, cases.map { case (label, caseAst) => (label, fromAst(caseAst)) }, optional)
-      case SchemaAst.Either(path, left, right, optional) =>
+      case MetaSchema.Either(path, left, right, optional) =>
         Either(path, fromAst(left), fromAst(right), optional)
-      case SchemaAst.FailNode(_, _, _) =>
+      case MetaSchema.FailNode(_, _, _) =>
         Other(ast)
-      case SchemaAst.ListNode(item, path, optional) =>
+      case MetaSchema.ListNode(item, path, optional) =>
         ListNode(fromAst(item), path, optional)
-      case SchemaAst.Dictionary(keys, values, path, optional) =>
+      case MetaSchema.Dictionary(keys, values, path, optional) =>
         Dictionary(fromAst(keys), fromAst(values), path, optional)
-      case SchemaAst.Value(_, _, _) =>
+      case MetaSchema.Value(_, _, _) =>
         Other(ast)
-      case SchemaAst.Ref(_, _, _) =>
+      case MetaSchema.Ref(_, _, _) =>
         Other(ast)
-      case SchemaAst.Dynamic(_, _, _) =>
+      case MetaSchema.Dynamic(_, _, _) =>
         Other(ast)
     }
 
   private def materialize(ast: FlowSchemaAst, refs: mutable.Map[NodePath, Schema[_]]): Schema[_] = {
     val baseSchema = ast match {
-      case FlowSchemaAst.Other(SchemaAst.Ref(refPath, _, _)) =>
+      case FlowSchemaAst.Other(MetaSchema.Ref(refPath, _, _)) =>
         Schema.defer(
           refs.getOrElse(refPath, Schema.Fail(s"invalid ref path $refPath"))
         )
@@ -266,6 +272,7 @@ object FlowSchemaAst {
         ast.toSchema
       case FlowSchemaAst.Product(_, elems, _) =>
         Schema.record(
+          TypeId.parse("zio.flow.Product"),
           elems.map { case (label, ast) =>
             Schema.Field(label, materialize(ast, refs))
           }: _*
@@ -277,6 +284,7 @@ object FlowSchemaAst {
         )
       case FlowSchemaAst.Sum(_, elems, _) =>
         Schema.enumeration[Any, CaseSet.Aux[Any]](
+          TypeId.parse("zio.flow.Enumeration"),
           elems.foldRight[CaseSet.Aux[Any]](CaseSet.Empty[Any]()) { case ((label, ast), acc) =>
             val _case: Schema.Case[Any, Any] = Schema
               .Case[Any, Any](
@@ -296,7 +304,7 @@ object FlowSchemaAst {
       case FlowSchemaAst.ListNode(itemAst, _, _) =>
         Schema.chunk(materialize(itemAst, refs))
       case FlowSchemaAst.Dictionary(keyAst, valueAst, _, _) =>
-        Schema.MapSchema(materialize(keyAst, refs), materialize(valueAst, refs), Chunk.empty)
+        Schema.Map(materialize(keyAst, refs), materialize(valueAst, refs), Chunk.empty)
       case ast =>
         ast.toSchema
     }

@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.schema.Schema
+import zio.schema.{Schema, TypeId}
 
 final case class Activity[-R, A](
   name: String,
@@ -60,6 +60,7 @@ object Activity {
       ActivityError,
       Unit
     ], Activity[R, A]](
+      TypeId.parse("zio.flow.Activity"),
       Schema.Field("name", Schema[String]),
       Schema.Field("description", Schema[String]),
       Schema.Field("operation", Operation.schema[R, A]),

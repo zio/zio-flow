@@ -17,13 +17,14 @@
 package zio.flow
 
 import zio.flow.internal.DurablePromise
-import zio.schema.Schema
+import zio.schema.{Schema, TypeId}
 
 final case class ExecutingFlow[+E, +A](id: FlowId, result: DurablePromise[_, _])
 
 object ExecutingFlow {
   implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
     Schema.CaseClass2[FlowId, DurablePromise[Either[Throwable, E], A], ExecutingFlow[E, A]](
+      TypeId.parse("zio.flow.ExecutingFlow"),
       Schema.Field("id", Schema[FlowId]),
       Schema.Field("result", Schema[DurablePromise[Either[Throwable, E], A]]),
       { case (id, promise) => ExecutingFlow(id, promise) },

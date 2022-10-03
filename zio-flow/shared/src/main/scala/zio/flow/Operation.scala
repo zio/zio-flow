@@ -16,6 +16,7 @@
 
 package zio.flow
 
+import zio.Chunk
 import zio.schema._
 import zio.flow.operation.http.API
 
@@ -35,6 +36,7 @@ object Operation {
 
   object Http {
     def schema[R, A]: Schema[Http[R, A]] = Schema.CaseClass2[String, API[R, A], Http[R, A]](
+      TypeId.parse("zio.flow.Http"),
       Schema.Field("host", Schema[String]),
       Schema.Field("api", API.schema[R, A]),
       (host, api) => Http(host, api),
@@ -48,9 +50,12 @@ object Operation {
 
   implicit def schema[R, A]: Schema[Operation[R, A]] =
     Schema.EnumN(
+      TypeId.parse("zio.flow.Operation"),
       CaseSet
-        .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
+        .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]()),
+      Chunk.empty
     )
+
 }
 
 final case class EmailRequest(

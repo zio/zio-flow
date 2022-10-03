@@ -17,7 +17,7 @@
 package zio.flow.operation.http
 
 import zhttp.http.{Headers => _, Path => _}
-import zio.schema.Schema
+import zio.schema.{Schema, TypeId}
 import zio.flow.serialization.FlowSchemaAst
 
 /**
@@ -50,6 +50,7 @@ object API {
 
   def schema[Input, Output]: Schema[API[Input, Output]] =
     Schema.CaseClass3[HttpMethod, RequestInput[Input], FlowSchemaAst, API[Input, Output]](
+      TypeId.parse("zio.flow.Api"),
       Schema.Field("method", HttpMethod.schema),
       Schema.Field("requestInput", RequestInput.schema[Input]),
       Schema.Field("outputSchema", FlowSchemaAst.schema),
