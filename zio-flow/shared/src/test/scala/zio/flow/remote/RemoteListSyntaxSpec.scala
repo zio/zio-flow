@@ -325,20 +325,20 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3).padTo(3, 11) <-> List(1, 2, 3)
       ),
       remoteTest("partition")(
-        Remote.nil[Int].partition(_ % 2 === 0) <-> (List.empty[Int], List.empty[Int]),
-        Remote.list(1, 2, 3, 4, 5).partition(_ % 2 === 0) <-> (List(2, 4), List(1, 3, 5))
+        Remote.nil[Int].partition(_ % 2 === 0) <-> ((List.empty[Int], List.empty[Int])),
+        Remote.list(1, 2, 3, 4, 5).partition(_ % 2 === 0) <-> ((List(2, 4), List(1, 3, 5)))
       ),
       remoteTest("partitionMap")(
         Remote
           .nil[Int]
           .partitionMap((n: Remote[Int]) =>
             (n % 2 === 0).ifThenElse(ifTrue = Remote.left(n), ifFalse = Remote.right(n.toString))
-          ) <-> (List.empty[Int], List.empty[String]),
+          ) <-> ((List.empty[Int], List.empty[String])),
         Remote
           .list(1, 2, 3, 4, 5)
           .partitionMap((n: Remote[Int]) =>
             (n % 2 === 0).ifThenElse(ifTrue = Remote.left(n), ifFalse = Remote.right(n.toString))
-          ) <-> (List(2, 4), List("1", "3", "5"))
+          ) <-> ((List(2, 4), List("1", "3", "5")))
       ),
       remoteTest("patch")(
         Remote.nil[Int].patch(0, Remote.nil[Int], 0) <-> List.empty[Int],
@@ -475,14 +475,14 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         )
       ),
       remoteTest("span")(
-        Remote.nil[Int].span(_ < 3) <-> (List.empty[Int], List.empty[Int]),
-        Remote.list(1, 2, 3, 4, 5).span(_ < 3) <-> (List(1, 2), List(3, 4, 5))
+        Remote.nil[Int].span(_ < 3) <-> ((List.empty[Int], List.empty[Int])),
+        Remote.list(1, 2, 3, 4, 5).span(_ < 3) <-> ((List(1, 2), List(3, 4, 5)))
       ),
       remoteTest("splitAt")(
-        Remote.nil[Int].splitAt(3) <-> (List.empty[Int], List.empty[Int]),
-        Remote.list(1, 2, 3, 4, 5).splitAt(3) <-> (List(1, 2, 3), List(4, 5)),
-        Remote.list(1, 2, 3, 4, 5).splitAt(0) <-> (List.empty, List(1, 2, 3, 4, 5)),
-        Remote.list(1, 2, 3, 4, 5).splitAt(6) <-> (List(1, 2, 3, 4, 5), List.empty)
+        Remote.nil[Int].splitAt(3) <-> ((List.empty[Int], List.empty[Int])),
+        Remote.list(1, 2, 3, 4, 5).splitAt(3) <-> ((List(1, 2, 3), List(4, 5))),
+        Remote.list(1, 2, 3, 4, 5).splitAt(0) <-> ((List.empty, List(1, 2, 3, 4, 5))),
+        Remote.list(1, 2, 3, 4, 5).splitAt(6) <-> ((List(1, 2, 3, 4, 5), List.empty))
       ),
       remoteTest("startsWith")(
         Remote.nil[Int].startsWith(Remote.list(1, 2)) <-> false,
@@ -521,14 +521,16 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3, 3, 2, 1).toSet <-> Set(1, 2, 3)
       ),
       remoteTest("unzip")(
-        Remote.nil[(Int, String)].unzip <-> (List.empty[Int], List.empty[String]),
-        Remote.list((1, "x"), (2, "y"), (3, "z")).unzip <-> (List(1, 2, 3), List("x", "y", "z"))
+        Remote.nil[(Int, String)].unzip[Int, String] <-> ((List.empty[Int], List.empty[String])),
+        Remote.list((1, "x"), (2, "y"), (3, "z")).unzip[Int, String] <-> ((List(1, 2, 3), List("x", "y", "z")))
       ),
       remoteTest("unzip3")(
-        Remote.nil[(Int, String, Double)].unzip3 <-> (List.empty[Int], List.empty[String], List.empty[Double]),
+        Remote
+          .nil[(Int, String, Double)]
+          .unzip3[Int, String, Double] <-> ((List.empty[Int], List.empty[String], List.empty[Double])),
         Remote
           .list((1, "x", 0.1), (2, "y", 0.2), (3, "z", 0.3))
-          .unzip3 <-> (List(1, 2, 3), List("x", "y", "z"), List(0.1, 0.2, 0.3))
+          .unzip3[Int, String, Double] <-> ((List(1, 2, 3), List("x", "y", "z"), List(0.1, 0.2, 0.3)))
       ),
       remoteTest("zip")(
         Remote.nil[Int].zip(Remote.nil[String]) <-> List.empty[(Int, String)],

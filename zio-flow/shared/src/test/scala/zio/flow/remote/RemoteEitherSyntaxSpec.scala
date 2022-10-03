@@ -48,7 +48,7 @@ object RemoteEitherSyntaxSpec extends RemoteSpecBase {
       },
       test("flatten") {
         check(Gen.either(Gen.int, Gen.int), Gen.either(Gen.int, Gen.int)) { (either, either2) =>
-          Remote(either).map(_ => either2).flatten <-> either.map(_ => either2).flatten
+          Remote(either).map(_ => either2).flatten <-> either.map(_ => either2).flatMap(e => e)
         }
       },
       test("fold") {
@@ -106,7 +106,10 @@ object RemoteEitherSyntaxSpec extends RemoteSpecBase {
         },
         test("filterToOption") {
           check(Gen.either(Gen.string, Gen.int)) { either =>
-            Remote(either).left.filterToOption[Int](_.length > 3) <-> either.left.filterToOption(_.length > 3)
+            Remote(either).left.filterToOption[Int](_.length > 3) <-> (either match {
+              case Left(s) if s.length > 3 => Some(either)
+              case _                       => None
+            })
           }
         },
         test("flatMap") {
@@ -144,7 +147,10 @@ object RemoteEitherSyntaxSpec extends RemoteSpecBase {
       },
       test("orElse") {
         check(Gen.either(Gen.boolean, Gen.int), Gen.either(Gen.boolean, Gen.int)) { (either1, either2) =>
-          Remote(either1).orElse(either2) <-> either1.orElse(either2)
+          Remote(either1).orElse(either2) <-> (either1 match {
+            case Right(_) => either1
+            case Left(_)  => either2
+          })
         }
       },
       test("swap") {

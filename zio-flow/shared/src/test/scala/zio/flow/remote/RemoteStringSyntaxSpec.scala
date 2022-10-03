@@ -15,35 +15,35 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote('x').toString * 2 <-> "xx"
       ),
       remoteTest("+")(
-        Remote("" + "hello") <-> "hello",
-        Remote("hello" + "") <-> "hello",
-        Remote("hello" + "world") <-> "helloworld"
+        Remote("") + "hello" <-> "hello",
+        Remote("hello") + "" <-> "hello",
+        Remote("hello") + "world" <-> "helloworld"
       ),
       remoteTest("++")(
-        Remote("" ++ "hello") <-> "hello",
-        Remote("hello" ++ "") <-> "hello",
-        Remote("hello" ++ "world") <-> "helloworld"
+        Remote("") ++ "hello" <-> "hello",
+        Remote("hello") ++ "" <-> "hello",
+        Remote("hello") ++ "world" <-> "helloworld"
       ),
       remoteTest("++:")(
-        Remote("" ++: "hello") <-> "hello",
-        Remote("hello" ++: "") <-> "hello",
-        Remote("hello" ++: "world") <-> "helloworld"
+        Remote("") ++: Remote("hello") <-> "hello",
+        Remote("hello") ++: Remote("") <-> "hello",
+        Remote("hello") ++: Remote("world") <-> "helloworld"
       ),
       remoteTest("+:")(
         Remote('x') +: Remote("yz") <-> "xyz"
       ),
       remoteTest(":++")(
-        Remote("" :++ "hello") <-> "hello",
-        Remote("hello" :++ "") <-> "hello",
-        Remote("hello" :++ "world") <-> "helloworld"
+        Remote("") :++ "hello" <-> "hello",
+        Remote("hello") :++ "" <-> "hello",
+        Remote("hello") :++ "world" <-> "helloworld"
       ),
       remoteTest("appended")(
         Remote("hello").appended('!') <-> "hello!"
       ),
       remoteTest("appendedAll")(
-        Remote("" appendedAll "hello") <-> "hello",
-        Remote("hello" appendedAll "") <-> "hello",
-        Remote("hello" appendedAll "world") <-> "helloworld"
+        Remote("").appendedAll("hello") <-> "hello",
+        Remote("hello").appendedAll("") <-> "hello",
+        Remote("hello").appendedAll("world") <-> "helloworld"
       ),
       remoteTest("apply")(
         Remote("").apply(1) failsWithRemoteError "get called on empty Option",
@@ -64,9 +64,9 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("hello").combinations(3) <-> List("hel", "heo", "hll", "hlo", "ell", "elo", "llo")
       ) @@ TestAspect.ignore, // TODO
       remoteTest("concat")(
-        Remote("" concat "hello") <-> "hello",
-        Remote("hello" concat "") <-> "hello",
-        Remote("hello" concat "world") <-> "helloworld"
+        Remote("").concat("hello") <-> "hello",
+        Remote("hello").concat("") <-> "hello",
+        Remote("hello").concat("world") <-> "helloworld"
       ),
       remoteTest("contains")(
         Remote("").contains('x') <-> false,
@@ -261,17 +261,17 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("abcd").padTo(3, '_') <-> "abcd"
       ),
       remoteTest("partition")(
-        Remote("").partition(_.isUpper) <-> ("", ""),
-        Remote("hello").partition(_.isUpper) <-> ("", "hello"),
-        Remote("hElLo").partition(_.isUpper) <-> ("EL", "hlo")
+        Remote("").partition(_.isUpper) <-> (("", "")),
+        Remote("hello").partition(_.isUpper) <-> (("", "hello")),
+        Remote("hElLo").partition(_.isUpper) <-> (("EL", "hlo"))
       ),
       remoteTest("partitionMap")(
         Remote("").partitionMap(
           _.isUpper.ifThenElse(Remote.left[Char, Char]('^'), Remote.right[Char, Char]('v'))
-        ) <-> ("", ""),
+        ) <-> (("", "")),
         Remote("hElLo").partitionMap(
           _.isUpper.ifThenElse(Remote.left[Char, Char]('^'), Remote.right[Char, Char]('v'))
-        ) <-> ("^^", "vvv")
+        ) <-> (("^^", "vvv"))
       ),
       remoteTest("patch")(
         Remote("").patch(0, "hello", 3) <-> "hello",
@@ -337,8 +337,8 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         )
       ),
       remoteTest("span")(
-        Remote("").span(_.isLetter) <-> ("", ""),
-        Remote("hello world").span(_.isLetter) <-> ("hello", " world")
+        Remote("").span(_.isLetter) <-> (("", "")),
+        Remote("hello world").span(_.isLetter) <-> (("hello", " world"))
       ),
       remoteTest("split")(
         Remote("").split(',') <-> List(""),
@@ -346,8 +346,8 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("1,2;3,4").split(List(',', ';')) <-> List("1", "2", "3", "4")
       ),
       remoteTest("splitAt")(
-        Remote("").splitAt(1) <-> ("", ""),
-        Remote("hello").splitAt(2) <-> ("he", "llo")
+        Remote("").splitAt(1) <-> (("", "")),
+        Remote("hello").splitAt(2) <-> (("he", "llo"))
       ),
       remoteTest("startsWith")(
         Remote("").startsWith("he") <-> false,

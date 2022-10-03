@@ -72,11 +72,11 @@ object DumpMetrics {
       case MetricState.Counter(count)         => Console.printLine(count.toString)
       case MetricState.Frequency(occurrences) => Console.printLine(occurrences.toString())
       case MetricState.Gauge(value)           => Console.printLine(value.toString)
-      case MetricState.Histogram(buckets, count, min, max, sum) =>
+      case MetricState.Histogram(_, count, min, max, sum) =>
         Console.printLine(
           s"${SC.MAGENTA}min${SC.RESET}: $min, ${SC.MAGENTA}max${SC.RESET}: $max, ${SC.MAGENTA}avg${SC.RESET}: ${sum / count}"
         )
-      case MetricState.Summary(error, quantiles, count, min, max, sum) =>
+      case MetricState.Summary(_, _, count, min, max, sum) =>
         Console.printLine(
           s"${SC.MAGENTA}min${SC.RESET}: $min, ${SC.MAGENTA}max${SC.RESET}: $max, ${SC.MAGENTA}avg${SC.RESET}: ${sum / count}"
         )
