@@ -8,7 +8,7 @@ import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, testEnvironment}
 
 object DynamoDbIndexedStoreSpec extends ZIOSpecDefault {
-  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+  override val bootstrap: ZLayer[Any, Any, TestEnvironment] =
     testEnvironment ++ Slf4jBridge.initialize
 
   private val dynamoDbIndexedStore =

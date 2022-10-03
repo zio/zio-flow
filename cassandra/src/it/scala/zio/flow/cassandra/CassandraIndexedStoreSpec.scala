@@ -8,7 +8,7 @@ import zio.test._
 
 object CassandraIndexedStoreSpec extends ZIOSpecDefault {
 
-  override val bootstrap: ZLayer[Scope, Any, TestEnvironment] =
+  override val bootstrap: ZLayer[Any, Any, TestEnvironment] =
     testEnvironment ++ Slf4jBridge.initialize
 
   override def spec: Spec[Environment, Any] =
