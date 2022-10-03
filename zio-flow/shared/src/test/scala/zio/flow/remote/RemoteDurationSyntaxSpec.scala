@@ -194,7 +194,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toDaysPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toDaysPart <-> duration.toDaysPart
+        Remote(duration).toDaysPart <-> (duration.getSeconds / 86400L)
       }
     },
     test("toHours") {
@@ -204,7 +204,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toHoursPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toHoursPart <-> duration.toHoursPart
+        Remote(duration).toHoursPart <-> (duration.toHours % 24L).toInt
       }
     },
     test("toMillis") {
@@ -214,7 +214,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toMillisPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toMillisPart <-> duration.toMillisPart
+        Remote(duration).toMillisPart <-> duration.getNano / 1000000
       }
     },
     test("toMinutes") {
@@ -224,7 +224,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toMinutesPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toMinutesPart <-> duration.toMinutesPart
+        Remote(duration).toMinutesPart <-> (duration.toMinutes % 60L).toInt
       }
     },
     test("toNanos") {
@@ -234,7 +234,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toNanosPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toNanosPart <-> duration.toNanosPart
+        Remote(duration).toNanosPart <-> duration.getNano
       }
     },
     test("toSeconds") {
@@ -244,7 +244,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toSecondsPart") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toSecondsPart <-> duration.toSecondsPart
+        Remote(duration).toSecondsPart <-> (duration.getSeconds % 60L).toInt
       }
     },
     test("withNanos") {
