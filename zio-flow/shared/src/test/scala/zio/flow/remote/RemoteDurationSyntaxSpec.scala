@@ -239,7 +239,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
     },
     test("toSeconds") {
       check(Gen.finiteDuration) { duration =>
-        Remote(duration).toSeconds <-> duration.toSeconds
+        Remote(duration).toSeconds <-> duration.getSeconds
       }
     },
     test("toSecondsPart") {
