@@ -16,61 +16,66 @@
 
 package zio.flow.remote
 
-import zio.{ZIO, ZLayer}
+import zio._
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
-import zio.flow.{LocalContext, Remote, RemoteContext}
+import zio.flow._
 import zio.test.{Gen, TestResult, check}
 
+import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 object RemoteDurationSyntaxSpec extends RemoteSpecBase {
   override def spec = suite("RemoteDurationSyntax")(
-    test("plus") {
+    test("+") {
       check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
-        (Remote(d1) plus Remote(d2)) <-> (d1 plus d2)
+        (Remote(d1) + Remote(d2)) <-> (d1 + d2)
       }
     },
-    test("plusNanos") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        Remote(d).plusNanos(l) <-> d.plusNanos(l)
+    test("*") {
+      check(Gen.finiteDuration, Gen.double) { case (duration, factor) =>
+        Remote(duration) * Remote(factor) <-> duration * factor
       }
     },
-    test("plusSeconds") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        Remote(d).plusSeconds(l) <-> d.plusSeconds(l)
+    test("abs") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).abs() <-> duration.abs()
       }
     },
-    test("plusMinutes") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        Remote(d).plusMinutes(l) <-> d.plusMinutes(l)
+    test("addTo") {
+      check(Gen.finiteDuration, Gen.instant) { case (duration, instant) =>
+        Remote(duration).addTo(Remote(instant)) <-> duration.addTo(instant).asInstanceOf[Instant]
       }
     },
-    test("plusHours") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        Remote(d).plusHours(l) <-> d.plusHours(l)
+    test("dividedBy") {
+      check(Gen.finiteDuration, Gen.long) { case (duration, divisor) =>
+        Remote(duration).dividedBy(Remote(divisor)) <-> duration.dividedBy(divisor)
       }
     },
-    test("plusDays") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        Remote(d).plusDays(l) <-> d.plusDays(l)
+    test("get") {
+      check(Gen.finiteDuration) { duration =>
+        (Remote(duration).get(Remote(ChronoUnit.SECONDS)) <-> duration.get(ChronoUnit.SECONDS)) &&
+        (Remote(duration).get(Remote(ChronoUnit.NANOS)) <-> duration.get(ChronoUnit.NANOS))
       }
     },
-    test("plus amount of temporal units") {
-      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
-        ZIO
-          .collectAll(
-            List(
-              Remote(d).plus(l, ChronoUnit.DAYS) <-> d.plus(l, ChronoUnit.DAYS),
-              Remote(d).plus(l, ChronoUnit.HOURS) <-> d.plus(l, ChronoUnit.HOURS),
-              Remote(d).plus(l, ChronoUnit.MINUTES) <-> d.plus(l, ChronoUnit.MINUTES),
-              Remote(d).plus(l, ChronoUnit.SECONDS) <-> d.plus(l, ChronoUnit.SECONDS),
-              Remote(d).plus(l, ChronoUnit.MILLIS) <-> d.plus(l, ChronoUnit.MILLIS),
-              Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS)
-            )
-          )
-          .map(TestResult.all(_: _*))
-
+    test("getSeconds") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).getSeconds <-> duration.getSeconds
+      }
+    },
+    test("getNano") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).getNano <-> duration.getNano
+      }
+    },
+    test("isNegative") {
+      check(Gen.finiteDuration) { d =>
+        Remote(d).isNegative <-> d.isNegative
+      }
+    },
+    test("isZero") {
+      check(Gen.finiteDuration) { d =>
+        Remote(d).isZero <-> d.isZero
       }
     },
     test("minus") {
@@ -120,24 +125,136 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
 
       }
     },
-    test("getSeconds") {
-      check(Gen.finiteDuration) { d =>
-        Remote(d).getSeconds() <-> d.getSeconds
+    test("multipliedBy") {
+      check(Gen.finiteDuration(-10.hours, 10.hours), Gen.long(-1000, 1000)) { case (duration, factor) =>
+        Remote(duration).multipliedBy(Remote(factor)) <-> duration.multipliedBy(factor)
       }
     },
-    test("getNano") {
-      check(Gen.finiteDuration) { d =>
-        Remote(d).getNano() <-> d.getNano
+    test("negated") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).negated() <-> duration.negated()
       }
     },
-    test("isZero") {
-      check(Gen.finiteDuration) { d =>
-        Remote(d).isZero <-> d.isZero
+    test("plus") {
+      check(Gen.finiteDuration, Gen.finiteDuration) { case (d1, d2) =>
+        (Remote(d1) plus Remote(d2)) <-> (d1 plus d2)
       }
     },
-    test("isNegative") {
-      check(Gen.finiteDuration) { d =>
-        Remote(d).isNegative <-> d.isNegative
+    test("plusNanos") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        Remote(d).plusNanos(l) <-> d.plusNanos(l)
+      }
+    },
+    test("plusSeconds") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        Remote(d).plusSeconds(l) <-> d.plusSeconds(l)
+      }
+    },
+    test("plusMinutes") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        Remote(d).plusMinutes(l) <-> d.plusMinutes(l)
+      }
+    },
+    test("plusHours") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        Remote(d).plusHours(l) <-> d.plusHours(l)
+      }
+    },
+    test("plusDays") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        Remote(d).plusDays(l) <-> d.plusDays(l)
+      }
+    },
+    test("plus amount of temporal units") {
+      check(Gen.finiteDuration, TestGen.long) { (d, l) =>
+        ZIO
+          .collectAll(
+            List(
+              Remote(d).plus(l, ChronoUnit.DAYS) <-> d.plus(l, ChronoUnit.DAYS),
+              Remote(d).plus(l, ChronoUnit.HOURS) <-> d.plus(l, ChronoUnit.HOURS),
+              Remote(d).plus(l, ChronoUnit.MINUTES) <-> d.plus(l, ChronoUnit.MINUTES),
+              Remote(d).plus(l, ChronoUnit.SECONDS) <-> d.plus(l, ChronoUnit.SECONDS),
+              Remote(d).plus(l, ChronoUnit.MILLIS) <-> d.plus(l, ChronoUnit.MILLIS),
+              Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS)
+            )
+          )
+          .map(TestResult.all(_: _*))
+
+      }
+    },
+    test("subtractFrom") {
+      check(Gen.finiteDuration, Gen.instant) { case (duration, instant) =>
+        Remote(duration).subtractFrom(Remote(instant)) <-> duration.subtractFrom(instant).asInstanceOf[Instant]
+      }
+    },
+    test("toDays") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toDays <-> duration.toDays
+      }
+    },
+    test("toDaysPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toDaysPart <-> duration.toDaysPart
+      }
+    },
+    test("toHours") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toHours <-> duration.toHours
+      }
+    },
+    test("toHoursPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toHoursPart <-> duration.toHoursPart
+      }
+    },
+    test("toMillis") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toMillis <-> duration.toMillis
+      }
+    },
+    test("toMillisPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toMillisPart <-> duration.toMillisPart
+      }
+    },
+    test("toMinutes") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toMinutes <-> duration.toMinutes
+      }
+    },
+    test("toMinutesPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toMinutesPart <-> duration.toMinutesPart
+      }
+    },
+    test("toNanos") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toNanos <-> duration.toNanos
+      }
+    },
+    test("toNanosPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toNanosPart <-> duration.toNanosPart
+      }
+    },
+    test("toSeconds") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toSeconds <-> duration.toSeconds
+      }
+    },
+    test("toSecondsPart") {
+      check(Gen.finiteDuration) { duration =>
+        Remote(duration).toSecondsPart <-> duration.toSecondsPart
+      }
+    },
+    test("withNanos") {
+      check(Gen.finiteDuration, Gen.int(0, 999999999)) { case (duration, nanos) =>
+        Remote(duration).withNanos(Remote(nanos)) <-> duration.withNanos(nanos)
+      }
+    },
+    test("withSeconds") {
+      check(Gen.finiteDuration, Gen.long) { case (duration, seconds) =>
+        Remote(duration).withSeconds(Remote(seconds)) <-> duration.withSeconds(seconds)
       }
     }
   ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
