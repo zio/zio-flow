@@ -44,7 +44,7 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
 
   override def spec: Spec[TestEnvironment, Throwable] =
     suite("RocksDbIndexedStore")(
-      IndexedStoreTests("Common", initializeDb = ZIO.unit).tests.provideLayer(testIndexedStore),
+      IndexedStoreTests("Common", initializeDb = ZIO.unit).tests.provideSomeLayer[TestEnvironment](testIndexedStore),
       test("Get namespaces") {
         (for {
           path <- ZIO.service[Path]
