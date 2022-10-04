@@ -120,7 +120,7 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
     plus(Duration.ofNanos(nanoToAdd))
 
   def subtractFrom(temporal: Remote[Instant]): Remote[Instant] =
-    temporal.minusDuration(self)
+    temporal.minus(self)
 
   def toDays: Remote[Long] =
     self.getSeconds / 86400L

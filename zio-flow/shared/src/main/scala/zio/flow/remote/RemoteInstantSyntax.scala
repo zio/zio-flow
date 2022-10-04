@@ -50,11 +50,11 @@ final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
   def isBefore(that: Remote[Instant]): Remote[Boolean] =
     self.getEpochSecond < that.getEpochSecond
 
-  def minusDuration(duration: Remote[Duration]): Remote[Instant] =
+  def minus(duration: Remote[Duration]): Remote[Instant] =
     self.plus(duration.multipliedBy(-1L))
 
   def minus(amountToSubtract: Remote[Long], unit: Remote[ChronoUnit]): Remote[Instant] =
-    self.minusDuration(Remote.DurationFromAmount(amountToSubtract, unit))
+    self.minus(Remote.DurationFromAmount(amountToSubtract, unit))
 
   def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
     self.minus(secondsToSubtract, Remote(ChronoUnit.SECONDS))
