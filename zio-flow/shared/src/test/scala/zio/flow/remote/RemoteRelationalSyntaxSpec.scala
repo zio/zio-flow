@@ -18,12 +18,12 @@ package zio.flow.remote
 
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{LocalContext, Remote, RemoteContext}
-import zio.test.{Gen, Sized, TestResult, check}
+import zio.test.{Gen, TestResult, check}
 import zio.{ZIO, ZLayer}
 
-object RemoteRelationalSpec extends RemoteSpecBase {
+object RemoteRelationalSyntaxSpec extends RemoteSpecBase {
 
-  val smallIntGen: Gen[Sized, Int] =
+  val smallIntGen: Gen[Any, Int] =
     Gen.small(Gen.const(_))
 
   override def spec =
@@ -43,6 +43,22 @@ object RemoteRelationalSpec extends RemoteSpecBase {
             )
             .map(TestResult.all(_: _*))
         }
+      },
+      test("String") {
+        check(Gen.string, Gen.string) { case (x, y) =>
+          ZIO
+            .collectAll(
+              List(
+                Remote(x) < Remote(y) <-> (x < y),
+                Remote(x) <= Remote(y) <-> (x <= y),
+                (Remote(x) !== Remote(y)) <-> (x != y),
+                Remote(x) > Remote(y) <-> (x > y),
+                Remote(x) >= Remote(y) <-> (x >= y),
+                (Remote(x) === Remote(y)) <-> (x == y)
+              )
+            )
+            .map(TestResult.all(_: _*))
+        }
       }
-    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+    ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 }

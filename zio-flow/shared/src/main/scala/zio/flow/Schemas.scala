@@ -20,7 +20,7 @@ import zio.schema._
 import zio.ZNothing
 import zio.{Chunk, Duration}
 
-import java.time.temporal.ChronoUnit
+import java.time.temporal.{ChronoField, ChronoUnit}
 import scala.util.Try
 
 trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
@@ -38,6 +38,7 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(
+      TypeId.parse("java.lang.Throwable"),
       field1 = Schema.Field("cause", Schema.defer(Schema[Option[Throwable]])),
       field2 = Schema.Field("message", Schema[Option[String]]),
       field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
@@ -64,6 +65,7 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit lazy val schemaStackTraceElement: Schema[StackTraceElement] =
     Schema.CaseClass4(
+      TypeId.parse("java.lang.StackTraceElement"),
       field1 = Schema.Field("declaringClass", Schema[String]),
       field2 = Schema.Field("methodName", Schema[String]),
       field3 = Schema.Field("fileName", Schema[String]),
@@ -78,12 +80,14 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit def schemaTry[A](implicit schema: Schema[A]): Schema[scala.util.Try[A]] =
     Schema.Enum2[scala.util.Failure[A], scala.util.Success[A], scala.util.Try[A]](
+      TypeId.parse("scala.util.Try"),
       case1 = Schema.Case("Failure", schemaFailure, _.asInstanceOf[scala.util.Failure[A]]),
       case2 = Schema.Case("Success", schemaSuccess, _.asInstanceOf[scala.util.Success[A]])
     )
 
   implicit def schemaFailure[A]: Schema[scala.util.Failure[A]] =
     Schema.CaseClass1(
+      TypeId.parse("scala.util.Failure"),
       field = Schema.Field("exception", Schema[Throwable]),
       construct = (throwable: Throwable) => scala.util.Failure(throwable),
       extractField = _.exception
@@ -91,6 +95,7 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
   implicit def schemaSuccess[A](implicit schema: Schema[A]): Schema[scala.util.Success[A]] =
     Schema.CaseClass1(
+      TypeId.parse("scala.util.Success"),
       field = Schema.Field("value", schema),
       construct = (value: A) => scala.util.Success(value),
       extractField = _.value
@@ -100,6 +105,12 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
     Schema[String].transformOrFail(
       s => Try(ChronoUnit.valueOf(s)).toEither.left.map(_.getMessage),
       (unit: ChronoUnit) => Right(unit.name())
+    )
+
+  implicit val chronoFieldSchema: Schema[ChronoField] =
+    Schema[String].transformOrFail(
+      s => Try(ChronoField.valueOf(s)).toEither.left.map(_.getMessage),
+      (unit: ChronoField) => Right(unit.name())
     )
 }
 

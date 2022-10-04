@@ -16,11 +16,8 @@
 
 package zio.flow.operation.http
 
-import zio.schema.Schema
-
-import zio.schema.CaseSet
+import zio.schema.{CaseSet, DeriveSchema, Schema, TypeId}
 import zio.flow.serialization.FlowSchemaAst
-import zio.schema.DeriveSchema
 
 /**
  * A RequestInput is a description of a Path, Query Parameters, Headers and Body
@@ -37,8 +34,10 @@ sealed trait RequestInput[A] extends Product with Serializable { self =>
 }
 
 object RequestInput {
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.RequestInput")
 
   def schema[A]: Schema[RequestInput[A]] = Schema.EnumN(
+    typeId,
     CaseSet
       .Cons(ZipWith.schemaCase[A], CaseSet.Empty[RequestInput[A]]())
       .:+:(Header.schemaCase[A])
@@ -56,9 +55,11 @@ object RequestInput {
   }
 
   object ZipWith {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.RequestInput.ZipWith")
 
     def schema[A, B, C] =
       Schema.CaseClass3[RequestInput[A], RequestInput[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
+        typeId,
         Schema.Field("left", Schema.defer(RequestInput.schema[A])),
         Schema.Field("right", Schema.defer(RequestInput.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
@@ -95,7 +96,10 @@ object Header {
 
   def string(name: String): Header[String] = SingleHeader(name, Schema[String])
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header")
+
   def schema[A]: Schema[Header[A]] = Schema.EnumN(
+    typeId,
     CaseSet
       .Cons(SingleHeader.schemaCase[A], CaseSet.Empty[Header[A]]())
       .:+:(ZipWith.schemaCase[A])
@@ -107,8 +111,10 @@ object Header {
 
   private[http] final case class SingleHeader[A](name: String, override val schema: Schema[A]) extends Header[A]
   object SingleHeader {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header.SingleHeader")
 
     def schema[A]: Schema[SingleHeader[A]] = Schema.CaseClass2[String, FlowSchemaAst, SingleHeader[A]](
+      typeId,
       Schema.Field("name", Schema[String]),
       Schema.Field("schema", FlowSchemaAst.schema),
       (name, schema) => SingleHeader(name, schema.toSchema[A]),
@@ -127,9 +133,11 @@ object Header {
   }
 
   object ZipWith {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header.ZipWith")
 
     def schema[A, B, C] =
       Schema.CaseClass3[Header[A], Header[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
+        typeId,
         Schema.Field("left", Schema.defer(Header.schema[A])),
         Schema.Field("right", Schema.defer(Header.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
@@ -149,8 +157,10 @@ object Header {
   }
 
   object Optional {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header.Optional")
 
     def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
+      typeId,
       Schema.Field("headers", Schema.defer(Header.schema[A])),
       Optional.apply,
       _.headers
@@ -166,8 +176,10 @@ case class Body[A](override val schema: Schema[A]) extends RequestInput[A] { sel
 }
 
 object Body {
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Body")
 
   def schema[A]: Schema[Body[A]] = Schema.CaseClass1[FlowSchemaAst, Body[A]](
+    typeId,
     Schema.Field("schema", FlowSchemaAst.schema),
     a => Body(a.toSchema[A]),
     s => FlowSchemaAst.fromSchema(s.schema)
@@ -188,8 +200,10 @@ sealed trait Query[A] extends RequestInput[A] { self =>
 }
 
 object Query {
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query")
 
   def schema[A]: Schema[Query[A]] = Schema.EnumN(
+    typeId,
     CaseSet
       .Cons(SingleParam.schemaCase[A], CaseSet.Empty[Query[A]]())
       .:+:(ZipWith.schemaCase[A])
@@ -202,8 +216,10 @@ object Query {
   private[http] final case class SingleParam[A](name: String, override val schema: Schema[A]) extends Query[A]
 
   object SingleParam {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query.SingleParam")
 
     def schema[A]: Schema[SingleParam[A]] = Schema.CaseClass2[String, FlowSchemaAst, SingleParam[A]](
+      typeId,
       Schema.Field("name", Schema[String]),
       Schema.Field("schema", FlowSchemaAst.schema),
       (name, schema) => SingleParam(name, schema.toSchema[A]),
@@ -222,9 +238,11 @@ object Query {
   }
 
   object ZipWith {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query.ZipWith")
 
     def schema[A, B, C] =
       Schema.CaseClass3[Query[A], Query[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
+        typeId,
         Schema.Field("left", Schema.defer(Query.schema[A])),
         Schema.Field("right", Schema.defer(Query.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),
@@ -244,7 +262,10 @@ object Query {
   }
 
   object Optional {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query.Optional")
+
     def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
+      typeId,
       Schema.Field("params", Schema.defer(Query.schema[A])),
       Optional.apply,
       _.params
@@ -275,7 +296,10 @@ final case class PathState(var input: List[String])
 object Path {
   def path(name: String): Path[Unit] = Path.Literal(name).asInstanceOf[Path[Unit]]
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path")
+
   def schema[A]: Schema[Path[A]] = Schema.EnumN(
+    typeId,
     CaseSet
       .Cons(Literal.schemaCase[A], CaseSet.Empty[Path[A]]())
       .:+:(Match.schemaCase[A])
@@ -299,7 +323,10 @@ object Path {
   private[http] final case class Match[A](schema: Schema[A]) extends Path[A]
 
   object Match {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path.Match")
+
     def schema[A]: Schema[Match[A]] = Schema.CaseClass1[FlowSchemaAst, Match[A]](
+      typeId,
       Schema.Field("schema", FlowSchemaAst.schema),
       schema => Match(schema.toSchema[A]),
       m => FlowSchemaAst.fromSchema(m.schema)
@@ -315,8 +342,11 @@ object Path {
   }
 
   object ZipWith {
+    private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path.ZipWith")
+
     def schema[A, B, C]: Schema[ZipWith[A, B, C]] =
       Schema.CaseClass3[Path[A], Path[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
+        typeId,
         Schema.Field("left", Schema.defer(Path.schema[A])),
         Schema.Field("right", Schema.defer(Path.schema[B])),
         Schema.Field("zipper", Zipper.schema[A, B, C]),

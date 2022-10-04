@@ -16,8 +16,7 @@
 
 package zio.flow.operation.http
 
-import zio.schema.Schema
-import zio.schema.CaseSet
+import zio.schema.{CaseSet, Schema, TypeId}
 
 trait Zipper[A, B] {
   type Out
@@ -28,9 +27,11 @@ trait Zipper[A, B] {
 }
 
 object Zipper extends ZipperLowPriority1 {
+  private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Zipper")
 
   implicit def schema[A, B, C]: Schema[Zipper.WithOut[A, B, C]] =
     Schema.EnumN(
+      typeId,
       CaseSet
         .Cons(zipperLeftIdentitySchemaCase[A, B, C], CaseSet.Empty[Zipper.WithOut[A, B, C]]())
         .:+:(zipperRightIdentitySchemaCase[A, B, C])

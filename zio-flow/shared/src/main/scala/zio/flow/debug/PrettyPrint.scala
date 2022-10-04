@@ -47,6 +47,12 @@ object PrettyPrint {
           case Right(flow) =>
             prettyPrintFlow(flow, builder, indent)
         }
+      case Remote.Fail(message) =>
+        builder.append("fail ")
+        builder.append(message)
+      case Remote.Debug(inner, message, debugMode) =>
+        builder.append(s"$debugMode($message)")
+        prettyPrintRemote(inner)
       case Remote.Flow(flow) =>
         builder.append("flow")
         prettyPrintFlow(flow, builder, indent + 2)
@@ -75,16 +81,13 @@ object PrettyPrint {
         prettyPrintRemote(f, builder, indent)
         builder.append(" called with ")
         prettyPrintRemote(a, builder, indent)
-      case Remote.UnaryNumeric(value, _, operator) =>
+      case Remote.Unary(value, operator) =>
         builder.append(operator)
         prettyPrintRemote(value, builder, indent)
-      case Remote.BinaryNumeric(left, right, _, operator) =>
+      case Remote.Binary(left, right, operator) =>
         prettyPrintRemote(left, builder, indent)
         builder.append(operator)
         prettyPrintRemote(right, builder, indent)
-      case Remote.UnaryFractional(value, _, operator) =>
-        builder.append(operator)
-        prettyPrintRemote(value, builder, indent)
       case Remote.RemoteEither(either) =>
         either match {
           case Left(value) =>
@@ -106,9 +109,6 @@ object PrettyPrint {
         nl(indent + 2)
         builder.append("on right: ")
         prettyPrintRemote(right, builder, indent + 2)
-      case Remote.SwapEither(either) =>
-        builder.append("swap ")
-        prettyPrintRemote(either, builder, indent + 2)
       case Remote.Try(either) =>
         either match {
           case Left(value) =>
@@ -732,27 +732,25 @@ object PrettyPrint {
         nl(indent + 2)
         prettyPrintRemote(t22, builder, indent + 2)
         builder.append(")")
-      case Remote.TupleAccess(tuple, n) =>
+      case Remote.TupleAccess(tuple, n, _) =>
         prettyPrintRemote(tuple, builder, indent)
         builder.append("(")
         builder.append(n)
         builder.append(")")
-      case Remote.Branch(_, _, _) => ???
-      case Remote.Length(_)       => ???
-      case Remote.LessThanEqual(left, right, _) =>
-        prettyPrintRemote(left, builder, indent)
-        builder.append("<=")
-        prettyPrintRemote(right, builder, indent)
+      case Remote.Branch(p, t, f) =>
+        builder.append("if(")
+        prettyPrintRemote(p, builder, indent)
+        builder.append(")")
+        prettyPrintRemote(t, builder, indent)
+        builder.append(" else ")
+        prettyPrintRemote(f, builder, indent)
+      case Remote.StringToCharList(x) =>
+        prettyPrintRemote(x, builder, indent)
+      case Remote.CharListToString(x) =>
+        prettyPrintRemote(x, builder, indent)
       case Remote.Equal(left, right) =>
         prettyPrintRemote(left, builder, indent)
         builder.append("==")
-        prettyPrintRemote(right, builder, indent)
-      case Remote.Not(value) =>
-        builder.append("NOT ")
-        prettyPrintRemote(value, builder, indent)
-      case Remote.And(left, right) =>
-        prettyPrintRemote(left, builder, indent)
-        builder.append("&&")
         prettyPrintRemote(right, builder, indent)
       case Remote.Fold(list, initial, body) =>
         builder.append("RemoteFold[")
@@ -764,27 +762,17 @@ object PrettyPrint {
         prettyPrintRemote(head, builder, indent)
         builder.append(" :: ")
         prettyPrintRemote(list, builder, indent)
-      case Remote.UnCons(_)                     => ???
-      case Remote.InstantFromLongs(_, _)        => ???
-      case Remote.InstantFromString(_)          => ???
-      case Remote.InstantToTuple(_)             => ???
-      case Remote.InstantPlusDuration(_, _)     => ???
-      case Remote.InstantTruncate(_, _)         => ???
-      case Remote.DurationFromString(_)         => ???
-      case Remote.DurationBetweenInstants(_, _) => ???
-      case Remote.DurationFromBigDecimal(_)     => ???
-      case Remote.DurationFromLongs(_, _)       => ???
-      case Remote.DurationFromAmount(_, _)      => ???
-      case Remote.DurationToLongs(_)            => ???
-      case Remote.DurationPlusDuration(_, _)    => ???
-      case Remote.DurationMultipliedBy(_, _)    => ???
-      case Remote.Iterate(_, _, _)              => ???
+      case Remote.UnCons(_)                => ???
+      case Remote.DurationFromAmount(_, _) => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
-      case Remote.RemoteSome(_)       => ???
-      case Remote.FoldOption(_, _, _) => ???
-      case Remote.Recurse(_, _, _)    => ???
-      case Remote.RecurseWith(_, _)   => ???
+      case Remote.RemoteSome(_)            => ???
+      case Remote.FoldOption(_, _, _)      => ???
+      case Remote.Recurse(_, _, _)         => ???
+      case Remote.RecurseWith(_, _)        => ???
+      case Remote.SetToList(_)             => ???
+      case Remote.ListToSet(_)             => ???
+      case Remote.ListToString(_, _, _, _) => ???
     }
   }
 

@@ -23,7 +23,7 @@ import com.dimafeng.testcontainers.CassandraContainer
 
 import java.net.InetSocketAddress
 import org.testcontainers.utility.DockerImageName
-import zio.{ULayer, URLayer, ZIO, ZLayer}
+import zio.{ULayer, URLayer, ZEnvironment, ZIO, ZLayer}
 import zio.ZIO.{attemptBlocking, fromCompletionStage => execAsync}
 
 /**
@@ -33,7 +33,9 @@ import zio.ZIO.{attemptBlocking, fromCompletionStage => execAsync}
  */
 object CassandraTestContainerSupport {
 
-  type SessionLayer = ULayer[CqlSession]
+  case class CassandraV3(session: CqlSession)
+  case class CassandraV4(session: CqlSession)
+  case class ScyllaDb(session: CqlSession)
 
   private val cassandra        = "cassandra"
   private val testKeyspaceName = "CassandraKeyValueStoreSpec_Keyspace"
@@ -88,16 +90,20 @@ object CassandraTestContainerSupport {
   val createKeyspaceScript: String =
     s"CREATE KEYSPACE $testKeyspaceName WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
 
-  lazy val cassandraV3: SessionLayer =
-    cassandraContainer(DockerImageTag.cassandraV3) >>> cassandraSession
+  lazy val cassandraV3: ZLayer[Any, Nothing, CassandraV3] =
+    cassandraContainer(DockerImageTag.cassandraV3).fresh >>> cassandraSession.map(env =>
+      ZEnvironment(CassandraV3(env.get))
+    )
 
-  lazy val cassandraV4: SessionLayer =
-    cassandraContainer(DockerImageTag.cassandraV4) >>> cassandraSession
+  lazy val cassandraV4: ZLayer[Any, Nothing, CassandraV4] =
+    cassandraContainer(DockerImageTag.cassandraV4).fresh >>> cassandraSession.map(env =>
+      ZEnvironment(CassandraV4(env.get))
+    )
 
-  lazy val scyllaDb: SessionLayer =
-    cassandraContainer(DockerImageTag.scyllaDb) >>> cassandraSession
+  lazy val scyllaDb: ZLayer[Any, Nothing, ScyllaDb] =
+    cassandraContainer(DockerImageTag.scyllaDb).fresh >>> cassandraSession.map(env => ZEnvironment(ScyllaDb(env.get)))
 
-  lazy val cassandraSession: URLayer[CassandraContainer, CqlSession] =
+  def cassandraSession: URLayer[CassandraContainer, CqlSession] =
     ZLayer.scoped {
       for {
         container <- ZIO.service[CassandraContainer]
@@ -108,6 +114,7 @@ object CassandraTestContainerSupport {
               container.cassandraContainer.getFirstMappedPort
             )
           }
+        _ <- ZIO.logInfo(s"Creating Cassandra session connecting to $ipAddress")
         _ <- createKeyspace(ipAddress)
         session <-
           ZIO.acquireRelease {

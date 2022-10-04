@@ -117,7 +117,7 @@ object DurableLog {
           case Some(Topic(hub, semaphore)) =>
             Topic(hub, semaphore) -> topics
           case None =>
-            Unsafe.unsafeCompat { implicit u =>
+            Unsafe.unsafe { implicit u =>
               val topicInstance = Topic.make
               topicInstance -> topics.updated(topic, topicInstance)
             }
