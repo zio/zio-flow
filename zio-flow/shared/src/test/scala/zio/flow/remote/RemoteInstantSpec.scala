@@ -21,7 +21,7 @@ import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
 import zio.flow._
 import zio.schema.Schema
-import zio.test.{Gen, check}
+import zio.test.{Gen, TestAspect, check}
 
 import java.time.temporal.{ChronoField, ChronoUnit}
 
@@ -51,7 +51,7 @@ object RemoteInstantSpec extends RemoteSpecBase {
       check(Gen.instant, TestGen.chronoUnit) { case (i, u) =>
         Remote(i).truncatedTo(Remote(u)) <-> i.truncatedTo(u)
       }
-    },
+    } @@ TestAspect.ifProp("java.version")(v => !v.startsWith("1.8")), // https://bugs.openjdk.org/browse/JDK-8134928
     test("plus") {
       check(Gen.instant, Gen.finiteDuration) { case (i, d2) =>
         (Remote(i) plus Remote(d2)) <-> (i plus d2)
