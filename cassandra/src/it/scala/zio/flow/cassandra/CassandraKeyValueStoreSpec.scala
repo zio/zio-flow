@@ -16,25 +16,23 @@
 
 package zio.flow.cassandra
 
+import com.datastax.oss.driver.api.core.CqlSession
 import zio._
 import zio.flow.cassandra.CassandraTestContainerSupport._
 import zio.flow.test.KeyValueStoreTests
-import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.test._
 
-object CassandraKeyValueStoreSpec extends ZIOSpecDefault {
-  override val bootstrap: ZLayer[Any, Any, TestEnvironment] =
-    testEnvironment ++ Slf4jBridge.initialize
+object CassandraKeyValueStoreSpec extends CassandraSpec {
 
   override def spec: Spec[Environment, Any] =
     suite("CassandraKeyValueStoreSpec")(
-      testUsing(cassandraV3, "Cassandra V3"),
-      testUsing(cassandraV4, "Cassandra V4"),
-      testUsing(scyllaDb, "ScyllaDB")
+      testUsing(ZIO.service[CassandraV3].map(_.session), "Cassandra V3"),
+      testUsing(ZIO.service[CassandraV4].map(_.session), "Cassandra V4"),
+      testUsing(ZIO.service[ScyllaDb].map(_.session), "ScyllaDB")
     )
 
-  private def testUsing(database: SessionLayer, label: String): Spec[TestEnvironment, Any] =
+  private def testUsing[R](database: ZIO[R, Nothing, CqlSession], label: String): Spec[TestEnvironment with R, Any] =
     KeyValueStoreTests(label, initializeDb = ZIO.unit).tests
-      .provideSomeLayerShared[TestEnvironment](database >>> CassandraKeyValueStore.layer)
+      .provideSomeLayerShared[TestEnvironment with R](ZLayer(database) >>> CassandraKeyValueStore.layer)
 
 }
