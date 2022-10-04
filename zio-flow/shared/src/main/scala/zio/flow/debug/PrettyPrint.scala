@@ -762,14 +762,8 @@ object PrettyPrint {
         prettyPrintRemote(head, builder, indent)
         builder.append(" :: ")
         prettyPrintRemote(list, builder, indent)
-      case Remote.UnCons(_)                     => ???
-      case Remote.InstantFromLongs(_, _)        => ???
-      case Remote.InstantFromString(_)          => ???
-      case Remote.InstantToTuple(_)             => ???
-      case Remote.InstantPlusDuration(_, _)     => ???
-      case Remote.InstantTruncate(_, _)         => ???
-      case Remote.DurationBetweenInstants(_, _) => ???
-      case Remote.DurationFromAmount(_, _)      => ???
+      case Remote.UnCons(_)                => ???
+      case Remote.DurationFromAmount(_, _) => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
       case Remote.RemoteSome(_)            => ???

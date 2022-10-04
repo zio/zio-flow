@@ -107,10 +107,6 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("fold")(roundtripCheck(codec, genFold)),
       test("cons")(roundtripCheck(codec, genCons)),
       test("uncons")(roundtripCheck(codec, genUnCons)),
-      test("instant from longs")(roundtripCheck(codec, genInstantFromLongs)),
-      test("instant from string")(roundtripCheck(codec, genInstantFromString)),
-      test("instant to tuple")(roundtripCheck(codec, genInstantToTuple)),
-      test("instant plus duration")(roundtripCheck(codec, genInstantPlusDuration)),
       test("remote some")(roundtripCheck(codec, genRemoteSome)),
       test("fold option")(roundtripCheck(codec, genFoldOption)),
       test("recurse")(roundtripCheck(codec, genRecurse)),
@@ -165,12 +161,6 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
           val first =
             Remote.TupleAccess[(String, TestCaseClass), TestCaseClass](Remote.Tuple2(Remote(b), Remote(a)), 1, 2)
           roundtripEval(codec, first).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        }
-      },
-      test("instant truncation") {
-        check(Gen.instant zip genSmallChronoUnit) { case (instant, chronoUnit) =>
-          val remote = Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
-          roundtripEval(codec, remote).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       },
       test("duration from amount") {

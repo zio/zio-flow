@@ -20,7 +20,7 @@ import zio.schema._
 import zio.ZNothing
 import zio.{Chunk, Duration}
 
-import java.time.temporal.ChronoUnit
+import java.time.temporal.{ChronoField, ChronoUnit}
 import scala.util.Try
 
 trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
@@ -105,6 +105,12 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
     Schema[String].transformOrFail(
       s => Try(ChronoUnit.valueOf(s)).toEither.left.map(_.getMessage),
       (unit: ChronoUnit) => Right(unit.name())
+    )
+
+  implicit val chronoFieldSchema: Schema[ChronoField] =
+    Schema[String].transformOrFail(
+      s => Try(ChronoField.valueOf(s)).toEither.left.map(_.getMessage),
+      (unit: ChronoField) => Right(unit.name())
     )
 }
 

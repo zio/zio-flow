@@ -37,6 +37,7 @@ import zio.flow.{
   BindingName,
   ExecutingFlow,
   FlowId,
+  Instant,
   Operation,
   PromiseId,
   RecursionId,
@@ -50,7 +51,6 @@ import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema}
 import zio.test.{Gen, Sized}
 import zio.{Duration, ZNothing, flow}
 
-import java.time.Instant
 import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
@@ -464,6 +464,18 @@ trait Generators extends DefaultJavaTimeSchemas {
       ),
       Gen.const(
         (RemoteConversions.DurationToTuple.asInstanceOf[RemoteConversions[Any, Any]], Gen.finiteDuration.map(Remote(_)))
+      ),
+      Gen.const(
+        (RemoteConversions.InstantToTuple.asInstanceOf[RemoteConversions[Any, Any]], Gen.instant.map(Remote(_)))
+      ),
+      Gen.const(
+        (
+          RemoteConversions.TupleToInstant.asInstanceOf[RemoteConversions[Any, Any]],
+          Gen.long.zip(Gen.int).map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (RemoteConversions.StringToInstant.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))
       )
     )
 
@@ -677,24 +689,6 @@ trait Generators extends DefaultJavaTimeSchemas {
       list <- Gen.listOf(Gen.int zip Gen.string).map(Remote(_))
     } yield Remote.UnCons(list)
 
-  lazy val genInstantFromLongs: Gen[Sized, Remote[Any]] =
-    for {
-      seconds <- Gen.long
-      nanos   <- Gen.long
-    } yield Remote.InstantFromLongs(Remote(seconds), Remote(nanos))
-
-  lazy val genInstantFromString: Gen[Sized, Remote[Any]] =
-    Gen.instant.map(i => Remote.InstantFromString(Remote(i.toString)))
-
-  lazy val genInstantToTuple: Gen[Sized, Remote[Any]] =
-    Gen.instant.map(i => Remote.InstantToTuple(Remote(i)))
-
-  lazy val genInstantPlusDuration: Gen[Sized, Remote[Any]] =
-    for {
-      instant  <- Gen.instant
-      duration <- Gen.finiteDuration
-    } yield Remote.InstantPlusDuration(Remote(instant), Remote(duration))
-
   lazy val genSmallChronoUnit: Gen[Any, ChronoUnit] = Gen.oneOf(
     Seq(
       ChronoUnit.NANOS,
@@ -706,18 +700,6 @@ trait Generators extends DefaultJavaTimeSchemas {
     ).map(Gen.const(_)): _*
   )
   lazy val genChronoUnit: Gen[Any, ChronoUnit] = Gen.oneOf(ChronoUnit.values().toList.map(Gen.const(_)): _*)
-
-  lazy val genInstantTruncate: Gen[Sized, Remote[Any]] =
-    for {
-      instant    <- Gen.instant
-      chronoUnit <- genChronoUnit
-    } yield Remote.InstantTruncate(Remote(instant), Remote(chronoUnit))
-
-  lazy val genDurationBetweenInstants: Gen[Any, Remote[Any]] =
-    for {
-      start <- Gen.instant.map(Remote(_))
-      end   <- Gen.instant.map(Remote(_))
-    } yield Remote.DurationBetweenInstants(start, end)
 
   lazy val genDurationFromAmount: Gen[Any, Remote[Any]] =
     for {

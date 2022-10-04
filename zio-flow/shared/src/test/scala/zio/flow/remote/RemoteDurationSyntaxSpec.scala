@@ -22,7 +22,6 @@ import zio.flow.utils.TestGen
 import zio.flow._
 import zio.test.{Gen, TestResult, check}
 
-import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 object RemoteDurationSyntaxSpec extends RemoteSpecBase {

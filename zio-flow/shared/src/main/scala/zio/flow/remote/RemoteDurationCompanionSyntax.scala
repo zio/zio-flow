@@ -1,14 +1,13 @@
 package zio.flow.remote
 
 import zio.Duration
-import zio.flow.Remote
+import zio.flow._
 
-import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 final class RemoteDurationCompanionSyntax(val self: Duration.type) {
   def between(startInclusive: Remote[Instant], endExclusive: Remote[Instant]): Remote[Duration] =
-    Remote.DurationBetweenInstants(startInclusive, endExclusive)
+    ofNanos(startInclusive.until(endExclusive, ChronoUnit.NANOS))
 
   def of(amount: Remote[Long], unit: Remote[ChronoUnit]): Remote[Duration] =
     Remote.DurationFromAmount(amount, unit)

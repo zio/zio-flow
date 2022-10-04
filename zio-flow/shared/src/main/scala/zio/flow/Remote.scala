@@ -20,10 +20,9 @@ import zio.flow.Remote.Debug.DebugMode
 import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, InternalRemoteTracking, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
-import zio.{Chunk, ZIO}
+import zio.{Chunk, Duration, ZIO}
 
 import java.time.temporal.ChronoUnit
-import java.time.{Duration, Instant}
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
 import scala.language.implicitConversions
@@ -83,6 +82,14 @@ sealed trait Remote[+A] { self =>
       Remote.Debug(self, message, DebugMode.Track)
     else
       self
+
+  def `match`[A1 >: A: Schema, B](cases: (A1, Remote[B])*)(default: Remote[B]): Remote[B] =
+    cases.foldLeft(default) { case (fallback, (test, result)) =>
+      (self.widen[A1] === Remote(test)).ifThenElse(
+        ifTrue = result,
+        ifFalse = fallback
+      )
+    }
 }
 
 object Remote {
@@ -2455,205 +2462,13 @@ object Remote {
       Schema.Case("UnCons", schema[A], _.asInstanceOf[UnCons[A]])
   }
 
-  final case class InstantFromLongs(seconds: Remote[Long], nanos: Remote[Long]) extends Remote[Instant] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        s <- seconds.eval[Long]
-        n <- nanos.eval[Long]
-      } yield DynamicValueHelpers.of(Instant.ofEpochSecond(s, n))
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Instant] =
-      InstantFromLongs(seconds.substitute(f), nanos.substitute(f))
-
-    override private[flow] val variableUsage = seconds.variableUsage.union(nanos.variableUsage)
-  }
-
-  object InstantFromLongs {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantFromLongs")
-
-    val schema: Schema[InstantFromLongs] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Long], Remote[Long], InstantFromLongs](
-          typeId,
-          Schema.Field("seconds", Remote.schema[Long]),
-          Schema.Field("nanos", Remote.schema[Long]),
-          InstantFromLongs.apply,
-          _.seconds,
-          _.nanos
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[InstantFromLongs, Remote[A]] =
-      Schema.Case("InstantFromLongs", schema, _.asInstanceOf[InstantFromLongs])
-  }
-
-  final case class InstantFromString(charSeq: Remote[String]) extends Remote[Instant] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      charSeq.eval[String].map(s => DynamicValueHelpers.of(Instant.parse(s)))
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Instant] =
-      InstantFromString(charSeq.substitute(f))
-
-    override private[flow] val variableUsage = charSeq.variableUsage
-  }
-
-  object InstantFromString {
-    val schema: Schema[InstantFromString] = Schema.defer(
-      Remote
-        .schema[String]
-        .transform(
-          InstantFromString.apply,
-          _.charSeq
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[InstantFromString, Remote[A]] =
-      Schema.Case("InstantFromString", schema, _.asInstanceOf[InstantFromString])
-  }
-
-  final case class InstantToTuple(instant: Remote[Instant]) extends Remote[(Long, Int)] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      instant.eval[Instant].map { instant =>
-        DynamicValue
-          .fromSchemaAndValue(Schema.tuple2(Schema[Long], Schema[Int]), (instant.getEpochSecond, instant.getNano))
-      }
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[(Long, Int)] =
-      InstantToTuple(instant.substitute(f))
-
-    override private[flow] val variableUsage = instant.variableUsage
-  }
-
-  object InstantToTuple {
-    val schema: Schema[InstantToTuple] = Schema.defer(
-      Remote
-        .schema[Instant]
-        .transform(
-          InstantToTuple.apply,
-          _.instant
-        )
-    )
-
-    def schemaCase[A]: Schema.Case[InstantToTuple, Remote[A]] =
-      Schema.Case("InstantToTuple", schema, _.asInstanceOf[InstantToTuple])
-  }
-
-  final case class InstantPlusDuration(instant: Remote[Instant], duration: Remote[Duration]) extends Remote[Instant] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        instant  <- instant.eval[Instant]
-        duration <- duration.eval[Duration]
-        result    = instant.plusSeconds(duration.getSeconds).plusNanos(duration.getNano.toLong)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Instant] =
-      InstantPlusDuration(instant.substitute(f), duration.substitute(f))
-
-    override private[flow] val variableUsage = instant.variableUsage.union(duration.variableUsage)
-  }
-
-  object InstantPlusDuration {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantPlusDuration")
-
-    val schema: Schema[InstantPlusDuration] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Instant], Remote[Duration], InstantPlusDuration](
-          typeId,
-          Schema.Field("instant", Remote.schema[Instant]),
-          Schema.Field("duration", Remote.schema[Duration]),
-          InstantPlusDuration.apply,
-          _.instant,
-          _.duration
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[InstantPlusDuration, Remote[A]] =
-      Schema.Case("InstantPlusDuration", schema, _.asInstanceOf[InstantPlusDuration])
-  }
-
-  final case class InstantTruncate(instant: Remote[Instant], temporalUnit: Remote[ChronoUnit]) extends Remote[Instant] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        instant      <- instant.eval[Instant]
-        temporalUnit <- temporalUnit.eval[ChronoUnit].tapError(s => ZIO.debug(s"Failed to evaluate temporal unit: $s"))
-        result        = instant.truncatedTo(temporalUnit)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Instant] =
-      InstantTruncate(instant.substitute(f), temporalUnit.substitute(f))
-
-    override private[flow] val variableUsage = instant.variableUsage.union(temporalUnit.variableUsage)
-  }
-
-  object InstantTruncate {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.InstantTruncate")
-
-    val schema: Schema[InstantTruncate] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Instant], Remote[ChronoUnit], InstantTruncate](
-          typeId,
-          Schema.Field("instant", Remote.schema[Instant]),
-          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
-          InstantTruncate.apply,
-          _.instant,
-          _.temporalUnit
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[InstantTruncate, Remote[A]] =
-      Schema.Case("InstantTruncate", schema, _.asInstanceOf[InstantTruncate])
-  }
-
-  final case class DurationBetweenInstants(startInclusive: Remote[Instant], endExclusive: Remote[Instant])
-      extends Remote[Duration] {
-
-    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
-      for {
-        start <- startInclusive.eval[Instant]
-        end   <- endExclusive.eval[Instant]
-        result = Duration.between(start, end)
-      } yield DynamicValueHelpers.of(result)
-
-    override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
-      DurationBetweenInstants(
-        startInclusive.substitute(f),
-        endExclusive.substitute(f)
-      )
-
-    override private[flow] val variableUsage = startInclusive.variableUsage.union(endExclusive.variableUsage)
-  }
-
-  object DurationBetweenInstants {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.DurationBetweenInstants")
-
-    val schema: Schema[DurationBetweenInstants] =
-      Schema.defer(
-        Schema.CaseClass2[Remote[Instant], Remote[Instant], DurationBetweenInstants](
-          typeId,
-          Schema.Field("startInclusive", Remote.schema[Instant]),
-          Schema.Field("endExclusive", Remote.schema[Instant]),
-          DurationBetweenInstants.apply,
-          _.startInclusive,
-          _.endExclusive
-        )
-      )
-
-    def schemaCase[A]: Schema.Case[DurationBetweenInstants, Remote[A]] =
-      Schema.Case("DurationBetweenInstants", schema, _.asInstanceOf[DurationBetweenInstants])
-  }
-
   final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
 
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
         amount       <- amount.eval[Long]
         temporalUnit <- temporalUnit.eval[ChronoUnit]
-        result        = Duration.of(amount, temporalUnit)
+        result        = java.time.Duration.of(amount, temporalUnit)
       } yield DynamicValueHelpers.of(result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[Duration] =
@@ -3111,16 +2926,6 @@ object Remote {
 
   def list[A](values: Remote[A]*): Remote[List[A]] =
     values.foldRight(nil[A])((elem, lst) => Remote.Cons(lst, elem))
-
-  def ofEpochSecond(second: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, Remote(0L))
-
-  def ofEpochSecond(second: Remote[Long], nanos: Remote[Long]): Remote[Instant] = Remote.InstantFromLongs(second, nanos)
-
-  def ofEpochMilli(milliSecond: Remote[Long]): Remote[Instant] =
-    Remote.InstantFromLongs(
-      milliSecond / 1000L,
-      (milliSecond % 1000L) * 1000000L
-    )
 
   def nil[A]: Remote[List[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
@@ -3678,12 +3483,6 @@ object Remote {
       .:+:(Fold.schemaCase[A])
       .:+:(Cons.schemaCase[A])
       .:+:(UnCons.schemaCase[A])
-      .:+:(InstantFromLongs.schemaCase[A])
-      .:+:(InstantFromString.schemaCase[A])
-      .:+:(InstantToTuple.schemaCase[A])
-      .:+:(InstantPlusDuration.schemaCase[A])
-      .:+:(InstantTruncate.schemaCase[A])
-      .:+:(DurationBetweenInstants.schemaCase[A])
       .:+:(DurationFromAmount.schemaCase[A])
       .:+:(Lazy.schemaCase[A])
       .:+:(RemoteSome.schemaCase[A])

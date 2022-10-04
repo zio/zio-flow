@@ -19,7 +19,6 @@ package zio.flow.remote
 import zio.Duration
 import zio.flow._
 
-import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
@@ -48,7 +47,7 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
     )
 
   def addTo(temporal: Remote[Instant]): Remote[Instant] =
-    temporal.plusDuration(self)
+    temporal.plus(self)
 
   def dividedBy(divisor: Remote[Long]): Remote[Duration] = {
     val secondNs  = Remote(1000000000L)
@@ -59,13 +58,10 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
   }
 
   def get(unit: Remote[ChronoUnit]): Remote[Long] =
-    (unit === ChronoUnit.SECONDS).ifThenElse(
-      ifTrue = getSeconds,
-      ifFalse = (unit === ChronoUnit.NANOS).ifThenElse(
-        ifTrue = getNano.toLong,
-        ifFalse = Remote.fail("Unsupported unit")
-      )
-    )
+    unit.`match`(
+      ChronoUnit.SECONDS -> getSeconds,
+      ChronoUnit.NANOS   -> getNano.toLong
+    )(Remote.fail("Unsupported unit"))
 
   def getSeconds: Remote[Long] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple))._1

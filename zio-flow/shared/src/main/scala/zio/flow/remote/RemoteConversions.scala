@@ -17,6 +17,7 @@
 package zio.flow.remote
 
 import zio.Duration
+import zio.flow.{Instant, instantSchema}
 import zio.flow.remote.numeric._
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
@@ -159,6 +160,30 @@ object RemoteConversions {
 
     override def apply(value: Duration): (Long, Int) =
       (value.getSeconds, value.getNano)
+  }
+
+  case object StringToInstant extends RemoteConversions[String, Instant] {
+    override val inputSchema: Schema[String]   = Schema[String]
+    override val outputSchema: Schema[Instant] = Schema[Instant]
+
+    override def apply(value: String): Instant =
+      java.time.Instant.parse(value)
+  }
+
+  case object TupleToInstant extends RemoteConversions[(Long, Int), Instant] {
+    override val inputSchema: Schema[(Long, Int)] = Schema.tuple2[Long, Int]
+    override val outputSchema: Schema[Instant]    = Schema[Instant]
+
+    override def apply(value: (Long, Int)): Instant =
+      java.time.Instant.ofEpochSecond(value._1, value._2.toLong)
+  }
+
+  case object InstantToTuple extends RemoteConversions[Instant, (Long, Int)] {
+    override val inputSchema: Schema[Instant]      = Schema[Instant]
+    override val outputSchema: Schema[(Long, Int)] = Schema.tuple2[Long, Int]
+
+    override def apply(value: Instant): (Long, Int) =
+      (value.getEpochSecond, value.getNano)
   }
 
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
@@ -350,6 +375,27 @@ object RemoteConversions {
       _.asInstanceOf[DurationToTuple.type]
     )
 
+  private val stringToInstantCase: Schema.Case[StringToInstant.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "StringToInstant",
+      Schema.singleton(StringToInstant),
+      _.asInstanceOf[StringToInstant.type]
+    )
+
+  private val tupleToInstant: Schema.Case[TupleToInstant.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "TupleToInstant",
+      Schema.singleton(TupleToInstant),
+      _.asInstanceOf[TupleToInstant.type]
+    )
+
+  private val instantToTuple: Schema.Case[InstantToTuple.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "InstantToTuple",
+      Schema.singleton(InstantToTuple),
+      _.asInstanceOf[InstantToTuple.type]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -376,5 +422,8 @@ object RemoteConversions {
         .:+:(stringToDurationCase)
         .:+:(bigDecimalToDurationCase)
         .:+:(durationToTupleCase)
+        .:+:(stringToInstantCase)
+        .:+:(tupleToInstant)
+        .:+:(instantToTuple)
     )
 }

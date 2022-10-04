@@ -20,7 +20,7 @@ import zio.Duration
 import zio.flow.remote._
 import zio.flow.remote.RemoteTuples._
 
-import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
 
 trait Syntax {
@@ -30,9 +30,12 @@ trait Syntax {
       remote
     )
 
+  implicit def RemoteChronoUnit(remote: Remote[ChronoUnit]): RemoteChronoUnitSyntax = new RemoteChronoUnitSyntax(remote)
   implicit def RemoteInstant(remote: Remote[Instant]): RemoteInstantSyntax = new RemoteInstantSyntax(
     remote
   )
+  implicit def RemoteInstantCompanion(instant: Instant.type): RemoteInstantCompanionSyntax =
+    new RemoteInstantCompanionSyntax(instant)
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )

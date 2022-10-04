@@ -16,11 +16,9 @@
 
 package zio.flow
 
-import zio.ZNothing
+import zio.{Duration, ZNothing}
 import zio.flow.Remote._
 import zio.schema.{CaseSet, Schema, TypeId}
-
-import java.time.{Duration, Instant}
 
 /**
  * ZFlow is a serializable executable workflow.
@@ -1021,7 +1019,7 @@ object ZFlow {
   /** Creates a flow that waits for the given duration */
   def sleep(duration: Remote[Duration]): ZFlow[Any, ZNothing, Unit] =
     ZFlow.now.flatMap { now =>
-      ZFlow(now.plusDuration(duration)).flatMap { later =>
+      ZFlow(now.plus(duration)).flatMap { later =>
         ZFlow.waitTill(later).map { _ =>
           Remote.unit
         }

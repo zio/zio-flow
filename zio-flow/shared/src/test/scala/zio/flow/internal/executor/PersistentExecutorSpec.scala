@@ -11,7 +11,6 @@ import zio.test.Assertion._
 import zio.test._
 import zio.{Chunk, Clock, Exit, ZNothing}
 
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
@@ -109,7 +108,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         for {
           curr <- Clock.currentTime(TimeUnit.SECONDS)
           flow = for {
-                   _   <- ZFlow.waitTill(Remote(Instant.ofEpochSecond(curr + 2L)))
+                   _   <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L))
                    now <- ZFlow.now
                  } yield now
           fiber  <- flow.evaluateTestPersistent("waitTill").fork
@@ -546,8 +545,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         for {
           curr <- Clock.currentTime(TimeUnit.SECONDS)
           flow = for {
-                   flow1 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L)).as(1).fork
-                   flow2 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L)).as(2).fork
+                   flow1 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L)).as(1).fork
+                   flow2 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 3L)).as(2).fork
                    r1    <- flow1.await
                    r2    <- flow2.await
                    _     <- ZFlow.log(r1.toString)
@@ -580,7 +579,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         for {
           curr <- Clock.currentTime(TimeUnit.SECONDS)
           flow = ZFlow
-                   .waitTill(Remote.ofEpochSecond(curr + 2L))
+                   .waitTill(Instant.ofEpochSecond(curr + 2L))
                    .as(1)
                    .timeout(Duration.ofSeconds(1L))
           fiber  <- flow.evaluateTestPersistent("timeout").fork

@@ -32,7 +32,7 @@ object RemoteInstantSpec extends RemoteSpecBase {
         (Remote(i1) isAfter Remote(i2)) <-> (i1 isAfter i2)
       }
     },
-    test("plusDuration") {
+    test("isBefore") {
       check(Gen.instant, Gen.instant) { case (i1, i2) =>
         (Remote(i1) isBefore Remote(i2)) <-> (i1 isBefore i2)
       }
@@ -52,9 +52,9 @@ object RemoteInstantSpec extends RemoteSpecBase {
         Remote(i).truncatedTo(Remote(u)) <-> i.truncatedTo(u)
       }
     },
-    test("plusDuration") {
+    test("plus") {
       check(Gen.instant, Gen.finiteDuration) { case (i, d2) =>
-        (Remote(i) plusDuration Remote(d2)) <-> (i plus d2)
+        (Remote(i) plus Remote(d2)) <-> (i plus d2)
       }
     },
     test("plusSeconds") {

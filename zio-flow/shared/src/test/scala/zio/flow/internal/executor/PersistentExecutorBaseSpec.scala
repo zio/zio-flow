@@ -1,11 +1,10 @@
 package zio.flow.internal.executor
 
-import zio.flow._
 import zio.flow.internal._
 import zio.flow.mock.MockedOperation
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.flow.{ExecutionEnvironment, Remote, ZFlow, ZIOFlowBaseSpec}
+import zio.flow._
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -31,7 +30,6 @@ import zio.{
   durationInt
 }
 
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
 trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
@@ -152,7 +150,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         results <- {
           val break: ZFlow[Any, Nothing, Unit] =
             (ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+              ZFlow.waitTill(Instant.ofEpochSecond(100L)))
           val finalFlow = flow(break)
           for {
             fiber1 <- finalFlow
@@ -215,7 +213,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         results <- {
           val break: ZFlow[Any, Nothing, Unit] =
             (ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+              ZFlow.waitTill(Instant.ofEpochSecond(100L)))
           val finalFlow = flow(break)
 
           ZIO.scoped[Live with DurableLog with KeyValueStore] {
