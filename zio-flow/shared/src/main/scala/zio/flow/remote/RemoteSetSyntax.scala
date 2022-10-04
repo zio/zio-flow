@@ -77,7 +77,7 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
     toList.flatMap(f(_).toList).toSet
 
   def flatten[B](implicit ev: A <:< Set[B]): Remote[Set[B]] =
-    toList.map(ev(_).toList).flatten.toSet
+    toList.map(a => a.widen[Set[B]].toList).flatten.toSet
 
   def fold[B](initial: Remote[B])(
     f: (Remote[B], Remote[A]) => Remote[B]
@@ -224,12 +224,12 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
 
   def span(p: Remote[A] => Remote[Boolean]): Remote[(Set[A], Set[A])] = {
     val tuple = toList.span(p)
-    (p._1.toSet, p._2.toSet)
+    (tuple._1.toSet, tuple._2.toSet)
   }
 
   def splitAt(n: Remote[Int]): Remote[(Set[A], Set[A])] = {
     val tuple = toList.splitAt(n)
-    (p._1.toSet, p._2.toSet)
+    (tuple._1.toSet, tuple._2.toSet)
   }
 
   def subsetOf(that: Remote[Set[A]]): Remote[Boolean] =
