@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.remote
 
 import zio.ZLayer
@@ -23,11 +39,11 @@ object NumericSpec extends RemoteSpecBase {
       )(
         Operations.bigDecimalOperations
       )
-    ).provideCustom(ZLayer(RemoteContext.inMemory))
+    ).provideCustom(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
   private def numericTests[R, A: Schema: remote.numeric.Numeric](name: String, gen: Gen[R, A])(
     ops: NumericOps[A]
-  ): Spec[R with TestConfig with RemoteContext, TestSuccess] =
+  ): Spec[R with TestConfig with RemoteContext with LocalContext, TestSuccess] =
     suite(name)(
       testOp[R, A]("Addition", gen, gen)(_ + _)(ops.addition),
       testOp[R, A]("Subtraction", gen, gen)(_ - _)(ops.subtraction),
@@ -67,7 +83,7 @@ object NumericSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
-  )(op: (A, A) => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: (A, A) => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(genX, genY) { case (x, y) =>
         numericOp(x, y) <-> op(x, y)
@@ -76,7 +92,7 @@ object NumericSpec extends RemoteSpecBase {
 
   private def testOp[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
     numericOp: Remote[A] => Remote[A]
-  )(op: A => A): Spec[R with TestConfig with RemoteContext, Nothing] =
+  )(op: A => A): Spec[R with TestConfig with RemoteContext with LocalContext, Nothing] =
     test(name) {
       check(gen) { x =>
         numericOp(x) <-> op(x)

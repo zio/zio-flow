@@ -17,7 +17,6 @@
 package zio.flow.remote
 
 import zio.flow.Remote
-import zio.schema.Schema
 
 final class RemoteBooleanSyntax(val self: Remote[Boolean]) extends AnyVal {
 
@@ -29,7 +28,7 @@ final class RemoteBooleanSyntax(val self: Remote[Boolean]) extends AnyVal {
   def ||(that: Remote[Boolean]): Remote[Boolean] =
     (not && that.not).not
 
-  def ifThenElse[B: Schema](ifTrue: Remote[B], ifFalse: Remote[B]): Remote[B] =
+  def ifThenElse[B](ifTrue: Remote[B], ifFalse: Remote[B]): Remote[B] =
     Remote.Branch(self, Remote.suspend(ifTrue), Remote.suspend(ifFalse))
 
   def unary_! : Remote[Boolean] =

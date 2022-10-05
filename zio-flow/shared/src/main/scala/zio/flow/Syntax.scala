@@ -24,8 +24,8 @@ import scala.language.implicitConversions
 
 trait Syntax {
 
-  implicit def RemoteVariable[A](remote: Remote[RemoteVariableReference[A]]): RemoteVariableSyntax[A] =
-    new RemoteVariableSyntax(
+  implicit def RemoteVariable[A](remote: Remote[RemoteVariableReference[A]]): RemoteVariableReferenceSyntax[A] =
+    new RemoteVariableReferenceSyntax(
       remote
     )
 

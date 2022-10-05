@@ -403,14 +403,23 @@ sealed trait Fractional[A] extends Numeric[A] {
 
   def sin(a: A): A
 
+  def cos(a: A): A
+
   def asin(a: A): A
+
+  def acos(a: A): A
+
+  def tan(a: A): A
 
   def atan(a: A): A
 
   def unary(operator: UnaryFractionalOperator, value: A): A =
     operator match {
       case UnaryFractionalOperator.Sin    => sin(value)
+      case UnaryFractionalOperator.Cos    => cos(value)
       case UnaryFractionalOperator.ArcSin => asin(value)
+      case UnaryFractionalOperator.ArcCos => acos(value)
+      case UnaryFractionalOperator.Tan    => tan(value)
       case UnaryFractionalOperator.ArcTan => atan(value)
     }
 }
@@ -421,9 +430,12 @@ object Fractional {
     def fromDouble(const: Double): Float = const.toFloat
 
     override def sin(a: Float): Float = Math.sin(a.toDouble).toFloat
+    override def cos(a: Float): Float = Math.cos(a.toDouble).toFloat
 
     override def asin(a: Float): Float = Math.asin(a.toDouble).toFloat
+    override def acos(a: Float): Float = Math.acos(a.toDouble).toFloat
 
+    override def tan(a: Float): Float  = Math.tan(a.toDouble).toFloat
     override def atan(a: Float): Float = Math.atan(a.toDouble).toFloat
   }
 
@@ -432,9 +444,12 @@ object Fractional {
     def fromDouble(const: Double): Double = const.toDouble
 
     override def sin(a: Double): Double = Math.sin(a)
+    override def cos(a: Double): Double = Math.cos(a)
 
     override def asin(a: Double): Double = Math.asin(a)
+    override def acos(a: Double): Double = Math.acos(a)
 
+    override def tan(a: Double): Double  = Math.tan(a)
     override def atan(a: Double): Double = Math.atan(a)
 
   }
@@ -443,11 +458,13 @@ object Fractional {
     def fromDouble(const: Double): BigDecimal = BigDecimal(const)
 
     override def sin(a: BigDecimal): BigDecimal = Math.sin(a.doubleValue)
+    override def cos(a: BigDecimal): BigDecimal = Math.cos(a.doubleValue)
 
     override def asin(a: BigDecimal): BigDecimal = Math.asin(a.doubleValue)
+    override def acos(a: BigDecimal): BigDecimal = Math.acos(a.doubleValue)
 
-    override def atan(a: BigDecimal): BigDecimal =
-      Math.atan(a.doubleValue)
+    override def tan(a: BigDecimal): BigDecimal  = Math.tan(a.doubleValue)
+    override def atan(a: BigDecimal): BigDecimal = Math.atan(a.doubleValue)
 
   }
 

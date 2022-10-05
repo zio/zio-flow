@@ -17,13 +17,14 @@
 package zio.flow.remote
 
 import zio.flow.{ActivityError, ExecutingFlow, Remote, ZFlow}
-import zio.schema.Schema
 
 final class RemoteExecutingFlowSyntax[E, A](val self: Remote[ExecutingFlow[E, A]]) extends AnyVal {
 
-  def await(implicit schemaE: Schema[E], schemaA: Schema[A]): ZFlow[Any, ActivityError, Either[E, A]] =
+  /** Wait until the forked flow finishes with either error or success */
+  def await: ZFlow[Any, ActivityError, Either[E, A]] =
     ZFlow.Await(self)
 
+  /** Interrupt the forked flow */
   def interrupt: ZFlow[Any, ActivityError, Any] =
     ZFlow.Interrupt(self)
 
