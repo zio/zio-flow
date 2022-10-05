@@ -83,7 +83,7 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
     val encoded = codec.encode(ZFlow.schema[Any, Any, Any])(value)
     val decoded = codec.decode(ZFlow.schema[Any, Any, Any])(encoded)
 
-    //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+    // println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     assertTrue(decoded == Right(value))
   }
