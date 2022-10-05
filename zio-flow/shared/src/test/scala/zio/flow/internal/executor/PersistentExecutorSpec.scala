@@ -7,6 +7,7 @@ import zio.flow.operation.http.API
 import zio.flow.{Activity, ActivityError, Operation, Remote, ZFlow}
 import zio._
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
+import zio.schema.Schema
 import zio.test.Assertion._
 import zio.test._
 import zio.{Chunk, Clock, Exit, ZNothing}
@@ -104,6 +105,20 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           }
         }
       },
+      test("now polled") {
+        TestClock.adjust(5.seconds) *> {
+          val flow = ZFlow.now
+          flow.evaluateTestStartAndPoll("now", 0.seconds).flatMap { result =>
+            result match {
+              case None =>
+                // TODO cleaner way to just notify failure?
+                ZIO.succeed(assertTrue(false))
+              case Some(r) =>
+                r.map(wr => assertTrue(wr.result.toTypedValue(Schema[Instant]) == Right(Instant.ofEpochSecond(5L))))
+            }
+          }
+        }
+      },
       test("waitTill") {
         for {
           curr <- Clock.currentTime(TimeUnit.SECONDS)
@@ -128,6 +143,27 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           result <- fiber.join
         } yield assertTrue(result.getEpochSecond == 2L)
       },
+      // Failing, for reasons to be clarified?:
+      // Possible hypothesis: polling is broken because somewhere underneath there's a hub
+      // that we subscribe to after the result is published? See #subscribe in DurableLog.scala
+      //    test("waitTill polled complete") {
+      //      val fId = FlowId("waitTill-complete")
+      //      ZIO.scoped {
+      //        val flow = for {
+      //          _   <- ZFlow.sleep(Remote(1.second))
+      //          now <- ZFlow.now
+      //        } yield now
+      //        for {
+      //          exec    <- mockPersistentTestClock
+      //          _       <- exec.restartAll().orDie
+      //          _       <- exec.start(fId, flow)
+      //          _       <- TestClock.adjust(2.seconds)
+      //          resultF <- exec.pollWorkflowDynTyped(fId).fork
+      //          _       <- TestClock.adjust(1.seconds)
+      //          result  <- resultF.join
+      //        } yield assertTrue(result.isDefined)
+      //      }
+      //    },
       testFlow("Activity") {
         testActivity(12)
       }(
@@ -556,6 +592,21 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           result  <- fiber.join
           expected = (Some(1), Some(2))
         } yield assertTrue(result == expected)
+      },
+      test("start/poll waitTill incomplete") {
+        for {
+          curr <- Clock.currentTime(TimeUnit.SECONDS)
+          flow = for {
+                   flow1 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L)).as(1).fork
+                   flow2 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L)).as(2).fork
+                   r1    <- flow1.await
+                   r2    <- flow2.await
+                   _     <- ZFlow.log(r1.toString)
+                 } yield (r1.toOption, r2.toOption)
+          fiber  <- flow.evaluateTestStartAndPoll("wait-poll-early", 0.seconds).fork
+          _      <- TestClock.adjust(1.seconds)
+          result <- fiber.join
+        } yield assertTrue(result.isEmpty)
       },
       testFlowAndLogs("fork/interrupt", periodicAdjustClock = Some(1.seconds)) {
         for {

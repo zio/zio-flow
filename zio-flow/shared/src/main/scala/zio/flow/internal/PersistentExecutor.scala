@@ -83,9 +83,10 @@ final case class PersistentExecutor(
     } yield dyn)
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
+  // synchronous -> will return when work is done.
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
-      resultPromise <- start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow).orDieWith(_.toException)
+      resultPromise <- start(id, flow).orDieWith(_.toException)
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
       _             <- ZIO.log(s"$id finished with $promiseResult")
       result <- promiseResult match {
@@ -103,6 +104,22 @@ final case class PersistentExecutor(
                       .flatMapError(error => ZIO.die(ExecutorError.TypeError("success result", error).toException))
                 }
     } yield result
+
+  def start[E, A](
+    id: FlowId,
+    flow: ZFlow[Any, E, A]
+  ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] =
+    start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow)
+
+  private def processResultDynTyped(
+    in: Either[Either[ExecutorError, DynamicValue], FlowResult]
+  ): IO[DynamicValue, FlowResult] = in match {
+    case Left(Left(fail)) => ZIO.die(fail.toException)
+    case Left(Right(dynamicError)) =>
+      ZIO.fail(dynamicError)
+    case Right(flowResult) =>
+      ZIO.succeed(flowResult)
+  }
 
   def restartAll(): ZIO[Any, ExecutorError, Unit] =
     for {
@@ -147,6 +164,36 @@ final case class PersistentExecutor(
         gcQueue.offer(GarbageCollectionCommand(finished)) *> finished.await
       }
       .unit
+
+  // Looks up a workflow by id, checks its state:
+  // If it's done, return the result, otherwise nothing.
+  // Fails if the id is unknown
+  // TODO: has some problems, see commented test in PersistentExecutorSpec
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    workflows.get(id).commit.flatMap {
+      case Some(runtimeState) =>
+        getResultIfCompleteDynTyped(runtimeState)
+      // Check if done
+      case None =>
+        // Unknown workflow: let's fail
+        ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + id.toString))
+    }
+
+  // We know that workflow, check if it's done:
+  // TODO confirm that this is an acceptable way to do this
+  // TODO also check if we may have some corner cases where the work is done
+  // but we somehow still run into a timeout because looking things up takes longer than expected?
+  private def getResultIfCompleteDynTyped(
+    rtsPromise: Promise[Nothing, RuntimeState]
+  ): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    rtsPromise.await.flatMap(_.result.awaitEither).provideEnvironment(promiseEnv).timeout(10.millis).map {
+      case None =>
+        None
+      case Some(done) =>
+        // _NOT_ doing flatmap, we don't want to conflate problems the workflow had with problems
+        // we might run into when looking up results.
+        Some(processResultDynTyped(done))
+    }
 
   private def start[E, A](
     id: ScopedFlowId,
