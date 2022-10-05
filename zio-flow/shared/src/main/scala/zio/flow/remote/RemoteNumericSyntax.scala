@@ -19,53 +19,86 @@ package zio.flow.remote
 import zio.flow._
 import zio.flow.remote.numeric._
 
-class RemoteNumericSyntax[A](self: Remote[A]) {
+final class RemoteNumericSyntax[A](private val self: Remote[A]) extends AnyVal {
 
-  final def +(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], that, numeric, BinaryNumericOperator.Add)
+  def +(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Add))
 
-  final def /(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], that, numeric, BinaryNumericOperator.Div)
+  def /(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Div))
 
-  final def %(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    mod(that)
+  def %(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Mod))
 
-  final def *(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], that, numeric, BinaryNumericOperator.Mul)
+  def *(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Mul))
 
-  final def unary_-(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.UnaryNumeric(self.widen[A], numeric, UnaryNumericOperator.Neg)
+  def unary_-(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryNumericOperator.Neg))
 
-  final def -(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], -that, numeric, BinaryNumericOperator.Add)
+  def unary_~(implicit numeric: Integral[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryIntegralOperator.BitwiseNeg))
 
-  final def pow(exp: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], exp, numeric, BinaryNumericOperator.Pow)
+  def -(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Sub))
 
-  final def root(n: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], n, numeric, BinaryNumericOperator.Root)
+  def abs(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryNumericOperator.Abs))
 
-  final def log(base: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], base, numeric, BinaryNumericOperator.Log)
+  def sign(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryNumericOperator.Sign))
 
-  final def mod(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self, that, numeric, BinaryNumericOperator.Mod)
+  def min(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Min))
 
-  final def abs(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.UnaryNumeric(self.widen[A], numeric, UnaryNumericOperator.Abs)
+  def max(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryNumericOperator.Max))
 
-  final def min(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], that, numeric, BinaryNumericOperator.Min)
+  def >>(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.RightShift))
 
-  final def max(that: Remote[A])(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.BinaryNumeric(self.widen[A], that, numeric, BinaryNumericOperator.Max)
+  def <<(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.LeftShift))
 
-  final def floor(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.UnaryNumeric(self.widen[A], numeric, UnaryNumericOperator.Floor)
+  def >>>(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.UnsignedRightShift))
 
-  final def ceil(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.UnaryNumeric(self.widen[A], numeric, UnaryNumericOperator.Ceil)
+  def &(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.And))
 
-  final def round(implicit numeric: Numeric[A]): Remote[A] =
-    Remote.UnaryNumeric(self.widen[A], numeric, UnaryNumericOperator.Round)
+  def |(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.Or))
+
+  def ^(that: Remote[A])(implicit bitwiseNumeric: Integral[A]): Remote[A] =
+    Remote.Binary(self, that, BinaryOperators(BinaryIntegralOperator.Xor))
+
+  def toInt(implicit numeric: Numeric[A]): Remote[Int] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToInt(numeric)))
+
+  def toShort(implicit numeric: Numeric[A]): Remote[Short] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToShort(numeric)))
+
+  def toLong(implicit numeric: Numeric[A]): Remote[Long] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToLong(numeric)))
+
+  def toFloat(implicit numeric: Numeric[A]): Remote[Float] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToFloat(numeric)))
+
+  def toDouble(implicit numeric: Numeric[A]): Remote[Double] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToDouble(numeric)))
+
+  def intValue(implicit numeric: Numeric[A]): Remote[Int]       = toInt
+  def shortValue(implicit numeric: Numeric[A]): Remote[Short]   = toShort
+  def longValue(implicit numeric: Numeric[A]): Remote[Long]     = toLong
+  def floatValue(implicit numeric: Numeric[A]): Remote[Float]   = toFloat
+  def doubleValue(implicit numeric: Numeric[A]): Remote[Double] = toDouble
+
+  def toBinaryString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToBinaryString(bitwiseNumeric)))
+
+  def toHexString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToHexString(bitwiseNumeric)))
+
+  def toOctalString(implicit bitwiseNumeric: Integral[A]): Remote[String] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToOctalString(bitwiseNumeric)))
 }

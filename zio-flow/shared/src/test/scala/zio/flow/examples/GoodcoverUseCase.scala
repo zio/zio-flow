@@ -1,11 +1,11 @@
 package zio.flow.examples
 
 import zio.flow.internal.executor.PersistentExecutorBaseSpec
-import zio.{ZNothing, durationInt}
+import zio.{Duration, ZNothing, durationInt}
 import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.mock.MockedOperation
 import zio.flow.operation.http
-import zio.flow.{Activity, ActivityError, EmailRequest, Operation, Remote, RemoteVariableReference, ZFlow}
+import zio.flow._
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.equalTo
 import zio.test.{Spec, TestEnvironment, assertTrue}
@@ -17,7 +17,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
     sleepDuration: Long,
     value: Boolean
   ): ZFlow[Any, ZNothing, Unit] = for {
-    _ <- ZFlow.sleep(Remote.ofSeconds(sleepDuration))
+    _ <- ZFlow.sleep(Duration.ofSeconds(sleepDuration))
     _ <- remoteBoolVar.set(value)
   } yield ()
 
@@ -66,7 +66,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
   def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariableReference[Boolean]]): ZFlow[Any, ZNothing, Unit] =
     for {
       boolVar <- evaluationDone
-      _       <- ZFlow.sleep(Remote.ofSeconds(3L))
+      _       <- ZFlow.sleep(Duration.ofSeconds(3L))
       _       <- boolVar.set(true)
     } yield ()
 
@@ -78,7 +78,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
       for {
         bool <- manualEvalDone
         _    <- setBoolVarAfterSleep(bool, 5, true).fork
-        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+        _    <- bool.waitUntil(_ === true).timeout(Duration.ofSeconds(1L))
         loop <- bool.get
 //           _    <- ZFlow.log("Send reminder email to evaluator")
 //           _    <- reminderEmailForManualEvaluation(emailRequest)
@@ -95,7 +95,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
         _    <- ZFlow.log("Inside policy renewal reminder flow.")
         bool <- renewPolicy
         _    <- setBoolVarAfterSleep(bool, 5, true).fork
-        _    <- bool.waitUntil(_ === true).timeout(Remote.ofSeconds(1L))
+        _    <- bool.waitUntil(_ === true).timeout(Duration.ofSeconds(1L))
         loop <- bool.get
 //         _    <- ZFlow.log("Send reminder email to customer for payment")
 //         _    <- reminderEmailForManualEvaluation(emailRequest)

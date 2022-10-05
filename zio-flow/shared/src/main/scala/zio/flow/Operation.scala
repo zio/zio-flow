@@ -34,7 +34,10 @@ object Operation {
   }
 
   object Http {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Operation.Http")
+
     def schema[R, A]: Schema[Http[R, A]] = Schema.CaseClass2[String, API[R, A], Http[R, A]](
+      typeId,
       Schema.Field("host", Schema[String]),
       Schema.Field("api", API.schema[R, A]),
       (host, api) => Http(host, api),
@@ -46,8 +49,11 @@ object Operation {
       Schema.Case("Http", schema[R, A], _.asInstanceOf[Http[R, A]])
   }
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.Operation")
+
   implicit def schema[R, A]: Schema[Operation[R, A]] =
     Schema.EnumN(
+      typeId,
       CaseSet
         .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
     )

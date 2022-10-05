@@ -16,6 +16,14 @@
 
 package zio.flow.remote
 
-import zio.test.ZIOSpecDefault
+import zio.ZIO
+import zio.flow.{LocalContext, RemoteContext, ZIOFlowBaseSpec}
+import zio.test.{Spec, TestResult}
 
-trait RemoteSpecBase extends ZIOSpecDefault {}
+trait RemoteSpecBase extends ZIOFlowBaseSpec {
+  protected def remoteTest(name: String)(
+    cases: ZIO[RemoteContext with LocalContext, Nothing, TestResult]*
+  ): Spec[RemoteContext with LocalContext, Nothing] =
+    test(name)(ZIO.collectAll(cases.toList).map(TestResult.all(_: _*)))
+
+}

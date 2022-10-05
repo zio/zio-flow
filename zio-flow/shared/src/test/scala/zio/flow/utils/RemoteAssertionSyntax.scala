@@ -19,13 +19,21 @@ package zio.flow.utils
 import zio.ZIO
 import zio.flow._
 import zio.schema.Schema
-import zio.test.Assertion.{equalTo, succeeds}
-import zio.test.{TestResult, assertZIO}
+import zio.test.Assertion.{equalTo, fails, succeeds}
+import zio.test.{Assertion, TestResult, assertZIO}
 
 object RemoteAssertionSyntax {
 
   implicit final class RemoteAssertionOps[A: Schema](private val self: Remote[A]) {
     def <->[A1 <: A](that: A1): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
       assertZIO(self.eval[A].exit)(succeeds(equalTo(that)))
+
+    def failsWithRemoteFailure(message: String): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
+      failsWith(equalTo(RemoteEvaluationError.RemoteFail(message)))
+
+    def failsWith(
+      messageAssertion: Assertion[RemoteEvaluationError]
+    ): ZIO[RemoteContext with LocalContext, Nothing, TestResult] =
+      assertZIO(self.eval[A].exit)(fails(messageAssertion))
   }
 }

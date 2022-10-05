@@ -24,8 +24,11 @@ import zio.schema.Schema
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-package object flow extends Syntax with Schemas {
+package object flow extends Syntax with Schemas with InstantModule { self =>
   type RemoteVariableName = RemoteVariableName.Type
+
+  private[flow] val syntax: Syntax = self
+
   object RemoteVariableName extends Newtype[String] {
     implicit val schema: Schema[RemoteVariableName] = Schema[String].transform(wrap(_), unwrap)
 
@@ -50,6 +53,9 @@ package object flow extends Syntax with Schemas {
     }
 
     def unsafeMake(name: String): FlowId = wrap(name)
+
+    def newRandom: ZIO[Any, Nothing, FlowId] =
+      Random.nextUUID.map(rid => wrap(rid.toString))
   }
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
@@ -86,5 +92,15 @@ package object flow extends Syntax with Schemas {
   type PromiseId = PromiseId.Type
   object PromiseId extends Newtype[String] {
     implicit val schema: Schema[PromiseId] = Schema[String].transform(wrap(_), unwrap)
+  }
+
+  object TemplateId extends Newtype[String] {
+    implicit val schema: Schema[TemplateId] = Schema[String].transform(apply(_), unwrap)
+  }
+
+  type TemplateId = TemplateId.Type
+
+  implicit class TemplateIdSyntax(val templateId: TemplateId) extends AnyVal {
+    def toRaw: Chunk[Byte] = Chunk.fromArray(TemplateId.unwrap(templateId).getBytes(StandardCharsets.UTF_8))
   }
 }

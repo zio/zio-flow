@@ -18,7 +18,7 @@ package zio.flow.serialization
 
 import zio.Scope
 import zio.flow.{Remote, ZFlow}
-import zio.schema.Schema
+import zio.schema.{Schema, TypeId}
 import zio.schema.ast.SchemaAst
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
@@ -45,6 +45,7 @@ object FlowSchemaAstSpec extends ZIOSpecDefault {
       },
       test("Record") {
         val schema = Schema.record(
+          TypeId.Structural,
           Schema.Field("x", Schema[Int]),
           Schema.Field("flow", ZFlow.schemaAny),
           Schema.Field("remote", Remote.schemaAny)

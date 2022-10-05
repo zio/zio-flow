@@ -17,6 +17,7 @@
 package zio.flow.internal
 
 object Namespaces {
-  val workflowState = "_zflow_workflow_states"
-  val variables     = "_zflow_variables"
+  val workflowTemplate = "_zflow_workflow_templates"
+  val workflowState    = "_zflow_workflow_states"
+  val variables        = "_zflow_variables"
 }

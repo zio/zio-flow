@@ -1,9 +1,8 @@
 package zio.flow.internal.executor
 
-import zio.flow._
+import zio.Duration
+import zio.flow.{ZFlow, _}
 import zio.flow.internal._
-import zio.flow.{Remote, ZFlow}
-
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 
@@ -100,9 +99,9 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
                      _ <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
                      _ <- ZFlow.log("fiber finished")
                    } yield 10).fork
-          _ <- ZFlow.waitTill(Remote.ofEpochSecond(10L)) // wait for absolute T=10s
-          _ <- break                                     // waits for 100s
-          result <- fiber.await.timeout(Remote.ofSeconds(150L))
+          _ <- ZFlow.waitTill(Instant.ofEpochSecond(10L)) // wait for absolute T=10s
+          _ <- break                                      // waits for 100s
+          result <- fiber.await.timeout(Duration.ofSeconds(150L))
         } yield result
       } { (result, logs1, logs2) =>
         assertTrue(

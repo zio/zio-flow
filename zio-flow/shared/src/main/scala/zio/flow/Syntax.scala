@@ -19,7 +19,8 @@ package zio.flow
 import zio.Duration
 import zio.flow.remote._
 import zio.flow.remote.RemoteTuples._
-import java.time.Instant
+
+import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
 
 trait Syntax {
@@ -29,12 +30,17 @@ trait Syntax {
       remote
     )
 
+  implicit def RemoteChronoUnit(remote: Remote[ChronoUnit]): RemoteChronoUnitSyntax = new RemoteChronoUnitSyntax(remote)
   implicit def RemoteInstant(remote: Remote[Instant]): RemoteInstantSyntax = new RemoteInstantSyntax(
     remote
   )
+  implicit def RemoteInstantCompanion(instant: Instant.type): RemoteInstantCompanionSyntax =
+    new RemoteInstantCompanionSyntax(instant)
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )
+  implicit def RemoteDurationCompanion(duration: Duration.type): RemoteDurationCompanionSyntax =
+    new RemoteDurationCompanionSyntax(duration)
   implicit def RemoteBoolean(remote: Remote[Boolean]): RemoteBooleanSyntax = new RemoteBooleanSyntax(remote)
 
   implicit def RemoteEither[A, B](remote: Remote[Either[A, B]]): RemoteEitherSyntax[A, B] = new RemoteEitherSyntax(
@@ -245,11 +251,24 @@ trait Syntax {
     T22
   ] = new RemoteTuple22.Syntax(remote)
 
-  implicit def RemoteList[A](remote: Remote[List[A]]): RemoteListSyntax[A] = new RemoteListSyntax[A](remote)
+  implicit def RemoteList[A](remote: Remote[List[A]]): RemoteListSyntax[A] =
+    new RemoteListSyntax[A](remote, trackingEnabled = false)
+  implicit def RemoteListCompanion(list: List.type): RemoteListCompanionSyntax = new RemoteListCompanionSyntax(list)
+
+  implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] = new RemoteSetSyntax[A](remote)
+
+  implicit def RemoteListChar(remote: Remote[List[Char]]): RemoteListCharSyntax = new RemoteListCharSyntax(remote)
 
   implicit def RemoteOption[A](remote: Remote[Option[A]]): RemoteOptionSyntax[A] = new RemoteOptionSyntax[A](remote)
 
-  implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax = new RemoteStringSyntax(remote)
+  implicit def RemoteChar(remote: Remote[Char]): RemoteCharSyntax = new RemoteCharSyntax(remote)
+
+  implicit def RemoteString(remote: Remote[String]): RemoteStringSyntax =
+    new RemoteStringSyntax(remote, trackingEnabled = false)
+
+  implicit def remoteStringInterpolator(ctx: StringContext): RemoteStringInterpolator = new RemoteStringInterpolator(
+    ctx
+  )
 
   implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
     new RemoteExecutingFlowSyntax[E, A](remote)
@@ -259,6 +278,9 @@ trait Syntax {
   implicit def RemoteRelational[A](remote: Remote[A]): RemoteRelationalSyntax[A] = new RemoteRelationalSyntax[A](remote)
 
   implicit def RemoteFractional[A](remote: Remote[A]): RemoteFractionalSyntax[A] = new RemoteFractionalSyntax[A](remote)
+
+  implicit def RemoteBigDecimalCompanion(bigDecimal: BigDecimal.type): RemoteBigDecimalCompanionSyntax =
+    new RemoteBigDecimalCompanionSyntax(bigDecimal)
 
   implicit class ZFlowSyntax[R, E, A](flow: ZFlow[R, E, A]) {
     def toRemote: Remote.Flow[R, E, A] = Remote.Flow(flow)

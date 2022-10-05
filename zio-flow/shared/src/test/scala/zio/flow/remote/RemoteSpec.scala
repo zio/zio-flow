@@ -16,6 +16,7 @@
 
 package zio.flow.remote
 
+import zio.flow.Remote.TupleAccess
 import zio.{ZIO, ZLayer}
 import zio.flow._
 import zio.flow.remote.numeric._
@@ -97,36 +98,6 @@ object RemoteSpec extends RemoteSpecBase {
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       ),
-      suite("SwapEither")(
-        test("evaluates correctly when it is Left") {
-          val remote =
-            Remote.SwapEither(Remote.RemoteEither(Left(Remote("test"))))
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[Int, String]]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema.either[Int, String], Right("test")),
-              typ == Right("test")
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        },
-        test("evaluates correctly when it is Right") {
-          val remote =
-            Remote.SwapEither(Remote.RemoteEither(Right(Remote("test"))))
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Either[String, Int]]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema.either[String, Int], Left("test")),
-              typ == Left("test")
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        }
-      ),
       suite("Tuple3")(
         test("evaluates correctly") {
           val remote = Remote.Tuple3(
@@ -149,45 +120,16 @@ object RemoteSpec extends RemoteSpecBase {
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
         }
       ),
-      suite("LessThanEqual")(
-        test("evaluates correctly when less") {
-          val remote = Remote.LessThanEqual(Remote(5), Remote(10), Schema[Int])
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Boolean]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], true),
-              typ == true
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        },
-        test("evaluates correctly when greater") {
-          val remote = Remote.LessThanEqual(Remote(50), Remote(10), Schema[Int])
-          val test =
-            for {
-              dyn <- remote.evalDynamic
-              typ <- remote.eval[Boolean]
-            } yield assertTrue(
-              dyn == DynamicValue.fromSchemaAndValue(Schema[Boolean], false),
-              typ == false
-            )
-
-          test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
-        }
-      ),
       suite("Fold")(
         test("evaluates correctly") {
           val remote = Remote.Fold(
             Remote(List(10, 20, 30)),
             Remote(100),
             Remote.UnboundRemoteFunction.make((tuple: Remote[(Int, Int)]) =>
-              Remote.BinaryNumeric(
-                Remote.TupleAccess(tuple, 0),
-                Remote.TupleAccess(tuple, 1),
-                Numeric.NumericInt,
-                BinaryNumericOperator.Add
+              Remote.Binary(
+                Remote.TupleAccess(tuple, 0, 2),
+                Remote.TupleAccess(tuple, 1, 2),
+                BinaryOperators.Numeric(BinaryNumericOperator.Add, Numeric.NumericInt)
               )
             )
           )
@@ -207,7 +149,7 @@ object RemoteSpec extends RemoteSpecBase {
             Remote(List(TestCaseClass("a", 10), TestCaseClass("b", 20), TestCaseClass("c", 30))),
             Remote(TestCaseClass("d", 40)),
             Remote.UnboundRemoteFunction.make((tuple: Remote[(TestCaseClass, TestCaseClass)]) =>
-              Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1)
+              Remote.TupleAccess[(TestCaseClass, TestCaseClass), TestCaseClass](tuple, 1, 2)
             )
           )
           val test =
@@ -223,7 +165,7 @@ object RemoteSpec extends RemoteSpecBase {
         },
         test("folded flow") {
           val remote = Remote(List(1, 2))
-            .fold(ZFlow.succeed(0)) { case (flow, n) =>
+            .foldLeft(ZFlow.succeed(0)) { case (flow, n) =>
               flow.flatMap { prevFlow =>
                 ZFlow.unwrap(prevFlow).map(_ + n)
               }
@@ -252,7 +194,7 @@ object RemoteSpec extends RemoteSpecBase {
         test("recursive remote function") {
           val N = 1000
           val remote =
-            Remote.recurse(Remote(0)) { case (value, rec) =>
+            Remote.recurseSimple(Remote(0)) { case (value, rec) =>
               (value === N).ifThenElse(
                 value,
                 rec(value + 1)
@@ -269,6 +211,43 @@ object RemoteSpec extends RemoteSpecBase {
             )
 
           test.provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
+        }
+      ),
+      suite("TupleAccess")(
+        test("tuple2") {
+          val dyn = Schema.tuple2(Schema[Int], Schema[Int]).toDynamic((1, 2))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 2).toOption.get == Schema[Int].toDynamic(1),
+            TupleAccess.findValueIn(dyn, 1, 2).toOption.get == Schema[Int].toDynamic(2)
+          )
+        },
+        test("tuple3") {
+          val dyn = Schema.tuple3(Schema[Int], Schema[Int], Schema[Int]).toDynamic((1, 2, 3))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 3).toOption.get == Schema[Int].toDynamic(1),
+            TupleAccess.findValueIn(dyn, 1, 3).toOption.get == Schema[Int].toDynamic(2),
+            TupleAccess.findValueIn(dyn, 2, 3).toOption.get == Schema[Int].toDynamic(3)
+          )
+        },
+        test("nested tuple3") {
+          val dyn = Schema
+            .tuple3(
+              Schema.tuple2(Schema[Int], Schema[Int]),
+              Schema.tuple2(Schema[Int], Schema[Int]),
+              Schema.tuple2(Schema[Int], Schema[Int])
+            )
+            .toDynamic(((1, 2), (3, 4), (5, 6)))
+          assertTrue(
+            TupleAccess.findValueIn(dyn, 0, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((1, 2)),
+            TupleAccess.findValueIn(dyn, 1, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((3, 4)),
+            TupleAccess.findValueIn(dyn, 2, 3).toOption.get == Schema
+              .tuple2(Schema[Int], Schema[Int])
+              .toDynamic((5, 6))
+          )
         }
       )
     )

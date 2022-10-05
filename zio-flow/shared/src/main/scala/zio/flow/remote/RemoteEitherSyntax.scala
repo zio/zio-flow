@@ -16,97 +16,21 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.{Remote, ZFlow}
+import zio.flow.remote.RemoteEitherSyntax.RemoteLeftProjection
+import zio.flow.Remote
 
 import scala.util.Try
 
 final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends AnyVal {
-
-  def fold[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C]): Remote[C] =
-    Remote.FoldEither[A, B, C](self, UnboundRemoteFunction.make(left), UnboundRemoteFunction.make(right))
-
-  def handleEitherFlow[R, E, C](
-    left: Remote[A] => ZFlow[R, E, C],
-    right: Remote[B] => ZFlow[R, E, C]
-  ): ZFlow[R, E, C] = ZFlow.unwrap(fold(left.andThen(Remote(_)), right.andThen(Remote(_))))
-
-  def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
-    Remote.FoldEither[A1, B, Either[A1, B1]](
-      self,
-      UnboundRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
-      f
-    )
-
-  def map[B1](
-    f: Remote[B] => Remote[B1]
-  ): Remote[Either[A, B1]] =
-    Remote.FoldEither[A, B, Either[A, B1]](
-      self,
-      UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
-      UnboundRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
-    )
-
-  def flatten[A1 >: A, B1](implicit
-    ev: B <:< Either[A1, B1]
-  ): Remote[Either[A1, B1]] =
-    flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
-
-  def merge(implicit ev: Either[A, B] <:< Either[B, B]): Remote[B] =
-    Remote.FoldEither[B, B, B](
-      self.widen[Either[B, B]],
-      UnboundRemoteFunction.make(identity[Remote[B]]),
-      UnboundRemoteFunction.make(identity[Remote[B]])
-    )
-
-  def isLeft: Remote[Boolean] =
-    fold(_ => Remote(true), _ => Remote(false))
-
-  def isRight: Remote[Boolean] =
-    fold(_ => Remote(false), _ => Remote(true))
-
-  def swap: Remote[Either[B, A]] = Remote.SwapEither(self)
-
-  def joinRight[A1 >: A, B1 >: B, C](implicit
-    ev: B1 <:< Either[A1, C]
-  ): Remote[Either[A1, C]] =
-    fold(
-      _ => self.asInstanceOf[Remote[Either[A1, C]]],
-      r => r.asInstanceOf[Remote[Either[A1, C]]]
-    )
-
-  def joinLeft[A1 >: A, B1 >: B, C](implicit
-    ev: A1 <:< Either[C, B1]
-  ): Remote[Either[C, B1]] =
-    fold(
-      l => l.asInstanceOf[Remote[Either[C, B1]]],
-      _ => self.asInstanceOf[Remote[Either[C, B1]]]
-    )
-
   def contains[B1 >: B](
     elem: Remote[B1]
   ): Remote[Boolean] =
     fold(_ => Remote(false), Remote.Equal(_, elem))
 
-  def forall(
-    f: Remote[B] => Remote[Boolean]
-  ): Remote[Boolean] =
-    fold(_ => Remote(true), f)
-
   def exists(
     f: Remote[B] => Remote[Boolean]
   ): Remote[Boolean] =
     fold(_ => Remote(false), f)
-
-  def getOrElse(
-    or: => Remote[B]
-  ): Remote[B] =
-    fold(_ => or, identity)
-
-  def orElse[A1 >: A, B1 >: B](
-    or: => Remote[Either[A1, B1]]
-  ): Remote[Either[A1, B1]] =
-    fold(_ => or, _ => self)
 
   def filterOrElse[A1 >: A](p: Remote[B] => Remote[Boolean], zero: => Remote[A1]): Remote[Either[A1, B]] =
     fold(
@@ -119,11 +43,87 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
         )
     )
 
-  def toSeq: Remote[Seq[B]] =
-    fold(_ => Remote.nil[B], b => Remote.Cons(Remote.nil[B], b))
+  def flatMap[A1 >: A, B1](f: Remote[B] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
+    Remote.FoldEither[A1, B, Either[A1, B1]](
+      self,
+      Remote.UnboundRemoteFunction.make((a: Remote[A1]) => Remote.RemoteEither(Left(a))),
+      f
+    )
+
+  def flatten[A1 >: A, B1](implicit
+    ev: B <:< Either[A1, B1]
+  ): Remote[Either[A1, B1]] =
+    flatMap(_.asInstanceOf[Remote[Either[A1, B1]]])
+
+  def fold[C](left: Remote[A] => Remote[C], right: Remote[B] => Remote[C]): Remote[C] =
+    Remote.FoldEither[A, B, C](self, Remote.UnboundRemoteFunction.make(left), Remote.UnboundRemoteFunction.make(right))
+
+  def forall(
+    f: Remote[B] => Remote[Boolean]
+  ): Remote[Boolean] =
+    fold(_ => Remote(true), f)
+
+  def getOrElse(
+    or: => Remote[B]
+  ): Remote[B] =
+    fold(_ => or, identity)
+
+  def isLeft: Remote[Boolean] =
+    fold(_ => Remote(true), _ => Remote(false))
+
+  def isRight: Remote[Boolean] =
+    fold(_ => Remote(false), _ => Remote(true))
+
+  def joinLeft[A1 >: A, B1 >: B, C](implicit
+    ev: A1 <:< Either[C, B1]
+  ): Remote[Either[C, B1]] =
+    fold(
+      l => l.asInstanceOf[Remote[Either[C, B1]]],
+      _ => self.asInstanceOf[Remote[Either[C, B1]]]
+    )
+
+  def joinRight[A1 >: A, B1 >: B, C](implicit
+    ev: B1 <:< Either[A1, C]
+  ): Remote[Either[A1, C]] =
+    fold(
+      _ => self.asInstanceOf[Remote[Either[A1, C]]],
+      r => r.asInstanceOf[Remote[Either[A1, C]]]
+    )
+
+  def left: RemoteLeftProjection[A, B] = new RemoteLeftProjection(self)
+
+  def map[B1](
+    f: Remote[B] => Remote[B1]
+  ): Remote[Either[A, B1]] =
+    Remote.FoldEither[A, B, Either[A, B1]](
+      self,
+      Remote.UnboundRemoteFunction.make((a: Remote[A]) => Remote.RemoteEither(Left(a))),
+      Remote.UnboundRemoteFunction.make((b: Remote[B]) => Remote.RemoteEither(Right(f(b))))
+    )
+
+  def merge(implicit ev: Either[A, B] <:< Either[B, B]): Remote[B] =
+    Remote.FoldEither[B, B, B](
+      self.widen[Either[B, B]],
+      Remote.UnboundRemoteFunction.make(identity[Remote[B]]),
+      Remote.UnboundRemoteFunction.make(identity[Remote[B]])
+    )
+
+  def orElse[A1 >: A, B1 >: B](
+    or: => Remote[Either[A1, B1]]
+  ): Remote[Either[A1, B1]] =
+    fold(_ => or, _ => self)
+
+  def swap: Remote[Either[B, A]] =
+    self.fold(
+      (a: Remote[A]) => Remote.right[B, A](a),
+      (b: Remote[B]) => Remote.left[B, A](b)
+    )
 
   def toOption: Remote[Option[B]] =
     fold(_ => Remote.none[B], Remote.RemoteSome(_))
+
+  def toSeq: Remote[List[B]] =
+    fold(_ => Remote.nil[B], b => Remote.Cons(Remote.nil[B], b))
 
   def toTry(implicit
     ev: A <:< Throwable
@@ -132,6 +132,39 @@ final class RemoteEitherSyntax[A, B](val self: Remote[Either[A, B]]) extends Any
 }
 
 object RemoteEitherSyntax {
+  final class RemoteLeftProjection[A, B](val self: Remote[Either[A, B]]) extends AnyVal {
+
+    def getOrElse[A1 >: A](or: => Remote[A1]): Remote[A1] =
+      self.fold(value => value, _ => or)
+
+    def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
+      self.fold(p, _ => Remote(true))
+
+    def exists(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
+      self.fold(p, _ => Remote(false))
+
+    def filterToOption[B1](p: Remote[A] => Remote[Boolean]): Remote[Option[Either[A, B1]]] =
+      self.fold(
+        value =>
+          (p(value) === true).ifThenElse(
+            ifTrue = Remote.some(Remote.left[A, B1](value)),
+            ifFalse = Remote.none[Either[A, B1]]
+          ),
+        _ => Remote.none[Either[A, B1]]
+      )
+
+    def flatMap[A1, B1 >: B](f: Remote[A] => Remote[Either[A1, B1]]): Remote[Either[A1, B1]] =
+      self.fold(f, _ => self.asInstanceOf[Remote[Either[A1, B1]]])
+
+    def map[A1](f: Remote[A] => Remote[A1]): Remote[Either[A1, B]] =
+      self.fold(value => Remote.left[A1, B](f(value)), _ => self.asInstanceOf[Remote[Either[A1, B]]])
+
+    def toSeq: Remote[List[A]] =
+      self.fold(Remote.Cons(Remote.nil[A], _), _ => Remote.nil[A])
+
+    def toOption: Remote[Option[A]] =
+      self.fold(Remote.some, _ => Remote.none[A])
+  }
 
   def collectAll[E, A](
     values: Remote[List[Either[E, A]]]
@@ -159,6 +192,6 @@ object RemoteEitherSyntax {
       )
 
     val nil = Remote.right[E, List[A]](Remote.nil[A])
-    finalize(values.fold(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))
+    finalize(values.foldLeft(nil)((b: Remote[Either[E, List[A]]], a: Remote[Either[E, A]]) => combine(b, a)))
   }
 }

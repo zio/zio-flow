@@ -19,24 +19,36 @@ package zio.flow.remote
 import zio.flow._
 import zio.flow.remote.numeric._
 
-final class RemoteFractionalSyntax[A](val self: Remote[A]) extends AnyVal {
+final class RemoteFractionalSyntax[A](private val self: Remote[A]) extends AnyVal {
+  def floor(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Floor))
 
-  def sin(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.Sin)
+  def ceil(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Ceil))
 
-  def cos(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.Cos)
+  def round(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.Round))
 
-  def tan(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.Tan)
+  def toRadians(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.ToRadians))
 
-  def asin(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.ArcSin)
+  def toDegrees(implicit fractional: Fractional[A]): Remote[A] =
+    Remote.Unary(self, UnaryOperators(UnaryFractionalOperator.ToDegrees))
 
-  def acos(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.ArcCos)
+  def isNaN(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsNaN))
 
-  def atan(implicit fractional: Fractional[A]): Remote[A] =
-    Remote.UnaryFractional(self, fractional, UnaryFractionalOperator.ArcTan)
+  def isInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsInfinity))
 
+  def isInfinite(implicit fractional: Fractional[A]): Remote[Boolean] = isInfinity
+
+  def isFinite(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsFinite))
+
+  def isPosInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsPosInfinity))
+
+  def isNegInfinity(implicit fractional: Fractional[A]): Remote[Boolean] =
+    Remote.Unary(self, UnaryOperators(FractionalPredicateOperator.IsNegInifinty))
 }

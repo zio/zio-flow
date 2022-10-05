@@ -1,11 +1,10 @@
 package zio.flow.internal.executor
 
-import zio.flow._
 import zio.flow.internal._
 import zio.flow.mock.MockedOperation
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
-import zio.flow.{ExecutionEnvironment, Remote, ZFlow, ZIOFlowBaseSpec}
+import zio.flow._
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -31,7 +30,6 @@ import zio.{
   durationInt
 }
 
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
 trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
@@ -43,7 +41,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
     flowSpec
-      .provideCustom(
+      .provideSome[TestEnvironment](
         IndexedStore.inMemory,
         DurableLog.live,
         KeyValueStore.inMemory,
@@ -71,7 +69,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run(logQueue.offer(message()).unit).getOrThrowFiberFailure()
                      msg
@@ -138,7 +136,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run {
                        msg match {
@@ -152,7 +150,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         results <- {
           val break: ZFlow[Any, Nothing, Unit] =
             (ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+              ZFlow.waitTill(Instant.ofEpochSecond(100L)))
           val finalFlow = flow(break)
           for {
             fiber1 <- finalFlow
@@ -201,7 +199,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                      context: FiberRefs,
                      spans: List[LogSpan],
                      annotations: Map[String, String]
-                   ): String = Unsafe.unsafeCompat { implicit u =>
+                   ): String = Unsafe.unsafe { implicit u =>
                      val msg = message()
                      runtime.unsafe.run {
                        msg match {
@@ -215,7 +213,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         results <- {
           val break: ZFlow[Any, Nothing, Unit] =
             (ZFlow.log("!!!BREAK!!!") *>
-              ZFlow.waitTill(Remote(Instant.ofEpochSecond(100))))
+              ZFlow.waitTill(Instant.ofEpochSecond(100L)))
           val finalFlow = flow(break)
 
           ZIO.scoped[Live with DurableLog with KeyValueStore] {

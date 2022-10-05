@@ -17,25 +17,65 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.flow.remote.numeric.Numeric._
+import zio._
 
-import java.time.temporal.ChronoUnit
-import java.time.{Duration, Instant}
+import java.time.temporal.{ChronoField, ChronoUnit}
 
 final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
 
-  def isAfter(that: Remote[Instant]): Remote[Boolean]  = self.getEpochSecond > that.getEpochSecond
-  def isBefore(that: Remote[Instant]): Remote[Boolean] = self.getEpochSecond < that.getEpochSecond
+  def get(unit: Remote[ChronoField]): Remote[Int] =
+    unit.`match`(
+      ChronoField.NANO_OF_SECOND  -> getNano,
+      ChronoField.MICRO_OF_SECOND -> getNano / 1000,
+      ChronoField.MILLI_OF_SECOND -> getNano / 1000000
+    )(Remote.fail("Unsupported unit"))
 
-  def getEpochSecond: Remote[Long] = Remote.InstantToTuple(self.widen[Instant])._1
-  def getNano: Remote[Int]         = Remote.InstantToTuple(self.widen[Instant])._2
+  def getLong(unit: Remote[ChronoField]): Remote[Long] =
+    unit.`match`(
+      ChronoField.NANO_OF_SECOND  -> getNano.toLong,
+      ChronoField.MICRO_OF_SECOND -> (getNano / 1000).toLong,
+      ChronoField.MILLI_OF_SECOND -> (getNano / 1000000).toLong,
+      ChronoField.INSTANT_SECONDS -> getEpochSecond
+    )(Remote.fail("Unsupported unit"))
 
-  def truncatedTo(unit: Remote[ChronoUnit]): Remote[Instant] = Remote.InstantTruncate(self, unit)
+  def getEpochSecond: Remote[Long] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple))._1
+  def getNano: Remote[Int] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple))._2
 
-  def plusDuration(duration: Remote[Duration]): Remote[Instant] =
-    Remote.InstantPlusDuration(self, duration)
+  def isAfter(that: Remote[Instant]): Remote[Boolean] =
+    self.getEpochSecond > that.getEpochSecond
+
+  def isBefore(that: Remote[Instant]): Remote[Boolean] =
+    self.getEpochSecond < that.getEpochSecond
+
+  def minus(duration: Remote[Duration]): Remote[Instant] =
+    self.plus(duration.multipliedBy(-1L))
+
+  def minus(amountToSubtract: Remote[Long], unit: Remote[ChronoUnit]): Remote[Instant] =
+    self.minus(Remote.DurationFromAmount(amountToSubtract, unit))
+
+  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
+    self.minus(secondsToSubtract, Remote(ChronoUnit.SECONDS))
+
+  def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] =
+    self.minus(nanosecondsToSubtract, Remote(ChronoUnit.NANOS))
+
+  def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] =
+    self.minus(milliSecondsToSubtract, Remote(ChronoUnit.MILLIS))
+
+  def plus(duration: Remote[Duration]): Remote[Instant] =
+    plusImpl(duration.getSeconds, duration.getNano.toLong)
 
   def plus(amountToAdd: Remote[Long], unit: Remote[ChronoUnit]): Remote[Instant] =
-    self.plusDuration(Remote.DurationFromAmount(amountToAdd, unit))
+    self.plus(Duration.of(amountToAdd, unit))
+
+  private def plusImpl(secondsToAdd: Remote[Long], nanosToAdd: Remote[Long]): Remote[Instant] =
+    Instant.ofEpochSecond(
+      math.addExact(math.addExact(getEpochSecond, secondsToAdd), nanosToAdd / 1000000000L),
+      getNano.toLong + (nanosToAdd % 1000000000L)
+    )
 
   def plusSeconds(secondsToAdd: Remote[Long]): Remote[Instant] =
     self.plus(secondsToAdd, Remote(ChronoUnit.SECONDS))
@@ -46,23 +86,75 @@ final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
   def plusNanos(nanoSecondsToAdd: Remote[Long]): Remote[Instant] =
     self.plus(nanoSecondsToAdd, Remote(ChronoUnit.NANOS))
 
-  def minusDuration(duration: Remote[Duration]): Remote[Instant] =
-    self.plusDuration(duration.multipliedBy(-1L))
+  def toEpochMilli: Remote[Long] =
+    (getEpochSecond < 0L && getNano > 0).ifThenElse(
+      ifTrue = math.addExact(
+        math.multiplyExact(getEpochSecond + 1L, 1000L),
+        ((getNano / 1000000) - 1000).toLong
+      ),
+      ifFalse = math.addExact(
+        math.multiplyExact(getEpochSecond, 1000L),
+        (getNano / 1000000).toLong
+      )
+    )
 
-  def minus(amountToSubtract: Remote[Long], unit: Remote[ChronoUnit]): Remote[Instant] =
-    self.minusDuration(Remote.DurationFromAmount(amountToSubtract, unit))
+  def truncatedTo(unit: Remote[ChronoUnit]): Remote[Instant] =
+    (unit === ChronoUnit.NANOS).ifThenElse(
+      ifTrue = self,
+      ifFalse = {
+        val unitDur = unit.getDuration
+        (unitDur.getSeconds > 86400L).ifThenElse(
+          ifTrue = Remote.fail("Unit is too large to be used for truncation"),
+          ifFalse = {
+            val dur = unitDur.toNanos
+            ((Remote(86400000000000L) % dur) === 0L).ifThenElse(
+              ifTrue = {
+                val nod    = self.getEpochSecond % 86400L * 1000000000L + self.getNano.toLong
+                val result = math.floorDiv(nod, dur) * dur
+                self.plusNanos(result - nod)
+              },
+              ifFalse = Remote.fail("Unit must divide into a standard day without remainder")
+            )
+          }
+        )
+      }
+    )
 
-  def minusSeconds(secondsToSubtract: Remote[Long]): Remote[Instant] =
-    self.minus(secondsToSubtract, Remote(ChronoUnit.SECONDS))
+  def until(endExclusive: Remote[Instant], unit: Remote[ChronoUnit]): Remote[Long] =
+    unit.`match`(
+      ChronoUnit.NANOS     -> nanosUntil(endExclusive),
+      ChronoUnit.MICROS    -> nanosUntil(endExclusive) / 1000L,
+      ChronoUnit.MILLIS    -> math.subtractExact(endExclusive.toEpochMilli, toEpochMilli),
+      ChronoUnit.SECONDS   -> secondsUntil(endExclusive),
+      ChronoUnit.MINUTES   -> secondsUntil(endExclusive) / 60L,
+      ChronoUnit.HOURS     -> secondsUntil(endExclusive) / 3600L,
+      ChronoUnit.HALF_DAYS -> secondsUntil(endExclusive) / 43200L,
+      ChronoUnit.DAYS      -> secondsUntil(endExclusive) / 86400L
+    )(Remote.fail("Unsupported unit"))
 
-  def minusNanos(nanosecondsToSubtract: Remote[Long]): Remote[Instant] =
-    self.minus(nanosecondsToSubtract, Remote(ChronoUnit.NANOS))
+  private def nanosUntil(end: Remote[Instant]): Remote[Long] =
+    math.addExact(
+      math.multiplyExact(math.subtractExact(end.getEpochSecond, getEpochSecond), 1000000000L),
+      (end.getNano - getNano).toLong
+    )
 
-  def minusMillis(milliSecondsToSubtract: Remote[Long]): Remote[Instant] =
-    self.minus(milliSecondsToSubtract, Remote(ChronoUnit.MILLIS))
-}
+  private def secondsUntil(end: Remote[Instant]): Remote[Long] = {
+    val secsDiff  = math.subtractExact(end.getEpochSecond, getEpochSecond)
+    val nanosDiff = (end.getNano - getNano).toLong
+    (secsDiff > 0L && nanosDiff < 0L).ifThenElse(
+      ifTrue = secsDiff - 1L,
+      ifFalse = (secsDiff < 0L && nanosDiff > 0L).ifThenElse(
+        ifTrue = secsDiff + 1L,
+        ifFalse = secsDiff
+      )
+    )
+  }
 
-object RemoteInstant {
-  def now: Remote[Instant]                            = Remote(Instant.now())
-  def parse(charSeq: Remote[String]): Remote[Instant] = Remote.InstantFromString(charSeq)
+  def `with`(field: Remote[ChronoField], value: Remote[Long]): Remote[Instant] =
+    field.`match`(
+      ChronoField.NANO_OF_SECOND  -> Instant.ofEpochSecond(getEpochSecond, value),
+      ChronoField.MICRO_OF_SECOND -> Instant.ofEpochSecond(getEpochSecond, value * 1000L),
+      ChronoField.MILLI_OF_SECOND -> Instant.ofEpochSecond(getEpochSecond, value * 1000000L),
+      ChronoField.INSTANT_SECONDS -> Instant.ofEpochSecond(value, getNano.toLong)
+    )(Remote.fail("Unsupported unit"))
 }

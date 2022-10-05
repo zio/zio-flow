@@ -25,7 +25,7 @@ import zio.flow.serialization._
 import zio.flow._
 import zio.flow.internal.PersistentExecutor.GarbageCollectionCommand
 import zio.flow.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema}
+import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, OffsetDateTime}
@@ -83,9 +83,10 @@ final case class PersistentExecutor(
     } yield dyn)
       .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
+  // synchronous -> will return when work is done.
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
-      resultPromise <- start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow).orDieWith(_.toException)
+      resultPromise <- start(id, flow).orDieWith(_.toException)
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
       _             <- ZIO.log(s"$id finished with $promiseResult")
       result <- promiseResult match {
@@ -103,6 +104,22 @@ final case class PersistentExecutor(
                       .flatMapError(error => ZIO.die(ExecutorError.TypeError("success result", error).toException))
                 }
     } yield result
+
+  def start[E, A](
+    id: FlowId,
+    flow: ZFlow[Any, E, A]
+  ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] =
+    start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow)
+
+  private def processResultDynTyped(
+    in: Either[Either[ExecutorError, DynamicValue], FlowResult]
+  ): IO[DynamicValue, FlowResult] = in match {
+    case Left(Left(fail)) => ZIO.die(fail.toException)
+    case Left(Right(dynamicError)) =>
+      ZIO.fail(dynamicError)
+    case Right(flowResult) =>
+      ZIO.succeed(flowResult)
+  }
 
   def restartAll(): ZIO[Any, ExecutorError, Unit] =
     for {
@@ -147,6 +164,36 @@ final case class PersistentExecutor(
         gcQueue.offer(GarbageCollectionCommand(finished)) *> finished.await
       }
       .unit
+
+  // Looks up a workflow by id, checks its state:
+  // If it's done, return the result, otherwise nothing.
+  // Fails if the id is unknown
+  // TODO: has some problems, see commented test in PersistentExecutorSpec
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    workflows.get(id).commit.flatMap {
+      case Some(runtimeState) =>
+        getResultIfCompleteDynTyped(runtimeState)
+      // Check if done
+      case None =>
+        // Unknown workflow: let's fail
+        ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + id.toString))
+    }
+
+  // We know that workflow, check if it's done:
+  // TODO confirm that this is an acceptable way to do this
+  // TODO also check if we may have some corner cases where the work is done
+  // but we somehow still run into a timeout because looking things up takes longer than expected?
+  private def getResultIfCompleteDynTyped(
+    rtsPromise: Promise[Nothing, RuntimeState]
+  ): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    rtsPromise.await.flatMap(_.result.awaitEither).provideEnvironment(promiseEnv).timeout(10.millis).map {
+      case None =>
+        None
+      case Some(done) =>
+        // _NOT_ doing flatmap, we don't want to conflate problems the workflow had with problems
+        // we might run into when looking up results.
+        Some(processResultDynTyped(done))
+    }
 
   private def start[E, A](
     id: ScopedFlowId,
@@ -713,7 +760,7 @@ final case class PersistentExecutor(
               stateVar: Remote[RemoteVariableReference[i.ValueA]],
               boolRemote: Remote[Boolean]
             ): ZFlow[Any, i.ValueE, i.ValueA] =
-              ZFlow.recurse[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
+              ZFlow.recurseSimple[Any, i.ValueE, Boolean](boolRemote) { case (continue, rec) =>
                 ZFlow.ifThenElse(continue)(
                   ifTrue = for {
                     a0       <- stateVar.get
@@ -1218,6 +1265,7 @@ object PersistentExecutor {
 
     implicit val schema: Schema[Instruction] =
       Schema.EnumN(
+        TypeId.parse("zio.flow.internal.PersistentExecutor.Instruction"),
         CaseSet
           .Cons(
             Schema.Case[PopEnv.type, Instruction]("PopEnv", Schema.singleton(PopEnv), _.asInstanceOf[PopEnv.type]),
@@ -1237,6 +1285,7 @@ object PersistentExecutor {
                 Any,
                 ZFlow[Any, Any, Any]
               ], Continuation[Any, Any, Any, Any, Any]](
+                TypeId.parse("zio.flow.internal.PersistentExecutor.Instruction.Continuation"),
                 Schema.Field("onError", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
                 Schema.Field("onSuccess", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
                 Continuation(_, _),
@@ -1541,6 +1590,7 @@ object PersistentExecutor {
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
       Schema.CaseClass18(
+        TypeId.parse("zio.flow.internal.PersistentExecutor.State"),
         Schema.Field("id", Schema[ScopedFlowId]),
         Schema.Field("lastTimestamp", Schema[Timestamp]),
         Schema.Field("current", ZFlow.schemaAny),
@@ -1636,6 +1686,7 @@ object PersistentExecutor {
   object TransactionState {
     implicit val schema: Schema[TransactionState] =
       Schema.CaseClass5(
+        TypeId.parse("zio.flow.internal.PersistentExecutor.TransactionState"),
         Schema.Field("id", Schema[TransactionId]),
         Schema.Field("accessedVariables", Schema[Map[RemoteVariableName, RecordedAccess]]),
         Schema.Field("compensations", Schema[List[ZFlow[Any, ActivityError, Unit]]]),

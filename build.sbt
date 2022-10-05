@@ -13,9 +13,13 @@ inThisBuild(
         url("http://degoes.net")
       )
     ),
+    resolvers +=
+      "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
-    pgpSecretRing := file("/tmp/secret.asc")
+    pgpSecretRing := file("/tmp/secret.asc"),
+    resolvers +=
+      "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
   )
 )
 
@@ -61,12 +65,11 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
       "dev.zio" %% "zio-schema-json"       % Version.zioSchema,
       "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema,
-      "io.d11"  %% "zhttp"                 % Version.zioHttp,
-      "io.d11"  %% "zhttp-test"            % Version.zioHttp % Test
+      "io.d11"  %% "zhttp"                 % Version.zioHttp
     ) ++
       commonTestDependencies.map(_ % Test)
   )
-  .settings(fork := true)
+  .settings(fork := false)
   .settings(testFrameworks += zioTest)
   .enablePlugins(RemoteTupleGenerator)
 
@@ -75,6 +78,16 @@ lazy val zioFlowJS = zioFlow.js
   .settings(fork := false)
 
 lazy val zioFlowJVM = zioFlow.jvm
+
+lazy val zioFlowServer = project
+  .in(file("zio-flow-server"))
+  .dependsOn(zioFlowJVM)
+  .settings(stdSettings("zio-flow-server"))
+  .settings(
+    libraryDependencies ++= commonTestDependencies.map(_ % Test)
+  )
+  .settings(fork := true)
+  .settings(testFrameworks += zioTest)
 
 lazy val test = crossProject(JSPlatform, JVMPlatform)
   .in(file("test"))
