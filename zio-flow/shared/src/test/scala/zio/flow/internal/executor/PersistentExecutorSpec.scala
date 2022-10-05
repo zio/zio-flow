@@ -114,7 +114,9 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
                 // TODO cleaner way to just notify failure?
                 ZIO.succeed(assertTrue(false))
               case Some(r) =>
-                r.map(wr => assertTrue(wr.result.toTypedValue(Schema[Instant]) == Right(Instant.ofEpochSecond(5L))))
+                r.map(wr =>
+                  assertTrue(wr.result.toTypedValue(Schema[Instant]) == Right(java.time.Instant.ofEpochSecond(5L)))
+                )
             }
           }
         }
@@ -597,8 +599,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         for {
           curr <- Clock.currentTime(TimeUnit.SECONDS)
           flow = for {
-                   flow1 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 2L)).as(1).fork
-                   flow2 <- ZFlow.waitTill(Remote.ofEpochSecond(curr + 3L)).as(2).fork
+                   flow1 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L)).as(1).fork
+                   flow2 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 3L)).as(2).fork
                    r1    <- flow1.await
                    r2    <- flow2.await
                    _     <- ZFlow.log(r1.toString)

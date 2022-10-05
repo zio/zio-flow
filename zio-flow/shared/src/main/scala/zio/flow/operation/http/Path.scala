@@ -195,7 +195,7 @@ object Body {
 sealed trait Query[A] extends RequestInput[A] { self =>
   def ? : Query[Option[A]] = Query.Optional(self)
 
-  def ++[B](that: Query[B])(zipper: Zipper[A, B]): Query[zipper.Out] =
+  def ++[B](that: Query[B])(implicit zipper: Zipper[A, B]): Query[zipper.Out] =
     Query.ZipWith[A, B, zipper.Out](self, that, zipper)
 }
 

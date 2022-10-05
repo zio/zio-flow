@@ -39,6 +39,23 @@ object Zipper extends ZipperLowPriority1 {
         .:+:(zipper3SchemaCase[A, B, C])
         .:+:(zipper4SchemaCase[A, B, C])
         .:+:(zipper5SchemaCase[A, B, C])
+        .:+:(zipper6SchemaCase[A, B, C])
+        .:+:(zipper7SchemaCase[A, B, C])
+        .:+:(zipper8SchemaCase[A, B, C])
+        .:+:(zipper9SchemaCase[A, B, C])
+        .:+:(zipper10SchemaCase[A, B, C])
+        .:+:(zipper11SchemaCase[A, B, C])
+        .:+:(zipper12SchemaCase[A, B, C])
+        .:+:(zipper13SchemaCase[A, B, C])
+        .:+:(zipper14SchemaCase[A, B, C])
+        .:+:(zipper15SchemaCase[A, B, C])
+        .:+:(zipper16SchemaCase[A, B, C])
+        .:+:(zipper17SchemaCase[A, B, C])
+        .:+:(zipper18SchemaCase[A, B, C])
+        .:+:(zipper19SchemaCase[A, B, C])
+        .:+:(zipper20SchemaCase[A, B, C])
+        .:+:(zipper21SchemaCase[A, B, C])
+        .:+:(zipper22SchemaCase[A, B, C])
     )
 
   type WithOut[A, B, C] = Zipper[A, B] { type Out = C }
@@ -77,6 +94,385 @@ object Zipper extends ZipperLowPriority1 {
       "5",
       Schema.singleton(Zipper5[Any, Any, Any, Any, Any]()),
       _.asInstanceOf[Zipper5[Any, Any, Any, Any, Any]]
+    )
+
+  def zipper6SchemaCase[A, B, C]: Schema.Case[Zipper6[Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "6",
+      Schema.singleton(Zipper6[Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper6[Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper7SchemaCase[A, B, C]: Schema.Case[Zipper7[Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "7",
+      Schema.singleton(Zipper7[Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper7[Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper8SchemaCase[A, B, C]
+    : Schema.Case[Zipper8[Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "8",
+      Schema.singleton(Zipper8[Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper8[Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper9SchemaCase[A, B, C]
+    : Schema.Case[Zipper9[Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "9",
+      Schema.singleton(Zipper9[Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper9[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper10SchemaCase[A, B, C]
+    : Schema.Case[Zipper10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "10",
+      Schema.singleton(Zipper10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper11SchemaCase[A, B, C]
+    : Schema.Case[Zipper11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "11",
+      Schema.singleton(Zipper11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper12SchemaCase[A, B, C]
+    : Schema.Case[Zipper12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "12",
+      Schema.singleton(Zipper12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper13SchemaCase[A, B, C]
+    : Schema.Case[Zipper13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "13",
+      Schema.singleton(Zipper13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper14SchemaCase[A, B, C]
+    : Schema.Case[Zipper14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[
+      A,
+      B,
+      C
+    ]] =
+    Schema.Case(
+      "14",
+      Schema.singleton(Zipper14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper15SchemaCase[A, B, C]
+    : Schema.Case[Zipper15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any], Zipper.WithOut[
+      A,
+      B,
+      C
+    ]] =
+    Schema.Case(
+      "15",
+      Schema.singleton(Zipper15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper16SchemaCase[A, B, C]: Schema.Case[Zipper16[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "16",
+      Schema.singleton(Zipper16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper17SchemaCase[A, B, C]: Schema.Case[Zipper17[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "17",
+      Schema.singleton(Zipper17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()),
+      _.asInstanceOf[Zipper17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper18SchemaCase[A, B, C]: Schema.Case[Zipper18[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "18",
+      Schema.singleton(
+        Zipper18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()
+      ),
+      _.asInstanceOf[Zipper18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    )
+
+  def zipper19SchemaCase[A, B, C]: Schema.Case[Zipper19[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "19",
+      Schema.singleton(
+        Zipper19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()
+      ),
+      _.asInstanceOf[
+        Zipper19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]
+      ]
+    )
+
+  def zipper20SchemaCase[A, B, C]: Schema.Case[Zipper20[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "20",
+      Schema.singleton(
+        Zipper20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]()
+      ),
+      _.asInstanceOf[
+        Zipper20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]
+      ]
+    )
+
+  def zipper21SchemaCase[A, B, C]: Schema.Case[Zipper21[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "21",
+      Schema.singleton(
+        Zipper21[
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any
+        ]()
+      ),
+      _.asInstanceOf[Zipper21[
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any
+      ]]
+    )
+
+  def zipper22SchemaCase[A, B, C]: Schema.Case[Zipper22[
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any,
+    Any
+  ], Zipper.WithOut[A, B, C]] =
+    Schema.Case(
+      "22",
+      Schema.singleton(
+        Zipper22[
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any,
+          Any
+        ]()
+      ),
+      _.asInstanceOf[Zipper22[
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any
+      ]]
     )
 }
 
