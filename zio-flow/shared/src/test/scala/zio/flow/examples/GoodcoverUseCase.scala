@@ -26,9 +26,9 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
     implicit val policySchema: Schema[Policy] = DeriveSchema.gen[Policy]
   }
 
-  val emailRequest: Remote[EmailRequest] = Remote(
-    EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
-  )
+//  val emailRequest: Remote[EmailRequest] = Remote(
+//    EmailRequest(List("evaluatorEmail@gmail.com"), None, List.empty, List.empty, "")
+//  )
 
   val policyClaimStatus: Activity[Policy, Boolean] = Activity[Policy, Boolean](
     "get-policy-claim-status",

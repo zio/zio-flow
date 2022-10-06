@@ -16,8 +16,8 @@
 
 package zio.flow.internal
 
-import zio.flow.{RemoteContext, RemoteVariableName}
-import zio.schema.DynamicValue
+import zio.flow.{ConfigKey, RemoteContext, RemoteVariableName}
+import zio.schema.{DynamicValue, Schema}
 import zio.stm.TMap
 import zio.{Chunk, ZIO}
 
@@ -55,6 +55,9 @@ object RecordingRemoteContext {
 
                 override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
                   cache.delete(name).commit
+
+                override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
+                  outerRemoteContext.readConfig[A](key)
               }
 
             override def virtualClock: VirtualClock = vclock

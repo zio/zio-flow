@@ -23,6 +23,7 @@ sealed trait RemoteEvaluationError { self =>
 
   def toMessage: String = self match {
     case RemoteEvaluationError.VariableNotFound(name)          => s"Could not find identifier $name"
+    case RemoteEvaluationError.ConfigurationNotFound(key)      => s"Could not find configuration for $key"
     case RemoteEvaluationError.BindingNotFound(id)             => s"Cannot evaluate binding $id, it has to be substituted"
     case RemoteEvaluationError.UnexpectedDynamicValue(details) => s"Unexpected dynamic value: $details"
     case RemoteEvaluationError.RecursionNotFound(id)           => s"Could not find recursion body $id"
@@ -35,6 +36,7 @@ sealed trait RemoteEvaluationError { self =>
 
 object RemoteEvaluationError {
   final case class VariableNotFound(name: RemoteVariableName) extends RemoteEvaluationError
+  final case class ConfigurationNotFound(key: ConfigKey)      extends RemoteEvaluationError
   final case class BindingNotFound(id: BindingName)           extends RemoteEvaluationError
   final case class UnexpectedDynamicValue(details: String)    extends RemoteEvaluationError
   final case class RecursionNotFound(id: RecursionId)         extends RemoteEvaluationError

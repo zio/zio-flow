@@ -14,7 +14,7 @@ inThisBuild(
       )
     ),
     resolvers +=
-      "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
+      "Sonatype OSS Snapshots 01" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
     pgpSecretRing := file("/tmp/secret.asc"),
@@ -49,7 +49,10 @@ lazy val root = project
     zioFlowJVM,
     zioFlowJS,
     testJVM,
-    testJS
+    testJS,
+    // activity libraries
+    twilioJVM,
+    twilioJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -75,8 +78,6 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
 
 lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
-  .settings(fork := false)
-
 lazy val zioFlowJVM = zioFlow.jvm
 
 lazy val zioFlowServer = project
@@ -102,6 +103,8 @@ lazy val test = crossProject(JSPlatform, JVMPlatform)
 
 lazy val testJS  = test.js
 lazy val testJVM = test.jvm
+
+// Database implementations
 
 lazy val rocksdb = project
   .in(file("rocksdb"))
@@ -172,6 +175,24 @@ lazy val dynamodb = project
     ).map(_ % IntegrationTest),
     testFrameworks += zioTest
   )
+
+// Activity libraries
+lazy val twilio = crossProject(JSPlatform, JVMPlatform)
+  .in(file("activities/zio-flow-twilio"))
+  .dependsOn(zioFlow)
+  .settings(
+    stdSettings("zio-flow-twilio"),
+    testFrameworks += zioTest,
+    libraryDependencies ++= Seq(
+      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+    ) ++ commonTestDependencies.map(_ % Test)
+  )
+
+lazy val twilioJS  = twilio.js
+lazy val twilioJVM = twilio.jvm
+
+// Docs
 
 lazy val docs = project
   .in(file("zio-flow-docs"))

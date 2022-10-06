@@ -19,6 +19,7 @@ package zio.flow.remote
 import zio.flow.Remote
 import zio.flow.debug.TrackRemotes
 import zio.flow.remote.numeric._
+import zio.flow.remote.text.UnaryStringOperator
 
 import scala.annotation.nowarn
 
@@ -353,6 +354,9 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
 
   def takeWhile(p: Remote[Char] => Remote[Boolean]): Remote[String] =
     self.toList.takeWhile(p).mkString.trackInternal("String#takeWhilee")
+
+  def toBase64: Remote[String] =
+    Remote.Unary(self, UnaryOperators(UnaryStringOperator.Base64))
 
   def toBoolean: Remote[Boolean] =
     toBooleanOption.fold(Remote.fail("Invalid boolean"))(n => n).trackInternal("String#toBoolean")

@@ -16,11 +16,14 @@
 
 package zio.flow.mock
 
-import zio.flow.{ActivityError, Operation, OperationExecutor}
+import zio.flow.{ActivityError, Operation, OperationExecutor, RemoteContext}
 import zio.{Clock, Ref, Scope, ZIO}
 
-case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor[Any] {
-  override def execute[I, A](input: I, operation: Operation[I, A]): ZIO[Any, ActivityError, A] =
+case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor {
+  override def execute[Input, Result](
+    input: Input,
+    operation: Operation[Input, Result]
+  ): ZIO[RemoteContext, ActivityError, Result] =
     mocks.modify { mock =>
       mock.matchOperation(operation, input)
     }.flatMap {

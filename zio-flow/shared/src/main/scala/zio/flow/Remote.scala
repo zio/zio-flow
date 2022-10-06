@@ -19,6 +19,7 @@ package zio.flow
 import zio.flow.Remote.Debug.DebugMode
 import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, InternalRemoteTracking, RemoteConversions, UnaryOperators}
 import zio.flow.remote.RemoteTuples._
+import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.{Chunk, Duration, ZIO}
 
@@ -337,6 +338,46 @@ object Remote {
 
     def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
       Schema.Case("Variable", schema, _.asInstanceOf[Variable[A]])
+  }
+
+  final case class Config[A](key: ConfigKey, schema: Schema[A]) extends Remote[A] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      RemoteContext
+        .readConfig[A](key)(schema)
+        .mapError(RemoteEvaluationError.RemoteContextError)
+        .flatMap {
+          case None        => ZIO.fail(RemoteEvaluationError.ConfigurationNotFound(key))
+          case Some(value) => ZIO.succeed(DynamicValue.fromSchemaAndValue(schema, value))
+        }
+
+    override def equals(that: Any): Boolean =
+      that match {
+        case Config(otherKey, _) =>
+          key == otherKey
+        case _ => false
+      }
+
+    override protected def substituteRec(f: Remote.Substitutions): Remote[A] =
+      this
+
+    override private[flow] val variableUsage = VariableUsage.none
+  }
+
+  object Config {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Config")
+
+    def schema[A]: Schema[Config[A]] =
+      Schema.CaseClass2[ConfigKey, FlowSchemaAst, Config[A]](
+        typeId,
+        Schema.Field("key", Schema[ConfigKey]),
+        Schema.Field("schema", FlowSchemaAst.schema),
+        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema[A]),
+        _.key,
+        cfg => FlowSchemaAst.fromSchema(cfg.schema)
+      )
+
+    def schemaCase[A]: Schema.Case[Config[A], Remote[A]] =
+      Schema.Case("Config", schema, _.asInstanceOf[Config[A]])
   }
 
   final case class Unbound[A](identifier: BindingName) extends Remote[A] {
@@ -2887,6 +2928,9 @@ object Remote {
       case _ =>
         Literal(DynamicValue.fromSchemaAndValue(Schema[A], value))
     }
+
+  def config[A: Schema](key: ConfigKey): Remote[A] =
+    Config(key, implicitly[Schema[A]])
 
   def fail[A](message: String): Remote[A] =
     Remote.Fail(message)

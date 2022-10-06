@@ -18,38 +18,46 @@ package zio.flow
 
 import zio.schema.{Schema, TypeId}
 
-final case class Activity[-R, A](
+final case class Activity[-Input, Result](
   name: String,
   description: String,
-  operation: Operation[R, A],
-  check: ZFlow[R, ActivityError, A],
-  compensate: ZFlow[A, ActivityError, Unit]
+  operation: Operation[Input, Result],
+  check: ZFlow[Input, ActivityError, Result],
+  compensate: ZFlow[Result, ActivityError, Unit]
 ) { self =>
-  val inputSchema: Schema[_ >: R]  = operation.inputSchema
-  val resultSchema: Schema[_ <: A] = operation.resultSchema
+  val inputSchema: Schema[_ >: Input]   = operation.inputSchema
+  val resultSchema: Schema[_ <: Result] = operation.resultSchema
 
-  def apply(input: Remote[R]): ZFlow[Any, ActivityError, A] =
+  def apply(input: Remote[Input]): ZFlow[Any, ActivityError, Result] =
     ZFlow.RunActivity(input, self)
 
   def apply[R1, R2](R1: Remote[R1], R2: Remote[R2])(implicit
-    ev: (R1, R2) <:< R
-  ): ZFlow[Any, ActivityError, A] =
+    ev: (R1, R2) <:< Input
+  ): ZFlow[Any, ActivityError, Result] =
     self.narrow[(R1, R2)].apply(Remote.tuple2((R1, R2)))
 
   def apply[R1, R2, I3](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3])(implicit
-    ev: (R1, R2, I3) <:< R
-  ): ZFlow[Any, ActivityError, A] =
+    ev: (R1, R2, I3) <:< Input
+  ): ZFlow[Any, ActivityError, Result] =
     self.narrow[(R1, R2, I3)].apply(Remote.tuple3((R1, R2, i3)))
 
   def apply[R1, R2, I3, I4](R1: Remote[R1], R2: Remote[R2], i3: Remote[I3], i4: Remote[I4])(implicit
-    ev: (R1, R2, I3, I4) <:< R
-  ): ZFlow[Any, ActivityError, A] =
+    ev: (R1, R2, I3, I4) <:< Input
+  ): ZFlow[Any, ActivityError, Result] =
     self.narrow[(R1, R2, I3, I4)].apply(Remote.tuple4((R1, R2, i3, i4)))
 
-  def narrow[R0](implicit ev: R0 <:< R): Activity[R0, A] = {
+  def contramap[Input2: Schema](
+    from: Remote[Input2] => Remote[Input]
+  ): Activity[Input2, Result] =
+    this.copy(
+      operation = operation.contramap(from),
+      check = ZFlow.input[Input2].flatMap(input2 => from(input2)).flatMap(input => check.provide(input))
+    )
+
+  def narrow[Input0](implicit ev: Input0 <:< Input): Activity[Input0, Result] = {
     val _ = ev
 
-    self.asInstanceOf[Activity[R0, A]]
+    self.asInstanceOf[Activity[Input0, Result]]
   }
 }
 

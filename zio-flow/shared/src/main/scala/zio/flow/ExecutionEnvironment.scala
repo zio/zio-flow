@@ -18,4 +18,4 @@ package zio.flow
 
 import zio.flow.serialization.{Deserializer, Serializer}
 
-case class ExecutionEnvironment(serializer: Serializer, deserializer: Deserializer)
+final case class ExecutionEnvironment(serializer: Serializer, deserializer: Deserializer, configuration: Configuration)
