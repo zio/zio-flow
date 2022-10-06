@@ -117,7 +117,8 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
 
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
 
-  override def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any] =
+  override def flowSpec
+    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
     suite("End to end goodcover use-case performed by in-memory executor")(
       suite("PolicyClaimStatus")(
         testFlow("PolicyClaimStatus", periodicAdjustClock = Some(1.second)) {

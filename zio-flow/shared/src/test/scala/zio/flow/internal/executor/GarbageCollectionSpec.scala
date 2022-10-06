@@ -6,7 +6,8 @@ import zio.test._
 import zio._
 
 object GarbageCollectionSpec extends PersistentExecutorBaseSpec {
-  override def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any] =
+  override def flowSpec
+    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
     suite("Garbage Collection")(
       testGCFlow("Unused simple variable gets deleted") { break =>
         for {

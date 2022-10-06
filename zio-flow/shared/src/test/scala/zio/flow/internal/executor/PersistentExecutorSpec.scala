@@ -28,7 +28,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       ZFlow.unit
     )
 
-  override def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any] =
+  override def flowSpec
+    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
     suite("Operators in single run")(
       testFlow("succeed")(ZFlow.succeed(12)) { result =>
         assertTrue(result == 12)

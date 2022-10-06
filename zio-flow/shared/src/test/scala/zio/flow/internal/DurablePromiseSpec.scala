@@ -6,15 +6,14 @@ import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 import zio.{Promise, ZEnvironment, ZIO}
 
 object DurablePromiseSpec extends ZIOSpecDefault {
-  private val execEnv = ExecutionEnvironment(Serializer.json, Deserializer.json)
-
   override def spec: Spec[TestEnvironment, Any] =
     suite("DurablePromise")(
       test("Can't fail, await success") {
         val promise = DurablePromise.make[Nothing, Int](PromiseId("dp-1"))
         for {
           log    <- ZIO.service[DurableLog]
-          env     = ZEnvironment(log, execEnv)
+          config <- ZIO.service[Configuration]
+          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
           result <- Promise.make[ExecutorError, Either[Nothing, Int]]
           fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
           _      <- promise.succeed(100).provideEnvironment(env)
@@ -26,7 +25,8 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-2"))
         for {
           log    <- ZIO.service[DurableLog]
-          env     = ZEnvironment(log, execEnv)
+          config <- ZIO.service[Configuration]
+          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
           result <- Promise.make[ExecutorError, Either[String, Int]]
           fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
           _      <- promise.succeed(100).provideEnvironment(env)
@@ -38,7 +38,8 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-3"))
         for {
           log    <- ZIO.service[DurableLog]
-          env     = ZEnvironment(log, execEnv)
+          config <- ZIO.service[Configuration]
+          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
           result <- Promise.make[ExecutorError, Either[String, Int]]
           fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
           _      <- promise.fail("not good").provideEnvironment(env)
@@ -50,7 +51,8 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[Nothing, Int](PromiseId("dp-4"))
         for {
           log    <- ZIO.service[DurableLog]
-          env     = ZEnvironment(log, execEnv)
+          config <- ZIO.service[Configuration]
+          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
           before <- promise.poll.provideEnvironment(env)
           _      <- promise.succeed(100).provideEnvironment(env)
           after  <- promise.poll.provideEnvironment(env)
@@ -60,14 +62,16 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-5"))
         for {
           log    <- ZIO.service[DurableLog]
-          env     = ZEnvironment(log, execEnv)
+          config <- ZIO.service[Configuration]
+          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
           before <- promise.poll.provideEnvironment(env)
           _      <- promise.fail("not good").provideEnvironment(env)
           after  <- promise.poll.provideEnvironment(env)
         } yield assertTrue(before == None) && assertTrue(after == Some(Left("not good")))
       }
     ).provide(
-      DurableLog.live,
-      IndexedStore.inMemory
+      DurableLog.layer,
+      IndexedStore.inMemory,
+      Configuration.inMemory
     )
 }

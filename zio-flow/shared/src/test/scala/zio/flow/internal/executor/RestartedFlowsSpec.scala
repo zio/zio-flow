@@ -7,7 +7,8 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 
 object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
-  override def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore, Any] =
+  override def flowSpec
+    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
     suite("Restarted flows")(
       testRestartFlowAndLogs("log-|-log") { break =>
         for {

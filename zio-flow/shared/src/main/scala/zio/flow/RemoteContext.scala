@@ -105,10 +105,11 @@ object RemoteContext {
       configuration.get[A](key)
   }
 
-  def inMemory(configuration: Configuration): ZIO[Any, Nothing, RemoteContext] =
+  def inMemory: ZIO[Any, Nothing, RemoteContext] =
     (for {
-      vars <- TMap.empty[RemoteVariableName, DynamicValue]
-    } yield InMemory(vars, configuration)).commit
+      vars          <- TMap.empty[RemoteVariableName, DynamicValue].commit
+      configuration <- ZIO.service[Configuration]
+    } yield InMemory(vars, configuration)).provide(Configuration.inMemory)
 
   private final case class Persistent(
     virtualClock: VirtualClock,

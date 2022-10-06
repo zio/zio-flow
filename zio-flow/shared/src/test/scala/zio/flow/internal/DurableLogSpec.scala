@@ -8,7 +8,7 @@ import zio.{Chunk, ZIO, ZLayer}
 object DurableLogSpec extends ZIOSpecDefault {
 
   val durableLog: ZLayer[Any, Nothing, DurableLog with IndexedStore] =
-    IndexedStore.inMemory >+> DurableLog.live
+    IndexedStore.inMemory >+> DurableLog.layer
 
   val values: Gen[Sized, Chunk[Chunk[Byte]]] =
     Gen.chunkOf(Gen.chunkOf(Gen.byte)).noShrink
