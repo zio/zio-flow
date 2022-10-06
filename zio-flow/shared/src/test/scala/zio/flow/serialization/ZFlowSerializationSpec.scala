@@ -1,18 +1,34 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.serialization
 
 import zio.ZIO
 import zio.flow.ZFlow
 import zio.schema.Schema
 import zio.schema.ast.SchemaAst
-import zio.schema.codec.{Codec, JsonCodec}
+import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
 import zio.test._
 
 object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
   override def spec: Spec[TestEnvironment, Any] =
     suite("ZFlow serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec)
-        // equalityWithCodec(ProtobufCodec) // TODO: fix
+        equalityWithCodec(JsonCodec),
+        equalityWithCodec(ProtobufCodec)
       ),
       test("ZFlow schema is serializable") {
         val schema             = ZFlow.schema[Any, Any, Any]
@@ -67,7 +83,7 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
     val encoded = codec.encode(ZFlow.schema[Any, Any, Any])(value)
     val decoded = codec.decode(ZFlow.schema[Any, Any, Any])(encoded)
 
-    //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
+    // println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 
     assertTrue(decoded == Right(value))
   }

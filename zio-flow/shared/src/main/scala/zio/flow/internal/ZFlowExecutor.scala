@@ -17,10 +17,9 @@
 package zio.flow.internal
 
 import zio._
+import zio.flow.internal.PersistentExecutor.FlowResult
 import zio.flow.{FlowId, ZFlow}
-import zio.schema.Schema
-
-import java.io.IOException
+import zio.schema.{DynamicValue, Schema}
 
 trait ZFlowExecutor {
 
@@ -33,11 +32,33 @@ trait ZFlowExecutor {
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
 
   /**
+   * Submits a flow to be executed and returns a durable promise that will
+   * complete when the flow completes.
+   *
+   * If the executor is already running a flow with the given ID, the existing
+   * flow's durable promise will be returned
+   */
+  def start[E, A](
+    id: FlowId,
+    flow: ZFlow[Any, E, A]
+  ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]]
+
+  /**
+   * Poll currently running and complete workflows.
+   *
+   * If the workflow with the provided id is completed, it will be returned.
+   */
+  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]]
+
+  /**
    * Restart all known persisted running flows after recreating an executor.
    *
-   * Executors with no support for persistency should do nothing.
+   * Executors with no support for persistence should do nothing.
    */
-  def restartAll(): ZIO[Any, IOException, Unit]
+  def restartAll(): ZIO[Any, ExecutorError, Unit]
+
+  /** Force a GC run manually */
+  def forceGarbageCollection(): ZIO[Any, Nothing, Unit]
 }
 
 object ZFlowExecutor {}

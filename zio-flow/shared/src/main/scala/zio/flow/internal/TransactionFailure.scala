@@ -1,15 +1,33 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.internal
 
-import zio.flow.SchemaAndValue
-import zio.schema.{DynamicValue, Schema}
+import zio.schema.{DynamicValue, Schema, TypeId}
 
 sealed trait TransactionFailure[+E]
 object TransactionFailure {
   case object Retry                  extends TransactionFailure[Nothing]
   final case class Fail[E](value: E) extends TransactionFailure[E]
 
+  private val typeId: TypeId = TypeId.parse("zio.flow.internal.TransactionFailure")
+
   implicit def schema[E: Schema]: Schema[TransactionFailure[E]] =
     Schema.Enum2(
+      typeId,
       Schema.Case[Retry.type, TransactionFailure[E]](
         "Retry",
         Schema.singleton(Retry),
@@ -22,29 +40,21 @@ object TransactionFailure {
       )
     )
 
-  def wrapDynamic[E](value: SchemaAndValue[E]): SchemaAndValue[TransactionFailure[E]] = {
-    val result = SchemaAndValue(
-      schema(value.schema),
-      DynamicValue.Enumeration(
-        "Fail" -> value.value
-      )
-    )
-    result
-  }
+  /** Wraps a dynamic value E with TransactionFailure.Fail(value) */
+  def wrapDynamic[E](value: DynamicValue): DynamicValue =
+    DynamicValue.Enumeration(typeId, "Fail" -> value)
 
-  def unwrapDynamic(schemaAndValue: SchemaAndValue[Any]): Option[SchemaAndValue[Any]] =
-    schemaAndValue.value match {
-      case DynamicValue.Enumeration((name, value)) =>
+  /**
+   * Unwraps a dynamic value of type TransactionFailure.Fail or returns None if
+   * it was TransactionFailure.Retry
+   */
+  def unwrapDynamic(dynamicValue: DynamicValue): Option[DynamicValue] =
+    dynamicValue match {
+      case DynamicValue.Enumeration(_, (name, value)) =>
         name match {
           case "Retry" => None
           case "Fail" =>
-            val errorSchema = schemaAndValue.schema match {
-              case Schema.Enum2(_, failSchema, _) =>
-                failSchema.codec
-              case _ =>
-                throw new IllegalArgumentException(s"TransactionFailure.unwrapDynamic called with an unexpected schema")
-            }
-            Some(SchemaAndValue(errorSchema, value))
+            Some(value)
           case _ =>
             throw new IllegalArgumentException(s"TransactionFailure.unwrapDynamic called with an unexpected schema")
         }

@@ -33,6 +33,12 @@ Come chat with us on [![Badge-Discord]][Link-Discord].
 # License
 [License](LICENSE)
 
+# Sponsors
+
+[![YourKit][Image-YourKit]][Link-YourKit]
+
+[YourKit][Link-YourKit] generously provides use of their monitoring and profiling tools to maximize the performance of ZIO applications.
+
 [Badge-SonatypeReleases]: https://img.shields.io/nexus/r/https/oss.sonatype.org/dev.zio/zio-flow_2.12.svg "Sonatype Releases"
 [Badge-SonatypeSnapshots]: https://img.shields.io/nexus/s/https/oss.sonatype.org/dev.zio/zio-flow_2.12.svg "Sonatype Snapshots"
 [Badge-Discord]: https://img.shields.io/discord/629491597070827530?logo=discord "chat on discord"

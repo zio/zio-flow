@@ -1,5 +1,9 @@
 package zio.flow
 
-import zio.test.ZIOSpecDefault
+import zio.ZLayer
+import zio.test.{TestEnvironment, ZIOSpecDefault, testEnvironment}
 
-trait ZIOFlowBaseSpec extends ZIOSpecDefault {}
+trait ZIOFlowBaseSpec extends ZIOSpecDefault {
+
+  override val bootstrap: ZLayer[Any, Any, TestEnvironment] = testEnvironment ++ DumpMetrics.layer
+}

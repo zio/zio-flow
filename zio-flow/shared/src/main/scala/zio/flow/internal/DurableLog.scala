@@ -20,23 +20,23 @@ import zio._
 import zio.flow.internal.IndexedStore.Index
 import zio.stream._
 
-import java.io.IOException
-
 trait DurableLog {
-  def append(topic: String, value: Chunk[Byte]): IO[IOException, Index]
-  def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
-  def getAllAvailable(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]]
+  def append(topic: String, value: Chunk[Byte]): IO[DurableLogError, Index]
+  def subscribe(topic: String, position: Index): ZStream[Any, DurableLogError, Chunk[Byte]]
+  def getAllAvailable(topic: String, position: Index): ZStream[Any, DurableLogError, Chunk[Byte]]
 }
 
 object DurableLog {
-  def append(topic: String, value: Chunk[Byte]): ZIO[DurableLog, IOException, Index] =
+  def append(topic: String, value: Chunk[Byte]): ZIO[DurableLog, DurableLogError, Index] =
     ZIO.serviceWithZIO(_.append(topic, value))
 
-  def subscribe(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
+  def subscribe(topic: String, position: Index): ZStream[DurableLog, DurableLogError, Chunk[Byte]] =
     ZStream.serviceWithStream(_.subscribe(topic, position))
 
-  def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, IOException, Chunk[Byte]] =
+  def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, DurableLogError, Chunk[Byte]] =
     ZStream.serviceWithStream(_.getAllAvailable(topic, position))
+
+  val any: ZLayer[DurableLog, Nothing, DurableLog] = ZLayer.service[DurableLog]
 
   val live: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.scoped {
@@ -51,47 +51,64 @@ object DurableLog {
     topics: Ref[Map[String, Topic]],
     indexedStore: IndexedStore
   ) extends DurableLog {
-    def append(topic: String, value: Chunk[Byte]): IO[IOException, Index] =
+    def append(topic: String, value: Chunk[Byte]): IO[DurableLogError, Index] =
       getTopic(topic).flatMap { case Topic(hub, semaphore) =>
         semaphore.withPermit {
-          indexedStore.put(topic, value).flatMap { position =>
-            hub.publish(value -> position) *>
-              ZIO.succeedNow(position)
-          }
+          indexedStore
+            .put(topic, value)
+            .mapError(DurableLogError.IndexedStoreError("put", _))
+            .flatMap { position =>
+              hub.publish(value -> position) *>
+                ZIO.succeedNow(position)
+            }
         }
       }
-    def subscribe(topic: String, position: Index): ZStream[Any, IOException, Chunk[Byte]] =
+    def subscribe(topic: String, position: Index): ZStream[Any, DurableLogError, Chunk[Byte]] =
       ZStream.unwrapScoped {
         getTopic(topic).flatMap { case Topic(hub, _) =>
           hub.subscribe.flatMap { subscription =>
             subscription.size.flatMap { size =>
               if (size > 0)
                 subscription.take.map { case (value, index) =>
-                  indexedStore.scan(topic, position, index) ++
+                  indexedStore
+                    .scan(topic, position, index)
+                    .mapError(DurableLogError.IndexedStoreError("scan", _)) ++
                     ZStream(value) ++
                     ZStream.fromQueue(subscription).map(_._1)
                 }
               else
-                indexedStore.position(topic).map { currentPosition =>
-                  indexedStore.scan(topic, position, currentPosition) ++
-                    collectFrom(ZStream.fromQueue(subscription), currentPosition)
-                }
+                indexedStore
+                  .position(topic)
+                  .mapBoth(
+                    DurableLogError.IndexedStoreError("position", _),
+                    currentPosition =>
+                      indexedStore
+                        .scan(topic, position, currentPosition)
+                        .mapError(DurableLogError.IndexedStoreError("scan", _)) ++
+                        collectFrom(ZStream.fromQueue(subscription), currentPosition)
+                  )
             }
           }
         }
       }
 
-    def getAllAvailable(topic: String, position: IndexedStore.Index): ZStream[Any, IOException, Chunk[Byte]] =
+    def getAllAvailable(topic: String, position: IndexedStore.Index): ZStream[Any, DurableLogError, Chunk[Byte]] =
       ZStream.unwrap {
-        indexedStore.position(topic).map { current =>
-          indexedStore.scan(topic, position, current)
-        }
+        indexedStore
+          .position(topic)
+          .mapBoth(
+            DurableLogError.IndexedStoreError("position", _),
+            current =>
+              indexedStore
+                .scan(topic, position, current)
+                .mapError(DurableLogError.IndexedStoreError("scan", _))
+          )
       }
 
     private def collectFrom(
-      stream: ZStream[Any, IOException, (Chunk[Byte], Index)],
+      stream: ZStream[Any, DurableLogError, (Chunk[Byte], Index)],
       position: Index
-    ): ZStream[Any, IOException, Chunk[Byte]] =
+    ): ZStream[Any, DurableLogError, Chunk[Byte]] =
       stream.collect { case (value, index) if index >= position => value }
 
     private def getTopic(topic: String): UIO[Topic] =
@@ -100,9 +117,10 @@ object DurableLog {
           case Some(Topic(hub, semaphore)) =>
             Topic(hub, semaphore) -> topics
           case None =>
-            val hub       = unsafeMakeHub[(Chunk[Byte], Index)]()
-            val semaphore = unsafeMakeSemaphore(1)
-            Topic(hub, semaphore) -> topics.updated(topic, Topic(hub, semaphore))
+            Unsafe.unsafe { implicit u =>
+              val topicInstance = Topic.make
+              topicInstance -> topics.updated(topic, topicInstance)
+            }
         }
       }
   }
@@ -110,13 +128,13 @@ object DurableLog {
   private final case class Topic(hub: Hub[(Chunk[Byte], Index)], semaphore: Semaphore)
 
   private object Topic {
-    def unsafeMake(): Topic =
-      Topic(unsafeMakeHub[(Chunk[Byte], Index)](), unsafeMakeSemaphore(1))
+    def make(implicit unsafe: Unsafe): Topic =
+      Topic(makeHub[(Chunk[Byte], Index)], makeSemaphore(1))
   }
 
-  private def unsafeMakeHub[A](): Hub[A] =
-    Runtime.default.unsafeRun(Hub.unbounded[A])
+  private def makeHub[A](implicit unsafe: Unsafe): Hub[A] =
+    Runtime.default.unsafe.run(Hub.unbounded[A]).getOrThrowFiberFailure()
 
-  private def unsafeMakeSemaphore(permits: Long): Semaphore =
-    Runtime.default.unsafeRun(Semaphore.make(permits))
+  private def makeSemaphore(permits: Long)(implicit unsafe: Unsafe): Semaphore =
+    Runtime.default.unsafe.run(Semaphore.make(permits)).getOrThrowFiberFailure()
 }
