@@ -2856,6 +2856,25 @@ object Remote {
       OpticGet(optic, value.substituteRec(f))
   }
 
+  object OpticGet {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.OpticGet")
+
+    def schema[S, A, R]: Schema[OpticGet[S, A, R]] =
+      Schema.defer(
+        Schema.CaseClass2[RemoteOptic[S, A], Remote[S], OpticGet[S, A, R]](
+          typeId,
+          Schema.Field("optic", RemoteOptic.schema[S, A]),
+          Schema.Field("value", Remote.schema[S]),
+          OpticGet(_, _),
+          _.optic,
+          _.value
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[OpticGet[Any, Any, A], Remote[A]] =
+      Schema.Case("OpticGet", schema, _.asInstanceOf[OpticGet[Any, Any, A]])
+  }
+
   final case class OpticSet[S, A, V, R](optic: RemoteOptic[S, A], on: Remote[S], value: Remote[V]) extends Remote[R] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       optic match {
@@ -2933,6 +2952,27 @@ object Remote {
 
     override protected def substituteRec(f: Substitutions): Remote[R] =
       OpticSet(optic, on.substituteRec(f), value.substituteRec(f))
+  }
+
+  object OpticSet {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.OpticSet")
+
+    def schema[S, A, V, R]: Schema[OpticSet[S, A, V, R]] =
+      Schema.defer(
+        Schema.CaseClass3[RemoteOptic[S, A], Remote[S], Remote[V], OpticSet[S, A, V, R]](
+          typeId,
+          Schema.Field("optic", RemoteOptic.schema[S, A]),
+          Schema.Field("on", Remote.schema[S]),
+          Schema.Field("value", Remote.schema[V]),
+          OpticSet(_, _, _),
+          _.optic,
+          _.on,
+          _.value
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[OpticSet[Any, Any, Any, A], Remote[A]] =
+      Schema.Case("OpticSet", schema, _.asInstanceOf[OpticSet[Any, Any, Any, A]])
   }
 
   case class EvaluatedRemoteFunction[-A, +B](result: DynamicValue) extends AnyVal
@@ -3569,6 +3609,8 @@ object Remote {
       .:+:(ListToSet.schemaCase[A])
       .:+:(SetToList.schemaCase[A])
       .:+:(ListToString.schemaCase[A])
+      .:+:(OpticGet.schemaCase[A])
+      .:+:(OpticSet.schemaCase[A])
   )
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]

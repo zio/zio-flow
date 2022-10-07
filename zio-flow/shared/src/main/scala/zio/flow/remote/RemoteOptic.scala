@@ -86,10 +86,7 @@ object RemoteOptic {
         .:+:(
           Schema.Case[Traversal[A, B], RemoteOptic[A, B]](
             "Traversal",
-            Schema.CaseClass0(
-              TypeId.parse("zio.flow.remote.RemoteOptic.Traversal"),
-              () => Traversal[A, B]()
-            ),
+            Schema.singleton(Traversal[A, B]()),
             _.asInstanceOf[Traversal[A, B]]
           )
         )
