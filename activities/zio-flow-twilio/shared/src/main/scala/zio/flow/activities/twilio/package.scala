@@ -19,7 +19,7 @@ package object twilio {
         API
           .post("2010-04-01" / "Accounts" / string / "Messages.json")
           .header(Header.string("Authorization"))
-          .input[CreateMessage]
+          .input[CreateMessage](ContentType.`x-www-form-urlencoded`)
           .output[Message]
       ),
       check = ZFlow.fail(ActivityError("Check not supported", None)),
@@ -54,10 +54,6 @@ package object twilio {
     }
 
   // TODO: host should be configurable
-
-  // TODO: basic auth helper in the http api?
-  // TODO: support application/x-www-form-urlencoded
-
   // TODO: predefined flows for check/compensate not supported
   // TODO: test json format matches spec
 

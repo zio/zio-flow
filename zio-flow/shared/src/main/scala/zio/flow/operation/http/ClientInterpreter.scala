@@ -141,5 +141,10 @@ private[http] object ClientInterpreter {
     body: Body[Params],
     state: RequestState
   )(params: Params): Unit =
-    state.setBody(JsonCodec.encode(body.schema)(params))
+    body.contentType match {
+      case ContentType.json =>
+        state.setBody(JsonCodec.encode(body.schema)(params))
+      case ContentType.`x-www-form-urlencoded` =>
+        state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params))
+    }
 }

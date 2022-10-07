@@ -171,18 +171,20 @@ object Header {
   }
 }
 
-case class Body[A](override val schema: Schema[A]) extends RequestInput[A] { self =>
+case class Body[A](override val schema: Schema[A], contentType: ContentType) extends RequestInput[A] { self =>
   def ++[B](that: Body[B]): Body[B] = that
 }
 
 object Body {
   private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Body")
 
-  def schema[A]: Schema[Body[A]] = Schema.CaseClass1[FlowSchemaAst, Body[A]](
+  def schema[A]: Schema[Body[A]] = Schema.CaseClass2[FlowSchemaAst, ContentType, Body[A]](
     typeId,
     Schema.Field("schema", FlowSchemaAst.schema),
-    a => Body(a.toSchema[A]),
-    s => FlowSchemaAst.fromSchema(s.schema)
+    Schema.Field("contentType", Schema[ContentType]),
+    (ast, contentType) => Body(ast.toSchema[A], contentType),
+    s => FlowSchemaAst.fromSchema(s.schema),
+    _.contentType
   )
 
   def schemaCase[A]: Schema.Case[Body[A], RequestInput[A]] =
