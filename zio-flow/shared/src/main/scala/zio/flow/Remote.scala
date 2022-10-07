@@ -17,7 +17,15 @@
 package zio.flow
 
 import zio.flow.Remote.Debug.DebugMode
-import zio.flow.remote.{BinaryOperators, DynamicValueHelpers, InternalRemoteTracking, RemoteConversions, UnaryOperators}
+import zio.flow.remote.{
+  BinaryOperators,
+  DynamicValueHelpers,
+  InternalRemoteTracking,
+  RemoteAccessorBuilder,
+  RemoteConversions,
+  RemoteOptic,
+  UnaryOperators
+}
 import zio.flow.remote.RemoteTuples._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
@@ -94,15 +102,15 @@ sealed trait Remote[+A] { self =>
 }
 
 object Remote {
-//
-//  /**
-//   * Constructs accessors that can be used modify remote versions of user
-//   * defined data types.
-//   */
-//  def makeAccessors[A](implicit
-//    schema: Schema[A]
-//  ): schema.schema.Accessors[RemoteLens, RemotePrism, RemoteTraversal] =
-//    schema.schema.makeAccessors(RemoteAccessorBuilder)
+
+  /**
+   * Constructs accessors that can be used modify remote versions of user
+   * defined data types.
+   */
+  def makeAccessors[A](implicit
+    schema: Schema[A]
+  ): schema.Accessors[RemoteOptic.Lens, RemoteOptic.Prism, RemoteOptic.Traversal] =
+    schema.makeAccessors(RemoteAccessorBuilder)
 
   final case class Literal[A](value: DynamicValue) extends Remote[A] {
 
@@ -2824,80 +2832,189 @@ object Remote {
       Schema.Case("ListToString", schema, _.asInstanceOf[ListToString])
   }
 
-//  final case class LensGet[S, A](whole: Remote[S], lens: RemoteLens[S, A]) extends Remote[A] {
-//    val schema: Schema[A] = SchemaOrNothing.fromSchema(lens.schemaPiece)
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[A], SchemaAndValue[A]]] =
-//      whole.evalWithSchema.map {
-//        case Right(SchemaAndValue(_, whole)) => Right(SchemaAndValue(lens.schemaPiece, lens.unsafeGet(whole)))
-//        case _                               => Left(self)
-//      }
-//  }
-//
-//  final case class LensSet[S, A](whole: Remote[S], piece: Remote[A], lens: RemoteLens[S, A]) extends Remote[S] {
-//    val schema: Schema[S] = SchemaOrNothing.fromSchema(lens.schemaWhole)
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
-//      whole.evalWithSchema.flatMap {
-//        case Right(SchemaAndValue(_, whole)) =>
-//          piece.evalWithSchema.flatMap {
-//            case Right(SchemaAndValue(_, piece)) =>
-//              val newValue = lens.unsafeSet(piece)(whole)
-//              ZIO.right(SchemaAndValue(lens.schemaWhole, newValue))
-//            case _ => ZIO.left(self)
-//          }
-//        case _ => ZIO.left(self)
-//      }
-//  }
-//
-//  final case class PrismGet[S, A](whole: Remote[S], prism: RemotePrism[S, A]) extends Remote[Option[A]] {
-//    val schema: Schema[Option[A]] = SchemaOrNothing.fromSchema(Schema.option(prism.schemaPiece))
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[Option[A]], SchemaAndValue[Option[A]]]] =
-//      whole.evalWithSchema.map {
-//        case Right(SchemaAndValue(_, whole)) =>
-//          Right(SchemaAndValue(Schema.option(prism.schemaPiece), prism.unsafeGet(whole)))
-//        case _ => Left(self)
-//      }
-//  }
-//
-//  final case class PrismSet[S, A](piece: Remote[A], prism: RemotePrism[S, A]) extends Remote[S] {
-//    val schema: Schema[S] = SchemaOrNothing.fromSchema(prism.schemaWhole)
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
-//      piece.evalWithSchema.map {
-//        case Right(SchemaAndValue(_, piece)) => Right(SchemaAndValue(prism.schemaWhole, prism.unsafeSet(piece)))
-//        case _                               => Left(self)
-//      }
-//  }
-//
-//  final case class TraversalGet[S, A](whole: Remote[S], traversal: RemoteTraversal[S, A]) extends Remote[Chunk[A]] {
-//    val schema: Schema[Chunk[A]] = SchemaOrNothing.fromSchema(Schema.chunk(traversal.schemaPiece))
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[Chunk[A]], SchemaAndValue[Chunk[A]]]] =
-//      whole.evalWithSchema.map {
-//        case Right(SchemaAndValue(_, whole)) =>
-//          Right(SchemaAndValue(Schema.chunk(traversal.schemaPiece), traversal.unsafeGet(whole)))
-//        case _ => Left(self)
-//      }
-//  }
-//
-//  final case class TraversalSet[S, A](whole: Remote[S], piece: Remote[Chunk[A]], traversal: RemoteTraversal[S, A])
-//      extends Remote[S] {
-//    val schema: Schema[S] = SchemaOrNothing.fromSchema(traversal.schemaWhole)
-//
-//    def evalWithSchema: ZIO[LocalContext with RemoteContext, Nothing, Either[Remote[S], SchemaAndValue[S]]] =
-//      whole.evalWithSchema.flatMap {
-//        case Right(SchemaAndValue(_, whole)) =>
-//          piece.evalWithSchema.flatMap {
-//            case Right(SchemaAndValue(_, piece)) =>
-//              val newValue = traversal.unsafeSet(whole)(piece)
-//              ZIO.right(SchemaAndValue(traversal.schemaWhole, newValue))
-//            case _ => ZIO.left(self)
-//          }
-//        case _ => ZIO.left(self)
-//      }
-//  }
+  final case class OpticGet[S, A, R](optic: RemoteOptic[S, A], value: Remote[S]) extends Remote[R] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      value.evalDynamic.flatMap { dynValue =>
+        optic match {
+          case RemoteOptic.Lens(fieldName) =>
+            dynValue match {
+              case DynamicValue.Record(_, fields) =>
+                fields.get(fieldName) match {
+                  case Some(value) => ZIO.succeed(value)
+                  case None        => ZIO.fail(RemoteEvaluationError.FieldNotFound(s"Could not find $fieldName in record"))
+                }
+
+              case _ =>
+                ZIO.fail(
+                  RemoteEvaluationError.UnexpectedDynamicValue(
+                    s"Unexpected value in Remote.OpticGet(Lens) of type ${dynValue.getClass.getSimpleName}"
+                  )
+                )
+            }
+
+          case RemoteOptic.Prism(_, termName) =>
+            dynValue match {
+              case DynamicValue.Enumeration(_, (id, value)) =>
+                if (id == termName)
+                  ZIO.succeed(DynamicValue.SomeValue(value))
+                else
+                  ZIO.succeed(DynamicValue.NoneValue)
+
+              case _ =>
+                ZIO.fail(
+                  RemoteEvaluationError.UnexpectedDynamicValue(
+                    s"Unexpected value in Remote.OpticGet(Prism) of type ${dynValue.getClass.getSimpleName}"
+                  )
+                )
+            }
+
+          case RemoteOptic.Traversal() =>
+            dynValue match {
+              case DynamicValue.Sequence(_) =>
+                ZIO.succeed(dynValue)
+              case DynamicValue.Dictionary(entries) =>
+                ZIO.succeed(
+                  DynamicValue.Sequence(
+                    entries.map { case (k, v) => DynamicValue.Tuple(k, v) }
+                  )
+                )
+              case DynamicValue.SetValue(values) =>
+                ZIO.succeed(DynamicValue.Sequence(Chunk.fromIterable(values)))
+              case _ =>
+                ZIO.fail(
+                  RemoteEvaluationError.UnexpectedDynamicValue(
+                    s"Unexpected value in Remote.OpticGet(Traversal) of type ${dynValue.getClass.getSimpleName}"
+                  )
+                )
+            }
+        }
+      }
+
+    override private[flow] def variableUsage =
+      value.variableUsage
+
+    override protected def substituteRec(f: Substitutions): Remote[R] =
+      OpticGet(optic, value.substituteRec(f))
+  }
+
+  object OpticGet {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.OpticGet")
+
+    def schema[S, A, R]: Schema[OpticGet[S, A, R]] =
+      Schema.defer(
+        Schema.CaseClass2[RemoteOptic[S, A], Remote[S], OpticGet[S, A, R]](
+          typeId,
+          Schema.Field("optic", RemoteOptic.schema[S, A]),
+          Schema.Field("value", Remote.schema[S]),
+          OpticGet(_, _),
+          _.optic,
+          _.value
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[OpticGet[Any, Any, A], Remote[A]] =
+      Schema.Case("OpticGet", schema, _.asInstanceOf[OpticGet[Any, Any, A]])
+  }
+
+  final case class OpticSet[S, A, V, R](optic: RemoteOptic[S, A], on: Remote[S], value: Remote[V]) extends Remote[R] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      optic match {
+        case RemoteOptic.Lens(fieldName) =>
+          for {
+            dynRecord <- on.evalDynamic
+            dynValue  <- value.evalDynamic
+            result <- dynRecord match {
+                        case DynamicValue.Record(id, fields) =>
+                          if (fields.contains(fieldName)) {
+                            ZIO.succeed(DynamicValue.Record(id, fields.updated(fieldName, dynValue)))
+                          } else {
+                            ZIO.fail(RemoteEvaluationError.FieldNotFound(s"Could not find $fieldName in record"))
+                          }
+                        case _ =>
+                          ZIO.fail(
+                            RemoteEvaluationError.UnexpectedDynamicValue(
+                              s"Unexpected value in Remote.OpticSet(Lens) of type ${dynValue.getClass.getSimpleName}"
+                            )
+                          )
+                      }
+          } yield result
+
+        case RemoteOptic.Prism(sumTypeId, termName) =>
+          value.evalDynamic.map { dynValue =>
+            DynamicValue.Enumeration(sumTypeId, (termName, dynValue))
+          }
+
+        case RemoteOptic.Traversal() =>
+          for {
+            dynRecord <- on.evalDynamic
+            dynValue  <- value.evalDynamic
+            dynSequence <- dynValue match {
+                             case seq @ DynamicValue.Sequence(_) =>
+                               ZIO.succeed(seq)
+                             case _ =>
+                               ZIO.fail(
+                                 RemoteEvaluationError.UnexpectedDynamicValue(
+                                   s"Unexpected target value in Remote.OpticsSet(Traversal) of type ${dynValue.getClass.getSimpleName}"
+                                 )
+                               )
+                           }
+            result <- dynRecord match {
+                        case DynamicValue.Sequence(_) =>
+                          ZIO.succeed(dynSequence)
+                        case DynamicValue.Dictionary(_) =>
+                          ZIO
+                            .foreach(dynSequence.values) {
+                              case DynamicValue.Tuple(key, value) =>
+                                ZIO.succeed((key, value))
+                              case dynItem =>
+                                ZIO.fail(
+                                  RemoteEvaluationError.UnexpectedDynamicValue(
+                                    s"Unexpected item value in Remote.OpticsSet(Traversal) of type ${dynItem.getClass.getSimpleName}"
+                                  )
+                                )
+                            }
+                            .map { pairs =>
+                              DynamicValue.Dictionary(pairs)
+                            }
+                        case DynamicValue.SetValue(_) =>
+                          ZIO.succeed(DynamicValue.SetValue(dynSequence.values.toSet))
+                        case _ =>
+                          ZIO.fail(
+                            RemoteEvaluationError.UnexpectedDynamicValue(
+                              s"Unexpected source value in Remote.OpticSet(Traversal) of type ${dynValue.getClass.getSimpleName}"
+                            )
+                          )
+                      }
+          } yield result
+      }
+
+    override private[flow] def variableUsage =
+      value.variableUsage.union(on.variableUsage)
+
+    override protected def substituteRec(f: Substitutions): Remote[R] =
+      OpticSet(optic, on.substituteRec(f), value.substituteRec(f))
+  }
+
+  object OpticSet {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.OpticSet")
+
+    def schema[S, A, V, R]: Schema[OpticSet[S, A, V, R]] =
+      Schema.defer(
+        Schema.CaseClass3[RemoteOptic[S, A], Remote[S], Remote[V], OpticSet[S, A, V, R]](
+          typeId,
+          Schema.Field("optic", RemoteOptic.schema[S, A]),
+          Schema.Field("on", Remote.schema[S]),
+          Schema.Field("value", Remote.schema[V]),
+          OpticSet(_, _, _),
+          _.optic,
+          _.on,
+          _.value
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[OpticSet[Any, Any, Any, A], Remote[A]] =
+      Schema.Case("OpticSet", schema, _.asInstanceOf[OpticSet[Any, Any, Any, A]])
+  }
 
   case class EvaluatedRemoteFunction[-A, +B](result: DynamicValue) extends AnyVal
 
@@ -3536,6 +3653,8 @@ object Remote {
       .:+:(ListToSet.schemaCase[A])
       .:+:(SetToList.schemaCase[A])
       .:+:(ListToString.schemaCase[A])
+      .:+:(OpticGet.schemaCase[A])
+      .:+:(OpticSet.schemaCase[A])
   )
 
   implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]

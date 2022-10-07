@@ -47,7 +47,7 @@ import zio.flow.{
   TransactionId,
   ZFlow
 }
-import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema}
+import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema, TypeId}
 import zio.test.{Gen, Sized}
 import zio.{Duration, ZNothing, flow}
 
@@ -55,7 +55,7 @@ import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
-import zio.flow.remote.{BinaryOperators, RemoteConversions, UnaryOperators}
+import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
 
 trait Generators extends DefaultJavaTimeSchemas {
 
@@ -758,6 +758,40 @@ trait Generators extends DefaultJavaTimeSchemas {
       sep   <- Gen.string
       end   <- Gen.string
     } yield Remote.ListToString(Remote(list).map(_.toString), Remote(start), Remote(sep), Remote(end))
+
+  lazy val genOpticGet: Gen[Sized, Remote[Any]] =
+    Gen.oneOf(
+      for {
+        fieldName <- Gen.alphaNumericStringBounded(1, 16)
+        value     <- genRemoteVariable
+      } yield Remote.OpticGet(RemoteOptic.Lens(fieldName), value),
+      for {
+        typeId   <- Gen.alphaNumericStringBounded(1, 16).map(TypeId.parse)
+        termName <- Gen.alphaNumericStringBounded(1, 16)
+        value    <- genRemoteVariable
+      } yield Remote.OpticGet(RemoteOptic.Prism(typeId, termName), value),
+      for {
+        value <- genCons
+      } yield Remote.OpticGet(RemoteOptic.Traversal(), value)
+    )
+
+  lazy val genOpticSet: Gen[Sized, Remote[Any]] =
+    Gen.oneOf(
+      for {
+        fieldName <- Gen.alphaNumericStringBounded(1, 16)
+        value     <- genRemoteVariable
+        field     <- genRemoteVariable
+      } yield Remote.OpticSet(RemoteOptic.Lens(fieldName), value, field),
+      for {
+        typeId   <- Gen.alphaNumericStringBounded(1, 16).map(TypeId.parse)
+        termName <- Gen.alphaNumericStringBounded(1, 16)
+        value    <- genRemoteVariable
+      } yield Remote.OpticSet(RemoteOptic.Prism(typeId, termName), Remote.fail("-"), value),
+      for {
+        value  <- genCons
+        value2 <- genCons
+      } yield Remote.OpticSet(RemoteOptic.Traversal(), value, value2)
+    )
 
   lazy val genZFlowReturn: Gen[Sized, ZFlow.Return[Any]] =
     Gen
