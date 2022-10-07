@@ -25,16 +25,16 @@ import zio.schema._
  */
 object RemoteAccessorBuilder extends AccessorBuilder {
 
-  override type Lens[S, A]      = RemoteLens[S, A]
-  override type Prism[S, A]     = RemotePrism[S, A]
-  override type Traversal[S, A] = RemoteTraversal[S, A]
+  override type Lens[F, S, A]   = RemoteOptic.Lens[F, S, A]
+  override type Prism[F, S, A]  = RemoteOptic.Prism[F, S, A]
+  override type Traversal[S, A] = RemoteOptic.Traversal[S, A]
 
-  override def makeLens[S, A](product: Schema.Record[S], term: Schema.Field[A]): Lens[S, A] =
-    RemoteLens.unsafeMake(product, term)
+  override def makeLens[F, S, A](product: Schema.Record[S], term: Schema.Field[A]): Lens[F, S, A] =
+    RemoteOptic.Lens(term.label)
 
-  override def makePrism[S, A](sum: Schema.Enum[S], term: Schema.Case[A, S]): Prism[S, A] =
-    RemotePrism.unsafeMake(sum, term)
+  override def makePrism[F, S, A](sum: Schema.Enum[S], term: Schema.Case[A, S]): Prism[F, S, A] =
+    RemoteOptic.Prism(sum.id, term.id)
 
   override def makeTraversal[S, A](collection: Schema.Collection[S, A], element: Schema[A]): Traversal[S, A] =
-    RemoteTraversal.unsafeMake(collection, element)
+    RemoteOptic.Traversal()
 }

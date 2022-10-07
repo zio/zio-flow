@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.flow.{Remote, RemoteContext}
+import zio.flow.{LocalContext, Remote, RemoteContext}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio._
 import zio.schema._
@@ -15,7 +15,7 @@ object RemoteOpticsSpec extends RemoteSpecBase {
     val (name, age)     = Remote.makeAccessors[Person]
   }
 
-  val genPerson: Gen[Random with Sized, Person] =
+  val genPerson: Gen[Any, Person] =
     for {
       name <- Gen.string
       age  <- Gen.int
@@ -40,7 +40,7 @@ object RemoteOpticsSpec extends RemoteSpecBase {
     val (blue, green, red) = Remote.makeAccessors[Color]
   }
 
-  val genColor: Gen[Random with Sized, Color] =
+  val genColor: Gen[Any, Color] =
     Gen.elements(Red, Green, Blue)
 
   def spec = suite("RemoteOpticsSpec")(
@@ -66,6 +66,6 @@ object RemoteOpticsSpec extends RemoteSpecBase {
         Color.blue.set(Remote(Blue)) <-> Blue
       }
     )
-  ).provideCustom(ZLayer(RemoteContext.inMemory), zio.Random.live)
+  ).provide(ZLayer(RemoteContext.inMemory), LocalContext.inMemory)
 
 }
