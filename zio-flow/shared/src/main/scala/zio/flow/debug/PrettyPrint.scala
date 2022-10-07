@@ -773,6 +773,8 @@ object PrettyPrint {
       case Remote.SetToList(_)             => ???
       case Remote.ListToSet(_)             => ???
       case Remote.ListToString(_, _, _, _) => ???
+      case Remote.OpticGet(_, _)           => ???
+      case Remote.OpticSet(_, _, _)        => ???
     }
   }
 

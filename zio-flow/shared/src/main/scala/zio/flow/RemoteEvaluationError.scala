@@ -30,6 +30,7 @@ sealed trait RemoteEvaluationError { self =>
     case RemoteEvaluationError.RemoteContextError(error)       => error.toMessage
     case RemoteEvaluationError.RemoteFail(message)             => message
     case RemoteEvaluationError.EvaluationException(failure)    => s"Remote evaluation failed: ${failure.getMessage}"
+    case RemoteEvaluationError.FieldNotFound(fieldName)        => s"Could not find field $fieldName"
   }
 }
 
@@ -42,6 +43,7 @@ object RemoteEvaluationError {
   final case class RemoteContextError(error: ExecutorError)   extends RemoteEvaluationError
   final case class RemoteFail(message: String)                extends RemoteEvaluationError
   final case class EvaluationException(failure: Throwable)    extends RemoteEvaluationError
+  final case class FieldNotFound(fieldName: String)           extends RemoteEvaluationError
 
   implicit val schema: Schema[RemoteEvaluationError] = DeriveSchema.gen
 }
