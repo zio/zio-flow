@@ -54,6 +54,9 @@ final case class Activity[-Input, Result](
       check = ZFlow.input[Input2].flatMap(input2 => from(input2)).flatMap(input => check.provide(input))
     )
 
+  def fromInput: ZFlow[Input, ActivityError, Result] =
+    ZFlow.input[Input].flatMap(apply)
+
   def narrow[Input0](implicit ev: Input0 <:< Input): Activity[Input0, Result] = {
     val _ = ev
 

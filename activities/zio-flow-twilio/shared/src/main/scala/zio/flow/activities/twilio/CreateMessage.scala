@@ -19,5 +19,8 @@ final case class CreateMessage(
 // TODO: get rid of eithers
 
 object CreateMessage {
-  implicit val schema: Schema[CreateMessage] = DeriveSchema.gen
+  implicit val schema = DeriveSchema.gen[CreateMessage]
+
+  val (to, from, body, maxPrice, provideFeedback, attempt, validityPeriod, smartEncoded, sendAt, sendAsMms) =
+    Remote.makeAccessors[CreateMessage]
 }

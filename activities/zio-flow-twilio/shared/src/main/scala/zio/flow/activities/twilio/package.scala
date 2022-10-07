@@ -23,7 +23,7 @@ package object twilio {
           .output[Message]
       ),
       check = ZFlow.fail(ActivityError("Check not supported", None)),
-      compensate = ZFlow.input[Message].flatMap(deleteMessageActivity(_))
+      compensate = deleteMessageActivity.fromInput
     ).contramap[CreateMessage] { (createMessage: Remote[CreateMessage]) =>
       (
         Remote.config[String](twilioAccountSid),
@@ -45,10 +45,10 @@ package object twilio {
       check =
         ZFlow.fail(ActivityError("Check not supported", None)), // TODO: provide check that tries getting the message
       compensate = ZFlow.fail(ActivityError("Compensate not supported", None))
-    ).contramap[Message] { (_: Remote[Message]) =>
+    ).contramap[Message] { (message: Remote[Message]) =>
       (
         Remote.config[String](twilioAccountSid),
-        rs"message.sid", // TODO: this requires optics support
+        MessageSid.value.get(Message.sid.get(message)),
         twilioAuthHeader
       )
     }

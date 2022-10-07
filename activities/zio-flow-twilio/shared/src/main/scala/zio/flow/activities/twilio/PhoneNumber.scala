@@ -1,9 +1,12 @@
 package zio.flow.activities.twilio
 
-import zio.schema.Schema
+import zio.flow.Remote
+import zio.schema.DeriveSchema
 
 final case class PhoneNumber(value: String) extends AnyVal
 
 object PhoneNumber {
-  implicit val schema: Schema[PhoneNumber] = Schema[String].transform(PhoneNumber.apply, _.value)
+  implicit val schema = DeriveSchema.gen[PhoneNumber]
+
+  val (value) = Remote.makeAccessors[PhoneNumber]
 }

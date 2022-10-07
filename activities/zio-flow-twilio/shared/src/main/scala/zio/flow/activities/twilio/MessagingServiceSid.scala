@@ -1,9 +1,12 @@
 package zio.flow.activities.twilio
 
-import zio.schema.Schema
+import zio.flow.Remote
+import zio.schema.DeriveSchema
 
 final case class MessagingServiceSid(value: String) extends AnyVal
 
 object MessagingServiceSid {
-  implicit val schema: Schema[MessagingServiceSid] = Schema[String].transform(MessagingServiceSid.apply, _.value)
+  implicit val schema = DeriveSchema.gen[MessagingServiceSid]
+
+  val (value) = Remote.makeAccessors[MessagingServiceSid]
 }

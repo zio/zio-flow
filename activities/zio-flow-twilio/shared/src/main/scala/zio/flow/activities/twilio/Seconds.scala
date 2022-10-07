@@ -1,9 +1,12 @@
 package zio.flow.activities.twilio
 
-import zio.schema.Schema
+import zio.flow.Remote
+import zio.schema.DeriveSchema
 
 final case class Seconds(value: Short) extends AnyVal
 
 object Seconds {
-  implicit val schema: Schema[Seconds] = Schema[Short].transform(Seconds.apply, _.value)
+  implicit val schema = DeriveSchema.gen[Seconds]
+
+  val (value) = Remote.makeAccessors[Seconds]
 }

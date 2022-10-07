@@ -1,15 +1,13 @@
 package zio.flow.activities.twilio
 
 import zio.flow._
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema.DeriveSchema
 
-final case class Message(
-  sid: MessageSid
-  // TODO
-)
+final case class Message(sid: MessageSid)
+// TODO: other fields
 
 object Message {
-  implicit val schema: Schema[Message] = DeriveSchema.gen
+  implicit val schema = DeriveSchema.gen[Message]
 
-  val (sid) = Remote
+  val (sid) = Remote.makeAccessors[Message]
 }
