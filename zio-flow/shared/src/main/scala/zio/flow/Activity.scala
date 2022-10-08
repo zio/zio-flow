@@ -65,6 +65,11 @@ final case class Activity[-Input, Result](
 }
 
 object Activity {
+  val checkNotSupported: ZFlow[Any, ActivityError, Nothing] =
+    ZFlow.fail(ActivityError("Check is not supported for this Activity", None))
+  val compensateNotSupported: ZFlow[Any, ActivityError, Nothing] =
+    ZFlow.fail(ActivityError("Compensate is not supported for this Activity", None))
+
   private val typeId: TypeId = TypeId.parse("zio.flow.Activity")
 
   def schema[R, A]: Schema[Activity[R, A]] =

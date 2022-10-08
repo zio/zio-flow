@@ -179,7 +179,7 @@ lazy val dynamodb = project
 // Activity libraries
 lazy val twilio = crossProject(JSPlatform, JVMPlatform)
   .in(file("activities/zio-flow-twilio"))
-  .dependsOn(zioFlow)
+  .dependsOn(zioFlow, test % "test->compile")
   .settings(
     stdSettings("zio-flow-twilio"),
     testFrameworks += zioTest,

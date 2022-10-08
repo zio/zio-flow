@@ -22,7 +22,7 @@ package object twilio {
           .input[CreateMessage](ContentType.`x-www-form-urlencoded`)
           .output[Message]
       ),
-      check = ZFlow.fail(ActivityError("Check not supported", None)),
+      check = Activity.checkNotSupported,
       compensate = deleteMessageActivity.fromInput
     ).contramap[CreateMessage] { (createMessage: Remote[CreateMessage]) =>
       (
@@ -39,12 +39,11 @@ package object twilio {
       operation = Operation.Http(
         host = "https://api.twilio.com",
         API
-          .delete("2010-04-01" / "Accounts" / string / "Messages" / string) // TODO: .json postfix
+          .delete("2010-04-01" / "Accounts" / string / "Messages" / string + ".json")
           .header(Header.string("Authorization"))
       ),
-      check =
-        ZFlow.fail(ActivityError("Check not supported", None)), // TODO: provide check that tries getting the message
-      compensate = ZFlow.fail(ActivityError("Compensate not supported", None))
+      check = Activity.checkNotSupported, // TODO: implement check
+      compensate = Activity.compensateNotSupported
     ).contramap[Message] { (message: Remote[Message]) =>
       (
         Remote.config[String](twilioAccountSid),
@@ -52,9 +51,4 @@ package object twilio {
         twilioAuthHeader
       )
     }
-
-  // TODO: host should be configurable
-  // TODO: predefined flows for check/compensate not supported
-  // TODO: test json format matches spec
-
 }

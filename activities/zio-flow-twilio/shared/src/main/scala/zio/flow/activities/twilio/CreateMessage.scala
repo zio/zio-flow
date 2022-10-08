@@ -4,23 +4,49 @@ import zio.schema._
 import zio.flow._
 
 final case class CreateMessage(
-  to: PhoneNumber,
-  from: Either[PhoneNumber, MessagingServiceSid],
-  body: Either[MediaUrl, String],
-  maxPrice: Option[BigDecimal] = None,
-  provideFeedback: Option[Boolean] = None,
-  attempt: Option[Int] = None,
-  validityPeriod: Option[Seconds] = None,
-  smartEncoded: Option[Boolean] = None,
-  sendAt: Option[Instant] = None,
-  sendAsMms: Option[Boolean] = None
-)
+  To: PhoneNumber,
+  Body: String,
+  From: Option[PhoneNumber] = None,
+  MessagingServiceSid: Option[MessagingServiceSid] = None,
+  MediaUrl: Option[MediaUrl] = None,
+  MaxPrice: Option[BigDecimal] = None,
+  ProvideFeedback: Option[Boolean] = None,
+  Attempt: Option[Int] = None,
+  ValidityPeriod: Option[Seconds] = None,
+  SmartEncoded: Option[Boolean] = None,
+  SendAt: Option[Instant] = None,
+  SendAsMms: Option[Boolean] = None,
+  StatusCallback: Option[CallbackUrl] = None,
+  ApplicationSid: Option[ApplicationSid] = None,
+  ContentRetention: Option[Retention] = None,
+  AddressRetention: Option[Retention] = None,
+  ScheduleType: Option[MessageScheduleType] = None
+) {
+  assert(From.isDefined || MessagingServiceSid.isDefined)
+}
 // TODO: contentRetention, addressRetention, scheduleType
-// TODO: get rid of eithers
 
 object CreateMessage {
   implicit val schema = DeriveSchema.gen[CreateMessage]
 
-  val (to, from, body, maxPrice, provideFeedback, attempt, validityPeriod, smartEncoded, sendAt, sendAsMms) =
+  val (
+    to,
+    body,
+    from,
+    messagingServiceSid,
+    mediaUrl,
+    maxPrice,
+    provideFeedback,
+    attempt,
+    validityPeriod,
+    smartEncoded,
+    sendAt,
+    sendAsMms,
+    statusCallback,
+    applicationSid,
+    contentRetention,
+    addressRetention,
+    scheduleType
+  ) =
     Remote.makeAccessors[CreateMessage]
 }

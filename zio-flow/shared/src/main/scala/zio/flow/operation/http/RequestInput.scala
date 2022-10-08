@@ -291,12 +291,15 @@ sealed trait Path[A] extends RequestInput[A] { self =>
 
   def /(string: String): Path[A] =
     Path.ZipWith(this, Path.path(string), Zipper.zipperRightIdentity)
+
+  def +(string: String): Path[A] =
+    Path.ZipWith(this, Path.Literal(string), Zipper.zipperRightIdentity)
 }
 
 final case class PathState(var input: List[String])
 
 object Path {
-  def path(name: String): Path[Unit] = Path.Literal(name).asInstanceOf[Path[Unit]]
+  def path(name: String): Path[Unit] = Path.Literal("/" + name)
 
   private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path")
 
