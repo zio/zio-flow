@@ -5,9 +5,9 @@ import zio.schema.DeriveSchema
 
 final case class SubscriptionTracking(
   enable: Boolean,
-  text: Option[String],
-  html: Option[String],
-  substitution_tag: Option[String]
+  text: Option[String] = None,
+  html: Option[String] = None,
+  substitution_tag: Option[String] = None
 )
 
 object SubscriptionTracking {

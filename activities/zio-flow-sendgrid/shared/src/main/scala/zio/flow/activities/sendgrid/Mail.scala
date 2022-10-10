@@ -3,24 +3,25 @@ package zio.flow.activities.sendgrid
 import zio.flow.Remote
 import zio.schema.DeriveSchema
 
-final case class Mail private[sendgrid] (
+// TODO: instead of Option[List[A]]s empty lists as null would be preferable. maybe separate serialization class from the API and convert in activity's contramap
+final case class Mail(
   personalizations: List[Personalization],
   from: EmailAddress,
-  reply_to: Option[EmailAddress],
-  reply_to_list: List[EmailAddress],
+  reply_to: Option[EmailAddress] = None,
+  reply_to_list: Option[List[EmailAddress]] = None,
   subject: String,
   content: List[Content],
-  attachments: List[Attachment],
-  template_id: Option[String],
+  attachments: Option[List[Attachment]] = None,
+  template_id: Option[String] = None,
   //headers: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
-  categories: List[CategoryName],
-  custom_args: Option[String],
-  send_at: Option[Int], // TODO: should be Instant
-  batch_id: Option[BatchId],
-  asm: Option[Asm],
-  ip_pool_name: Option[String],
-  mail_settings: Option[MailSettings],
-  tracking_settings: Option[TrackingSettings]
+  categories: Option[List[CategoryName]] = None,
+  custom_args: Option[String] = None,
+  send_at: Option[Int] = None, // TODO: should be Instant
+  batch_id: Option[BatchId] = None,
+  asm: Option[Asm] = None,
+  ip_pool_name: Option[String] = None,
+  mail_settings: Option[MailSettings] = None,
+  tracking_settings: Option[TrackingSettings] = None
 )
 
 object Mail {

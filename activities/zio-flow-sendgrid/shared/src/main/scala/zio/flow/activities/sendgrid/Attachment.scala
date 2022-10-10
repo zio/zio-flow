@@ -8,7 +8,7 @@ final case class Attachment(
   `type`: String,
   filename: String,
   disposition: String, // TODO: should be ContentDisposition enum (inline / attachment)
-  content_id: String
+  content_id: Option[String] = None
 )
 
 object Attachment {

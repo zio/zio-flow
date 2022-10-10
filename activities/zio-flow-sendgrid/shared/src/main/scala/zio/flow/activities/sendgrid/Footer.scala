@@ -5,8 +5,8 @@ import zio.schema.DeriveSchema
 
 final case class Footer(
   enable: Boolean,
-  text: Option[String],
-  html: Option[String]
+  text: Option[String] = None,
+  html: Option[String] = None
 )
 
 object Footer {

@@ -4,12 +4,12 @@ import zio.flow.Remote
 import zio.schema.DeriveSchema
 
 final case class MailSettings(
-  bypass_list_management: Option[Setting],
-  bypass_spam_management: Option[Setting],
-  bypass_bounce_management: Option[Setting],
-  bypass_unsubscribe_management: Option[Setting],
-  footer: Option[Footer],
-  sandbox_mode: Option[Setting]
+  bypass_list_management: Option[Setting] = None,
+  bypass_spam_management: Option[Setting] = None,
+  bypass_bounce_management: Option[Setting] = None,
+  bypass_unsubscribe_management: Option[Setting] = None,
+  footer: Option[Footer] = None,
+  sandbox_mode: Option[Setting] = None
 )
 
 object MailSettings {
