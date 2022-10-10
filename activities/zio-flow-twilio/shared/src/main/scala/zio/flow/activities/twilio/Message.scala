@@ -23,7 +23,7 @@ final case class Message(
   error_code: Option[Int],
   price_unit: Option[String],
   api_version: String
-  //subresource_uris:  Map[String, String] // TODO: this should be a dynamic Json object
+  //subresource_uris:  Map[String, String] // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
 )
 
 object Message {
@@ -44,7 +44,7 @@ object Message {
     status,
     messaging_service_sid,
     sid,
-    date_Sent,
+    date_sent,
     date_created,
     error_code,
     price_unit,

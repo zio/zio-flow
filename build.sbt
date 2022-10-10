@@ -52,7 +52,9 @@ lazy val root = project
     testJS,
     // activity libraries
     twilioJVM,
-    twilioJS
+    twilioJS,
+    sendgridJVM,
+    sendgridJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -191,6 +193,21 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
 
 lazy val twilioJS  = twilio.js
 lazy val twilioJVM = twilio.jvm
+
+lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
+  .in(file("activities/zio-flow-sendgrid"))
+  .dependsOn(zioFlow, test % "test->compile")
+  .settings(
+    stdSettings("zio-flow-sendgrid"),
+    testFrameworks += zioTest,
+    libraryDependencies ++= Seq(
+      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+    ) ++ commonTestDependencies.map(_ % Test)
+  )
+
+lazy val sendgridJS  = sendgrid.js
+lazy val sendgridJVM = sendgrid.jvm
 
 // Docs
 
