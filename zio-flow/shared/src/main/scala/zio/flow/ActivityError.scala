@@ -18,6 +18,7 @@ package zio.flow
 
 import zio.schema.{DeriveSchema, Schema}
 
+/** Failure of running an [[Activity]] */
 case class ActivityError(failure: String, details: Option[Throwable])
 object ActivityError {
   implicit val schema: Schema[ActivityError] = DeriveSchema.gen

@@ -20,13 +20,42 @@ import zio.schema._
 import zio.flow.operation.http.API
 import zio.flow.serialization.FlowSchemaAst
 
+/**
+ * Operation describes the way a zio-flow workflow communicates with the outside
+ * world.
+ *
+ * An operation always has an input value of type Input, and a result value of
+ * type Result. What the operation does with the input value to get the result
+ * depends on the actual operation's other properties.
+ *
+ * Both the input and the result types need to have a schema, because the
+ * workflow executor may need to encode/decode values when communicating with an
+ * external service.
+ *
+ * Currently the only supported operation is the [[Operation.Http]] operation.
+ *
+ * Operations are not directly used from the zio-flow programs, but through
+ * [[Activity]] values.
+ *
+ * When writing tests for workflows the MockedOperation class provides
+ * capabilities to mock these operations instead of using the real operation
+ * executor.
+ */
 sealed trait Operation[-Input, +Result] { self =>
   val inputSchema: Schema[_ >: Input]
   val resultSchema: Schema[_ <: Result]
 
+  /**
+   * Defines an operation that performs the same thing but it's input gets
+   * transformed by the given remote function first.
+   */
   def contramap[Input2: Schema](f: Remote[Input2] => Remote[Input]): Operation[Input2, Result] =
     Operation.ContraMap(self, f, implicitly[Schema[Input2]])
 
+  /**
+   * Defines an operation that performs the same thing and then transforms the
+   * result with the given remote function.
+   */
   def map[Result2: Schema](f: Remote[Result] => Remote[Result2]): Operation[Input, Result2] =
     Operation.Map(self, f, implicitly[Schema[Result2]])
 }
