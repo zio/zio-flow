@@ -18,7 +18,7 @@ package zio.flow.internal
 
 import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.{ZEnvironment, ZIO, ZLayer}
-import zio.flow.Operation.{ContraMap, Http}
+import zio.flow.Operation.{ContraMap, Http, Map}
 import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
 import zio.schema.Schema
 
@@ -37,6 +37,12 @@ final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with 
           .flatMap { input2 =>
             execute(input2, inner)
           }
+      case Map(inner, f, schema) =>
+        execute(input, inner).flatMap { result =>
+          RemoteContext
+            .eval(f(Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])))(schema)
+            .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
+        }
       case Http(host, api) =>
         api
           .call(host)(input)

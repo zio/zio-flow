@@ -16,7 +16,9 @@
 
 package zio.flow.mock
 
-import zio.flow.{ActivityError, Operation, OperationExecutor, RemoteContext}
+import zio.flow.Operation.{ContraMap, Map}
+import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
+import zio.schema.Schema
 import zio.{Clock, Ref, Scope, ZIO}
 
 case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends OperationExecutor {
@@ -24,17 +26,33 @@ case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends
     input: Input,
     operation: Operation[Input, Result]
   ): ZIO[RemoteContext, ActivityError, Result] =
-    mocks.modify { mock =>
-      mock.matchOperation(operation, input)
-    }.flatMap {
-      case Some(MockedOperation.Match(result, duration)) =>
-        for {
-          _ <- ZIO.logInfo(s"Simulating operation $operation with input $input")
-          _ <- Clock.sleep(duration)
-        } yield result
-      case None =>
-        ZIO.logWarning(s"Mocked operation $operation with input $input was not found") *>
-          ZIO.fail(ActivityError(s"Operation $operation not found", None))
+    operation match {
+      case ContraMap(inner, f, schema) =>
+        RemoteContext
+          .eval(f(Remote(input)(operation.inputSchema.asInstanceOf[Schema[Input]])))(schema)
+          .mapError(executionError => ActivityError("Failed to transform input", Some(executionError.toException)))
+          .flatMap { input2 =>
+            execute(input2, inner)
+          }
+      case Map(inner, f, schema) =>
+        execute(input, inner).flatMap { result =>
+          RemoteContext
+            .eval(f(Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])))(schema)
+            .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
+        }
+      case _ =>
+        mocks.modify { mock =>
+          mock.matchOperation(operation, input)
+        }.flatMap {
+          case Some(MockedOperation.Match(result, duration)) =>
+            for {
+              _ <- ZIO.logInfo(s"Simulating operation $operation with input $input")
+              _ <- Clock.sleep(duration)
+            } yield result
+          case None =>
+            ZIO.logWarning(s"Mocked operation $operation with input $input was not found") *>
+              ZIO.fail(ActivityError(s"Operation $operation not found", None))
+        }
     }
 }
 

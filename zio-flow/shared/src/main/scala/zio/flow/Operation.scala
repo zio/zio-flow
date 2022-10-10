@@ -26,6 +26,9 @@ sealed trait Operation[-Input, +Result] { self =>
 
   def contramap[Input2: Schema](f: Remote[Input2] => Remote[Input]): Operation[Input2, Result] =
     Operation.ContraMap(self, f, implicitly[Schema[Input2]])
+
+  def map[Result2: Schema](f: Remote[Result] => Remote[Result2]): Operation[Input, Result2] =
+    Operation.Map(self, f, implicitly[Schema[Result2]])
 }
 
 object Operation {
@@ -64,6 +67,41 @@ object Operation {
       Schema.Case("ContraMap", schema[Any, Input, Result], _.asInstanceOf[ContraMap[Any, Input, Result]])
   }
 
+  final case class Map[Input, Result, Result2](
+    inner: Operation[Input, Result],
+    f: Remote.UnboundRemoteFunction[Result, Result2],
+    schema: Schema[Result2]
+  ) extends Operation[Input, Result2] {
+    override val inputSchema: Schema[_ >: Input]    = inner.inputSchema
+    override val resultSchema: Schema[_ <: Result2] = schema
+  }
+
+  object Map {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Operation.Map")
+
+    def schema[Input, Result, Result2]: Schema[Map[Input, Result, Result2]] =
+      Schema.defer {
+        Schema
+          .CaseClass3[Operation[Input, Result], Remote.UnboundRemoteFunction[Result, Result2], FlowSchemaAst, Map[
+            Input,
+            Result,
+            Result2
+          ]](
+            typeId,
+            Schema.Field("inner", Operation.schema[Input, Result]),
+            Schema.Field("f", Remote.UnboundRemoteFunction.schema[Result, Result2]),
+            Schema.Field("inputSchema", FlowSchemaAst.schema),
+            (inner, f, ast) => Map(inner, f, ast.toSchema[Result2]),
+            _.inner,
+            _.f,
+            op => FlowSchemaAst.fromSchema(op.schema)
+          )
+      }
+
+    def schemaCase[Input, Result2]: Schema.Case[Map[Input, Any, Result2], Operation[Input, Result2]] =
+      Schema.Case("Map", schema[Input, Any, Result2], _.asInstanceOf[Map[Input, Any, Result2]])
+  }
+
   final case class Http[Input, Result](
     host: String,
     api: zio.flow.operation.http.API[Input, Result]
@@ -97,5 +135,6 @@ object Operation {
       CaseSet
         .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
         .:+:(ContraMap.schemaCase[R, A])
+        .:+:(Map.schemaCase[R, A])
     )
 }

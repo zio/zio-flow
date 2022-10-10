@@ -57,6 +57,16 @@ final case class Activity[-Input, Result](
   def fromInput: ZFlow[Input, ActivityError, Result] =
     ZFlow.input[Input].flatMap(apply)
 
+  def mapResult[Result2: Schema](
+    to: Remote[Result] => Remote[Result2],
+    from: Remote[Result2] => Remote[Result]
+  ): Activity[Input, Result2] =
+    this.copy(
+      operation = operation.map(to),
+      check = check.map(to),
+      compensate = ZFlow.input[Result2].flatMap(result2 => from(result2)).flatMap(result => compensate.provide(result))
+    )
+
   def narrow[Input0](implicit ev: Input0 <:< Input): Activity[Input0, Result] = {
     val _ = ev
 
