@@ -618,39 +618,41 @@ object FormUrlEncodedEncoder {
           addValuePrefix()
           primitive.standardType match {
             case StandardType.InstantType(formatter) =>
-              builder.append(URLEncoder.encode(formatter.format(value.asInstanceOf[Instant]), StandardCharsets.UTF_8));
+              builder.append(
+                URLEncoder.encode(formatter.format(value.asInstanceOf[Instant]), StandardCharsets.UTF_8.name())
+              );
               ()
             case StandardType.LocalDateType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalDate]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalDate]), StandardCharsets.UTF_8.name())
               );
               ()
             case StandardType.LocalTimeType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalTime]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalTime]), StandardCharsets.UTF_8.name())
               );
               ()
             case StandardType.LocalDateTimeType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalDateTime]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[LocalDateTime]), StandardCharsets.UTF_8.name())
               );
               ()
             case StandardType.OffsetTimeType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[OffsetTime]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[OffsetTime]), StandardCharsets.UTF_8.name())
               );
               ()
             case StandardType.OffsetDateTimeType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[OffsetDateTime]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[OffsetDateTime]), StandardCharsets.UTF_8.name())
               );
               ()
             case StandardType.ZonedDateTimeType(formatter) =>
               builder.append(
-                URLEncoder.encode(formatter.format(value.asInstanceOf[ZonedDateTime]), StandardCharsets.UTF_8)
+                URLEncoder.encode(formatter.format(value.asInstanceOf[ZonedDateTime]), StandardCharsets.UTF_8.name())
               );
               ()
-            case _ => builder.append(URLEncoder.encode(value.toString, StandardCharsets.UTF_8)); ()
+            case _ => builder.append(URLEncoder.encode(value.toString, StandardCharsets.UTF_8.name())); ()
           }
         case optional: Schema.Optional[_] =>
           value.asInstanceOf[Option[Any]] match {
