@@ -17,7 +17,6 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.internal.{RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
   BinaryIntegralOperator,
@@ -56,7 +55,6 @@ import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
-import zio.flow.runtime.DurablePromise
 
 trait Generators extends DefaultJavaTimeSchemas {
 
@@ -76,18 +74,6 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genTransactionId: Gen[Sized, TransactionId] =
     Gen.alphaNumericStringBounded(1, 16).map(TransactionId.unsafeMake)
-
-  lazy val genScope: Gen[Sized, RemoteVariableScope] =
-    Gen.suspend {
-      Gen.oneOf(
-        genFlowId.map(RemoteVariableScope.TopLevel),
-        (genFlowId <*> genScope).map { case (id, scope) => RemoteVariableScope.Fiber(id, scope) },
-        (genTransactionId <*> genScope).map { case (id, scope) => RemoteVariableScope.Transactional(scope, id) }
-      )
-    }
-
-  lazy val genScopedRemoteVariableName: Gen[Sized, ScopedRemoteVariableName] =
-    (genRemoteVariableName <*> genScope).map { case (name, scope) => ScopedRemoteVariableName(name, scope) }
 
   lazy val genBindingName: Gen[Sized, BindingName] =
     Gen.uuid.map(BindingName.apply(_))
@@ -1043,7 +1029,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       id        <- genFlowId
       promiseId <- Gen.string1(Gen.asciiChar)
-      promise    = DurablePromise[E, A](PromiseId(promiseId))
+      promise    = PromiseId(promiseId)
     } yield ExecutingFlow(id, promise)
 }
 

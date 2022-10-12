@@ -3,7 +3,7 @@ package zio.flow.server
 import zhttp.service.Server
 import zio._
 import zio.flow.Configuration
-import zio.flow.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.serialization.{Deserializer, Serializer}
 

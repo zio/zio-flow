@@ -14,22 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow
+package zio.flow.runtime.internal
 
-import zio.schema.{Schema, TypeId}
+import zio.ZIO
+import zio.flow.TransactionId
 
-final case class ExecutingFlow[+E, +A](id: FlowId, result: PromiseId)
+object Logging {
 
-object ExecutingFlow {
-  private val typeId: TypeId = TypeId.parse("zio.flow.ExecutingFlow")
+  def optionalTransactionId[R, E, A](transactionId: => Option[TransactionId])(f: ZIO[R, E, A]): ZIO[R, E, A] =
+    optionalAnnotate("txId", transactionId.map(TransactionId.unwrap))(f)
 
-  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[E, A]](
-      typeId,
-      Schema.Field("id", Schema[FlowId]),
-      Schema.Field("result", Schema[PromiseId]),
-      { case (id, promise) => ExecutingFlow(id, promise) },
-      (ef: ExecutingFlow[E, A]) => ef.id,
-      (ef: ExecutingFlow[E, A]) => ef.result
-    )
+  def optionalAnnotate[R, E, A](key: => String, value: => Option[String])(f: ZIO[R, E, A]): ZIO[R, E, A] =
+    value match {
+      case Some(value) => ZIO.logAnnotate(key, value)(f)
+      case None        => f
+    }
 }

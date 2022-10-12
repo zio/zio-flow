@@ -14,22 +14,16 @@
  * limitations under the License.
  */
 
-package zio.flow
+package zio.flow.runtime.internal
 
-import zio.schema.{Schema, TypeId}
+import zio.schema.{DeriveSchema, Schema}
 
-final case class ExecutingFlow[+E, +A](id: FlowId, result: PromiseId)
+sealed trait PersistentWorkflowStatus
 
-object ExecutingFlow {
-  private val typeId: TypeId = TypeId.parse("zio.flow.ExecutingFlow")
+object PersistentWorkflowStatus {
+  case object Running   extends PersistentWorkflowStatus
+  case object Done      extends PersistentWorkflowStatus
+  case object Suspended extends PersistentWorkflowStatus
 
-  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[E, A]](
-      typeId,
-      Schema.Field("id", Schema[FlowId]),
-      Schema.Field("result", Schema[PromiseId]),
-      { case (id, promise) => ExecutingFlow(id, promise) },
-      (ef: ExecutingFlow[E, A]) => ef.id,
-      (ef: ExecutingFlow[E, A]) => ef.result
-    )
+  implicit val schema: Schema[PersistentWorkflowStatus] = DeriveSchema.gen
 }
