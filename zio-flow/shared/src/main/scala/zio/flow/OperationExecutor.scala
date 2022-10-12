@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.ZIO
+import zio.{ZIO, ZLayer}
 
 /**
  * An `OperationExecutor` can execute operations, or fail trying.
@@ -26,4 +26,8 @@ trait OperationExecutor { self =>
     input: Input,
     operation: Operation[Input, Result]
   ): ZIO[RemoteContext, ActivityError, Result]
+}
+
+object OperationExecutor {
+  val any: ZLayer[OperationExecutor, Nothing, OperationExecutor] = ZLayer.service[OperationExecutor]
 }

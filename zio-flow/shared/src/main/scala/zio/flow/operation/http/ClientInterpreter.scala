@@ -36,8 +36,10 @@ private[http] object ClientInterpreter {
     def addHeader(key: String, value: String): Option[String] =
       headers.put(key, value)
 
-    def setBody(body: Chunk[Byte]): Unit =
+    def setBody(body: Chunk[Byte], contentType: String): Unit = {
+      this.headers.put("Content-Type", contentType)
       this.body = Option(body)
+    }
 
     def result: (String, Map[String, String], Option[Chunk[Byte]]) = {
 
@@ -143,8 +145,8 @@ private[http] object ClientInterpreter {
   )(params: Params): Unit =
     body.contentType match {
       case ContentType.json =>
-        state.setBody(JsonCodec.encode(body.schema)(params))
+        state.setBody(JsonCodec.encode(body.schema)(params), "application/json")
       case ContentType.`x-www-form-urlencoded` =>
-        state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params))
+        state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params), "application/x-www-form-urlencoded")
     }
 }

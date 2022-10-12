@@ -237,7 +237,7 @@ lazy val examples = crossProject(JSPlatform, JVMPlatform)
   .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
   .settings((publish / skip) := true)
-  .dependsOn(zioFlow)
+  .dependsOn(zioFlow, twilio, sendgrid)
 
 lazy val examplesJS = examples.js
 

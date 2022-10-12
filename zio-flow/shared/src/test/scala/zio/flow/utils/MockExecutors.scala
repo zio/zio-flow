@@ -17,8 +17,8 @@
 package zio.flow.utils
 
 import zio._
-import zio.flow.Configuration
-import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor, ZFlowExecutor}
+import zio.flow.{Configuration, ZFlowExecutor}
+import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor}
 import zio.flow.mock.{MockedOperation, MockedOperationExecutor}
 import zio.flow.serialization.{Deserializer, Serializer}
 
@@ -27,13 +27,9 @@ object MockExecutors {
     mockedOperations: MockedOperation = MockedOperation.Empty
   ): ZIO[Scope with DurableLog with KeyValueStore with Configuration, Nothing, ZFlowExecutor] =
     MockedOperationExecutor.make(mockedOperations).flatMap { operationExecutor =>
-      PersistentExecutor
-        .make(
-          operationExecutor,
-          Serializer.json,
-          Deserializer.json
-        )
-        .build
-        .map(_.get[ZFlowExecutor])
+      ((DurableLog.any ++ KeyValueStore.any ++ Configuration.any ++ ZLayer.succeed(operationExecutor) ++ ZLayer
+        .succeed(Serializer.json) ++ ZLayer.succeed(Deserializer.json)) >>>
+        PersistentExecutor
+          .make()).build.map(_.get[ZFlowExecutor])
     }
 }

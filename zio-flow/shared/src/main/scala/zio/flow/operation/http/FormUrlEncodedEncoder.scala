@@ -5,7 +5,7 @@ import zio.schema.{Schema, StandardType}
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, OffsetTime, ZonedDateTime}
+import java.time._
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 
@@ -24,6 +24,9 @@ object FormUrlEncodedEncoder {
 
     def addCase[A, Z](c: Schema.Case[A, Z], value: Any): Unit =
       if (c.asInstanceOf[Schema.Case[Any, Any]].deconstruct(value).isDefined) { builder.append(c.id); () }
+
+    def addCaseSet(cases: Seq[Schema.Case[_, _]], value: Any): Unit =
+      cases.foreach(addCase(_, value))
 
     def addValuePrefix(): Unit = {
       if (builder.nonEmpty) builder.append('&')
@@ -610,6 +613,9 @@ object FormUrlEncodedEncoder {
           addCase(enum.case20, value)
           addCase(enum.case21, value)
           addCase(enum.case22, value)
+        case enum: Schema.EnumN[_, _] =>
+          addValuePrefix()
+          addCaseSet(enum.caseSet.toSeq, value)
         case transform: Schema.Transform[_, _, _] =>
           encode(builder, label, transform.codec)(
             transform.g(value).fold((failure: String) => throw new RuntimeException(failure), value => value)

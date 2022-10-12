@@ -2,7 +2,7 @@ package zio.flow.server
 
 import zhttp.service.Server
 import zio._
-import zio.flow.{Configuration, OperationExecutor}
+import zio.flow.Configuration
 import zio.flow.internal.{DefaultOperationExecutor, DurableLog, IndexedStore, KeyValueStore, PersistentExecutor}
 import zio.flow.serialization.{Deserializer, Serializer}
 
@@ -18,13 +18,9 @@ object Main extends ZIOAppDefault {
       ZFlowEndpoint.layer,
       DurableLog.layer,
       IndexedStore.inMemory,
-      DefaultOperationExecutor.live,
-      ZLayer.service[OperationExecutor].flatMap { executor =>
-        PersistentExecutor.make(
-          executor.get,
-          Serializer.json,
-          Deserializer.json
-        )
-      }
+      DefaultOperationExecutor.layer,
+      ZLayer.succeed(Serializer.json),
+      ZLayer.succeed(Deserializer.json),
+      PersistentExecutor.make()
     )
 }

@@ -17,10 +17,10 @@
 package zio.flow.internal
 
 import zhttp.service.{ChannelFactory, EventLoopGroup}
-import zio.{ZEnvironment, ZIO, ZLayer}
 import zio.flow.Operation.{ContraMap, Http, Map}
 import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
 import zio.schema.Schema
+import zio.{ZEnvironment, ZIO, ZLayer, durationInt}
 
 final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with ChannelFactory])
     extends OperationExecutor {
@@ -32,7 +32,7 @@ final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with 
     operation match {
       case ContraMap(inner, f, schema) =>
         RemoteContext
-          .eval(f(Remote(input)(operation.inputSchema.asInstanceOf[Schema[Input]])))(schema)
+          .eval(f(Remote(input)(schema.asInstanceOf[Schema[Input]])))(inner.inputSchema)
           .mapError(executionError => ActivityError("Failed to transform input", Some(executionError.toException)))
           .flatMap { input2 =>
             execute(input2, inner)
@@ -44,15 +44,24 @@ final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with 
             .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
         }
       case Http(host, api) =>
-        api
-          .call(host)(input)
-          .mapError(e => ActivityError(s"Failed ${api.method} request to $host", Option(e)))
-          .provideEnvironment(env)
+        ZIO.logInfo(s"Request ${api.method} $host") *>
+          api
+            .call(host)(input)
+            .sandbox
+            .tapBoth(
+              failure => ZIO.logErrorCause(s"Request ${api.method} $host failed", failure),
+              result => ZIO.logDebug(s"Request ${api.method} $host succeeded with result $result")
+            )
+            .mapError(e => ActivityError(s"Failed ${api.method} request to $host", Option(e.squash)))
+            .timeoutFail(ActivityError(s"Request ${api.method} $host timed out", None))(
+              30.seconds
+            ) // TODO: configurable
+            .provideEnvironment(env)
     }
 }
 
 object DefaultOperationExecutor {
-  val live: ZLayer[Any, Nothing, OperationExecutor] =
+  val layer: ZLayer[Any, Nothing, OperationExecutor] =
     ZLayer.scoped {
       for {
         env <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build

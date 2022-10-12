@@ -1175,40 +1175,50 @@ final case class PersistentExecutor(
 
 object PersistentExecutor {
   def make(
-    operationExecutor: OperationExecutor,
-    serializer: Serializer,
-    deserializer: Deserializer,
     gcPeriod: Duration = 5.minutes
-  ): ZLayer[DurableLog with KeyValueStore with Configuration, Nothing, ZFlowExecutor] =
+  ): ZLayer[
+    DurableLog with KeyValueStore with Configuration with OperationExecutor with Serializer with Deserializer,
+    Nothing,
+    ZFlowExecutor
+  ] =
     ZLayer {
-      ZIO.service[Configuration].map { configuration =>
-        ExecutionEnvironment(serializer, deserializer, configuration)
-      }
-    } >+> (DurableLog.any ++ KeyValueStore.any ++ RemoteVariableKeyValueStore.live) >>>
-      ZLayer.scoped {
-        for {
-          durableLog            <- ZIO.service[DurableLog]
-          kvStore               <- ZIO.service[KeyValueStore]
-          remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
-          execEnv               <- ZIO.service[ExecutionEnvironment]
-          workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
-          gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
-          _ <- Promise
-                 .make[Nothing, Any]
-                 .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
-                 .scheduleFork(Schedule.fixed(gcPeriod))
-          executor = PersistentExecutor(
-                       execEnv,
-                       durableLog,
-                       kvStore,
-                       remoteVariableKvStore,
-                       operationExecutor,
-                       workflows,
-                       gcQueue
-                     )
-          _ <- executor.startGarbageCollector()
-        } yield executor
-      }
+      for {
+        configuration <- ZIO.service[Configuration]
+        serializer    <- ZIO.service[Serializer]
+        deserializer  <- ZIO.service[Deserializer]
+      } yield ExecutionEnvironment(serializer, deserializer, configuration, gcPeriod)
+    } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any ++ RemoteVariableKeyValueStore.live) >>> layer
+
+  val layer: ZLayer[
+    DurableLog with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with OperationExecutor,
+    Nothing,
+    ZFlowExecutor
+  ] =
+    ZLayer.scoped {
+      for {
+        durableLog            <- ZIO.service[DurableLog]
+        kvStore               <- ZIO.service[KeyValueStore]
+        remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
+        operationExecutor     <- ZIO.service[OperationExecutor]
+        execEnv               <- ZIO.service[ExecutionEnvironment]
+        workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
+        gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
+        _ <- Promise
+               .make[Nothing, Any]
+               .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
+               .scheduleFork(Schedule.fixed(execEnv.gcPeriod))
+        executor = PersistentExecutor(
+                     execEnv,
+                     durableLog,
+                     kvStore,
+                     remoteVariableKvStore,
+                     operationExecutor,
+                     workflows,
+                     gcQueue
+                   )
+        _ <- executor.startGarbageCollector()
+      } yield executor
+    }
 
   sealed trait Instruction
 

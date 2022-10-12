@@ -18,9 +18,9 @@ package zio.flow.utils
 
 import zio._
 import zio.flow.internal.PersistentExecutor.FlowResult
-import zio.flow.internal.{DurableLog, ExecutorError, KeyValueStore, ZFlowExecutor}
+import zio.flow.internal.{DurableLog, ExecutorError, KeyValueStore}
 import zio.flow.mock.MockedOperation
-import zio.flow.{Configuration, FlowId, ZFlow}
+import zio.flow.{Configuration, FlowId, ZFlow, ZFlowExecutor}
 import zio.schema.{DynamicValue, Schema}
 
 object ZFlowAssertionSyntax {

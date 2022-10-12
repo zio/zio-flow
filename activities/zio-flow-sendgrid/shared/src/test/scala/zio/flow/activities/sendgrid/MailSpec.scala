@@ -1,6 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.Chunk
+import zio.schema.{DynamicValue, Schema}
 import zio.schema.codec.JsonCodec
 import zio.test.{ZIOSpecDefault, assertTrue}
 
@@ -216,6 +217,13 @@ object MailSpec extends ZIOSpecDefault {
         assertTrue(
           JsonCodec.decode(Mail.schema)(Chunk.fromArray(exampleRaw.getBytes(StandardCharsets.UTF_8))) ==
             Right(exampleMail)
+        )
+      ),
+      test("can be converted to/from dynamic value")(
+        assertTrue(
+          DynamicValue.fromSchemaAndValue(implicitly[Schema[Mail]], exampleMail).toTypedValue[Mail] == Right(
+            exampleMail
+          )
         )
       )
     )

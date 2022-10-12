@@ -3607,6 +3607,7 @@ object Remote {
       .:+:(VariableReference.schemaCase[A])
       .:+:(Ignore.schemaCase[A])
       .:+:(Variable.schemaCase[A])
+      .:+:(Config.schemaCase[A])
       .:+:(Unbound.schemaCase[A])
       .:+:(Unary.schemaCase[Any, A])
       .:+:(Binary.schemaCase[Any, A])

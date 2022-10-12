@@ -16,6 +16,14 @@
 
 package zio.flow
 
+import zio.durationInt
 import zio.flow.serialization.{Deserializer, Serializer}
 
-final case class ExecutionEnvironment(serializer: Serializer, deserializer: Deserializer, configuration: Configuration)
+import java.time.Duration
+
+final case class ExecutionEnvironment(
+  serializer: Serializer,
+  deserializer: Deserializer,
+  configuration: Configuration,
+  gcPeriod: Duration = 5.minutes
+)
