@@ -18,6 +18,7 @@ package zio.flow.remote
 
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow._
+import zio.flow.Remote._
 import zio.flow.remote.numeric._
 import zio.schema.Schema
 
@@ -328,7 +329,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
 
         Remote
           .UnCons(currentSelf)
-          .fold((result, Remote.nil[A])) { tupleSelf: Remote[(A, List[A])] =>
+          .fold((result, Remote.nil[A])) { (tupleSelf: Remote[(A, List[A])]) =>
             rec((currentSelf.reverse :: result, tupleSelf._2))
           }
       }
@@ -913,10 +914,10 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
 
         Remote
           .UnCons(currentSelf)
-          .fold((result, Remote.nil[A], Remote.nil[B])) { tupleSelf: Remote[(A, List[A])] =>
+          .fold((result, Remote.nil[A], Remote.nil[B])) { (tupleSelf: Remote[(A, List[A])]) =>
             Remote
               .UnCons(currentThat)
-              .fold((result, Remote.nil[A], Remote.nil[B])) { tupleThat: Remote[(B, List[B])] =>
+              .fold((result, Remote.nil[A], Remote.nil[B])) { (tupleThat: Remote[(B, List[B])]) =>
                 rec(((tupleSelf._1, tupleThat._1) :: result, tupleSelf._2, tupleThat._2))
               }
           }
@@ -945,7 +946,7 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
 
         Remote
           .UnCons(currentSelf)
-          .fold((result, Remote.nil[A], Remote(0))) { tupleSelf: Remote[(A, List[A])] =>
+          .fold((result, Remote.nil[A], Remote(0))) { (tupleSelf: Remote[(A, List[A])]) =>
             rec(((tupleSelf._1, currentIndex) :: result, tupleSelf._2, currentIndex + 1))
           }
       }

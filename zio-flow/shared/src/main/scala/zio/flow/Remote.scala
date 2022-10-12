@@ -2800,10 +2800,7 @@ object Remote {
       } yield DynamicValue.fromSchemaAndValue(Schema[String], list.mkString(start, sep, end))
 
     override private[flow] def variableUsage: VariableUsage =
-      list.variableUsage union
-        start.variableUsage union
-        sep.variableUsage union
-        end.variableUsage
+      list.variableUsage.union(start.variableUsage.union(sep.variableUsage.union(end.variableUsage)))
 
     override protected def substituteRec(f: Substitutions): Remote[String] =
       ListToString(list.substituteRec(f), start.substituteRec(f), sep.substituteRec(f), end.substituteRec(f))

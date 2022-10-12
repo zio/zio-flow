@@ -16,7 +16,7 @@
 
 package zio.flow.internal
 
-import zio.flow.FlowId
+import zio.flow._
 import zio.schema.{DeriveSchema, Schema}
 
 final case class ScopedFlowId(name: FlowId, parentStack: List[FlowId]) {

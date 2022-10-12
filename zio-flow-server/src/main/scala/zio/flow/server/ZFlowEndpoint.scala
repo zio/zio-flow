@@ -1,5 +1,6 @@
 package zio.flow.server
 
+import zhttp.html.data
 import zhttp.http.Method._
 import zhttp.http._
 import zio._
@@ -48,7 +49,7 @@ final class ZFlowEndpoint(flowService: FlowTemplates) {
 object ZFlowEndpoint {
   private def deserializeTemplate(request: Request): ZIO[Any, Throwable, ZFlowTemplate] =
     for {
-      payload <- request.body
+      payload <- request.body.asChunk
       zFlow <- ZIO
                  .fromEither(jsonToZFlowTemplate(payload))
                  // TODO custom error type? ;)
@@ -64,7 +65,7 @@ object ZFlowEndpoint {
 
   private[server] def jsonResponse[T](body: T, status: Status = Status.Ok)(implicit schema: Schema[T]): Response =
     Response(
-      data = HttpData.fromChunk(JsonCodec.encode(schema)(body)),
+      body = zhttp.http.Body.fromChunk(JsonCodec.encode(schema)(body)),
       headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson),
       status = status
     )

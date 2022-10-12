@@ -1,6 +1,6 @@
 package zio.flow.remote
 
-import zio.flow.Remote
+import zio.flow._
 import zio.flow.remote.numeric.Numeric
 import zio.schema.Schema
 

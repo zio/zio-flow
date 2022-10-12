@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote
+import zio.flow._
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 
 final class RemoteBooleanSyntax(val self: Remote[Boolean]) extends AnyVal {
