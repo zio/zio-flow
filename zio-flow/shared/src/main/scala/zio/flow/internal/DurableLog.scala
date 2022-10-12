@@ -38,7 +38,7 @@ object DurableLog {
 
   val any: ZLayer[DurableLog, Nothing, DurableLog] = ZLayer.service[DurableLog]
 
-  val live: ZLayer[IndexedStore, Nothing, DurableLog] =
+  val layer: ZLayer[IndexedStore, Nothing, DurableLog] =
     ZLayer.scoped {
       for {
         indexedStore <- ZIO.service[IndexedStore]

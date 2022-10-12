@@ -18,7 +18,7 @@ package zio.flow
 
 import zio.ZIO
 import zio.flow.internal._
-import zio.schema.DynamicValue
+import zio.schema.{DynamicValue, Schema}
 import zio.stm.TMap
 
 import java.io.IOException
@@ -29,6 +29,8 @@ trait RemoteContext {
   def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]]
   def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]]
   def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit]
+
+  def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]]
 }
 
 object RemoteContext {
@@ -39,11 +41,51 @@ object RemoteContext {
     ZIO.serviceWithZIO(_.setVariable(name, value))
   def getVariable(name: RemoteVariableName): ZIO[RemoteContext, ExecutorError, Option[DynamicValue]] =
     ZIO.serviceWithZIO(_.getVariable(name))
+  def getLatestTimestamp(name: RemoteVariableName): ZIO[RemoteContext, ExecutorError, Option[Timestamp]] =
+    ZIO.serviceWithZIO(_.getLatestTimestamp(name))
   def dropVariable(name: RemoteVariableName): ZIO[RemoteContext, ExecutorError, Unit] =
     ZIO.serviceWithZIO(_.dropVariable(name))
+  def readConfig[A: Schema](key: ConfigKey): ZIO[RemoteContext, ExecutorError, Option[A]] =
+    ZIO.serviceWithZIO(_.readConfig[A](key))
+
+  def eval[A: Schema](remote: Remote[A]): ZIO[RemoteContext, ExecutorError, A] =
+    evalDynamic(remote).flatMap(dyn =>
+      ZIO
+        .fromEither(dyn.toTypedValue(implicitly[Schema[A]]))
+        .mapError(ExecutorError.TypeError("eval", _))
+    )
+
+  def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, ExecutorError, DynamicValue] =
+    (for {
+      vars0 <- LocalContext.getAllVariables
+      dyn   <- remote.evalDynamic.mapError(ExecutorError.RemoteEvaluationError)
+      vars1 <- LocalContext.getAllVariables
+      vars   = vars1.diff(vars0)
+
+      remote       = Remote.fromDynamic(dyn)
+      usedByResult = remote.variableUsage.variables
+
+      usedByVars <- ZIO.foldLeft(vars)(Set.empty[RemoteVariableName]) { case (set, variable) =>
+                      for {
+                        optDynVar <- RemoteContext.getVariable(variable.identifier)
+                        result = optDynVar match {
+                                   case Some(dynVar) =>
+                                     val remoteVar = Remote.fromDynamic(dynVar)
+                                     set union remoteVar.variableUsage.variables
+                                   case None =>
+                                     set
+                                 }
+                      } yield result
+                    }
+      toRemove = vars.map(_.identifier).diff(usedByResult union usedByVars)
+
+      _ <- ZIO.foreachDiscard(toRemove)(RemoteContext.dropVariable)
+    } yield dyn)
+      .provideSomeLayer[RemoteContext](LocalContext.inMemory)
 
   private final case class InMemory(
-    store: TMap[RemoteVariableName, DynamicValue]
+    store: TMap[RemoteVariableName, DynamicValue],
+    configuration: Configuration
   ) extends RemoteContext {
     override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
       store.put(name, value).commit
@@ -58,12 +100,16 @@ object RemoteContext {
 
     override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
       store.delete(name).commit
+
+    override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
+      configuration.get[A](key)
   }
 
   def inMemory: ZIO[Any, Nothing, RemoteContext] =
     (for {
-      vars <- TMap.empty[RemoteVariableName, DynamicValue]
-    } yield InMemory(vars)).commit
+      vars          <- TMap.empty[RemoteVariableName, DynamicValue].commit
+      configuration <- ZIO.service[Configuration]
+    } yield InMemory(vars, configuration)).provide(Configuration.inMemory)
 
   private final case class Persistent(
     virtualClock: VirtualClock,
@@ -116,6 +162,9 @@ object RemoteContext {
 
     override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
       remoteVariableStore.delete(name, scope)
+
+    override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
+      executionEnvironment.configuration.get[A](key)
   }
 
   def persistent(

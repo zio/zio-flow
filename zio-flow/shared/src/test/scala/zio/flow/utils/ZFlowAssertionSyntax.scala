@@ -18,9 +18,9 @@ package zio.flow.utils
 
 import zio._
 import zio.flow.internal.PersistentExecutor.FlowResult
-import zio.flow.internal.{DurableLog, ExecutorError, KeyValueStore, ZFlowExecutor}
+import zio.flow.internal.{DurableLog, ExecutorError, KeyValueStore}
 import zio.flow.mock.MockedOperation
-import zio.flow.{FlowId, ZFlow}
+import zio.flow.{Configuration, FlowId, ZFlow, ZFlowExecutor}
 import zio.schema.{DynamicValue, Schema}
 
 object ZFlowAssertionSyntax {
@@ -29,7 +29,7 @@ object ZFlowAssertionSyntax {
     def evaluateTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty)(implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
-    ): ZIO[DurableLog with KeyValueStore, E, A] =
+    ): ZIO[DurableLog with KeyValueStore with Configuration, E, A] =
       ZIO.scoped {
         submitTestPersistent(id, mock).flatMap(_._2.join)
       }
@@ -37,7 +37,7 @@ object ZFlowAssertionSyntax {
     def submitTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty)(implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
-    ): ZIO[Scope with DurableLog with KeyValueStore, E, (ZFlowExecutor, Fiber[E, A])] =
+    ): ZIO[Scope with DurableLog with KeyValueStore with Configuration, E, (ZFlowExecutor, Fiber[E, A])] =
       MockExecutors.persistent(mock).flatMap { executor =>
         executor.restartAll().orDieWith(_.toException) *>
           executor.submit(FlowId.unsafeMake(id), zflow).forkScoped.map(fiber => (executor, fiber))
@@ -48,7 +48,7 @@ object ZFlowAssertionSyntax {
     def evaluateTestStartAndPoll(
       id: String,
       waitBeforePoll: Duration
-    ): ZIO[DurableLog with KeyValueStore, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    ): ZIO[DurableLog with KeyValueStore with Configuration, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
       ZIO.scoped {
         val fId = FlowId.unsafeMake(id)
         MockExecutors.persistent().flatMap { executor =>

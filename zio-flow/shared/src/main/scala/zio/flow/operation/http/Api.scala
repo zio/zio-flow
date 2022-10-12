@@ -40,7 +40,12 @@ final case class API[Input, Output](
     copy(requestInput = requestInput ++ headers)
 
   def input[A](implicit schema: Schema[A], zipper: Zipper[Input, A]): API[zipper.Out, Output] =
-    copy(requestInput = requestInput ++ Body(schema))
+    copy(requestInput = requestInput ++ Body(schema, ContentType.json))
+
+  def input[A](
+    contentType: ContentType
+  )(implicit schema: Schema[A], zipper: Zipper[Input, A]): API[zipper.Out, Output] =
+    copy(requestInput = requestInput ++ Body(schema, contentType))
 
   def output[Output2](implicit schema: Schema[Output2]): API[Input, Output2] =
     copy(outputSchema = schema)

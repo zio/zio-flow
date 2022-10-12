@@ -36,8 +36,10 @@ private[http] object ClientInterpreter {
     def addHeader(key: String, value: String): Option[String] =
       headers.put(key, value)
 
-    def setBody(body: Chunk[Byte]): Unit =
+    def setBody(body: Chunk[Byte], contentType: String): Unit = {
+      this.headers.put("Content-Type", contentType)
       this.body = Option(body)
+    }
 
     def result: (String, Map[String, String], Option[Chunk[Byte]]) = {
 
@@ -87,7 +89,7 @@ private[http] object ClientInterpreter {
             parsePath(right, state)(b)
         }
       case Path.Literal(literal) =>
-        state.addPath("/" + literal)
+        state.addPath(literal)
       case Path.Match(_) =>
         state.addPath("/" + params.toString)
     }
@@ -141,5 +143,10 @@ private[http] object ClientInterpreter {
     body: Body[Params],
     state: RequestState
   )(params: Params): Unit =
-    state.setBody(JsonCodec.encode(body.schema)(params))
+    body.contentType match {
+      case ContentType.json =>
+        state.setBody(JsonCodec.encode(body.schema)(params), "application/json")
+      case ContentType.`x-www-form-urlencoded` =>
+        state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params), "application/x-www-form-urlencoded")
+    }
 }

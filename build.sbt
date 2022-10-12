@@ -14,7 +14,7 @@ inThisBuild(
       )
     ),
     resolvers +=
-      "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
+      "Sonatype OSS Snapshots 01" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
     pgpSecretRing := file("/tmp/secret.asc"),
@@ -49,7 +49,12 @@ lazy val root = project
     zioFlowJVM,
     zioFlowJS,
     testJVM,
-    testJS
+    testJS,
+    // activity libraries
+    twilioJVM,
+    twilioJS,
+    sendgridJVM,
+    sendgridJS
   )
 
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
@@ -75,8 +80,6 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
 
 lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
-  .settings(fork := false)
-
 lazy val zioFlowJVM = zioFlow.jvm
 
 lazy val zioFlowServer = project
@@ -102,6 +105,8 @@ lazy val test = crossProject(JSPlatform, JVMPlatform)
 
 lazy val testJS  = test.js
 lazy val testJVM = test.jvm
+
+// Database implementations
 
 lazy val rocksdb = project
   .in(file("rocksdb"))
@@ -173,6 +178,39 @@ lazy val dynamodb = project
     testFrameworks += zioTest
   )
 
+// Activity libraries
+lazy val twilio = crossProject(JSPlatform, JVMPlatform)
+  .in(file("activities/zio-flow-twilio"))
+  .dependsOn(zioFlow, test % "test->compile")
+  .settings(
+    stdSettings("zio-flow-twilio"),
+    testFrameworks += zioTest,
+    libraryDependencies ++= Seq(
+      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+    ) ++ commonTestDependencies.map(_ % Test)
+  )
+
+lazy val twilioJS  = twilio.js
+lazy val twilioJVM = twilio.jvm
+
+lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
+  .in(file("activities/zio-flow-sendgrid"))
+  .dependsOn(zioFlow, test % "test->compile")
+  .settings(
+    stdSettings("zio-flow-sendgrid"),
+    testFrameworks += zioTest,
+    libraryDependencies ++= Seq(
+      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+    ) ++ commonTestDependencies.map(_ % Test)
+  )
+
+lazy val sendgridJS  = sendgrid.js
+lazy val sendgridJVM = sendgrid.jvm
+
+// Docs
+
 lazy val docs = project
   .in(file("zio-flow-docs"))
   .settings(
@@ -199,7 +237,7 @@ lazy val examples = crossProject(JSPlatform, JVMPlatform)
   .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
   .settings((publish / skip) := true)
-  .dependsOn(zioFlow)
+  .dependsOn(zioFlow, twilio, sendgrid)
 
 lazy val examplesJS = examples.js
 

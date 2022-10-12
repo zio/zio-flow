@@ -103,4 +103,10 @@ package object flow extends Syntax with Schemas with InstantModule { self =>
   implicit class TemplateIdSyntax(val templateId: TemplateId) extends AnyVal {
     def toRaw: Chunk[Byte] = Chunk.fromArray(TemplateId.unwrap(templateId).getBytes(StandardCharsets.UTF_8))
   }
+
+  type ConfigKey = ConfigKey.Type
+
+  object ConfigKey extends Newtype[String] {
+    implicit val schema: Schema[ConfigKey] = Schema[String].transform(wrap(_), unwrap)
+  }
 }

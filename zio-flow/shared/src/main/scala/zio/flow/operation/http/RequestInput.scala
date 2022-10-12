@@ -171,18 +171,20 @@ object Header {
   }
 }
 
-case class Body[A](override val schema: Schema[A]) extends RequestInput[A] { self =>
+case class Body[A](override val schema: Schema[A], contentType: ContentType) extends RequestInput[A] { self =>
   def ++[B](that: Body[B]): Body[B] = that
 }
 
 object Body {
   private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Body")
 
-  def schema[A]: Schema[Body[A]] = Schema.CaseClass1[FlowSchemaAst, Body[A]](
+  def schema[A]: Schema[Body[A]] = Schema.CaseClass2[FlowSchemaAst, ContentType, Body[A]](
     typeId,
     Schema.Field("schema", FlowSchemaAst.schema),
-    a => Body(a.toSchema[A]),
-    s => FlowSchemaAst.fromSchema(s.schema)
+    Schema.Field("contentType", Schema[ContentType]),
+    (ast, contentType) => Body(ast.toSchema[A], contentType),
+    s => FlowSchemaAst.fromSchema(s.schema),
+    _.contentType
   )
 
   def schemaCase[A]: Schema.Case[Body[A], RequestInput[A]] =
@@ -289,12 +291,15 @@ sealed trait Path[A] extends RequestInput[A] { self =>
 
   def /(string: String): Path[A] =
     Path.ZipWith(this, Path.path(string), Zipper.zipperRightIdentity)
+
+  def +(string: String): Path[A] =
+    Path.ZipWith(this, Path.Literal(string), Zipper.zipperRightIdentity)
 }
 
 final case class PathState(var input: List[String])
 
 object Path {
-  def path(name: String): Path[Unit] = Path.Literal(name).asInstanceOf[Path[Unit]]
+  def path(name: String): Path[Unit] = Path.Literal("/" + name)
 
   private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path")
 

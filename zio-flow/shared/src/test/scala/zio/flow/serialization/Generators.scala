@@ -54,7 +54,7 @@ import zio.{Duration, ZNothing, flow}
 import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
-import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
+import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
 
 trait Generators extends DefaultJavaTimeSchemas {
@@ -392,6 +392,11 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.const(BinaryBooleanOperator.Xor)
     )
 
+  lazy val genUnaryStringOperator: Gen[Any, UnaryStringOperator] =
+    Gen.oneOf(
+      Gen.const(UnaryStringOperator.Base64)
+    )
+
   lazy val genRemoteConversions: Gen[Sized, (RemoteConversions[Any, Any], Gen[Sized, Remote[Any]])] =
     Gen.oneOf(
       for {
@@ -512,7 +517,10 @@ trait Generators extends DefaultJavaTimeSchemas {
       } yield (UnaryOperators.Conversion(conversion).asInstanceOf[UnaryOperators[Any, Any]], gen),
       for {
         op <- genUnaryBooleanOperator
-      } yield (UnaryOperators.Bool(op).asInstanceOf[UnaryOperators[Any, Any]], Gen.boolean.map(Remote(_)))
+      } yield (UnaryOperators.Bool(op).asInstanceOf[UnaryOperators[Any, Any]], Gen.boolean.map(Remote(_))),
+      for {
+        op <- genUnaryStringOperator
+      } yield (UnaryOperators.Str(op).asInstanceOf[UnaryOperators[Any, Any]], Gen.string.map(Remote(_)))
     )
 
   lazy val genBinaryOperators: Gen[Sized, (BinaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =

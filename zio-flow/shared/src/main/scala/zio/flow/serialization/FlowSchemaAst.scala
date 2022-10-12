@@ -306,7 +306,13 @@ object FlowSchemaAst {
 
     refs += ast.path -> baseSchema
 
-    if (ast.optional) baseSchema.optional else baseSchema
+    ast match {
+      case Other(_) =>
+        // we are using SchemaAst here, so optional is already handled
+        baseSchema
+      case _ =>
+        if (ast.optional) baseSchema.optional else baseSchema
+    }
   }
 
   @nowarn private implicit val nodePathSchema: Schema[NodePath] =

@@ -24,7 +24,7 @@ import zio.flow.remote.numeric.{
   UnaryIntegralOperator,
   UnaryNumericOperator
 }
-import zio.flow.remote.text.CharPredicateOperator
+import zio.flow.remote.text.{CharPredicateOperator, UnaryStringOperator}
 import zio.schema.{CaseSet, Schema, TypeId}
 
 sealed trait UnaryOperators[In, Out] {
@@ -61,6 +61,9 @@ object UnaryOperators {
 
   def apply(operator: CharPredicateOperator): CharPredicate =
     CharPredicate(operator)
+
+  def apply(operator: UnaryStringOperator): Str =
+    Str(operator)
 
   final case class Numeric[A](operator: UnaryNumericOperator, numeric: zio.flow.remote.numeric.Numeric[A])
       extends UnaryOperators[A, A] {
@@ -117,6 +120,14 @@ object UnaryOperators {
 
     override def apply(value: Boolean): Boolean =
       UnaryBooleanOperator.evaluate(value, operator)
+  }
+
+  final case class Str(operator: UnaryStringOperator) extends UnaryOperators[String, String] {
+    override val inputSchema: Schema[String]  = Schema[String]
+    override val outputSchema: Schema[String] = Schema[String]
+
+    override def apply(value: String): String =
+      UnaryStringOperator.evaluate(value, operator)
   }
 
   final case class Conversion[In, Out](
@@ -222,6 +233,18 @@ object UnaryOperators {
       _.asInstanceOf[Bool]
     )
 
+  private val strCase: Schema.Case[Str, UnaryOperators[Any, Any]] =
+    Schema.Case(
+      "Str",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.UnaryOperators.Str"),
+        Schema.Field("operator", Schema[UnaryStringOperator]),
+        (op: UnaryStringOperator) => Str(op),
+        _.operator
+      ),
+      _.asInstanceOf[Str]
+    )
+
   private val conversionCase: Schema.Case[Conversion[Any, Any], UnaryOperators[Any, Any]] =
     Schema.Case(
       "Conversion",
@@ -249,6 +272,7 @@ object UnaryOperators {
         .:+:(fractionalPredicateCase)
         .:+:(charPredicateCase)
         .:+:(boolCase)
+        .:+:(strCase)
         .:+:(conversionCase)
     )
 }
