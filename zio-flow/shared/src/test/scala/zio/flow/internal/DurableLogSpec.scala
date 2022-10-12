@@ -1,6 +1,7 @@
 package zio.flow.internal
 
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore.Index
+import zio.flow.runtime.{DurableLog, IndexedStore}
 import zio.test.Assertion.isEmpty
 import zio.test.{Gen, Sized, ZIOSpecDefault, assert, assertTrue, check}
 import zio.{Chunk, ZIO, ZLayer}

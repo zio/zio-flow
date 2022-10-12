@@ -17,7 +17,7 @@
 package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
-import zio.flow.internal.{KeyValueStore, Timestamp}
+import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec

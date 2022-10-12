@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.metrics
+package zio.flow.runtime.metrics
 
-sealed trait TransactionOutcome
+sealed trait VariableAccess
 
-object TransactionOutcome {
-  case object Success extends TransactionOutcome
+object VariableAccess {
+  case object Read extends VariableAccess
 
-  case object Failure extends TransactionOutcome
+  case object Write extends VariableAccess
 
-  case object Retry extends TransactionOutcome
+  case object Delete extends VariableAccess
 
-  def toLabel(outcome: TransactionOutcome): String =
-    outcome match {
-      case TransactionOutcome.Success => "success"
-      case TransactionOutcome.Failure => "failure"
-      case TransactionOutcome.Retry   => "retry"
+  def toLabel(access: VariableAccess): String =
+    access match {
+      case VariableAccess.Read   => "read"
+      case VariableAccess.Write  => "write"
+      case VariableAccess.Delete => "delete"
     }
 }

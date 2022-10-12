@@ -17,7 +17,7 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.internal.{DurablePromise, RemoteVariableScope, ScopedRemoteVariableName}
+import zio.flow.internal.{RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
   BinaryIntegralOperator,
@@ -56,6 +56,7 @@ import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
+import zio.flow.runtime.DurablePromise
 
 trait Generators extends DefaultJavaTimeSchemas {
 

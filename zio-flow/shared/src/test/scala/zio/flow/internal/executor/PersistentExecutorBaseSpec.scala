@@ -5,6 +5,7 @@ import zio.flow.mock.MockedOperation
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{

@@ -18,7 +18,7 @@ package zio.flow.rocksdb
 
 import org.{rocksdb => jrocksdb}
 import zio._
-import zio.flow.internal.IndexedStore
+import zio.flow.runtime.IndexedStore
 import zio.flow.test.IndexedStoreTests
 import zio.nio.file.{Files, Path}
 import zio.rocksdb.TransactionDB

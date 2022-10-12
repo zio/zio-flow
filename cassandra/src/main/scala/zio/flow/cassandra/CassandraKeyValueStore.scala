@@ -31,6 +31,8 @@ import zio.{Chunk, IO, Task, URLayer, ZIO, ZLayer}
 import java.io.IOException
 import java.nio.ByteBuffer
 import com.datastax.oss.driver.api.core.metadata.schema.ClusteringOrder
+import zio.flow.runtime.{KeyValueStore, Timestamp}
+
 import scala.jdk.CollectionConverters._
 
 final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
@@ -202,7 +204,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   override def getLatestTimestamp(
     namespace: String,
     key: zio.Chunk[Byte]
-  ): zio.IO[Throwable, Option[zio.flow.internal.Timestamp]] =
+  ): zio.IO[Throwable, Option[Timestamp]] =
     getLatestImpl(namespace, key, before = None).map(_.map(_._2))
 
   private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {

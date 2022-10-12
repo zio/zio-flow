@@ -17,8 +17,8 @@
 package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
-import zio.flow.internal.IndexedStore
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore
+import zio.flow.runtime.IndexedStore.Index
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec

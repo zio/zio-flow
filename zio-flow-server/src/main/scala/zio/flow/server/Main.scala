@@ -3,7 +3,8 @@ package zio.flow.server
 import zhttp.service.Server
 import zio._
 import zio.flow.Configuration
-import zio.flow.internal.{DefaultOperationExecutor, DurableLog, IndexedStore, KeyValueStore, PersistentExecutor}
+import zio.flow.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.serialization.{Deserializer, Serializer}
 
 object Main extends ZIOAppDefault {

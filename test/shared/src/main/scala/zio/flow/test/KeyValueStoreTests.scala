@@ -18,6 +18,7 @@ package zio.flow.test
 
 import zio.{Chunk, Scope, ZIO}
 import zio.flow.internal._
+import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.test._
 import zio.test.Assertion.{hasSameElements, isNone}
 import zio.test.TestAspect._

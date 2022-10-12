@@ -21,8 +21,8 @@ import zio.aws.core.{AwsError, GenericAwsError}
 import zio.aws.dynamodb.model.primitives._
 import zio.aws.dynamodb.model.{AttributeValue, GetItemRequest, PutItemRequest, QueryRequest}
 import zio.aws.dynamodb.DynamoDb
-import zio.flow.internal.IndexedStore
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore.Index
+import zio.flow.runtime.IndexedStore
 import zio.prelude.data.Optional
 import zio.stream.ZStream
 import zio.{Chunk, IO, Schedule, URLayer, ZIO, ZLayer}

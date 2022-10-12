@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.runtime
 
 import zio._
-import zio.flow.internal.IndexedStore.Index
+import IndexedStore.Index
 import zio.stream._
 
 trait DurableLog {

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.runtime
 
 import zio._
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore.Index
 import zio.prelude.Subtype
 import zio.schema.Schema
 import zio.stream._

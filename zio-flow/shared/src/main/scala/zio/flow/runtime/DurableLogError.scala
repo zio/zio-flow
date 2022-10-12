@@ -14,21 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.metrics
+package zio.flow.runtime
 
-sealed trait FlowResult
+sealed trait DurableLogError { self =>
+  def cause: Option[Throwable] = None
 
-object FlowResult {
-  case object Success extends FlowResult
+  def toMessage: String = self match {
+    case DurableLogError.IndexedStoreError(operation, reason) =>
+      s"Indexed store failure in $operation: ${reason.getMessage}"
+  }
+}
 
-  case object Failure extends FlowResult
-
-  case object Death extends FlowResult
-
-  def toLabel(result: FlowResult): String =
-    result match {
-      case FlowResult.Success => "success"
-      case FlowResult.Failure => "failure"
-      case FlowResult.Death   => "death"
-    } // TODO: categorize failures (introduce a proper error type first in place of IOException)
+object DurableLogError {
+  final case class IndexedStoreError(operation: String, reason: Throwable) extends DurableLogError {
+    override val cause: Option[Throwable] = Some(reason)
+  }
 }

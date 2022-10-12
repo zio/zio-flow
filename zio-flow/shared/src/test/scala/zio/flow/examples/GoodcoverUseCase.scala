@@ -2,10 +2,10 @@ package zio.flow.examples
 
 import zio.flow.internal.executor.PersistentExecutorBaseSpec
 import zio.{Duration, ZNothing, durationInt}
-import zio.flow.internal.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.mock.MockedOperation
 import zio.flow.operation.http
 import zio.flow._
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.equalTo
 import zio.test.{Spec, TestEnvironment, assertTrue}

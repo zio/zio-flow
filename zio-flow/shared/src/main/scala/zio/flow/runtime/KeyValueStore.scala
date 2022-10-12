@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.runtime
 
 import zio.stream.ZStream
 import zio.{Chunk, IO, Ref, ZIO, ZLayer}

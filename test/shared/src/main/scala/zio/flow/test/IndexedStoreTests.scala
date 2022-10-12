@@ -17,8 +17,8 @@
 package zio.flow.test
 
 import zio.{Chunk, Scope, ZIO}
-import zio.flow.internal.IndexedStore
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore.Index
+import zio.flow.runtime.IndexedStore
 import zio.test.Assertion.{containsString, equalTo}
 import zio.test.TestAspect.{nondeterministic, sequential}
 import zio.test.{Spec, TestEnvironment, assertTrue, assertZIO, test, suite}

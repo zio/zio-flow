@@ -4,6 +4,7 @@ import zio.flow.internal._
 import zio.flow._
 import zio.test._
 import zio._
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 
 object GarbageCollectionSpec extends PersistentExecutorBaseSpec {
   override def flowSpec

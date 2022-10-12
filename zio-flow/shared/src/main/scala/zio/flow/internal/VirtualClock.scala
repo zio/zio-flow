@@ -16,6 +16,7 @@
 
 package zio.flow.internal
 
+import zio.flow.runtime.Timestamp
 import zio.{Ref, UIO, ZIO}
 
 trait VirtualClock {

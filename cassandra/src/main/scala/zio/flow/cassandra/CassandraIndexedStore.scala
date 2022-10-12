@@ -23,8 +23,8 @@ import com.datastax.oss.driver.api.querybuilder.insert.InsertInto
 import com.datastax.oss.driver.api.querybuilder.select.SelectFrom
 import com.datastax.oss.driver.api.querybuilder.update.UpdateStart
 import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
-import zio.flow.internal.IndexedStore
-import zio.flow.internal.IndexedStore.Index
+import zio.flow.runtime.IndexedStore
+import zio.flow.runtime.IndexedStore.Index
 import zio.schema.Schema
 import zio.schema.codec.ProtobufCodec
 import zio.stream.ZStream

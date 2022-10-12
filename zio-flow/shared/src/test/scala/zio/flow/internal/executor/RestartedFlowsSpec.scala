@@ -2,7 +2,7 @@ package zio.flow.internal.executor
 
 import zio.Duration
 import zio.flow.{ZFlow, _}
-import zio.flow.internal._
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 

@@ -18,8 +18,9 @@ package zio.flow.utils
 
 import zio._
 import zio.flow.{Configuration, ZFlowExecutor}
-import zio.flow.internal.{DurableLog, KeyValueStore, PersistentExecutor}
+import zio.flow.internal.PersistentExecutor
 import zio.flow.mock.{MockedOperation, MockedOperationExecutor}
+import zio.flow.runtime.{DurableLog, KeyValueStore}
 import zio.flow.serialization.{Deserializer, Serializer}
 
 object MockExecutors {

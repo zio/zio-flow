@@ -30,7 +30,7 @@ import zio.aws.dynamodb.model.QueryRequest
 import zio.aws.dynamodb.model.BatchWriteItemRequest
 import zio.aws.dynamodb.model.WriteRequest
 import zio.aws.dynamodb.model.DeleteRequest
-import zio.flow.internal.{KeyValueStore, Timestamp}
+import zio.flow.runtime.{KeyValueStore, Timestamp}
 
 import scala.util.Try
 

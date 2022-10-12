@@ -16,9 +16,10 @@
 
 package zio.flow.internal
 
-import zio.flow.internal.IndexedStore.Index
-import zio.flow.metrics
-import zio.flow.metrics.{VariableAccess, VariableKind}
+import zio.flow.runtime.IndexedStore.Index
+import zio.flow.runtime.metrics
+import zio.flow.runtime.metrics.{VariableAccess, VariableKind}
+import zio.flow.runtime.{DurableLog, ExecutorError, KeyValueStore, Timestamp}
 import zio.flow.{ExecutionEnvironment, RemoteVariableName}
 import zio.stm.{TRef, TSet}
 import zio.stream.ZStream

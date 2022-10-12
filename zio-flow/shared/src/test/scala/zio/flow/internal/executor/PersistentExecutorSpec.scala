@@ -1,11 +1,11 @@
 package zio.flow.internal.executor
 
 import zio.flow._
-import zio.flow.internal._
 import zio.flow.mock.MockedOperation
 import zio.flow.operation.http.API
 import zio.flow.{Activity, ActivityError, Operation, Remote, ZFlow}
 import zio._
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.utils.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.schema.Schema
 import zio.test.Assertion._

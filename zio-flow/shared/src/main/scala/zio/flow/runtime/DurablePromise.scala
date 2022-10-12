@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.runtime
 
 import zio._
 import zio.flow._
-import zio.flow.internal.IndexedStore.Index
+import IndexedStore.Index
+import zio.flow.internal.Topics
 import zio.schema._
 
 final case class DurablePromise[E, A](promiseId: PromiseId) {

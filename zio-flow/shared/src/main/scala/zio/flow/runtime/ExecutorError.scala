@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package zio.flow.internal
+package zio.flow.runtime
 
-import zio.flow.{FlowId, PromiseId, RemoteVariableName}
+import zio.flow._
 import zio.schema.{DeriveSchema, Schema}
 
 sealed trait ExecutorError { self =>
@@ -65,7 +65,5 @@ object ExecutorError {
   case object VariableChangeLogFinished extends ExecutorError
 
   case object FlowDied extends ExecutorError
-
-  import zio.flow.schemaThrowable
   implicit val schema: Schema[ExecutorError] = DeriveSchema.gen
 }

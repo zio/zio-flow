@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-package zio.flow.metrics
+package zio.flow.runtime.metrics
 
-sealed trait VariableKind
+sealed trait StartType
 
-object VariableKind {
-  case object TopLevel extends VariableKind
+object StartType {
+  case object Fresh extends StartType
 
-  case object Forked extends VariableKind
+  case object Continued extends StartType
 
-  case object Transactional extends VariableKind
-
-  def toLabel(kind: VariableKind): String =
-    kind match {
-      case VariableKind.TopLevel      => "toplevel"
-      case VariableKind.Forked        => "forked"
-      case VariableKind.Transactional => "transactional"
+  def toLabel(startType: StartType): String =
+    startType match {
+      case StartType.Fresh     => "fresh"
+      case StartType.Continued => "continued"
     }
 }

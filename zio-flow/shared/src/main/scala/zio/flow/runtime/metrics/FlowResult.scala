@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-package zio.flow.metrics
+package zio.flow.runtime.metrics
 
-sealed trait VariableAccess
+sealed trait FlowResult
 
-object VariableAccess {
-  case object Read extends VariableAccess
+object FlowResult {
+  case object Success extends FlowResult
 
-  case object Write extends VariableAccess
+  case object Failure extends FlowResult
 
-  case object Delete extends VariableAccess
+  case object Death extends FlowResult
 
-  def toLabel(access: VariableAccess): String =
-    access match {
-      case VariableAccess.Read   => "read"
-      case VariableAccess.Write  => "write"
-      case VariableAccess.Delete => "delete"
-    }
+  def toLabel(result: FlowResult): String =
+    result match {
+      case FlowResult.Success => "success"
+      case FlowResult.Failure => "failure"
+      case FlowResult.Death   => "death"
+    } // TODO: categorize failures (introduce a proper error type first in place of IOException)
 }
