@@ -58,7 +58,7 @@ class WorkflowEndpoint(pExec: ZFlowExecutor) {
 
   def deserializeFlow(r: Request) =
     for {
-      payload <- r.body
+      payload <- r.body.asChunk
       zFlow <- ZIO
                  .fromEither(jsonToZFlow(payload))
                  // TODO custom error type? ;)

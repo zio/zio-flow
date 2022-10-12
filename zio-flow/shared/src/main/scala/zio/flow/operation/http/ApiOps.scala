@@ -28,7 +28,7 @@ final class APIOps[Input, Output: API.NotUnit, Id](
   val self: API.WithId[Input, Output, Id]
 ) {
   def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Output] =
-    ClientInterpreter.interpret(host)(self)(params).flatMap(_.body).flatMap { string =>
+    ClientInterpreter.interpret(host)(self)(params).flatMap(_.body.asChunk).flatMap { string =>
       if (self.outputSchema == Schema[Unit])
         ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, Throwable, Output]]
       else {

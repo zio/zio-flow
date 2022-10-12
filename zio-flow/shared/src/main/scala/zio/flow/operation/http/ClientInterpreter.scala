@@ -1,6 +1,5 @@
 package zio.flow.operation.http
 
-import zhttp.http.HttpData
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.ZIO
 
@@ -17,14 +16,14 @@ private[http] object ClientInterpreter {
     val state  = new RequestState()
     parseUrl(api.requestInput, state)(input)
     val (url, headers, body) = state.result
-    val data                 = body.fold(HttpData.empty)(HttpData.fromChunk)
+    val data                 = body.fold(zhttp.http.Body.empty)(zhttp.http.Body.fromChunk)
     Client.request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
   }
 
   private[http] class RequestState {
     private val query: mutable.Map[String, String]   = mutable.Map.empty
     private val headers: mutable.Map[String, String] = mutable.Map.empty
-    private val pathBuilder: StringBuilder           = new StringBuilder()
+    private val pathBuilder: mutable.StringBuilder   = new mutable.StringBuilder()
     private var body: Option[Chunk[Byte]]            = None
 
     def addPath(path: String): Unit =

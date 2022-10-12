@@ -60,6 +60,7 @@ lazy val root = project
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .in(file("zio-flow"))
   .settings(stdSettings("zio-flow"))
+  .settings(dottySettings)
   .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
   .settings(
@@ -85,6 +86,7 @@ lazy val zioFlowJVM = zioFlow.jvm
 lazy val zioFlowServer = project
   .in(file("zio-flow-server"))
   .dependsOn(zioFlowJVM)
+  .settings(dottySettings)
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= commonTestDependencies.map(_ % Test)
@@ -95,6 +97,7 @@ lazy val zioFlowServer = project
 lazy val test = crossProject(JSPlatform, JVMPlatform)
   .in(file("test"))
   .settings(stdSettings("zio-flow-test"))
+  .settings(dottySettings)
   .settings(crossProjectSettings)
   .settings(
     libraryDependencies ++= Seq(
@@ -117,6 +120,7 @@ lazy val rocksdb = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-rocksdb"),
+    dottySettings,
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-rocksdb" % Version.zioRocksDb
@@ -139,6 +143,7 @@ lazy val cassandra = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-cassandra"),
+    dottySettings,
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "com.scylladb"  % "java-driver-core-shaded"   % Version.cassandraJavaDriver,
@@ -164,6 +169,7 @@ lazy val dynamodb = project
   .settings(
     stdSettings("zio-flow-dynamodb"),
     Defaults.itSettings,
+    dottySettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-aws-dynamodb" % Version.zioAws,
       "dev.zio" %% "zio-aws-netty"    % Version.zioAws
@@ -184,6 +190,7 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
   .dependsOn(zioFlow, test % "test->compile")
   .settings(
     stdSettings("zio-flow-twilio"),
+    dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
       "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
@@ -199,6 +206,7 @@ lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
   .dependsOn(zioFlow, test % "test->compile")
   .settings(
     stdSettings("zio-flow-sendgrid"),
+    dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
       "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
