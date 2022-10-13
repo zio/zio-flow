@@ -40,16 +40,19 @@ lazy val root = project
     publish / skip := true
   )
   .aggregate(
+    docs,
+    examples,
+    zioFlowJVM,
+    zioFlowJS,
+    zioFlowTestJVM,
+    zioFlowTestJS,
+    zioFlowRuntime,
+    zioFlowRuntimeTest,
+    zioFlowServer,
+    // database backends
     rocksdb,
     cassandra,
     dynamodb,
-    docs,
-    examplesJVM,
-    examplesJS,
-    zioFlowJVM,
-    zioFlowJS,
-    testJVM,
-    testJS,
     // activity libraries
     twilioJVM,
     twilioJS,
@@ -70,7 +73,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
       "dev.zio" %% "zio-schema-json"       % Version.zioSchema,
       "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema,
-      "io.d11"  %% "zhttp"                 % Version.zioHttp
+      "io.d11"  %% "zhttp"                 % Version.zioHttp // TODO: remove
     ) ++
       commonTestDependencies.map(_ % Test)
   )
@@ -82,18 +85,33 @@ lazy val zioFlowJS = zioFlow.js
   .settings(scalaJSUseMainModuleInitializer := true)
 lazy val zioFlowJVM = zioFlow.jvm
 
+lazy val zioFlowRuntime = project
+  .in(file("zio-flow-runtime"))
+  .dependsOn(
+    zioFlowJVM % "compile->compile;test->test",
+    zioFlowTestJVM
+  )
+  .settings(stdSettings("zio-flow-runtime"))
+  .settings(
+    libraryDependencies ++= Seq(
+      "io.d11"                       %% "zhttp" % Version.zioHttp
+    ) ++ commonTestDependencies.map(_ % Test)
+  )
+  .settings(fork := false)
+  .settings(testFrameworks += zioTest)
+
 lazy val zioFlowServer = project
   .in(file("zio-flow-server"))
-  .dependsOn(zioFlowJVM)
+  .dependsOn(zioFlowRuntime % " compile->compile;test->test")
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= commonTestDependencies.map(_ % Test)
   )
-  .settings(fork := true)
+  .settings(fork := false)
   .settings(testFrameworks += zioTest)
 
-lazy val test = crossProject(JSPlatform, JVMPlatform)
-  .in(file("test"))
+lazy val zioFlowTest = crossProject(JSPlatform, JVMPlatform)
+  .in(file("zio-flow-test"))
   .settings(stdSettings("zio-flow-test"))
   .settings(crossProjectSettings)
   .settings(
@@ -103,16 +121,27 @@ lazy val test = crossProject(JSPlatform, JVMPlatform)
   )
   .dependsOn(zioFlow)
 
-lazy val testJS  = test.js
-lazy val testJVM = test.jvm
+lazy val zioFlowTestJS  = zioFlowTest.js
+lazy val zioFlowTestJVM = zioFlowTest.jvm
 
-// Database implementations
+lazy val zioFlowRuntimeTest = project
+  .in(file("zio-flow-runtime-test"))
+  .settings(stdSettings("zio-flow-runtime-test"))
+  .settings(
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio-test" % Version.zio
+    )
+  )
+  .dependsOn(zioFlowRuntime)
+
+// Database backends
 
 lazy val rocksdb = project
-  .in(file("rocksdb"))
+  .in(file("backends/zio-flow-rocksdb"))
   .dependsOn(
     zioFlowJVM,
-    testJVM % "it->compile"
+    zioFlowRuntime,
+    zioFlowRuntimeTest % "it->compile"
   )
   .configs(IntegrationTest)
   .settings(
@@ -131,10 +160,11 @@ lazy val rocksdb = project
   )
 
 lazy val cassandra = project
-  .in(file("cassandra"))
+  .in(file("backends/zio-flow-cassandra"))
   .dependsOn(
     zioFlowJVM,
-    testJVM % "it->compile"
+    zioFlowRuntime,
+    zioFlowRuntimeTest % "it->compile"
   )
   .configs(IntegrationTest)
   .settings(
@@ -155,10 +185,11 @@ lazy val cassandra = project
   )
 
 lazy val dynamodb = project
-  .in(file("dynamodb"))
+  .in(file("backends/zio-flow-dynamodb"))
   .dependsOn(
     zioFlowJVM,
-    testJVM % "it->compile"
+    zioFlowRuntime,
+    zioFlowRuntimeTest % "it->compile"
   )
   .configs(IntegrationTest)
   .settings(
@@ -181,7 +212,7 @@ lazy val dynamodb = project
 // Activity libraries
 lazy val twilio = crossProject(JSPlatform, JVMPlatform)
   .in(file("activities/zio-flow-twilio"))
-  .dependsOn(zioFlow, test % "test->compile")
+  .dependsOn(zioFlow, zioFlowTest % "test->compile")
   .settings(
     stdSettings("zio-flow-twilio"),
     testFrameworks += zioTest,
@@ -196,7 +227,7 @@ lazy val twilioJVM = twilio.jvm
 
 lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
   .in(file("activities/zio-flow-sendgrid"))
-  .dependsOn(zioFlow, test % "test->compile")
+  .dependsOn(zioFlow, zioFlowTest % "test->compile")
   .settings(
     stdSettings("zio-flow-sendgrid"),
     testFrameworks += zioTest,
@@ -231,14 +262,9 @@ lazy val docs = project
   .dependsOn(zioFlowJVM)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
 
-lazy val examples = crossProject(JSPlatform, JVMPlatform)
+lazy val examples = project
   .in(file("zio-flow-examples"))
   .settings(stdSettings("zio-flow-examples"))
-  .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
   .settings((publish / skip) := true)
-  .dependsOn(zioFlow, twilio, sendgrid)
-
-lazy val examplesJS = examples.js
-
-lazy val examplesJVM = examples.jvm
+  .dependsOn(zioFlowJVM, zioFlowRuntime, twilioJVM, sendgridJVM)

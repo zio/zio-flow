@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.flow.internal.ExecutorError
+import zio.flow.runtime.ExecutorError
 import zio.schema.{DeriveSchema, Schema}
 
 sealed trait RemoteEvaluationError { self =>
