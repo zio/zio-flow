@@ -23,7 +23,7 @@ import zio.schema.{DeriveSchema, Schema}
  *
  * Remote variables can not be shared between top level workflows, but they can
  * be accessed from forked workflows. For more information about scoping of
- * remote variables see [[zio.flow.internal.RemoteVariableScope]]
+ * remote variables see zio.flow.runtime.internal.RemoteVariableScope
  */
 case class RemoteVariableReference[A](name: RemoteVariableName) {
 
