@@ -3,10 +3,9 @@ package zio.flow.runtime.internal
 import zio.Scope
 import zio.flow.runtime.internal.Generators.genScopedRemoteVariableName
 import zio.flow.{FlowId, RemoteVariableName, ZIOFlowBaseSpec}
-import zio.flow.serialization.Generators
 import zio.test._
 
-object ScopedRemoteVariableNameSpec extends ZIOFlowBaseSpec with Generators {
+object ScopedRemoteVariableNameSpec extends ZIOFlowBaseSpec with zio.flow.serialization.Generators {
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("ScopedRemoteVariableName")(
       suite("conversion to string is invertible")(
