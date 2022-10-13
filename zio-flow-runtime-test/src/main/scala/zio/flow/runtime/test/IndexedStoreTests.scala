@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.flow.test
+package zio.flow.runtime.test
 
 import zio.{Chunk, Scope, ZIO}
 import zio.flow.runtime.IndexedStore.Index

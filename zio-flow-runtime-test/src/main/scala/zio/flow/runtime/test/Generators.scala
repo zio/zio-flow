@@ -1,4 +1,4 @@
-package zio.flow.test
+package zio.flow.runtime.test
 
 import zio.{Chunk, NonEmptyChunk}
 import zio.test.{Gen, Sized}
