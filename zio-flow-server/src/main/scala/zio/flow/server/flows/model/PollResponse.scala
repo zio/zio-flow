@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.server.flows.model
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.json.{DeriveJsonCodec, JsonCodec}
+import zio.json.ast.Json
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
+sealed trait PollResponse
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
+object PollResponse {
+  case object Running                     extends PollResponse
+  final case class Failed(value: Json)    extends PollResponse
+  final case class Succeeded(value: Json) extends PollResponse
 
+  implicit val codec: JsonCodec[PollResponse] = DeriveJsonCodec.gen
 }

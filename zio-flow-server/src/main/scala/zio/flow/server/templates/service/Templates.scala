@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.server.templates.service
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio._
+import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId}
+import zio.stream.ZStream
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
-
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
-
+trait Templates {
+  def all: ZStream[Any, Throwable, ZFlowTemplateWithId]
+  def get(templateId: TemplateId): ZIO[Any, Throwable, Option[ZFlowTemplate]]
+  def put(templateId: TemplateId, flowTemplate: ZFlowTemplate): ZIO[Any, Throwable, Unit]
+  def delete(templateId: TemplateId): ZIO[Any, Throwable, Unit]
 }

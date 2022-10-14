@@ -14,15 +14,11 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.server.common
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.schema.{DeriveSchema, Schema}
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
-
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
-
+final case class ErrorResponse(message: String)
+object ErrorResponse {
+  implicit val schema: Schema[ErrorResponse] = DeriveSchema.gen
 }

@@ -14,15 +14,24 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.server.templates
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.Chunk
+import zio.prelude.Newtype
+import zio.schema.Schema
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
+import java.nio.charset.StandardCharsets
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
+package object model {
+
+  object TemplateId extends Newtype[String] {
+    implicit val schema: Schema[TemplateId] = Schema[String].transform(apply(_), unwrap)
+  }
+
+  type TemplateId = TemplateId.Type
+
+  implicit class TemplateIdSyntax(val templateId: TemplateId) extends AnyVal {
+    def toRaw: Chunk[Byte] = Chunk.fromArray(TemplateId.unwrap(templateId).getBytes(StandardCharsets.UTF_8))
+  }
 
 }

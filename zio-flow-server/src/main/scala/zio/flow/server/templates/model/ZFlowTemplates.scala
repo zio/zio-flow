@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.server.templates.model
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.Chunk
+import zio.schema.{DeriveSchema, Schema}
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
+final case class ZFlowTemplates(entries: Chunk[ZFlowTemplateWithId])
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
-
+object ZFlowTemplates {
+  implicit val schema: Schema[ZFlowTemplates] = DeriveSchema.gen
 }

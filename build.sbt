@@ -105,7 +105,10 @@ lazy val zioFlowServer = project
   .dependsOn(zioFlowRuntime % " compile->compile;test->test")
   .settings(stdSettings("zio-flow-server"))
   .settings(
-    libraryDependencies ++= commonTestDependencies.map(_ % Test)
+    libraryDependencies ++= Seq(
+      "io.d11"                       %% "zhttp"                  % Version.zioHttp,
+      "dev.zio"                      %% "zio-metrics-connectors" % Version.zioMetricsConnectors
+    ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(fork := false)
   .settings(testFrameworks += zioTest)
