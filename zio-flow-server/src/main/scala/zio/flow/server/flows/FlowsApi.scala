@@ -38,9 +38,9 @@ final case class FlowsApi(executor: ZFlowExecutor) extends Api {
             _ <- request match {
                    case StartRequest.Flow(flow) =>
                      executor.start(flowId, flow).orDieWith(_.toException)
-                   case StartRequest.FlowWithParameter(flow, value)           => ???
-                   case StartRequest.Template(templateId)                     => ???
-                   case StartRequest.TemplateWithParameter(templateId, value) => ???
+                   case StartRequest.FlowWithParameter(_, _)     => ???
+                   case StartRequest.Template(_)                 => ???
+                   case StartRequest.TemplateWithParameter(_, _) => ???
                  }
           } yield jsonResponse(StartResponse(flowId))
 
