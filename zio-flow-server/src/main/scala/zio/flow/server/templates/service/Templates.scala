@@ -26,3 +26,17 @@ trait Templates {
   def put(templateId: TemplateId, flowTemplate: ZFlowTemplate): ZIO[Any, Throwable, Unit]
   def delete(templateId: TemplateId): ZIO[Any, Throwable, Unit]
 }
+
+object Templates {
+  def all: ZStream[Templates, Throwable, ZFlowTemplateWithId] =
+    ZStream.serviceWithStream(_.all)
+
+  def get(templateId: TemplateId): ZIO[Templates, Throwable, Option[ZFlowTemplate]] =
+    ZIO.serviceWithZIO(_.get(templateId))
+
+  def put(templateId: TemplateId, flowTemplate: ZFlowTemplate): ZIO[Templates, Throwable, Unit] =
+    ZIO.serviceWithZIO(_.put(templateId, flowTemplate))
+
+  def delete(templateId: TemplateId): ZIO[Templates, Throwable, Unit] =
+    ZIO.serviceWithZIO(_.delete(templateId))
+}

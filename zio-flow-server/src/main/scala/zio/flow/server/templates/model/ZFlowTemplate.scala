@@ -20,7 +20,13 @@ import zio.flow.ZFlow
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{DeriveSchema, Schema}
 
-final case class ZFlowTemplate(template: ZFlow[Any, Any, Any], inputSchema: Option[FlowSchemaAst])
+final case class ZFlowTemplate private[model] (flow: ZFlow[Any, Any, Any], inputSchema: Option[FlowSchemaAst])
 object ZFlowTemplate {
+  def apply(flow: ZFlow[Any, Any, Any]): ZFlowTemplate =
+    ZFlowTemplate(flow, None)
+
+  def apply[R](flow: ZFlow[R, Any, Any], schema: Schema[R]): ZFlowTemplate =
+    ZFlowTemplate(flow.asInstanceOf[ZFlow[Any, Any, Any]], Some(FlowSchemaAst.fromSchema(schema)))
+
   implicit val schema: Schema[ZFlowTemplate] = DeriveSchema.gen
 }

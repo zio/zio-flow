@@ -24,6 +24,7 @@ import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplate
 import zio.flow.server.templates.service.Templates
 
 final case class TemplatesApi(templates: Templates) extends Api {
+
   val endpoint: HttpApp[Any, Nothing] =
     Http
       .collectZIO[Request] {
@@ -51,10 +52,6 @@ final case class TemplatesApi(templates: Templates) extends Api {
         case DELETE -> !! / "templates" / templateId =>
           templates.delete(TemplateId(templateId)).as(Response.status(Status.NoContent))
 
-//        case POST -> !! / "templates" / templateId / "trigger" =>
-//          templates
-//            .trigger(TemplateId(templateId))
-//            .map(flowId => jsonResponse(ZFlowTriggered(flowId)))
       }
       .catchAll { error =>
         Http.response(jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError))
