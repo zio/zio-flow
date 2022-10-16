@@ -283,7 +283,7 @@ object FlowsApiSpec extends ApiSpecBase {
       executorMock
     ) @@ TestAspect.sequential
 
-  private def decodeStartResponse(response: Response): ZIO[Any, Serializable, StartResponse] =
+  private def decodeStartResponse(response: Response): ZIO[Any, java.io.Serializable, StartResponse] =
     for {
       body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
       result <-
@@ -292,7 +292,7 @@ object FlowsApiSpec extends ApiSpecBase {
         )
     } yield result
 
-  private def decodeGetAllResponse(response: Response): ZIO[Any, Serializable, GetAllResponse] =
+  private def decodeGetAllResponse(response: Response): ZIO[Any, java.io.Serializable, GetAllResponse] =
     for {
       body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
       result <-
@@ -301,7 +301,7 @@ object FlowsApiSpec extends ApiSpecBase {
         )
     } yield result
 
-  private def decodePollResponse(response: Response): ZIO[Any, Serializable, PollResponse] =
+  private def decodePollResponse(response: Response): ZIO[Any, java.io.Serializable, PollResponse] =
     for {
       body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
       result <-
@@ -348,7 +348,7 @@ object FlowsApiSpec extends ApiSpecBase {
           case Some(handler) if handler.after > 0 =>
             (None, handlers.updated(id, handler.copy(after = handler.after - 1)))
           case Some(handler) =>
-            (Some(handler.result), handlers.removed(id))
+            (Some(handler.result), handlers - id)
           case None => (None, handlers)
         }
       }
