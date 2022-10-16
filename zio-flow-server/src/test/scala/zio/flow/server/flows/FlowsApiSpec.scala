@@ -19,9 +19,12 @@ package zio.flow.server.flows
 import zhttp.http.{HttpData, Method, Request, Response, Status, URL}
 import zhttp.service.{Client, Server}
 import zio.flow.runtime.internal.PersistentExecutor
-import zio.flow.runtime.{DurablePromise, ExecutorError, FlowStatus, ZFlowExecutor}
+import zio.flow.runtime.{DurablePromise, ExecutorError, FlowStatus, KeyValueStore, ZFlowExecutor}
+import zio.flow.serialization.FlowSchemaAst
 import zio.flow.server.common.ApiSpecBase
 import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
+import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate}
+import zio.flow.server.templates.service.{KVStoreBasedTemplates, Templates}
 import zio.flow.{FlowId, PromiseId, RemoteVariableName, ZFlow}
 import zio.json.ast.Json
 import zio.schema.codec.JsonCodec
@@ -34,6 +37,7 @@ import java.nio.charset.StandardCharsets
 
 object FlowsApiSpec extends ApiSpecBase {
   private val flow1 = ZFlow.succeed(11)
+  private val flow2 = ZFlow.input[Int]
 
   override def spec: Spec[Client[Any] with Client.Config with TestEnvironment with Scope, Any] =
     suite("FlowsApi")(
@@ -175,6 +179,144 @@ object FlowsApiSpec extends ApiSpecBase {
             started.contains(startResponse.flowId),
             started(startResponse.flowId) == flow1,
             pollResult == PollResponse.Died(ExecutorError.MissingVariable(RemoteVariableName("x"), "y"))
+          )
+        },
+        test("send flow with parameter and wait for successful result") {
+          for {
+            _             <- reset()
+            client        <- ZIO.service[Client[Any]]
+            clientConfig  <- ZIO.service[Client.Config]
+            baseUrl       <- ZIO.service[URL]
+            parameterJson <- ZIO.fromEither(JsonCodec.jsonEncoder(Schema[Int]).toJsonAST(11))
+            response <- client.request(
+                          Request(
+                            method = Method.POST,
+                            url = baseUrl.setPath("/flows"),
+                            data = HttpData.fromCharSequence(
+                              StartRequest.codec.encodeJson(
+                                StartRequest.FlowWithParameter(
+                                  flow2.asInstanceOf[ZFlow[Any, Any, Any]],
+                                  FlowSchemaAst.fromSchema(Schema[Int]),
+                                  parameterJson
+                                ),
+                                None
+                              )
+                            )
+                          ),
+                          clientConfig
+                        )
+            startResponse <- decodeStartResponse(response)
+            started       <- getStarted
+
+            _ <- addPollHandler(
+                   startResponse.flowId,
+                   PollHandler(0, Right(DynamicValue.fromSchemaAndValue(Schema[Int], 1)))
+                 )
+
+            pollResponse <-
+              client.request(
+                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
+                clientConfig
+              )
+            pollResult <- decodePollResponse(pollResponse)
+          } yield assertTrue(
+            started.size == 1,
+            response.status == Status.Ok,
+            started.contains(startResponse.flowId),
+            started(startResponse.flowId) == flow2.provide(11),
+            pollResult == PollResponse.Succeeded(Json.Obj("Int" -> Json.Num(1)))
+          )
+        },
+        test("start registered flow without parameter and wait for successful result") {
+          for {
+            _            <- reset()
+            client       <- ZIO.service[Client[Any]]
+            clientConfig <- ZIO.service[Client.Config]
+            baseUrl      <- ZIO.service[URL]
+
+            _ <- Templates.put(TemplateId("test"), ZFlowTemplate(flow1))
+
+            response <- client.request(
+                          Request(
+                            method = Method.POST,
+                            url = baseUrl.setPath("/flows"),
+                            data = HttpData.fromCharSequence(
+                              StartRequest.codec.encodeJson(
+                                StartRequest.Template(TemplateId("test")),
+                                None
+                              )
+                            )
+                          ),
+                          clientConfig
+                        )
+            startResponse <- decodeStartResponse(response)
+            started       <- getStarted
+
+            _ <- addPollHandler(
+                   startResponse.flowId,
+                   PollHandler(0, Right(DynamicValue.fromSchemaAndValue(Schema[Int], 1)))
+                 )
+
+            pollResponse <-
+              client.request(
+                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
+                clientConfig
+              )
+            pollResult <- decodePollResponse(pollResponse)
+          } yield assertTrue(
+            started.size == 1,
+            response.status == Status.Ok,
+            started.contains(startResponse.flowId),
+            started(startResponse.flowId) == flow1,
+            pollResult == PollResponse.Succeeded(Json.Obj("Int" -> Json.Num(1)))
+          )
+        },
+        test("start registered flow with parameter and wait for successful result") {
+          for {
+            _            <- reset()
+            client       <- ZIO.service[Client[Any]]
+            clientConfig <- ZIO.service[Client.Config]
+            baseUrl      <- ZIO.service[URL]
+
+            _             <- Templates.put(TemplateId("test"), ZFlowTemplate(flow2, Schema[Int]))
+            parameterJson <- ZIO.fromEither(JsonCodec.jsonEncoder(Schema[Int]).toJsonAST(11))
+
+            response <- client.request(
+                          Request(
+                            method = Method.POST,
+                            url = baseUrl.setPath("/flows"),
+                            data = HttpData.fromCharSequence(
+                              StartRequest.codec.encodeJson(
+                                StartRequest.TemplateWithParameter(
+                                  TemplateId("test"),
+                                  parameterJson
+                                ),
+                                None
+                              )
+                            )
+                          ),
+                          clientConfig
+                        )
+            startResponse <- decodeStartResponse(response)
+            started       <- getStarted
+
+            _ <- addPollHandler(
+                   startResponse.flowId,
+                   PollHandler(0, Right(DynamicValue.fromSchemaAndValue(Schema[Int], 1)))
+                 )
+
+            pollResponse <-
+              client.request(
+                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
+                clientConfig
+              )
+            pollResult <- decodePollResponse(pollResponse)
+          } yield assertTrue(
+            started.size == 1,
+            response.status == Status.Ok,
+            started.contains(startResponse.flowId),
+            started(startResponse.flowId) == flow2.provide(11),
+            pollResult == PollResponse.Succeeded(Json.Obj("Int" -> Json.Num(1)))
           )
         }
       ),
@@ -346,8 +488,10 @@ object FlowsApiSpec extends ApiSpecBase {
       ZLayer(
         ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
       ),
-      executorMock
-    ) @@ TestAspect.sequential
+      executorMock,
+      KeyValueStore.inMemory,
+      KVStoreBasedTemplates.layer
+    ) @@ TestAspect.withLiveClock @@ TestAspect.sequential
 
   private def decodeStartResponse(response: Response): ZIO[Any, java.io.Serializable, StartResponse] =
     for {
@@ -382,11 +526,18 @@ object FlowsApiSpec extends ApiSpecBase {
       }
     }
 
-  private def reset(): ZIO[MockedExecutor, Nothing, Unit] =
+  private def reset(): ZIO[MockedExecutor with KeyValueStore, Throwable, Unit] =
     for {
       mock <- ZIO.service[MockedExecutor]
       _    <- mock.started.set(Map.empty)
       _    <- mock.pollHandlers.set(Map.empty)
+      _    <- mock.abortRequests.set(Set.empty)
+      _    <- mock.pauseRequests.set(Set.empty)
+      _    <- mock.resumeRequests.set(Set.empty)
+      _ <- KeyValueStore
+             .scanAll("_zflow_workflow_templates")
+             .mapZIO(kv => KeyValueStore.delete("_zflow_workflow_templates", kv._1))
+             .runDrain
     } yield ()
 
   private case class PollHandler(

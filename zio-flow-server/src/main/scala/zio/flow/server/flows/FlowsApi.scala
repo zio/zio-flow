@@ -17,15 +17,17 @@
 package zio.flow.server.flows
 
 import zhttp.http._
-import zio.flow.FlowId
+import zio.flow.{FlowId, Remote}
 import zio.flow.runtime.{ExecutorError, ZFlowExecutor}
 import zio.flow.server.common.{Api, ErrorResponse}
 import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
+import zio.flow.server.templates.model.ZFlowTemplate
+import zio.flow.server.templates.service.Templates
 import zio.schema.codec.JsonCodec
 import zio.schema.{DynamicValue, Schema}
 import zio.{ZIO, ZLayer}
 
-final case class FlowsApi(executor: ZFlowExecutor) extends Api {
+final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends Api {
 
   // Create HTTP route
   val endpoint: HttpApp[Any, Nothing] =
@@ -38,9 +40,56 @@ final case class FlowsApi(executor: ZFlowExecutor) extends Api {
             _ <- request match {
                    case StartRequest.Flow(flow) =>
                      executor.start(flowId, flow).orDieWith(_.toException)
-                   case StartRequest.FlowWithParameter(_, _)     => ???
-                   case StartRequest.Template(_)                 => ???
-                   case StartRequest.TemplateWithParameter(_, _) => ???
+                   case StartRequest.FlowWithParameter(flow, schemaAst, inputJson) =>
+                     val schema = schemaAst.toSchema[Any]
+                     ZIO
+                       .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
+                       .mapError(message =>
+                         new IllegalArgumentException(
+                           s"Failed to decode provided input value based on the provided schema: $message"
+                         )
+                       )
+                       .flatMap { (input: Any) =>
+                         executor.start(flowId, flow.provide(Remote(input)(schema))).orDieWith(_.toException)
+                       }
+                   case StartRequest.Template(templateId) =>
+                     templates.get(templateId).flatMap {
+                       case Some(ZFlowTemplate(flow, None)) =>
+                         executor.start(flowId, flow).orDieWith(_.toException)
+                       case Some(ZFlowTemplate(_, Some(_))) =>
+                         ZIO.fail(
+                           new IllegalArgumentException(
+                             s"The given flow template ($templateId) requires an input value"
+                           )
+                         )
+                       case None =>
+                         ZIO
+                           .fail(new IllegalArgumentException(s"Could not find the given template with id $templateId"))
+                     }
+                   case StartRequest.TemplateWithParameter(templateId, inputJson) =>
+                     templates.get(templateId).flatMap {
+                       case Some(ZFlowTemplate(_, None)) =>
+                         ZIO.fail(
+                           new IllegalArgumentException(
+                             s"The given flow template ($templateId) does not requires an input value"
+                           )
+                         )
+                       case Some(ZFlowTemplate(flow, Some(schemaAst))) =>
+                         val schema = schemaAst.toSchema[Any]
+                         ZIO
+                           .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
+                           .mapError(message =>
+                             new IllegalArgumentException(
+                               s"Failed to decode provided input value based on the provided schema: $message"
+                             )
+                           )
+                           .flatMap { (input: Any) =>
+                             executor.start(flowId, flow.provide(Remote(input)(schema))).orDieWith(_.toException)
+                           }
+                       case None =>
+                         ZIO
+                           .fail(new IllegalArgumentException(s"Could not find the given template with id $templateId"))
+                     }
                  }
           } yield jsonResponse(StartResponse(flowId))
 
@@ -132,17 +181,26 @@ final case class FlowsApi(executor: ZFlowExecutor) extends Api {
             }
       }
       .catchAll { error =>
-        Http.response(jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError))
+        Http.response(
+          jsonResponse(
+            ErrorResponse(error.getMessage),
+            error match {
+              case _: IllegalArgumentException => Status.BadRequest
+              case _                           => Status.InternalServerError
+            }
+          )
+        )
       }
 }
 
 object FlowsApi {
   def endpoint: ZIO[FlowsApi, Nothing, HttpApp[Any, Nothing]] = ZIO.serviceWith(_.endpoint)
 
-  val layer: ZLayer[ZFlowExecutor, Nothing, FlowsApi] =
+  val layer: ZLayer[ZFlowExecutor with Templates, Nothing, FlowsApi] =
     ZLayer {
       for {
-        executor <- ZIO.service[ZFlowExecutor]
-      } yield FlowsApi(executor)
+        executor  <- ZIO.service[ZFlowExecutor]
+        templates <- ZIO.service[Templates]
+      } yield FlowsApi(executor, templates)
     }
 }

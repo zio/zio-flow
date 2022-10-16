@@ -17,6 +17,7 @@
 package zio.flow.server.flows.model
 
 import zio.flow.ZFlow
+import zio.flow.serialization.FlowSchemaAst
 import zio.flow.server.templates.model.TemplateId
 import zio.json.{DeriveJsonCodec, JsonCodec, JsonDecoder, JsonEncoder}
 import zio.json.ast.Json
@@ -26,8 +27,9 @@ import scala.annotation.nowarn
 sealed trait StartRequest
 
 object StartRequest {
-  final case class Flow(flow: ZFlow[Any, Any, Any])                           extends StartRequest
-  final case class FlowWithParameter(flow: ZFlow[Any, Any, Any], value: Json) extends StartRequest
+  final case class Flow(flow: ZFlow[Any, Any, Any]) extends StartRequest
+  final case class FlowWithParameter(flow: ZFlow[Any, Any, Any], schema: FlowSchemaAst, value: Json)
+      extends StartRequest
   final case class Template(templateId: TemplateId)                           extends StartRequest
   final case class TemplateWithParameter(templateId: TemplateId, value: Json) extends StartRequest
 
@@ -40,6 +42,11 @@ object StartRequest {
     implicitly[JsonEncoder[String]].contramap(TemplateId.unwrap(_))
   @nowarn private implicit val templateIdDecoder: JsonDecoder[TemplateId] =
     implicitly[JsonDecoder[String]].map(TemplateId(_))
+
+  @nowarn private implicit val flowSchemaAstEncoder: JsonEncoder[FlowSchemaAst] =
+    zio.schema.codec.JsonCodec.jsonEncoder(FlowSchemaAst.schema)
+  @nowarn private implicit val flowSchemaAstDecoder: JsonDecoder[FlowSchemaAst] =
+    zio.schema.codec.JsonCodec.jsonDecoder(FlowSchemaAst.schema)
 
   implicit val codec: JsonCodec[StartRequest] = DeriveJsonCodec.gen[StartRequest]
 }
