@@ -22,6 +22,7 @@ import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.{Configuration, FlowId, ZFlow}
 import zio.schema.{DynamicValue, Schema}
+import zio.stream.ZStream
 
 trait ZFlowExecutor {
 
@@ -31,7 +32,7 @@ trait ZFlowExecutor {
    * If the executor is already running a flow with the given ID, that flow's
    * result will be awaited.
    */
-  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
+  def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A]
 
   /**
    * Submits a flow to be executed and returns a durable promise that will
@@ -50,7 +51,7 @@ trait ZFlowExecutor {
    *
    * If the workflow with the provided id is completed, it will be returned.
    */
-  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]]
+  def poll(id: FlowId): ZIO[Any, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]]
 
   /**
    * Restart all known persisted running flows after recreating an executor.
@@ -61,6 +62,33 @@ trait ZFlowExecutor {
 
   /** Force a GC run manually */
   def forceGarbageCollection(): ZIO[Any, Nothing, Unit]
+
+  /** Delete the persisted state and result of a completed workflow */
+  def delete(id: FlowId): ZIO[Any, ExecutorError, Unit]
+
+  /**
+   * Pause a running flow. If the flow has been already finished or is already
+   * paused, it has no effect.
+   */
+  def pause(id: FlowId): ZIO[Any, ExecutorError, Unit]
+
+  /**
+   * Resumes a paused flow. If the flow has been already finished or is already
+   * running, it has no effect.
+   */
+  def resume(id: FlowId): ZIO[Any, ExecutorError, Unit]
+
+  /**
+   * Aborts a running flow. If the flow has been already finished, it has no
+   * effect.
+   */
+  def abort(id: FlowId): ZIO[Any, ExecutorError, Unit]
+
+  /**
+   * Lists all the known flows, no matter if they are still running or already
+   * finished
+   */
+  def getAll: ZStream[Any, ExecutorError, (FlowId, FlowStatus)]
 }
 
 object ZFlowExecutor {
@@ -72,7 +100,7 @@ object ZFlowExecutor {
    * result will be awaited.
    */
   def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): ZIO[ZFlowExecutor, E, A] =
-    ZIO.serviceWithZIO(_.submit(id, flow))
+    ZIO.serviceWithZIO(_.run(id, flow))
 
   /**
    * Submits a flow to be executed and returns a durable promise that will
@@ -92,8 +120,10 @@ object ZFlowExecutor {
    *
    * If the workflow with the provided id is completed, it will be returned.
    */
-  def pollWorkflowDynTyped(id: FlowId): ZIO[ZFlowExecutor, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
-    ZIO.serviceWithZIO(_.pollWorkflowDynTyped(id))
+  def poll(
+    id: FlowId
+  ): ZIO[ZFlowExecutor, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]] =
+    ZIO.serviceWithZIO(_.poll(id))
 
   /**
    * Restart all known persisted running flows after recreating an executor.

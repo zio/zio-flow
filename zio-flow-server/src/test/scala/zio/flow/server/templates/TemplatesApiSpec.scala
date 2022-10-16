@@ -1,24 +1,41 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.server.templates
 
 import zhttp.http._
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup, Server}
+import zhttp.service.{Client, Server}
 import zio.flow.ZFlow
 import zio.flow.runtime.KeyValueStore
+import zio.flow.server.common.ApiSpecBase
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId, ZFlowTemplates}
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.schema.Schema
 import zio.schema.codec.JsonCodec
-import zio.test.{Spec, TestAspect, TestEnvironment, ZIOSpecDefault, assertTrue}
-import zio.{Chunk, Scope, ZIO, ZLayer}
+import zio.test.{TestAspect, assertTrue}
+import zio.{Chunk, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
 
-object TemplatesApiSpec extends ZIOSpecDefault {
+object TemplatesApiSpec extends ApiSpecBase {
 
   private val template1 = ZFlowTemplate(ZFlow.log("Hello world"))
   private val template2 = ZFlowTemplate(ZFlow.input[String].flatMap(ZFlow.log), Schema[String])
 
-  override def spec: Spec[TestEnvironment with Scope, Any] =
+  override def spec =
     suite("TemplatesApi")(
       test("get all templates from empty database") {
         for {
@@ -151,12 +168,14 @@ object TemplatesApiSpec extends ZIOSpecDefault {
           decoded == template1
         )
       }
-    ).provideShared(
+    ).provideSomeShared[Client[Any] with Client.Config](
       KeyValueStore.inMemory,
       KVStoreBasedTemplates.layer,
       TemplatesApi.layer,
       server,
-      client
+      ZLayer(
+        ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
+      )
     ) @@ TestAspect.sequential
 
   private def reset() =
@@ -173,14 +192,4 @@ object TemplatesApiSpec extends ZIOSpecDefault {
       }
     }
 
-  private val client: ZLayer[Any, Throwable, Client[Any] with Client.Config with URL] =
-    ZLayer.make[Client[Any] with Client.Config with URL](
-      EventLoopGroup.auto(),
-      ChannelFactory.auto,
-      ZLayer(Client.make[Any]),
-      ZLayer(
-        ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
-      ),
-      ZLayer.succeed(Client.Config.empty)
-    )
 }

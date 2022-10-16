@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-package zio.flow.server
+package zio.flow.runtime
 
-import zio.Scope
-import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.schema.{DeriveSchema, Schema}
 
-object WorkflowEndpointSpec extends ZIOSpecDefault {
+sealed trait FlowStatus
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("TODO")(
-    test("TODO")(assertTrue(true))
-  )
+object FlowStatus {
+  case object Running   extends FlowStatus
+  case object Done      extends FlowStatus
+  case object Suspended extends FlowStatus
+  case object Paused    extends FlowStatus
 
+  implicit val schema: Schema[FlowStatus] = DeriveSchema.gen
 }

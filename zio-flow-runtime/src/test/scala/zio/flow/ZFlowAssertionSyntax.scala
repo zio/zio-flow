@@ -17,10 +17,9 @@
 package zio.flow
 
 import zio.flow.mock.MockedOperation
-import zio.flow.runtime.internal.PersistentExecutor.FlowResult
 import zio.flow.runtime.{DurableLog, ExecutorError, KeyValueStore, ZFlowExecutor}
 import zio.schema.{DynamicValue, Schema}
-import zio.{Duration, Fiber, IO, Scope, ZIO}
+import zio.{Duration, Fiber, Scope, ZIO}
 
 object ZFlowAssertionSyntax {
 
@@ -39,22 +38,23 @@ object ZFlowAssertionSyntax {
     ): ZIO[Scope with DurableLog with KeyValueStore with Configuration, E, (ZFlowExecutor, Fiber[E, A])] =
       MockExecutors.persistent(mock).flatMap { executor =>
         executor.restartAll().orDieWith(_.toException) *>
-          executor.submit(FlowId.unsafeMake(id), zflow).forkScoped.map(fiber => (executor, fiber))
+          executor.run(FlowId.unsafeMake(id), zflow).forkScoped.map(fiber => (executor, fiber))
       }
 
     // Submit a flow and wait for the result via the start+poll interface
-    // a bit dirty?
     def evaluateTestStartAndPoll(
       id: String,
       waitBeforePoll: Duration
-    ): ZIO[DurableLog with KeyValueStore with Configuration, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+    ): ZIO[DurableLog with KeyValueStore with Configuration, ExecutorError, Option[
+      Either[Either[ExecutorError, DynamicValue], DynamicValue]
+    ]] =
       ZIO.scoped {
         val fId = FlowId.unsafeMake(id)
         MockExecutors.persistent().flatMap { executor =>
           executor.restartAll().orDieWith(_.toException) *>
             executor.start(fId, zflow) *>
             ZIO.sleep(waitBeforePoll) *>
-            executor.pollWorkflowDynTyped(fId)
+            executor.poll(fId)
         }
       }
   }

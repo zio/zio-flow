@@ -26,7 +26,7 @@ import zio.test.{Spec, TestEnvironment, assertTrue, assertZIO, test, suite}
 final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Scope, Throwable, Any]) {
   def tests: Spec[TestEnvironment with R with IndexedStore, Throwable] =
     suite(name)(
-      test("Test single put") {
+      test("single put") {
         ZIO.scoped[R with IndexedStore] {
           for {
             _            <- initializeDb
@@ -35,7 +35,7 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
           } yield assertTrue(insertPos == Index(1L))
         }
       },
-      test("Test sequential put") {
+      test("sequential put") {
         ZIO.scoped[R with IndexedStore] {
           for {
             _            <- initializeDb
@@ -43,21 +43,20 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             posList <- ZIO.foreach((0 until 10).toList)(i =>
                          indexedStore.put("SomeTopic2", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                        )
-            _ <- ZIO.debug(posList.mkString(","))
           } yield assertTrue(posList.mkString(",") == "1,2,3,4,5,6,7,8,9,10")
         }
       },
-      test("Test scan on empty topic") {
+      test("scan on empty topic") {
         ZIO.scoped[R with IndexedStore] {
           for {
             _            <- initializeDb
             indexedStore <- ZIO.service[IndexedStore]
             scannedChunk <- indexedStore.scan("SomeTopic3", Index(1L), Index(10L)).runCollect
-            resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
+            resultChunk   = scannedChunk.map(bytes => new String(bytes.toArray))
           } yield assertTrue(resultChunk.toList.mkString("") == "")
         }
       },
-      test("Test sequential put and scan") {
+      test("sequential put and scan") {
         ZIO.scoped[R with IndexedStore] {
           for {
             _            <- initializeDb
@@ -66,13 +65,13 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
                    indexedStore.put("SomeTopic4", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                  }
             scannedChunk <- indexedStore.scan("SomeTopic4", Index(1L), Index(10L)).runCollect
-            resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
+            resultChunk   = scannedChunk.map(bytes => new String(bytes.toArray))
           } yield assertTrue(
             resultChunk.toList.mkString(",") == "Value0,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9"
           )
         }
       },
-      test("Test concurrent put and scan") {
+      test("concurrent put and scan") {
         val resChunk =
           ZIO.scoped[R with IndexedStore] {
             for {
@@ -82,12 +81,29 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
                      indexedStore.put("SomeTopic5", Chunk.fromArray(s"Value${i.toString}".getBytes()))
                    )
               scannedChunk <- indexedStore.scan("SomeTopic5", Index(1L), Index(10L)).runCollect
-              resultChunk  <- ZIO.succeed(scannedChunk.map(bytes => new String(bytes.toArray)))
+              resultChunk   = scannedChunk.map(bytes => new String(bytes.toArray))
             } yield resultChunk
           }
         assertZIO(resChunk.map(_.size))(equalTo(10)) *>
           assertZIO(resChunk.map(_.toList.mkString(",")))(containsString("Value9")) *>
           assertZIO(resChunk.map(_.toList.mkString(",")))(containsString("Value0"))
+      },
+      test("delete") {
+        ZIO.scoped[R with IndexedStore] {
+          for {
+            _            <- initializeDb
+            indexedStore <- ZIO.service[IndexedStore]
+            _ <- ZIO.foreach((0 until 10).toList)(i =>
+                   indexedStore.put("TopicToBeDeleted", Chunk.fromArray(s"Value${i.toString}".getBytes()))
+                 )
+            scannedChunk1 <- indexedStore.scan("TopicToBeDeleted", Index(1L), Index(10L)).runCollect
+            _             <- indexedStore.delete("TopicToBeDeleted")
+            scannedChunk2 <- indexedStore.scan("TopicToBeDeleted", Index(1L), Index(10L)).runCollect
+          } yield assertTrue(
+            scannedChunk1.size == 10,
+            scannedChunk2.size == 0
+          )
+        }
       }
     ) @@ nondeterministic @@ sequential
 }

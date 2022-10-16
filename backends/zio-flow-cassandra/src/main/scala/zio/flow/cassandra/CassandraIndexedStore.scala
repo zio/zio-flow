@@ -19,6 +19,7 @@ package zio.flow.cassandra
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, Statement}
 import com.datastax.oss.driver.api.core.{CqlIdentifier, CqlSession}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder.literal
+import com.datastax.oss.driver.api.querybuilder.delete.DeleteSelection
 import com.datastax.oss.driver.api.querybuilder.insert.InsertInto
 import com.datastax.oss.driver.api.querybuilder.select.SelectFrom
 import com.datastax.oss.driver.api.querybuilder.update.UpdateStart
@@ -48,6 +49,9 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
 
   private val cqlUpdate: UpdateStart =
     QueryBuilder.update(keyspace, table)
+
+  private val cqlDelete: DeleteSelection =
+    QueryBuilder.deleteFrom(keyspace, table)
 
   override def position(topic: String): IO[Throwable, Index] =
     executeAsync(
@@ -167,6 +171,18 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
         new IOException(s"Error scanning topic <$topic>", _)
       )
       .flatten
+
+  override def delete(topic: String): IO[Throwable, Unit] =
+    executeAsync(
+      cqlDelete
+        .whereColumn(topicColumnName)
+        .isEqualTo(literal(topic))
+        .build()
+    )
+      .mapBoth(
+        new IOException(s"Error deleting topic <$topic>", _),
+        _ => ()
+      )
 
   private def executeAsync(statement: Statement[_]): Task[AsyncResultSet] =
     ZIO.fromCompletionStage(

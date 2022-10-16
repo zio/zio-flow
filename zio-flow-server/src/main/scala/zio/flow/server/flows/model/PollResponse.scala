@@ -16,15 +16,22 @@
 
 package zio.flow.server.flows.model
 
+import zio.flow.runtime.ExecutorError
 import zio.json.{DeriveJsonCodec, JsonCodec}
 import zio.json.ast.Json
+import zio.schema.Schema
+
+import scala.annotation.nowarn
 
 sealed trait PollResponse
 
 object PollResponse {
-  case object Running                     extends PollResponse
-  final case class Failed(value: Json)    extends PollResponse
-  final case class Succeeded(value: Json) extends PollResponse
+  case object Running                         extends PollResponse
+  final case class Died(value: ExecutorError) extends PollResponse
+  final case class Failed(value: Json)        extends PollResponse
+  final case class Succeeded(value: Json)     extends PollResponse
 
+  @nowarn private implicit val executorErrorCodec: JsonCodec[ExecutorError] =
+    zio.schema.codec.JsonCodec.jsonCodec(Schema[ExecutorError])
   implicit val codec: JsonCodec[PollResponse] = DeriveJsonCodec.gen
 }

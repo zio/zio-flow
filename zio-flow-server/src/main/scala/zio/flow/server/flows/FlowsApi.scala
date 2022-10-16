@@ -18,9 +18,9 @@ package zio.flow.server.flows
 
 import zhttp.http._
 import zio.flow.FlowId
-import zio.flow.runtime.ZFlowExecutor
+import zio.flow.runtime.{ExecutorError, ZFlowExecutor}
 import zio.flow.server.common.{Api, ErrorResponse}
-import zio.flow.server.flows.model.{PollResponse, StartRequest, StartResponse}
+import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
 import zio.schema.codec.JsonCodec
 import zio.schema.{DynamicValue, Schema}
 import zio.{ZIO, ZLayer}
@@ -31,7 +31,7 @@ final case class FlowsApi(executor: ZFlowExecutor) extends Api {
   val endpoint: HttpApp[Any, Nothing] =
     Http
       .collectZIO[Request] {
-        case req @ Method.POST -> !! / "flows" / "start" =>
+        case req @ Method.POST -> !! / "flows" =>
           for {
             request <- jsonCodecBody[StartRequest](req)
             flowId  <- FlowId.newRandom
@@ -44,39 +44,92 @@ final case class FlowsApi(executor: ZFlowExecutor) extends Api {
                  }
           } yield jsonResponse(StartResponse(flowId))
 
-        // Poll for a result
+        case Method.GET -> !! / "flows" =>
+          for {
+            flows <-
+              executor.getAll.runCollect.mapError(failure => new RuntimeException(s"Failed to list flows: $failure"))
+          } yield jsonResponse(GetAllResponse(flows.toMap))
+
         case Method.GET -> !! / "flows" / uuid =>
           FlowId
             .make(uuid)
             .toZIO
             .mapError(new IllegalArgumentException(_))
             .flatMap { flowId =>
-              executor.pollWorkflowDynTyped(flowId).mapError(_.toException)
+              executor.poll(flowId).mapError(_.toException)
             }
             .flatMap {
               case None =>
                 ZIO.succeed(
                   PollResponse.Running
                 )
-              case Some(r) =>
-                r.foldZIO(
-                  err =>
-                    ZIO
-                      .fromEither(JsonCodec.jsonEncoder(Schema[DynamicValue]).toJsonAST(err))
-                      .mapBoth(
-                        failure => new RuntimeException(s"Failed to encode failed flow's result: $failure"),
-                        json => PollResponse.Failed(json)
-                      ),
-                  ok =>
-                    ZIO
-                      .fromEither(JsonCodec.jsonEncoder(Schema[DynamicValue]).toJsonAST(ok.result))
-                      .mapBoth(
-                        failure => new RuntimeException(s"Failed to encode successful flow's result: $failure"),
-                        json => PollResponse.Succeeded(json)
-                      )
-                )
+              case Some(Left(Left(executorError))) =>
+                ZIO.succeed(PollResponse.Died(executorError))
+              case Some(Left(Right(failure))) =>
+                ZIO
+                  .fromEither(JsonCodec.jsonEncoder(Schema[DynamicValue]).toJsonAST(failure))
+                  .mapBoth(
+                    failure => new RuntimeException(s"Failed to encode failed flow's result: $failure"),
+                    json => PollResponse.Failed(json)
+                  )
+              case Some(Right(success)) =>
+                ZIO
+                  .fromEither(JsonCodec.jsonEncoder(Schema[DynamicValue]).toJsonAST(success))
+                  .mapBoth(
+                    failure => new RuntimeException(s"Failed to encode successful flow's result: $failure"),
+                    json => PollResponse.Succeeded(json)
+                  )
             }
             .map((response: PollResponse) => jsonCodecResponse(response))
+
+        case Method.DELETE -> !! / "flows" / uuid =>
+          FlowId
+            .make(uuid)
+            .toZIO
+            .mapError(new IllegalArgumentException(_))
+            .flatMap { flowId =>
+              executor
+                .delete(flowId)
+                .as(Response(status = Status.Ok))
+                .catchSome { case ExecutorError.InvalidOperationArguments(details) =>
+                  ZIO.succeed(Response(status = Status.BadRequest, data = HttpData.fromString(details)))
+                }
+                .mapError(_.toException)
+            }
+
+        case Method.POST -> !! / "flows" / uuid / "pause" =>
+          FlowId
+            .make(uuid)
+            .toZIO
+            .mapError(new IllegalArgumentException(_))
+            .flatMap { flowId =>
+              executor
+                .pause(flowId)
+                .as(Response(status = Status.Ok))
+                .mapError(_.toException)
+            }
+        case Method.POST -> !! / "flows" / uuid / "resume" =>
+          FlowId
+            .make(uuid)
+            .toZIO
+            .mapError(new IllegalArgumentException(_))
+            .flatMap { flowId =>
+              executor
+                .resume(flowId)
+                .as(Response(status = Status.Ok))
+                .mapError(_.toException)
+            }
+        case Method.POST -> !! / "flows" / uuid / "abort" =>
+          FlowId
+            .make(uuid)
+            .toZIO
+            .mapError(new IllegalArgumentException(_))
+            .flatMap { flowId =>
+              executor
+                .abort(flowId)
+                .as(Response(status = Status.Ok))
+                .mapError(_.toException)
+            }
       }
       .catchAll { error =>
         Http.response(jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError))

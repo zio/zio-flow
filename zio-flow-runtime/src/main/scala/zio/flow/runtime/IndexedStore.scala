@@ -26,6 +26,7 @@ trait IndexedStore {
   def position(topic: String): IO[Throwable, Index]
   def put(topic: String, value: Chunk[Byte]): IO[Throwable, Index]
   def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]]
+  def delete(topic: String): IO[Throwable, Unit]
 }
 
 object IndexedStore {
@@ -46,6 +47,9 @@ object IndexedStore {
 
   def scan(topic: String, position: Index, until: Index): ZStream[IndexedStore, Throwable, Chunk[Byte]] =
     ZStream.serviceWithStream(_.scan(topic, position, until))
+
+  def delete(topic: String): ZIO[IndexedStore, Throwable, Unit] =
+    ZIO.serviceWithZIO(_.delete(topic))
 
   val inMemory: ZLayer[Any, Nothing, IndexedStore] =
     ZLayer {
@@ -80,6 +84,11 @@ object IndexedStore {
             case None         => ZStream.empty
           }
         }
+      }
+
+    override def delete(topic: String): IO[Throwable, Unit] =
+      topics.update { topics =>
+        topics - topic
       }
   }
 }
