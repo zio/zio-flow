@@ -18,11 +18,11 @@ package zio.flow.dynamodb
 
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
 import zio.aws.core.{AwsError, GenericAwsError}
-import zio.aws.dynamodb.model.primitives._
-import zio.aws.dynamodb.model.{AttributeValue, GetItemRequest, PutItemRequest, QueryRequest}
 import zio.aws.dynamodb.DynamoDb
-import zio.flow.runtime.IndexedStore.Index
+import zio.aws.dynamodb.model.primitives._
+import zio.aws.dynamodb.model._
 import zio.flow.runtime.IndexedStore
+import zio.flow.runtime.IndexedStore.Index
 import zio.prelude.data.Optional
 import zio.stream.ZStream
 import zio.{Chunk, IO, Schedule, URLayer, ZIO, ZLayer}
@@ -104,6 +104,30 @@ final class DynamoDbIndexedStore(dynamoDb: DynamoDb) extends IndexedStore {
         } yield b
       }
       .mapError(ioExceptionOf(s"Indexed store failed to query topic $topic", _))
+
+  override def delete(topic: String): IO[Throwable, Unit] =
+    getLatestPosition(topic).flatMap { latestIndex =>
+      val indices = -1L to latestIndex
+      val deletes: Iterable[WriteRequest] = indices.map(idx =>
+        WriteRequest(deleteRequest =
+          DeleteRequest(
+            Map(
+              AttributeName(topicColumnName) -> stringValue(topic),
+              AttributeName(indexColumnName) -> longValue(idx)
+            )
+          )
+        )
+      )
+
+      dynamoDb
+        .batchWriteItem(
+          BatchWriteItemRequest(requestItems =
+            Map(
+              tableName -> deletes
+            )
+          )
+        )
+    }.mapError(ioExceptionOf(s"Indexed store failed to delete topic $topic", _)).unit
 
   private def getLatestPosition(topic: String): IO[AwsError, Index] =
     for {

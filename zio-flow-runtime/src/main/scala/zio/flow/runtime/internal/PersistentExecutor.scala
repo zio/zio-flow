@@ -24,7 +24,16 @@ import zio.flow.serialization._
 import zio.flow._
 import PersistentExecutor.GarbageCollectionCommand
 import zio.flow.runtime.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
-import zio.flow.runtime.{DurableLog, DurablePromise, ExecutorError, KeyValueStore, Timestamp, ZFlowExecutor, metrics}
+import zio.flow.runtime.{
+  DurableLog,
+  DurablePromise,
+  ExecutorError,
+  KeyValueStore,
+  FlowStatus,
+  Timestamp,
+  ZFlowExecutor,
+  metrics
+}
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
 
 import java.nio.charset.StandardCharsets
@@ -49,7 +58,7 @@ final case class PersistentExecutor(
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
   // synchronous -> will return when work is done.
-  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
+  def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
       resultPromise <- start(id, flow).orDieWith(_.toException)
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
@@ -75,16 +84,6 @@ final case class PersistentExecutor(
     flow: ZFlow[Any, E, A]
   ): ZIO[Any, ExecutorError, DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]] =
     start(ScopedFlowId.toplevel(id), Timestamp(0L), Index(0L), flow)
-
-  private def processResultDynTyped(
-    in: Either[Either[ExecutorError, DynamicValue], FlowResult]
-  ): IO[DynamicValue, FlowResult] = in match {
-    case Left(Left(fail)) => ZIO.die(fail.toException)
-    case Left(Right(dynamicError)) =>
-      ZIO.fail(dynamicError)
-    case Right(flowResult) =>
-      ZIO.succeed(flowResult)
-  }
 
   def restartAll(): ZIO[Any, ExecutorError, Unit] =
     for {
@@ -130,35 +129,89 @@ final case class PersistentExecutor(
       }
       .unit
 
-  // Looks up a workflow by id, checks its state:
-  // If it's done, return the result, otherwise nothing.
-  // Fails if the id is unknown
-  // TODO: has some problems, see commented test in PersistentExecutorSpec
-  def pollWorkflowDynTyped(id: FlowId): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
+  def poll(id: FlowId): ZIO[Any, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]] =
     workflows.get(id).commit.flatMap {
-      case Some(runtimeState) =>
-        getResultIfCompleteDynTyped(runtimeState)
-      // Check if done
+      case Some(runtimeStatePromise) =>
+        runtimeStatePromise.await.flatMap { runtimeState =>
+          getResultFromPromise(runtimeState.result)
+        }
       case None =>
-        // Unknown workflow: let's fail
-        ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + id.toString))
+        loadState(id).flatMap {
+          case None =>
+            ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + FlowId.unwrap(id)))
+          case Some(state) =>
+            getResultFromPromise(state.result)
+        }
     }
 
-  // We know that workflow, check if it's done:
-  // TODO confirm that this is an acceptable way to do this
-  // TODO also check if we may have some corner cases where the work is done
-  // but we somehow still run into a timeout because looking things up takes longer than expected?
-  private def getResultIfCompleteDynTyped(
-    rtsPromise: Promise[Nothing, RuntimeState]
-  ): ZIO[Any, ExecutorError, Option[IO[DynamicValue, FlowResult]]] =
-    rtsPromise.await.flatMap(_.result.awaitEither).provideEnvironment(promiseEnv).timeout(10.millis).map {
+  def delete(id: FlowId): IO[ExecutorError, Unit] =
+    for {
+      rtsPromise <- workflows.get(id).commit
+      rts <- rtsPromise match {
+               case Some(promise) => promise.await.map(Some(_))
+               case None          => ZIO.none
+             }
+      _ <- ZIO
+             .fail(ExecutorError.InvalidOperationArguments(s"Cannot delete running flow $id"))
+             .when(rts.isDefined)
+      _     <- ZIO.logInfo(s"Deleting persisted state $id")
+      state <- loadState(id)
+      _ <- state match {
+             case Some(state) =>
+               for {
+                 _ <- kvStore
+                        .delete(Namespaces.workflowState, id.toRaw)
+                        .mapError(ExecutorError.KeyValueStoreError("delete", _))
+                 _ <- state.result.delete().provideEnvironment(promiseEnv)
+               } yield ()
+             case None => ZIO.unit
+           }
+    } yield ()
+
+  override def pause(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+    workflows.get(id).commit.flatMap {
+      case Some(runtimeStatePromise) =>
+        for {
+          runtimeState <- runtimeStatePromise.await
+          _            <- runtimeState.messages.offer(ExecutionCommand.Pause)
+        } yield ()
       case None =>
-        None
-      case Some(done) =>
-        // _NOT_ doing flatmap, we don't want to conflate problems the workflow had with problems
-        // we might run into when looking up results.
-        Some(processResultDynTyped(done))
+        ZIO.unit
     }
+
+  override def resume(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+    workflows.get(id).commit.flatMap {
+      case Some(runtimeStatePromise) =>
+        for {
+          runtimeState <- runtimeStatePromise.await
+          _            <- runtimeState.messages.offer(ExecutionCommand.Resume)
+        } yield ()
+      case None =>
+        ZIO.unit
+    }
+  override def abort(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+    interruptFlow(id).unit
+
+  override def getAll: ZStream[Any, ExecutorError, (FlowId, FlowStatus)] =
+    kvStore
+      .scanAll(Namespaces.workflowState)
+      .mapError(ExecutorError.KeyValueStoreError("scanAll", _))
+      .mapZIO { case (rawKey, rawState) =>
+        val id = FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8))
+        ZIO
+          .fromEither(
+            execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
+          )
+          .mapBoth(
+            error => ExecutorError.DeserializationError(s"state of $id", error),
+            state => (id, state.status)
+          )
+      }
+
+  private def getResultFromPromise(
+    resultPromise: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]
+  ): ZIO[Any, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]] =
+    resultPromise.poll.provideEnvironment(promiseEnv).map(_.map(_.map(_.result)))
 
   private def start[E, A](
     id: ScopedFlowId,
@@ -195,7 +248,7 @@ final case class PersistentExecutor(
                                    promiseIdCounter = 0,
                                    forkCounter = 0,
                                    transactionCounter = 0,
-                                   status = PersistentWorkflowStatus.Running,
+                                   status = FlowStatus.Running,
                                    watchedVariables = Set.empty,
                                    watchPosition = watchPosition,
                                    startedAt = now,
@@ -791,65 +844,101 @@ final case class PersistentExecutor(
           case None => ZIO.fail(ExecutorError.VariableChangeLogFinished)
         }
 
+    def commandToStateChange(command: ExecutionCommand): StateChange =
+      command match {
+        case ExecutionCommand.Pause  => StateChange.pause
+        case ExecutionCommand.Resume => StateChange.resume(resetWatchedVariables = false)
+      }
+
+    def processMessages(messages: Queue[PersistentExecutor.ExecutionCommand]): ZIO[Any, Nothing, StateChange] =
+      messages.takeAll.map { commands =>
+        commands.foldLeft(StateChange.none) { case (s, cmd) =>
+          s ++ commandToStateChange(cmd)
+        }
+      }
+
+    def waitAndProcessMessages(messages: Queue[PersistentExecutor.ExecutionCommand]): ZIO[Any, Nothing, StateChange] =
+      messages.take.flatMap { first =>
+        processMessages(messages).map { rest =>
+          commandToStateChange(first) ++ rest
+        }
+      }
+
     def runSteps(
       stateRef: Ref[State[E, A]],
+      messages: Queue[ExecutionCommand],
       executionStartedAt: OffsetDateTime
     ): ZIO[
       VirtualClock with KeyValueStore with ExecutionEnvironment with DurableLog with RemoteVariableKeyValueStore,
       ExecutorError,
       Unit
     ] =
-      stateRef.get.flatMap { state0 =>
-        ZIO.logAnnotate("flowId", state0.id.asString) {
+      stateRef.get.flatMap { lastState =>
+        ZIO.logAnnotate("flowId", lastState.id.asString) {
           Logging
-            .optionalTransactionId(state0.transactionStack.headOption.map(_.id)) {
-              val scope = state0.scope
+            .optionalTransactionId(lastState.transactionStack.headOption.map(_.id)) {
+              processMessages(messages).flatMap { changesFromMessages =>
+                val scope         = lastState.scope
+                val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
 
-              val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
+                remoteContext {
+                  for {
+                    recordingContext <- RecordingRemoteContext.startRecording
 
-              remoteContext {
-                for {
-                  recordingContext <- RecordingRemoteContext.startRecording
+                    state0 <-
+                      persistState(
+                        state.id.asFlowId,
+                        lastState,
+                        changesFromMessages,
+                        recordingContext
+                      ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
 
-                  stepResult <-
-                    state0.status match {
-                      case PersistentWorkflowStatus.Running =>
-                        step(state0).provideSomeLayer[
-                          VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
-                        ](
-                          ZLayer.succeed(recordingContext.remoteContext)
-                        )
-                      case PersistentWorkflowStatus.Done =>
-                        ZIO.succeed(StepResult(StateChange.none, continue = false))
-                      case PersistentWorkflowStatus.Suspended =>
-                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
-                          timestamp =>
-                            Clock.currentDateTime.flatMap { now =>
-                              val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
-                              metrics.flowSuspendedTime
-                                .update(suspendedDuration)
-                                .as(
-                                  StepResult(
-                                    StateChange.resume ++ StateChange.advanceClock(atLeastTo = timestamp),
-                                    continue = true
+                    stepResult <-
+                      state0.status match {
+                        case FlowStatus.Running =>
+                          step(state0).provideSomeLayer[
+                            VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
+                          ](
+                            ZLayer.succeed(recordingContext.remoteContext)
+                          )
+                        case FlowStatus.Done =>
+                          ZIO.succeed(StepResult(StateChange.none, continue = false))
+                        case FlowStatus.Suspended =>
+                          waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
+                            timestamp =>
+                              Clock.currentDateTime.flatMap { now =>
+                                val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
+                                metrics.flowSuspendedTime
+                                  .update(suspendedDuration)
+                                  .as(
+                                    StepResult(
+                                      StateChange.resume(resetWatchedVariables = true) ++ StateChange
+                                        .advanceClock(atLeastTo = timestamp),
+                                      continue = true
+                                    )
                                   )
-                                )
+                              }
+                          }
+                        case FlowStatus.Paused =>
+                          ZIO.logInfo(s"Flow paused, waiting for resume command") *>
+                            waitAndProcessMessages(messages).map { changes =>
+                              StepResult(changes, continue = true)
                             }
-                        }
-                    }
-                  now <- Clock.currentDateTime
-                  state2 <- persistState(
-                              state.id.asFlowId,
-                              state0,
-                              stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
-                              recordingContext
-                            )
-                  _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-                } yield stepResult
+                      }
+                    now <- Clock.currentDateTime
+                    state2 <-
+                      persistState(
+                        state.id.asFlowId,
+                        state0,
+                        stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
+                        recordingContext
+                      )
+                    _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                  } yield stepResult
+                }
+              }.flatMap { stepResult =>
+                runSteps(stateRef, messages, executionStartedAt).when(stepResult.continue).unit
               }
-            }
-            .flatMap { stepResult =>
-              runSteps(stateRef, executionStartedAt).when(stepResult.continue).unit
             }
         }
       }
@@ -859,11 +948,13 @@ final case class PersistentExecutor(
       ref       <- Ref.make[State[E, A]](state)
       startGate <- Promise.make[Nothing, Unit]
       now       <- Clock.currentDateTime
+      messages  <- Queue.unbounded[ExecutionCommand]
+
       fiber <- {
         for {
           _ <- startGate.await
           _ <- {
-            runSteps(ref, executionStartedAt = now)
+            runSteps(ref, messages, executionStartedAt = now)
               .provide(
                 ZLayer.succeed(execEnv),
                 ZLayer.succeed(kvStore),
@@ -887,7 +978,6 @@ final case class PersistentExecutor(
                    )
             } yield ()
           }
-          _ <- deleteState(state.id.asFlowId).orDieWith(_.toException)
         } yield ()
       }.ensuring {
         workflows.delete(state.id.asFlowId).commit *> updateWorkflowMetrics()
@@ -895,8 +985,9 @@ final case class PersistentExecutor(
       runtimeState = PersistentExecutor.RuntimeState(
                        result = state.result,
                        fiber = fiber,
-                       currentStatus = PersistentWorkflowStatus.Running,
-                       executionStartedAt = now
+                       executionStartedAt = now,
+                       state = ref.asInstanceOf[Ref[State[_, _]]],
+                       messages = messages
                      )
       _ <- promise.succeed(runtimeState)
       _ <- startGate.succeed(())
@@ -953,7 +1044,6 @@ final case class PersistentExecutor(
     PersistentExecutor.State[_, _]
   ] = {
     // TODO: optimization: do not persist state if there were no side effects
-    val key    = id.toRaw
     val state1 = stateChange(state0)
     for {
       _                    <- recordingContext.virtualClock.advance(state1.lastTimestamp)
@@ -998,11 +1088,7 @@ final case class PersistentExecutor(
                  )
                  .recordAccessedVariables(readVariablesWithTimestamps)
                  .recordReadVariables(readVariables)
-      persistedState = execEnv.serializer.serialize(state2)
-      _             <- metrics.serializedFlowStateSize.update(persistedState.size)
-      _ <- kvStore
-             .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
-             .mapError(ExecutorError.KeyValueStoreError("put", _))
+      _ <- saveState(id, state2, currentTimestamp)
     } yield state2
   }
 
@@ -1023,21 +1109,37 @@ final case class PersistentExecutor(
                }
     } yield state
 
-  private def deleteState(id: FlowId): IO[ExecutorError, Unit] =
+  private def saveState(
+    id: FlowId,
+    state: State[_, _],
+    currentTimestamp: Timestamp
+  ): ZIO[Any, ExecutorError.KeyValueStoreError, Unit] =
     for {
-      _ <- ZIO.logInfo(s"Deleting persisted state $id")
+      persistedState <- ZIO.succeed(execEnv.serializer.serialize(state))
+      key             = id.toRaw
+      _              <- metrics.serializedFlowStateSize.update(persistedState.size)
       _ <- kvStore
-             .delete(Namespaces.workflowState, id.toRaw)
-             .mapError(ExecutorError.KeyValueStoreError("delete", _))
+             .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
+             .mapError(ExecutorError.KeyValueStoreError("put", _))
     } yield ()
 
-  private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
+  private def interruptFlow(id: FlowId): ZIO[Any, ExecutorError, Boolean] =
     for {
       _     <- ZIO.log(s"Interrupting flow $id")
       state <- workflows.get(id).commit
       result <- state match {
-                  case Some(runtimeState) =>
-                    runtimeState.await.flatMap(_.fiber.interrupt.as(true))
+                  case Some(runtimeStatePromise) =>
+                    for {
+                      runtimeState <- runtimeStatePromise.await
+                      _            <- runtimeState.fiber.interrupt
+                      _ <- loadState(id).flatMap {
+                             case None => ZIO.unit
+                             case Some(lastState) =>
+                               val finalState = lastState.copy(status = FlowStatus.Done)
+                               saveState(id, finalState, finalState.lastTimestamp)
+                           }
+                      _ <- runtimeState.result.fail(Left(ExecutorError.Interrupted)).provideEnvironment(promiseEnv)
+                    } yield true
                   case None =>
                     ZIO.succeed(false)
                 }
@@ -1149,16 +1251,20 @@ final case class PersistentExecutor(
 
   private def updateWorkflowMetrics(): ZIO[Any, Nothing, Unit] =
     for {
-      promises    <- workflows.values.commit
-      getStatuses <- ZIO.foreach(promises)(_.poll).map(_.flatten)
-      statuses    <- ZIO.collectAll(getStatuses)
-      byStatus     = statuses.groupBy(_.currentStatus)
+      promises <- workflows.values.commit
+      getRts   <- ZIO.foreach(promises)(_.poll).map(_.flatten)
+      rts      <- ZIO.collectAll(getRts)
+      statuses <- ZIO.collectAll(rts.map(_.state.get))
+      byStatus  = statuses.groupBy(_.status)
       _ <- metrics
-             .activeFlows(PersistentWorkflowStatus.Running)
-             .set(byStatus.getOrElse(PersistentWorkflowStatus.Running, List.empty).length)
+             .activeFlows(FlowStatus.Running)
+             .set(byStatus.getOrElse(FlowStatus.Running, List.empty).length)
       _ <- metrics
-             .activeFlows(PersistentWorkflowStatus.Suspended)
-             .set(byStatus.getOrElse(PersistentWorkflowStatus.Suspended, List.empty).length)
+             .activeFlows(FlowStatus.Suspended)
+             .set(byStatus.getOrElse(FlowStatus.Suspended, List.empty).length)
+      _ <- metrics
+             .activeFlows(FlowStatus.Paused)
+             .set(byStatus.getOrElse(FlowStatus.Paused, List.empty).length)
     } yield ()
 
   private def updateFinishedFlowMetrics(
@@ -1189,7 +1295,7 @@ object PersistentExecutor {
         serializer    <- ZIO.service[Serializer]
         deserializer  <- ZIO.service[Deserializer]
       } yield ExecutionEnvironment(serializer, deserializer, configuration, gcPeriod)
-    } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any ++ RemoteVariableKeyValueStore.live) >>> layer
+    } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any ++ RemoteVariableKeyValueStore.layer) >>> layer
 
   val layer: ZLayer[
     DurableLog with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with OperationExecutor,
@@ -1408,7 +1514,7 @@ object PersistentExecutor {
                 accessedVariables = Map.empty,
                 readVariables = Set.empty
               ) :: state.transactionStack.tail,
-              status = if (suspend) PersistentWorkflowStatus.Suspended else PersistentWorkflowStatus.Running,
+              status = if (suspend) FlowStatus.Suspended else FlowStatus.Running,
               watchedVariables = txState.readVariables,
               transactionCounter = state.transactionCounter + 1,
               suspendedAt = if (suspend) Some(now) else None
@@ -1438,14 +1544,18 @@ object PersistentExecutor {
     }
     private case object Done extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
-        state.copy(status = PersistentWorkflowStatus.Done)
+        state.copy(status = FlowStatus.Done)
     }
-    private case object Resume extends StateChange {
+    private case class Resume(resetWatchedVariables: Boolean) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(
-          status = PersistentWorkflowStatus.Running,
-          watchedVariables = Set.empty
+          status = FlowStatus.Running,
+          watchedVariables = if (resetWatchedVariables) Set.empty else state.watchedVariables
         )
+    }
+    private case object Pause extends StateChange {
+      override def apply[E, A](state: State[E, A]): State[E, A] =
+        state.copy(status = FlowStatus.Paused)
     }
     private final case class UpdateWatchPosition(newWatchPosition: Index) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -1474,14 +1584,15 @@ object PersistentExecutor {
     def revertCurrentTransaction[E](failure: Remote[E]): StateChange = RevertCurrentTransaction(failure)
     def restartCurrentTransaction(suspend: Boolean, now: OffsetDateTime): StateChange =
       RestartCurrentTransaction(suspend, now)
-    val increaseForkCounter: StateChange                = IncreaseForkCounter
-    val increaseTempVarCounter: StateChange             = IncreaseTempVarCounter
-    def pushEnvironment(value: Remote[_]): StateChange  = PushEnvironment(value)
-    def popEnvironment: StateChange                     = PopEnvironment
-    def advanceClock(atLeastTo: Timestamp): StateChange = AdvanceClock(atLeastTo)
-    val done: StateChange                               = Done
-    val resume: StateChange                             = Resume
-    def updateWatchPosition(index: Index): StateChange  = UpdateWatchPosition(index)
+    val increaseForkCounter: StateChange                    = IncreaseForkCounter
+    val increaseTempVarCounter: StateChange                 = IncreaseTempVarCounter
+    def pushEnvironment(value: Remote[_]): StateChange      = PushEnvironment(value)
+    def popEnvironment: StateChange                         = PopEnvironment
+    def advanceClock(atLeastTo: Timestamp): StateChange     = AdvanceClock(atLeastTo)
+    val done: StateChange                                   = Done
+    def resume(resetWatchedVariables: Boolean): StateChange = Resume(resetWatchedVariables)
+    val pause: StateChange                                  = Pause
+    def updateWatchPosition(index: Index): StateChange      = UpdateWatchPosition(index)
     def updateCurrentExecutionTime(now: OffsetDateTime, executionStartedAt: OffsetDateTime): StateChange =
       UpdateCurrentExecutionTime(now, executionStartedAt)
   }
@@ -1503,7 +1614,7 @@ object PersistentExecutor {
     promiseIdCounter: Int,
     forkCounter: Int,
     transactionCounter: Int,
-    status: PersistentWorkflowStatus,
+    status: FlowStatus,
     watchedVariables: Set[ScopedRemoteVariableName],
     watchPosition: Index,
     startedAt: OffsetDateTime,
@@ -1581,7 +1692,7 @@ object PersistentExecutor {
         Schema.Field("promiseIdCounter", Schema[Int]),
         Schema.Field("forkCounter", Schema[Int]),
         Schema.Field("transactionCounter", Schema[Int]),
-        Schema.Field("status", Schema[PersistentWorkflowStatus]),
+        Schema.Field("status", Schema[FlowStatus]),
         Schema.Field("watchedVariables", Schema[Set[ScopedRemoteVariableName]]),
         Schema.Field("watchPosition", Schema[Index]),
         Schema.Field("startedAt", Schema[OffsetDateTime]),
@@ -1600,7 +1711,7 @@ object PersistentExecutor {
           promiseIdCounter: Int,
           forkCounter: Int,
           transactionCounter: Int,
-          status: PersistentWorkflowStatus,
+          status: FlowStatus,
           watchedVariables: Set[ScopedRemoteVariableName],
           watchPosition: Index,
           startedAt: OffsetDateTime,
@@ -1686,10 +1797,17 @@ object PersistentExecutor {
       )
   }
 
+  sealed trait ExecutionCommand
+  object ExecutionCommand {
+    case object Pause  extends ExecutionCommand
+    case object Resume extends ExecutionCommand
+  }
+
   final case class RuntimeState(
     result: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult],
     fiber: Fiber[Nothing, Unit],
-    currentStatus: PersistentWorkflowStatus,
-    executionStartedAt: OffsetDateTime
+    executionStartedAt: OffsetDateTime,
+    state: Ref[State[_, _]],
+    messages: Queue[ExecutionCommand]
   )
 }

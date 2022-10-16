@@ -17,6 +17,7 @@
 package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
+import zio.flow.rocksdb.RocksDbIndexedStore.positionKey
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
 import zio.rocksdb.{Transaction, TransactionDB}
@@ -41,7 +42,7 @@ final case class RocksDbIndexedStore(
       _ <- rocksDB
              .put(
                colFamHandle,
-               ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+               positionKey,
                ProtobufCodec.encode(Schema[Long])(0L).toArray
              )
 
@@ -51,7 +52,7 @@ final case class RocksDbIndexedStore(
     (for {
       cfHandle <- getOrCreateNamespace(topic)
       positionBytes <-
-        rocksDB.get(cfHandle, ProtobufCodec.encode(Schema[String])("POSITION").toArray).orDie
+        rocksDB.get(cfHandle, positionKey).orDie
       position <-
         positionBytes match {
           case Some(positionBytes) =>
@@ -71,14 +72,14 @@ final case class RocksDbIndexedStore(
                positionBytes <- Transaction
                                   .getForUpdate(
                                     colFam,
-                                    ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+                                    positionKey,
                                     exclusive = true
                                   )
                positionBytes1 = incPosition(positionBytes)
                _ <- Transaction
                       .put(
                         colFam,
-                        ProtobufCodec.encode(Schema[String])("POSITION").toArray,
+                        positionKey,
                         positionBytes1
                       )
                _ <-
@@ -94,6 +95,29 @@ final case class RocksDbIndexedStore(
       newPosition <- position(topic)
     } yield newPosition
 
+  override def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]] =
+    ZStream
+      .fromZIO(getOrCreateNamespace(topic))
+      .flatMap { cf =>
+        for {
+          k <- ZStream.fromIterable(position to until)
+          value <-
+            ZStream
+              .fromZIO(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray))
+        } yield value.map(Chunk.fromArray)
+      }
+      .collect { case Some(item) => item }
+
+  override def delete(topic: String): IO[Throwable, Unit] =
+    for {
+      colFam   <- getOrCreateNamespace(topic)
+      position <- position(topic)
+      _        <- rocksDB.delete(colFam, positionKey)
+      _ <- ZIO.foreachDiscard(0L to position.toLong) { idx =>
+             rocksDB.delete(colFam, ProtobufCodec.encode(Schema[Long])(idx).toArray)
+           }
+    } yield ()
+
   private def incPosition(posBytes: Option[Array[Byte]]): Array[Byte] =
     posBytes match {
       case Some(posBytes) =>
@@ -107,16 +131,6 @@ final case class RocksDbIndexedStore(
           .toArray
       case None =>
         ProtobufCodec.encode(Schema[Long])(1L).toArray
-    }
-
-  def scan(topic: String, position: Index, until: Index): ZStream[Any, Throwable, Chunk[Byte]] =
-    ZStream.fromZIO(getOrCreateNamespace(topic)).flatMap { cf =>
-      for {
-        k <- ZStream.fromIterable(position to until)
-        value <-
-          ZStream
-            .fromZIO(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray))
-      } yield value.map(Chunk.fromArray).getOrElse(Chunk.empty)
     }
 }
 
@@ -145,4 +159,6 @@ object RocksDbIndexedStore {
 
   def withEmptyTopic(topicName: String): ZLayer[RocksDbConfig, Throwable, IndexedStore] =
     ZLayer.scoped(make.tap(store => store.addTopic(topicName)))
+
+  private lazy val positionKey = ProtobufCodec.encode(Schema[String])("POSITION").toArray
 }

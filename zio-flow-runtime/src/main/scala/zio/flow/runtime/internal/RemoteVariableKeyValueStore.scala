@@ -136,7 +136,7 @@ final case class RemoteVariableKeyValueStore(
 }
 
 object RemoteVariableKeyValueStore {
-  val live: ZLayer[ExecutionEnvironment with DurableLog with KeyValueStore, Nothing, RemoteVariableKeyValueStore] =
+  val layer: ZLayer[ExecutionEnvironment with DurableLog with KeyValueStore, Nothing, RemoteVariableKeyValueStore] =
     ZLayer {
       for {
         kvStore              <- ZIO.service[KeyValueStore]

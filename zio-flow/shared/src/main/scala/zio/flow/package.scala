@@ -94,16 +94,6 @@ package object flow extends Syntax with Schemas with InstantModule { self =>
     implicit val schema: Schema[PromiseId] = Schema[String].transform(wrap(_), unwrap)
   }
 
-  object TemplateId extends Newtype[String] {
-    implicit val schema: Schema[TemplateId] = Schema[String].transform(apply(_), unwrap)
-  }
-
-  type TemplateId = TemplateId.Type
-
-  implicit class TemplateIdSyntax(val templateId: TemplateId) extends AnyVal {
-    def toRaw: Chunk[Byte] = Chunk.fromArray(TemplateId.unwrap(templateId).getBytes(StandardCharsets.UTF_8))
-  }
-
   type ConfigKey = ConfigKey.Type
 
   object ConfigKey extends Newtype[String] {

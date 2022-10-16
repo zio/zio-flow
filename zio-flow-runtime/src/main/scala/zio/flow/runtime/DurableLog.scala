@@ -24,6 +24,7 @@ trait DurableLog {
   def append(topic: String, value: Chunk[Byte]): IO[DurableLogError, Index]
   def subscribe(topic: String, position: Index): ZStream[Any, DurableLogError, Chunk[Byte]]
   def getAllAvailable(topic: String, position: Index): ZStream[Any, DurableLogError, Chunk[Byte]]
+  def delete(topic: String): IO[DurableLogError, Unit]
 }
 
 object DurableLog {
@@ -35,6 +36,9 @@ object DurableLog {
 
   def getAllAvailable(topic: String, position: Index): ZStream[DurableLog, DurableLogError, Chunk[Byte]] =
     ZStream.serviceWithStream(_.getAllAvailable(topic, position))
+
+  def delete(topic: String): ZIO[DurableLog, DurableLogError, Unit] =
+    ZIO.serviceWithZIO(_.delete(topic))
 
   val any: ZLayer[DurableLog, Nothing, DurableLog] = ZLayer.service[DurableLog]
 
@@ -104,6 +108,9 @@ object DurableLog {
                 .mapError(DurableLogError.IndexedStoreError("scan", _))
           )
       }
+
+    override def delete(topic: String): IO[DurableLogError, Unit] =
+      indexedStore.delete(topic).mapError(DurableLogError.IndexedStoreError("delete", _))
 
     private def collectFrom(
       stream: ZStream[Any, DurableLogError, (Chunk[Byte], Index)],

@@ -14,9 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.internal
+package zio.flow.server.templates.model
 
-object Namespaces {
-  val workflowState = "_zflow_workflow_states"
-  val variables     = "_zflow_variables"
+import zio.flow.ZFlow
+import zio.flow.serialization.FlowSchemaAst
+import zio.schema.{DeriveSchema, Schema}
+
+final case class ZFlowTemplate private[model] (flow: ZFlow[Any, Any, Any], inputSchema: Option[FlowSchemaAst])
+object ZFlowTemplate {
+  def apply(flow: ZFlow[Any, Any, Any]): ZFlowTemplate =
+    ZFlowTemplate(flow, None)
+
+  def apply[R](flow: ZFlow[R, Any, Any], schema: Schema[R]): ZFlowTemplate =
+    ZFlowTemplate(flow.asInstanceOf[ZFlow[Any, Any, Any]], Some(FlowSchemaAst.fromSchema(schema)))
+
+  implicit val schema: Schema[ZFlowTemplate] = DeriveSchema.gen
 }

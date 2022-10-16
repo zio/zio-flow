@@ -34,6 +34,7 @@ sealed trait ExecutorError { self =>
     case ExecutorError.LogError(error)           => s"Durable log failure: ${error.toMessage}"
     case ExecutorError.VariableChangeLogFinished => "Variable change log finished unexpectedly"
     case ExecutorError.FlowDied                  => s"Could not evaluate ZFlow"
+    case ExecutorError.Interrupted               => s"Flow execution interrupted"
   }
 
   def cause: Option[Throwable] = None
@@ -64,6 +65,7 @@ object ExecutorError {
   }
   case object VariableChangeLogFinished extends ExecutorError
 
-  case object FlowDied extends ExecutorError
+  case object FlowDied    extends ExecutorError
+  case object Interrupted extends ExecutorError
   implicit val schema: Schema[ExecutorError] = DeriveSchema.gen
 }

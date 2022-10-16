@@ -236,7 +236,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
               vars <-
                 RemoteVariableKeyValueStore.allStoredVariables.runCollect
                   .provideSome[DurableLog with KeyValueStore](
-                    RemoteVariableKeyValueStore.live,
+                    RemoteVariableKeyValueStore.layer,
                     Configuration.inMemory,
                     ZLayer(
                       ZIO

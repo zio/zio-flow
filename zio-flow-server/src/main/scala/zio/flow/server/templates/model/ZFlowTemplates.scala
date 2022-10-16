@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.internal
+package zio.flow.server.templates.model
 
+import zio.Chunk
 import zio.schema.{DeriveSchema, Schema}
 
-sealed trait PersistentWorkflowStatus
+final case class ZFlowTemplates(entries: Chunk[ZFlowTemplateWithId])
 
-object PersistentWorkflowStatus {
-  case object Running   extends PersistentWorkflowStatus
-  case object Done      extends PersistentWorkflowStatus
-  case object Suspended extends PersistentWorkflowStatus
-
-  implicit val schema: Schema[PersistentWorkflowStatus] = DeriveSchema.gen
+object ZFlowTemplates {
+  implicit val schema: Schema[ZFlowTemplates] = DeriveSchema.gen
 }

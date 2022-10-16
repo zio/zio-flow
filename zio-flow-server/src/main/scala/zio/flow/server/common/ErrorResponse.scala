@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.internal
+package zio.flow.server.common
 
-object Namespaces {
-  val workflowState = "_zflow_workflow_states"
-  val variables     = "_zflow_variables"
+import zio.schema.{DeriveSchema, Schema}
+
+final case class ErrorResponse(message: String)
+object ErrorResponse {
+  implicit val schema: Schema[ErrorResponse] = DeriveSchema.gen
 }

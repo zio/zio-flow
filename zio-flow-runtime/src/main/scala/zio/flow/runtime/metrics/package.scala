@@ -17,7 +17,6 @@
 package zio.flow.runtime
 
 import zio.{Duration, ZIOAspect}
-import zio.flow.runtime.internal.PersistentWorkflowStatus
 import zio.metrics.MetricKeyType.{Counter, Gauge, Histogram}
 import zio.metrics._
 
@@ -37,7 +36,7 @@ package object metrics {
    * Gauge representing the actual number of flows in the executor, both running
    * and suspended ones.
    */
-  def activeFlows(status: PersistentWorkflowStatus): Metric[Gauge, Int, MetricState.Gauge] =
+  def activeFlows(status: FlowStatus): Metric[Gauge, Int, MetricState.Gauge] =
     Metric
       .gauge("zioflow_active_flows")
       .tagged("status", statusToLabel(status))
@@ -146,10 +145,11 @@ package object metrics {
   /** Counter for the number of garbage collections */
   val gcRuns: ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] = Metric.counter("zioflow_gc").trackAll(1)
 
-  private def statusToLabel(status: PersistentWorkflowStatus): String =
+  private def statusToLabel(status: FlowStatus): String =
     status match {
-      case PersistentWorkflowStatus.Running   => "running"
-      case PersistentWorkflowStatus.Suspended => "suspended"
-      case PersistentWorkflowStatus.Done      => "done"
+      case FlowStatus.Running   => "running"
+      case FlowStatus.Suspended => "suspended"
+      case FlowStatus.Paused    => "paused"
+      case FlowStatus.Done      => "done"
     }
 }

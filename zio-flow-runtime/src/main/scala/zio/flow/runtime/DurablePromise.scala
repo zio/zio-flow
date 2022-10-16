@@ -90,6 +90,11 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
             )
           )
     }
+
+  def delete(): ZIO[DurableLog, ExecutorError, Unit] =
+    DurableLog
+      .delete(Topics.promise(promiseId))
+      .mapError(ExecutorError.LogError)
 }
 
 object DurablePromise {

@@ -14,9 +14,17 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.internal
+package zio.flow.runtime
 
-object Namespaces {
-  val workflowState = "_zflow_workflow_states"
-  val variables     = "_zflow_variables"
+import zio.schema.{DeriveSchema, Schema}
+
+sealed trait FlowStatus
+
+object FlowStatus {
+  case object Running   extends FlowStatus
+  case object Done      extends FlowStatus
+  case object Suspended extends FlowStatus
+  case object Paused    extends FlowStatus
+
+  implicit val schema: Schema[FlowStatus] = DeriveSchema.gen
 }

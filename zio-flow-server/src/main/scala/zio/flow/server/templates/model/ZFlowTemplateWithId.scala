@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.internal
+package zio.flow.server.templates.model
 
-object Namespaces {
-  val workflowState = "_zflow_workflow_states"
-  val variables     = "_zflow_variables"
+import zio.schema.{DeriveSchema, Schema}
+
+case class ZFlowTemplateWithId(templateId: TemplateId, template: ZFlowTemplate)
+
+object ZFlowTemplateWithId {
+  implicit val schema: Schema[ZFlowTemplateWithId] = DeriveSchema.gen
 }
