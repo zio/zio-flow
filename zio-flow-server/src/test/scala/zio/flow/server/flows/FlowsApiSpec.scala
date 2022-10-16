@@ -273,6 +273,72 @@ object FlowsApiSpec extends ApiSpecBase {
             response.status == Status.Ok
           )
         }
+      ),
+      suite("pause")(
+        test("pause flow") {
+          for {
+            _            <- reset()
+            client       <- ZIO.service[Client[Any]]
+            clientConfig <- ZIO.service[Client.Config]
+            baseUrl      <- ZIO.service[URL]
+
+            flowId <- FlowId.newRandom
+            response <-
+              client.request(
+                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/pause")),
+                clientConfig
+              )
+
+            reqs <- pauseRequests
+          } yield assertTrue(
+            response.status == Status.Ok,
+            reqs == Set(flowId)
+          )
+        }
+      ),
+      suite("resume")(
+        test("resume flow") {
+          for {
+            _            <- reset()
+            client       <- ZIO.service[Client[Any]]
+            clientConfig <- ZIO.service[Client.Config]
+            baseUrl      <- ZIO.service[URL]
+
+            flowId <- FlowId.newRandom
+            response <-
+              client.request(
+                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/resume")),
+                clientConfig
+              )
+
+            reqs <- resumeRequests
+          } yield assertTrue(
+            response.status == Status.Ok,
+            reqs == Set(flowId)
+          )
+        }
+      ),
+      suite("abort")(
+        test("abort flow") {
+          for {
+            _            <- reset()
+            client       <- ZIO.service[Client[Any]]
+            clientConfig <- ZIO.service[Client.Config]
+            baseUrl      <- ZIO.service[URL]
+
+            flowId <- FlowId.newRandom
+            response <-
+              client.request(
+                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/abort")),
+                clientConfig
+              )
+
+            reqs <- abortRequests
+          } yield assertTrue(
+            response.status == Status.Ok,
+            reqs == Set(flowId)
+          )
+        }
       )
     ).provideSomeShared[Client[Any] with Client.Config](
       FlowsApi.layer,
@@ -330,7 +396,10 @@ object FlowsApiSpec extends ApiSpecBase {
 
   private class MockedExecutor(
     val started: Ref[Map[FlowId, ZFlow[Any, Any, Any]]],
-    val pollHandlers: Ref[Map[FlowId, PollHandler]]
+    val pollHandlers: Ref[Map[FlowId, PollHandler]],
+    val pauseRequests: Ref[Set[FlowId]],
+    val resumeRequests: Ref[Set[FlowId]],
+    val abortRequests: Ref[Set[FlowId]]
   ) extends ZFlowExecutor {
     override def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] = ???
 
@@ -362,9 +431,12 @@ object FlowsApiSpec extends ApiSpecBase {
         case true  => ZIO.fail(ExecutorError.InvalidOperationArguments("flow is running"))
         case false => ZIO.unit
       }
-    override def pause(id: FlowId): ZIO[Any, ExecutorError, Unit]  = ???
-    override def resume(id: FlowId): ZIO[Any, ExecutorError, Unit] = ???
-    override def abort(id: FlowId): ZIO[Any, ExecutorError, Unit]  = ???
+    override def pause(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+      pauseRequests.update(_ + id)
+    override def resume(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+      resumeRequests.update(_ + id)
+    override def abort(id: FlowId): ZIO[Any, ExecutorError, Unit] =
+      abortRequests.update(_ + id)
 
     override def getAll: ZStream[Any, ExecutorError, (FlowId, FlowStatus)] =
       ZStream
@@ -380,11 +452,23 @@ object FlowsApiSpec extends ApiSpecBase {
   private def addPollHandler(flowId: FlowId, pollHandler: PollHandler): ZIO[MockedExecutor, Nothing, Unit] =
     ZIO.serviceWithZIO(_.pollHandlers.update(_.updated(flowId, pollHandler)))
 
+  private def pauseRequests: ZIO[MockedExecutor, Nothing, Set[FlowId]] =
+    ZIO.serviceWithZIO(_.pauseRequests.get)
+
+  private def resumeRequests: ZIO[MockedExecutor, Nothing, Set[FlowId]] =
+    ZIO.serviceWithZIO(_.resumeRequests.get)
+
+  private def abortRequests: ZIO[MockedExecutor, Nothing, Set[FlowId]] =
+    ZIO.serviceWithZIO(_.abortRequests.get)
+
   private val executorMock: ULayer[ZFlowExecutor with MockedExecutor] =
     ZLayer {
       for {
-        started      <- Ref.make(Map.empty[FlowId, ZFlow[Any, Any, Any]])
-        pollHandlers <- Ref.make(Map.empty[FlowId, PollHandler])
-      } yield new MockedExecutor(started, pollHandlers)
+        started        <- Ref.make(Map.empty[FlowId, ZFlow[Any, Any, Any]])
+        pollHandlers   <- Ref.make(Map.empty[FlowId, PollHandler])
+        pauseRequests  <- Ref.make(Set.empty[FlowId])
+        resumeRequests <- Ref.make(Set.empty[FlowId])
+        abortRequests  <- Ref.make(Set.empty[FlowId])
+      } yield new MockedExecutor(started, pollHandlers, pauseRequests, resumeRequests, abortRequests)
     }
 }

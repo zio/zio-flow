@@ -878,14 +878,20 @@ final case class PersistentExecutor(
           Logging
             .optionalTransactionId(lastState.transactionStack.headOption.map(_.id)) {
               processMessages(messages).flatMap { changesFromMessages =>
-                val state0 = changesFromMessages(lastState)
-                val scope  = state0.scope
-
+                val scope         = lastState.scope
                 val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
 
                 remoteContext {
                   for {
                     recordingContext <- RecordingRemoteContext.startRecording
+
+                    state0 <-
+                      persistState(
+                        state.id.asFlowId,
+                        lastState,
+                        changesFromMessages,
+                        recordingContext
+                      ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
 
                     stepResult <-
                       state0.status match {
@@ -914,9 +920,10 @@ final case class PersistentExecutor(
                               }
                           }
                         case FlowStatus.Paused =>
-                          waitAndProcessMessages(messages).map { changes =>
-                            StepResult(changes, continue = true)
-                          }
+                          ZIO.logInfo(s"Flow paused, waiting for resume command") *>
+                            waitAndProcessMessages(messages).map { changes =>
+                              StepResult(changes, continue = true)
+                            }
                       }
                     now <- Clock.currentDateTime
                     state2 <-
@@ -1037,7 +1044,6 @@ final case class PersistentExecutor(
     PersistentExecutor.State[_, _]
   ] = {
     // TODO: optimization: do not persist state if there were no side effects
-    val key    = id.toRaw
     val state1 = stateChange(state0)
     for {
       _                    <- recordingContext.virtualClock.advance(state1.lastTimestamp)
@@ -1082,11 +1088,7 @@ final case class PersistentExecutor(
                  )
                  .recordAccessedVariables(readVariablesWithTimestamps)
                  .recordReadVariables(readVariables)
-      persistedState = execEnv.serializer.serialize(state2)
-      _             <- metrics.serializedFlowStateSize.update(persistedState.size)
-      _ <- kvStore
-             .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
-             .mapError(ExecutorError.KeyValueStoreError("put", _))
+      _ <- saveState(id, state2, currentTimestamp)
     } yield state2
   }
 
@@ -1107,13 +1109,37 @@ final case class PersistentExecutor(
                }
     } yield state
 
-  private def interruptFlow(id: FlowId): ZIO[Any, Nothing, Boolean] =
+  private def saveState(
+    id: FlowId,
+    state: State[_, _],
+    currentTimestamp: Timestamp
+  ): ZIO[Any, ExecutorError.KeyValueStoreError, Unit] =
+    for {
+      persistedState <- ZIO.succeed(execEnv.serializer.serialize(state))
+      key             = id.toRaw
+      _              <- metrics.serializedFlowStateSize.update(persistedState.size)
+      _ <- kvStore
+             .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
+             .mapError(ExecutorError.KeyValueStoreError("put", _))
+    } yield ()
+
+  private def interruptFlow(id: FlowId): ZIO[Any, ExecutorError, Boolean] =
     for {
       _     <- ZIO.log(s"Interrupting flow $id")
       state <- workflows.get(id).commit
       result <- state match {
-                  case Some(runtimeState) =>
-                    runtimeState.await.flatMap(_.fiber.interrupt.as(true))
+                  case Some(runtimeStatePromise) =>
+                    for {
+                      runtimeState <- runtimeStatePromise.await
+                      _            <- runtimeState.fiber.interrupt
+                      _ <- loadState(id).flatMap {
+                             case None => ZIO.unit
+                             case Some(lastState) =>
+                               val finalState = lastState.copy(status = FlowStatus.Done)
+                               saveState(id, finalState, finalState.lastTimestamp)
+                           }
+                      _ <- runtimeState.result.fail(Left(ExecutorError.Interrupted)).provideEnvironment(promiseEnv)
+                    } yield true
                   case None =>
                     ZIO.succeed(false)
                 }

@@ -3,8 +3,8 @@ package zio.flow.runtime.internal.executor
 import zio._
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, ZFlowExecutor}
-import zio.schema.Schema
+import zio.flow.runtime.{DurableLog, ExecutorError, FlowStatus, IndexedStore, KeyValueStore, ZFlowExecutor}
+import zio.schema.{DynamicValue, Schema}
 import zio.test.{Spec, TestClock, TestEnvironment, assertTrue}
 
 import java.util.concurrent.TimeUnit
@@ -97,6 +97,53 @@ object ExecutorApi extends PersistentExecutorBaseSpec {
           _      <- TestClock.adjust(5.seconds)
           result <- executor.delete(id).exit
         } yield assertTrue(result.isSuccess)
+      }.provide(
+        Configuration.inMemory,
+        ZFlowExecutor.defaultInMemoryJson
+      ),
+      test("abort running flow") {
+        for {
+          curr       <- Clock.currentTime(TimeUnit.SECONDS)
+          executor   <- ZIO.service[ZFlowExecutor]
+          flow        = ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L)).as(1)
+          id          = FlowId("abort-running-flow")
+          _          <- executor.start(id, flow)
+          _          <- TestClock.adjust(1.second)
+          statuses1  <- executor.getAll.runCollect
+          _          <- executor.abort(id)
+          _          <- TestClock.adjust(4.seconds)
+          statuses2  <- executor.getAll.runCollect
+          pollResult <- executor.poll(id)
+        } yield assertTrue(
+          statuses1 == Chunk(id -> FlowStatus.Running),
+          statuses2 == Chunk(id -> FlowStatus.Done),
+          pollResult == Some(Left(Left(ExecutorError.Interrupted)))
+        )
+      }.provide(
+        Configuration.inMemory,
+        ZFlowExecutor.defaultInMemoryJson
+      ),
+      test("pause/resume flow") {
+        for {
+          executor   <- ZIO.service[ZFlowExecutor]
+          flow        = ZFlow.sleep(2.seconds) *> ZFlow.sleep(1.second).as(1)
+          id          = FlowId("pause-running-flow")
+          _          <- executor.start(id, flow)
+          _          <- TestClock.adjust(1.second)
+          statuses1  <- executor.getAll.runCollect
+          _          <- executor.pause(id)
+          _          <- TestClock.adjust(4.seconds)
+          statuses2  <- executor.getAll.runCollect
+          _          <- executor.resume(id)
+          _          <- TestClock.adjust(1.second)
+          statuses3  <- executor.getAll.runCollect
+          pollResult <- executor.poll(id)
+        } yield assertTrue(
+          statuses1 == Chunk(id -> FlowStatus.Running),
+          statuses2 == Chunk(id -> FlowStatus.Paused),
+          statuses3 == Chunk(id -> FlowStatus.Done),
+          pollResult == Some(Right(DynamicValue.fromSchemaAndValue(Schema[Int], 1)))
+        )
       }.provide(
         Configuration.inMemory,
         ZFlowExecutor.defaultInMemoryJson
