@@ -82,9 +82,7 @@ object CassandraTestContainerSupport {
   object DockerImageTag {
     val cassandraV3: String = s"$cassandra:3.11.11"
     val cassandraV4: String = s"$cassandra:4.0.1"
-    val scyllaDb: String =
-      // This nightly build supports Apple M1; Will point to a regular version when v4.6 is released.
-      "scylladb/scylla:5.0.1"
+    val scyllaDb: String    = "scylladb/scylla:5.0.1"
   }
 
   val createKeyspaceScript: String =
