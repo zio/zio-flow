@@ -30,6 +30,7 @@ trait RecordingRemoteContext {
 }
 
 object RecordingRemoteContext {
+
   def startRecording: ZIO[RemoteContext with VirtualClock, Nothing, RecordingRemoteContext] =
     ZIO.service[RemoteContext].flatMap { outerRemoteContext =>
       ZIO.service[VirtualClock].flatMap { vclock =>
