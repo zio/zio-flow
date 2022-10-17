@@ -77,7 +77,11 @@ sealed trait ZFlow[-R, +E, +A] {
   final def catchAll[R1 <: R, E1 >: E, A1 >: A, E2](
     f: Remote[E1] => ZFlow[R1, E2, A1]
   ): ZFlow[R1, E2, A1] =
-    self.foldFlow(f, (a: Remote[A1]) => ZFlow(a))
+    ZFlow.Fold(
+      self,
+      Some(UnboundRemoteFunction.make(f.andThen(_.toRemote))),
+      None
+    )
 
   /**
    * Ensure that the given flow is executed after this flow, regardless of
@@ -95,9 +99,10 @@ sealed trait ZFlow[-R, +E, +A] {
   final def flatMap[R1 <: R, E1 >: E, B](
     f: Remote[A] => ZFlow[R1, E1, B]
   ): ZFlow[R1, E1, B] =
-    foldFlow(
-      (e: Remote[E1]) => ZFlow.Fail(e),
-      f
+    ZFlow.Fold(
+      self,
+      None,
+      Some(UnboundRemoteFunction.make(f.andThen(_.toRemote)))
     )
 
   /**
@@ -110,8 +115,8 @@ sealed trait ZFlow[-R, +E, +A] {
   ): ZFlow[R1, E2, B] =
     ZFlow.Fold(
       self,
-      UnboundRemoteFunction.make(onError.andThen(_.toRemote)),
-      UnboundRemoteFunction.make(onSuccess.andThen(_.toRemote))
+      Some(UnboundRemoteFunction.make(onError.andThen(_.toRemote))),
+      Some(UnboundRemoteFunction.make(onSuccess.andThen(_.toRemote)))
     )
 
   /**
@@ -357,8 +362,8 @@ object ZFlow {
 
   final case class Fold[R, E, E2, A, B](
     value: ZFlow[R, E, A],
-    ifError: UnboundRemoteFunction[E, ZFlow[R, E2, B]],
-    ifSuccess: UnboundRemoteFunction[A, ZFlow[R, E2, B]]
+    errorCase: Option[UnboundRemoteFunction[E, ZFlow[R, E2, B]]],
+    successCase: Option[UnboundRemoteFunction[A, ZFlow[R, E2, B]]]
   ) extends ZFlow[R, E2, B] {
     type ValueE  = E
     type ValueE2 = E2
@@ -366,15 +371,27 @@ object ZFlow {
     type ValueR  = R
     type ValueB  = B
 
+    lazy val onError: UnboundRemoteFunction[E, ZFlow[R, E2, B]] =
+      errorCase.getOrElse {
+        UnboundRemoteFunction.make((e: Remote[E]) => ZFlow.fail(e).asInstanceOf[ZFlow[R, E2, B]].toRemote)
+      }
+
+    lazy val onSuccess: UnboundRemoteFunction[A, ZFlow[R, E2, B]] =
+      successCase.getOrElse {
+        UnboundRemoteFunction.make((a: Remote[A]) => ZFlow.succeed(a).asInstanceOf[ZFlow[R, E2, B]].toRemote)
+      }
+
     override protected def substituteRec[C](f: Remote.Substitutions): ZFlow[R, E2, B] =
       Fold(
         value.substitute(f),
-        ifError.substitute(f).asInstanceOf[UnboundRemoteFunction[E, ZFlow[R, E2, B]]],
-        ifSuccess.substitute(f).asInstanceOf[UnboundRemoteFunction[A, ZFlow[R, E2, B]]]
+        errorCase.map(_.substitute(f).asInstanceOf[UnboundRemoteFunction[E, ZFlow[R, E2, B]]]),
+        successCase.map(_.substitute(f).asInstanceOf[UnboundRemoteFunction[A, ZFlow[R, E2, B]]])
       )
 
     override private[flow] val variableUsage =
-      value.variableUsage.union(ifError.variableUsage).union(ifSuccess.variableUsage)
+      value.variableUsage
+        .union(errorCase.map(_.variableUsage).getOrElse(VariableUsage.none))
+        .union(successCase.map(_.variableUsage).getOrElse(VariableUsage.none))
   }
 
   object Fold {
@@ -382,18 +399,17 @@ object ZFlow {
 
     def schema[R, E, E2, A, B]: Schema[Fold[R, E, E2, A, B]] =
       Schema.defer(
-        Schema.CaseClass3[ZFlow[R, E, A], UnboundRemoteFunction[E, ZFlow[R, E2, B]], UnboundRemoteFunction[
-          A,
-          ZFlow[R, E2, B]
+        Schema.CaseClass3[ZFlow[R, E, A], Option[UnboundRemoteFunction[E, ZFlow[R, E2, B]]], Option[
+          UnboundRemoteFunction[A, ZFlow[R, E2, B]]
         ], Fold[R, E, E2, A, B]](
           typeId,
           Schema.Field("value", ZFlow.schema[R, E, A]),
-          Schema.Field("ifError", UnboundRemoteFunction.schema[E, ZFlow[R, E2, B]]),
-          Schema.Field("ifSuccess", UnboundRemoteFunction.schema[A, ZFlow[R, E2, B]]),
-          (value, ifError, ifSuccess) => Fold(value, ifError, ifSuccess),
+          Schema.Field("errorCase", Schema.option(UnboundRemoteFunction.schema[E, ZFlow[R, E2, B]])),
+          Schema.Field("successCase", Schema.option(UnboundRemoteFunction.schema[A, ZFlow[R, E2, B]])),
+          (value, errorCase, successCase) => Fold(value, errorCase, successCase),
           _.value,
-          _.ifError,
-          _.ifSuccess
+          _.errorCase,
+          _.successCase
         )
       )
 
