@@ -549,8 +549,8 @@ final case class PersistentExecutor(
           case fold @ Fold(_, _, _) =>
             val cont =
               Instruction.Continuation[fold.ValueR, fold.ValueA, fold.ValueE, fold.ValueE2, fold.ValueB](
-                fold.ifError,
-                fold.ifSuccess
+                fold.onError,
+                fold.onSuccess
               )
             ZIO.succeed(
               StepResult(
@@ -1480,10 +1480,12 @@ object PersistentExecutor {
             val compensateAndFail: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                UnboundRemoteFunction.make((error: Remote[ActivityError]) =>
-                  ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
-                ),
-                UnboundRemoteFunction.make((_: Remote[Unit]) => ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]])
+                None,
+                Some(
+                  UnboundRemoteFunction.make((_: Remote[Unit]) =>
+                    ZFlow.Fail(failure).asInstanceOf[ZFlow[Any, Any, Any]]
+                  )
+                )
               )
             state.copy(
               current = compensateAndFail
@@ -1499,10 +1501,8 @@ object PersistentExecutor {
             val compensateAndRun: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
-                UnboundRemoteFunction.make((error: Remote[ActivityError]) =>
-                  ZFlow.fail(error).asInstanceOf[ZFlow[Any, Any, Any]]
-                ),
-                UnboundRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]])
+                None,
+                Some(UnboundRemoteFunction.make((_: Remote[Unit]) => txState.body.asInstanceOf[ZFlow[Any, Any, Any]]))
               )
 
             // We need to assign a new transaction ID because we are not cleaning up persisted variables immediately

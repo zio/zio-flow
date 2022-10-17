@@ -825,14 +825,22 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       flow         <- genZFlowNow
       successValue <- genDynamicValue
-      ifSuccess =
-        UnboundRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
-          ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
-        )
-      ifError =
-        UnboundRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
-          ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
-        )
+      ifSuccess <- Gen.elements(
+                     None,
+                     Some(
+                       UnboundRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
+                         ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
+                       )
+                     )
+                   )
+      ifError <- Gen.elements(
+                   None,
+                   Some(
+                     UnboundRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
+                       ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
+                     )
+                   )
+                 )
     } yield ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any](flow, ifError, ifSuccess)
 
   lazy val genZFlowLog: Gen[Sized, ZFlow.Log] =
