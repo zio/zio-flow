@@ -57,6 +57,8 @@ final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with 
               30.seconds
             ) // TODO: configurable
             .provideEnvironment(env)
+      case _ =>
+        ZIO.dieMessage(s"Unsupported operation ${operation.getClass.getName}")
     }
 }
 

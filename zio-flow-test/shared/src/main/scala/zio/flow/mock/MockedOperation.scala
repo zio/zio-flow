@@ -58,10 +58,6 @@ object MockedOperation {
   ) extends MockedOperation {
     override def matchOperation[R1, A1](operation: Operation[R1, A1], input: R1): (Option[Match[A1]], MockedOperation) =
       operation match {
-        case Operation.ContraMap(_, _, _) =>
-          (None, this)
-        case Operation.Map(_, _, _) =>
-          (None, this)
         case Operation.Http(url, api) =>
           // TODO: check R1 and A1 types too
           // TODO: check headers as well
@@ -89,6 +85,8 @@ object MockedOperation {
           } else {
             (None, this)
           }
+        case _ =>
+          (None, this)
       }
   }
 

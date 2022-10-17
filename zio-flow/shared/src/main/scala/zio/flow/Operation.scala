@@ -41,7 +41,7 @@ import zio.flow.serialization.FlowSchemaAst
  * capabilities to mock these operations instead of using the real operation
  * executor.
  */
-sealed trait Operation[-Input, +Result] { self =>
+trait Operation[-Input, +Result] { self =>
   val inputSchema: Schema[_ >: Input]
   val resultSchema: Schema[_ <: Result]
 
