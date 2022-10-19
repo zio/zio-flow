@@ -431,7 +431,7 @@ object Remote {
       result.evalDynamic
 
     def apply(a: Remote[A]): Remote[B] =
-      EvaluateUnboundRemoteFunction(this, a)
+      Bind(input, a, result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[EvaluatedRemoteFunction[A, B]] =
       UnboundRemoteFunction(input, result.substitute(f))
@@ -466,51 +466,57 @@ object Remote {
 
   type ===>[A, B] = UnboundRemoteFunction[A, B]
 
-  final case class EvaluateUnboundRemoteFunction[A, B](f: UnboundRemoteFunction[A, B], a: Remote[A]) extends Remote[B] {
+  final case class Bind[A, B](unbound: Unbound[A], value: Remote[A], inner: Remote[B]) extends Remote[B] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        input       <- a.evalDynamic
-        paramName    = RemoteContext.generateFreshVariableName
-        variable     = Remote.Variable(paramName)
-        _           <- RemoteContext.setVariable(paramName, input).mapError(RemoteEvaluationError.RemoteContextError)
-        _           <- LocalContext.pushBinding(f.input.identifier, variable)
-        evaluated   <- f.evalDynamic
-        _           <- LocalContext.popBinding(f.input.identifier)
-        resultRemote = Remote.fromDynamic(evaluated)
+        input            <- value.evalDynamic
+        boundVariableName = RemoteContext.generateFreshVariableName
+        variable          = Remote.Variable(boundVariableName)
+        _                <- RemoteContext.setVariable(boundVariableName, input).mapError(RemoteEvaluationError.RemoteContextError)
+        _                <- LocalContext.pushBinding(unbound.identifier, variable)
+        evaluated        <- inner.evalDynamic
+        _                <- LocalContext.popBinding(unbound.identifier)
+        resultRemote      = Remote.fromDynamic(evaluated)
         finalResult <-
-          if (resultRemote.variableUsage.bindings.contains(f.input.identifier)) {
-            val substituted = resultRemote.substitute(Substitutions(Map(f.input -> variable)))
+          if (resultRemote.variableUsage.bindings.contains(unbound.identifier)) {
+            val substituted = resultRemote.substitute(Substitutions(Map(unbound -> variable)))
             substituted.evalDynamic
           } else ZIO.succeed(evaluated)
       } yield finalResult
 
     override protected def substituteRec(fn: Remote.Substitutions): Remote[B] =
-      EvaluateUnboundRemoteFunction(
-        f.substitute(fn).asInstanceOf[UnboundRemoteFunction[A, B]],
-        a.substitute(fn)
+      Bind(
+        unbound.substitute(fn).asInstanceOf[Unbound[A]],
+        value.substitute(fn),
+        inner.substitute(fn)
       )
 
-    override private[flow] val variableUsage = f.variableUsage.union(a.variableUsage).removeBinding(f.input.identifier)
+    override private[flow] val variableUsage =
+      unbound.variableUsage.union(value.variableUsage).union(inner.variableUsage).removeBinding(unbound.identifier)
   }
 
-  object EvaluateUnboundRemoteFunction {
-    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.EvaluateUnboundRemoteFunction")
+  object Bind {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Bind")
 
-    def schema[A, B]: Schema[EvaluateUnboundRemoteFunction[A, B]] =
-      Schema.CaseClass2[UnboundRemoteFunction[A, B], Remote[A], EvaluateUnboundRemoteFunction[A, B]](
-        typeId,
-        Schema.Field("f", UnboundRemoteFunction.schema[A, B]),
-        Schema.Field("a", Schema.defer(Remote.schema[A])),
-        EvaluateUnboundRemoteFunction.apply,
-        _.f,
-        _.a
-      )
+    def schema[A, B]: Schema[Bind[A, B]] =
+      Schema.defer {
+        Schema.CaseClass3[Unbound[A], Remote[A], Remote[B], Bind[A, B]](
+          typeId,
+          Schema.Field("unbound", Unbound.schema[A]),
+          Schema.Field("value", Remote.schema[A]),
+          Schema.Field("inner", Remote.schema[B]),
+          Bind.apply,
+          _.unbound,
+          _.value,
+          _.inner
+        )
+      }
 
-    def schemaCase[A, B]: Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]] =
-      Schema.Case[EvaluateUnboundRemoteFunction[A, B], Remote[B]](
-        "EvaluateUnboundRemoteFunction",
+    def schemaCase[A, B]: Schema.Case[Bind[A, B], Remote[B]] =
+      Schema.Case[Bind[A, B], Remote[B]](
+        "Bind",
         schema[A, B],
-        _.asInstanceOf[EvaluateUnboundRemoteFunction[A, B]]
+        _.asInstanceOf[Bind[A, B]]
       )
   }
 
@@ -3046,6 +3052,11 @@ object Remote {
         Literal(DynamicValue.fromSchemaAndValue(Schema[A], value))
     }
 
+  def bind[A, B](value: Remote[A])(f: Unbound[A] => Remote[B]): Remote[B] = {
+    val unbound = Unbound[A](LocalContext.generateFreshBinding)
+    Bind(unbound, value, f(unbound))
+  }
+
   def config[A: Schema](key: ConfigKey): Remote[A] =
     Config(key, implicitly[Schema[A]])
 
@@ -3612,7 +3623,7 @@ object Remote {
       .:+:(Unary.schemaCase[Any, A])
       .:+:(Binary.schemaCase[Any, A])
       .:+:(UnboundRemoteFunction.schemaCase[Any, A])
-      .:+:(EvaluateUnboundRemoteFunction.schemaCase[Any, A])
+      .:+:(Bind.schemaCase[Any, A])
       .:+:(RemoteEither.schemaCase[A])
       .:+:(FoldEither.schemaCase[Any, Any, A])
       .:+:(Try.schemaCase[A])
