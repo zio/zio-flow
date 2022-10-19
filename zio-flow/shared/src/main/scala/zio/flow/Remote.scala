@@ -3057,8 +3057,13 @@ object Remote {
     Bind(unbound, value, f(unbound))
   }
 
+  def chunk[A](values: Remote[A]*): Remote[Chunk[A]] =
+    Chunk.fromList(list(values: _*))
+
   def config[A: Schema](key: ConfigKey): Remote[A] =
     Config(key, implicitly[Schema[A]])
+
+  def emptyChunk[A]: Remote[Chunk[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
   def fail[A](message: String): Remote[A] =
     Remote.Fail(message)

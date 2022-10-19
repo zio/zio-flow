@@ -69,8 +69,8 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.nil[Int] ::: Remote.nil[Int] <-> List.empty
       ),
       remoteTest("appended")(
-        Remote.nil[Int] :+ Remote(1) <-> List(1),
-        Remote.list(2, 3) :+ Remote(1) <-> List(2, 3, 1)
+        Remote.nil[Int].appended(Remote(1)) <-> List(1),
+        Remote.list(2, 3).appended(Remote(1)) <-> List(2, 3, 1)
       ),
       remoteTest("appendedAll")(
         Remote.list(1, 2, 3, 4).appendedAll(Remote.list(5, 6, 7)) <-> List(1, 2, 3, 4, 5, 6, 7),
@@ -432,8 +432,8 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(0, 0, 1, 2, 3, 0, 0, 0).segmentLength(_ === 0, 5) <-> 3
       ),
       remoteTest("size")(
-        Remote.nil[Int].length <-> 0,
-        Remote.list(1, 2, 3).length <-> 3
+        Remote.nil[Int].size <-> 0,
+        Remote.list(1, 2, 3).size <-> 3
       ),
       remoteTest("slice")(
         Remote.nil[Int].slice(2, 3) <-> List.empty[Int],
