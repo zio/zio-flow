@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.Duration
+import zio.{Chunk, Duration}
 import zio.flow.remote._
 import zio.flow.remote.RemoteTuples._
 
@@ -285,4 +285,11 @@ trait Syntax {
   implicit class ZFlowSyntax[R, E, A](flow: ZFlow[R, E, A]) {
     def toRemote: Remote.Flow[R, E, A] = Remote.Flow(flow)
   }
+
+  implicit def RemoteChunk[A](remote: Remote[Chunk[A]]): RemoteChunkSyntax[A] =
+    new RemoteChunkSyntax[A](remote, trackingEnabled = false)
+
+  implicit def RemoteChunkCompanion(chunk: Chunk.type): RemoteChunkCompanionSyntax = new RemoteChunkCompanionSyntax(
+    chunk
+  )
 }

@@ -17,17 +17,15 @@
 package zio.flow.remote
 
 import zio.flow._
+import zio.Chunk
 
-final class RemoteListCompanionSyntax(val self: List.type) extends AnyVal {
-  def fill[A](n: Remote[Int])(elem: Remote[A]): Remote[List[A]] =
-    Remote
-      .recurseSimple((n, Remote.nil[A])) { case (input, rec) =>
-        val current = input._1
-        val lst     = input._2
-        (current === 0).ifThenElse(
-          ifTrue = (current, lst),
-          ifFalse = rec((current - 1, elem :: lst))
-        )
-      }
-      ._2
+final class RemoteChunkCompanionSyntax(val self: Chunk.type) extends AnyVal {
+  def fill[A](n: Remote[Int])(elem: Remote[A]): Remote[Chunk[A]] =
+    fromList(List.fill(n)(elem))
+
+  def fromList[A](list: Remote[List[A]]): Remote[Chunk[A]] =
+    // NOTE: We take advantage of the fact that List and Chunk are represented the same on the DynamicValue level.
+    //       A safer implementation in the future would use RemoteOptic.Traversal to convert from/to lists but that
+    //       is currently broken.
+    list.asInstanceOf[Remote[Chunk[A]]]
 }
