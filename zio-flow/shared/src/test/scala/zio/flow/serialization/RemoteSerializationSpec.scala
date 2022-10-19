@@ -76,7 +76,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("binary")(roundtripCheck(codec, genBinary)),
       test("unary")(roundtripCheck(codec, genUnary)),
       test("unbound remote function")(roundtripCheck(codec, genUnboundRemoteFunction)),
-      test("evaluate unbound remote function")(roundtripCheck(codec, genEvaluateUnboundRemoteFunction)),
+      test("bind")(roundtripCheck(codec, genBind)),
       test("remote either")(roundtripCheck(codec, genRemoteEither)),
       test("foldEither")(roundtripCheck(codec, genFoldEither)),
       test("try")(roundtripCheck(codec, genTry)),

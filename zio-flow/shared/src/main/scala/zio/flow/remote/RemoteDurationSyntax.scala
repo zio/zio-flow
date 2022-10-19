@@ -23,22 +23,24 @@ import java.time.temporal.ChronoUnit
 
 final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
 
-  def +(other: Remote[Duration]): Remote[Duration] = {
-    val sum = self.toNanos + other.toNanos
-    (sum >= 0L).ifThenElse(
-      Duration.ofNanos(sum),
-      Remote(Duration.Infinity)
-    )
-  }
-
-  def *(factor: Remote[Double]): Remote[Duration] =
-    (factor <= 0.0).ifThenElse(
-      Remote(Duration.Zero),
-      (factor <= Remote(Long.MaxValue).toDouble / self.toNanos.toDouble).ifThenElse(
-        Duration.ofNanos(math.round(self.toNanos.toDouble * factor).toLong),
+  def +(other: Remote[Duration]): Remote[Duration] =
+    Remote.bind(self.toNanos + other.toNanos) { sum =>
+      (sum >= 0L).ifThenElse(
+        Duration.ofNanos(sum),
         Remote(Duration.Infinity)
       )
-    )
+    }
+
+  def *(factor: Remote[Double]): Remote[Duration] =
+    Remote.bind(self.toNanos.toDouble) { nanos =>
+      (factor <= 0.0).ifThenElse(
+        Remote(Duration.Zero),
+        (factor <= Remote(Long.MaxValue).toDouble / nanos).ifThenElse(
+          Duration.ofNanos(math.round(nanos * factor).toLong),
+          Remote(Duration.Infinity)
+        )
+      )
+    }
 
   def abs(): Remote[Duration] =
     self.isNegative.ifThenElse(
@@ -50,11 +52,12 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
     temporal.plus(self)
 
   def dividedBy(divisor: Remote[Long]): Remote[Duration] = {
-    val secondNs  = Remote(1000000000L)
-    val resultNs  = self.toNanos / divisor
-    val resultS   = resultNs / secondNs
-    val remainder = resultNs % secondNs
-    Duration.ofSeconds(resultS, remainder)
+    val secondNs = Remote(1000000000L)
+    Remote.bind(self.toNanos / divisor) { resultNs =>
+      val resultS   = resultNs / secondNs
+      val remainder = resultNs % secondNs
+      Duration.ofSeconds(resultS, remainder)
+    }
   }
 
   def get(unit: Remote[ChronoUnit]): Remote[Long] =

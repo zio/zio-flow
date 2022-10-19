@@ -226,13 +226,15 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
     self.toList.padTo(len, elem).mkString.trackInternal("String#padTo")
 
   def partition(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
-    val tuple = self.toList.partition(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.partition(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#partition")
 
   def partitionMap(p: Remote[Char] => Remote[Either[Char, Char]]): Remote[(String, String)] = {
-    val tuple = self.toList.partitionMap(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.partitionMap(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#partitionMap")
 
   def patch(from: Remote[Int], other: Remote[String], replaced: Remote[Int]): Remote[String] =
@@ -273,8 +275,9 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   // TODO: sortBy/sortWith/sorted when list supports sort
 
   def span(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
-    val tuple = self.toList.span(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.span(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#span")
 
   def split[X](separators: Remote[X])(implicit ev: RemoteTypeEither[X, Char, List[Char]]): Remote[List[String]] =
@@ -282,9 +285,11 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
       ch => self.split(Remote.list(ch)),
       chs =>
         Remote.recurse[String, List[String]](self) { (remaining, rec) =>
-          val tuple = remaining.toList.span(!chs.contains(_))
-          val next  = tuple._2.drop(1).mkString
-          (tuple._1.mkString :: next.isEmpty.ifThenElse(Remote.nil[String], rec(tuple._2.drop(1).mkString)))
+          Remote.bind(remaining.toList.span(!chs.contains(_))) { tuple =>
+            Remote.bind(tuple._2.drop(1).mkString) { next =>
+              (tuple._1.mkString :: next.isEmpty.ifThenElse(Remote.nil[String], rec(tuple._2.drop(1).mkString)))
+            }
+          }
         }
     )(separators)
       .trackInternal("String#split")

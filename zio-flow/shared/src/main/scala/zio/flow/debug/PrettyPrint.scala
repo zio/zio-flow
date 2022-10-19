@@ -81,10 +81,12 @@ object PrettyPrint {
         prettyPrintRemote(input, builder, indent)
         builder.append(" => ")
         prettyPrintRemote(result, builder, indent)
-      case Remote.EvaluateUnboundRemoteFunction(f, a) =>
-        prettyPrintRemote(f, builder, indent)
-        builder.append(" called with ")
-        prettyPrintRemote(a, builder, indent)
+      case Remote.Bind(unbound, value, inner) =>
+        prettyPrintRemote(unbound, builder, indent)
+        builder.append(" bound to ")
+        prettyPrintRemote(value, builder, indent)
+        builder.append(" then ")
+        prettyPrintRemote(inner, builder, indent)
       case Remote.Unary(value, operator) =>
         builder.append(operator)
         prettyPrintRemote(value, builder, indent)
