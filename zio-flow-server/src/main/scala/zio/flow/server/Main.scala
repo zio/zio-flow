@@ -22,6 +22,7 @@ import zhttp.service.Server
 import zio._
 import zio.flow.Configuration
 import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.server.flows.FlowsApi
@@ -65,6 +66,7 @@ object Main extends ZIOAppDefault {
       DurableLog.layer,
       IndexedStore.inMemory,
       DefaultOperationExecutor.layer,
+      HttpOperationPolicies.disabled,
       ZLayer.succeed(Serializer.json),
       ZLayer.succeed(Deserializer.json),
       PersistentExecutor.make()
