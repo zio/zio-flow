@@ -427,7 +427,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
                          }
                        }
             maxResult <- max.get.commit
-          } yield assertTrue(results == (1 to 20).toSet, maxResult == 2)
+          } yield assertTrue(results == (1 to 20).toSet, maxResult <= 2)
         }
       ),
       suite("connects to circuit breaker")(
