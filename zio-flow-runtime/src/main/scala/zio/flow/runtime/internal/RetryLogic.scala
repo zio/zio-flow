@@ -51,12 +51,20 @@ class RetryLogic(policy: HttpOperationPolicy, semaphore: Semaphore, circuitBreak
 object RetryLogic {
   def make(policy: HttpOperationPolicy): ZIO[Any, Nothing, RetryLogic] =
     for {
-      semaphore <- Semaphore.make(policy.maxParallelRequestCount.toLong)
       circuitBreaker <-
         policy.circuitBreakerPolicy match {
           case Some(resetPolicy) => CircuitBreaker.make(resetPolicy)
           case None              => CircuitBreaker.disabled
         }
+      retryLogic <- make(policy, circuitBreaker)
+    } yield retryLogic
+
+  private[internal] def make(
+    policy: HttpOperationPolicy,
+    circuitBreaker: CircuitBreaker
+  ): ZIO[Any, Nothing, RetryLogic] =
+    for {
+      semaphore <- Semaphore.make(policy.maxParallelRequestCount.toLong)
     } yield new RetryLogic(policy, semaphore, circuitBreaker)
 
   private[internal] def conditionToSchedule(condition: HttpRetryCondition): Schedule[Any, Cause[HttpFailure], Any] =
@@ -101,7 +109,7 @@ object RetryLogic {
 
   private[internal] def retryLimitToSchedule(limit: RetryLimit) =
     limit match {
-      case RetryLimit.ElapsedTime(duration)  => Schedule.duration(duration)
+      case RetryLimit.ElapsedTime(duration)  => Schedule.upTo(duration)
       case RetryLimit.NumberOfRetries(count) => Schedule.recurs(count)
     }
 

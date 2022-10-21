@@ -2,6 +2,7 @@ package zio.flow.runtime.operation.http
 
 import zio.{Duration, ULayer, ZLayer}
 
+/** Service to get a [[HttpOperationPolicy]] for a given host */
 trait HttpOperationPolicies {
   def policyForHost(host: String): HttpOperationPolicy
 }
