@@ -19,6 +19,7 @@ package zio.flow.runtime
 import zio._
 import zio.flow.runtime.internal.PersistentExecutor.FlowResult
 import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.{Configuration, FlowId, ZFlow}
 import zio.schema.{DynamicValue, Schema}
@@ -146,6 +147,7 @@ object ZFlowExecutor {
       .makeSome[KeyValueStore with IndexedStore with Serializer with Deserializer with Configuration, ZFlowExecutor](
         DurableLog.layer,
         DefaultOperationExecutor.layer,
+        HttpOperationPolicies.disabled,
         PersistentExecutor.make()
       )
 

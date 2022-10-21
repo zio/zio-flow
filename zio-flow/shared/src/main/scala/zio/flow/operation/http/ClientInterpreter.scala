@@ -12,19 +12,21 @@ import zio.schema.codec.JsonCodec
 private[http] object ClientInterpreter {
   def interpret[Input, Output](host: String)(
     api: API[Input, Output]
-  )(input: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Response] = {
+  )(input: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Response] = {
     val method = api.method.toZioHttpMethod
     val state  = new RequestState()
     parseUrl(api.requestInput, state)(input)
     val (url, headers, body) = state.result
     val data                 = body.fold(HttpData.empty)(HttpData.fromChunk)
-    Client.request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
+    Client
+      .request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
+      .mapError(HttpFailure.FailedToSendRequest)
   }
 
   private[http] class RequestState {
     private val query: mutable.Map[String, String]   = mutable.Map.empty
     private val headers: mutable.Map[String, String] = mutable.Map.empty
-    private val pathBuilder: StringBuilder           = new StringBuilder()
+    private val pathBuilder: mutable.StringBuilder   = new mutable.StringBuilder()
     private var body: Option[Chunk[Byte]]            = None
 
     def addPath(path: String): Unit =

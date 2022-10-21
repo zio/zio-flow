@@ -18,12 +18,17 @@ package zio.flow.runtime.internal
 
 import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.flow.Operation.{ContraMap, Http, Map}
+import zio.flow.runtime.operation.http.{HttpOperationPolicies, HttpOperationPolicy}
 import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
 import zio.schema.Schema
-import zio.{ZEnvironment, ZIO, ZLayer, durationInt}
+import zio.stm.{TMap, TPromise}
+import zio.{ZEnvironment, ZIO, ZLayer}
 
-final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with ChannelFactory])
-    extends OperationExecutor {
+final case class DefaultOperationExecutor(
+  env: ZEnvironment[EventLoopGroup with ChannelFactory],
+  policies: HttpOperationPolicies,
+  perHostRetryLogic: TMap[String, TPromise[Nothing, RetryLogic]]
+) extends OperationExecutor {
 
   override def execute[Input, Result](
     input: Input,
@@ -44,29 +49,48 @@ final case class DefaultOperationExecutor(env: ZEnvironment[EventLoopGroup with 
             .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
         }
       case Http(host, api) =>
-        ZIO.logInfo(s"Request ${api.method} $host") *>
-          api
-            .call(host)(input)
-            .sandbox
-            .tapBoth(
-              failure => ZIO.logErrorCause(s"Request ${api.method} $host failed", failure),
-              result => ZIO.logDebug(s"Request ${api.method} $host succeeded with result $result")
-            )
-            .mapError(e => ActivityError(s"Failed ${api.method} request to $host", Option(e.squash)))
-            .timeoutFail(ActivityError(s"Request ${api.method} $host timed out", None))(
-              30.seconds
-            ) // TODO: configurable
-            .provideEnvironment(env)
+        val policy = policies.policyForHost(host)
+        getOrCreateRetryLogic(host, policy).flatMap { retryLogic =>
+          val finalHost = policy.hostOverride.getOrElse(host)
+          ZIO.logInfo(s"Request ${api.method} $host") *>
+            retryLogic(api.method, finalHost) {
+              api
+                .call(finalHost)(input) // TODO: typed http error type, retryLogic to handle it
+                .sandbox
+                .tapBoth(
+                  failure => ZIO.logErrorCause(s"Request ${api.method} $finalHost failed", failure),
+                  result => ZIO.logDebug(s"Request ${api.method} $finalHost succeeded with result $result")
+                )
+            }.provideEnvironment(env)
+        }
       case _ =>
         ZIO.dieMessage(s"Unsupported operation ${operation.getClass.getName}")
     }
+
+  private def getOrCreateRetryLogic(host: String, policy: HttpOperationPolicy): ZIO[Any, Nothing, RetryLogic] =
+    perHostRetryLogic
+      .get(host)
+      .flatMap {
+        case Some(promise) => promise.await.map(Right(_))
+        case None =>
+          TPromise.make[Nothing, RetryLogic].flatMap { promise =>
+            perHostRetryLogic.put(host, promise).as(Left(promise))
+          }
+      }
+      .commit
+      .flatMap {
+        case Left(promise) => RetryLogic.make(policy).flatMap(logic => promise.succeed(logic).commit.as(logic))
+        case Right(logic)  => ZIO.succeed(logic)
+      }
 }
 
 object DefaultOperationExecutor {
-  val layer: ZLayer[Any, Nothing, OperationExecutor] =
+  val layer: ZLayer[HttpOperationPolicies, Nothing, OperationExecutor] =
     ZLayer.scoped {
       for {
-        env <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build
-      } yield DefaultOperationExecutor(env)
+        env         <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build
+        policies    <- ZIO.service[HttpOperationPolicies]
+        retryLogics <- TMap.empty[String, TPromise[Nothing, RetryLogic]].commit
+      } yield DefaultOperationExecutor(env, policies, retryLogics)
     }
 }
