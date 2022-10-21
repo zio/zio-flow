@@ -35,31 +35,31 @@ object CircuitBreaker {
       override def onSuccess(): ZIO[Any, Nothing, Unit] =
         state.update {
           case State.Open        => State.Open
-          case State.HalfOpen(_) => State.Open
+          case State.HalfOpen(_) => State.Closed
           case State.Closed      => State.Closed
         }.commit
 
       override def onFailure(): ZIO[Any, Nothing, Unit] =
         state.modify {
-          case State.Open =>
-            (close(), State.Closed)
-          case State.HalfOpen(_) =>
-            (close(), State.Closed)
           case State.Closed =>
-            (ZIO.unit, State.Closed)
+            (open(), State.Open)
+          case State.HalfOpen(_) =>
+            (open(), State.Open)
+          case State.Open =>
+            (ZIO.unit, State.Open)
         }.commit.flatten
 
-      private def close(): ZIO[Any, Nothing, Unit] =
+      private def open(): ZIO[Any, Nothing, Unit] =
         (driver.next(()) *> halfOpen())
-          .catchAll(_ => halfOpen() *> driver.reset)
+          .catchAll(_ => driver.reset *> driver.next(()) *> halfOpen())
           .fork
           .unit
 
       private def halfOpen(): ZIO[Any, Nothing, Unit] =
         state.update {
-          case State.Open            => State.Open
+          case State.Closed          => State.Closed
           case State.HalfOpen(tried) => State.HalfOpen(tried)
-          case State.Closed          => State.HalfOpen(tried = false)
+          case State.Open            => State.HalfOpen(tried = false)
         }.commit
     }
 
