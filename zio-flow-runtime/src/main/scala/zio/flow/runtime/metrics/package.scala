@@ -16,6 +16,8 @@
 
 package zio.flow.runtime
 
+import zhttp.http.Status
+import zio.flow.operation.http.HttpFailure
 import zio.{Duration, ZIOAspect}
 import zio.metrics.MetricKeyType.{Counter, Gauge, Histogram}
 import zio.metrics._
@@ -145,11 +147,77 @@ package object metrics {
   /** Counter for the number of garbage collections */
   val gcRuns: ZIOAspect[Nothing, Any, Nothing, Any, Nothing, Any] = Metric.counter("zioflow_gc").trackAll(1)
 
+  /**
+   * Counter for the number of HTTP operations tagged with the target host and
+   * the response status
+   */
+  def httpResponses(host: String, status: Status): Metric[Counter, Long, MetricState.Counter] =
+    Metric
+      .counter("zioflow_http_responses_total")
+      .tagged(MetricLabel("host", host), MetricLabel("status", status.code.toString))
+
+  /**
+   * Histogram of the HTTP operation's response times tagged with the target
+   * host and the response status
+   */
+  def httpResponseTime(host: String, status: Status): Metric[Histogram, Duration, MetricState.Histogram] =
+    Metric
+      .histogram("zioflow_http_response_time_ms", Histogram.Boundaries.exponential(10, 2, 14))
+      .tagged(MetricLabel("host", host), MetricLabel("status", status.code.toString))
+      .contramap((duration: Duration) => duration.toMillis.toDouble)
+
+  /**
+   * Counter for the number of failed HTTP requests, tagged with the target
+   * host, the failure type and whether it was the final failure after potential
+   * retries
+   */
+  def httpFailedRequests(
+    host: String,
+    reason: Option[HttpFailure],
+    isFinal: Boolean
+  ): Metric[Counter, Long, MetricState.Counter] =
+    Metric
+      .counter("zioflow_http_failed_requests_total")
+      .tagged(
+        MetricLabel("host", host),
+        MetricLabel("failure", httpFailureToLabel(reason)),
+        MetricLabel("is_final", isFinal.toString)
+      )
+
+  /** Counter for the number of timed out HTTP requests */
+  def httpTimedOutRequests(host: String): Metric[Counter, Long, MetricState.Counter] =
+    Metric
+      .counter("zioflow_http_failed_requests_total")
+      .tagged(
+        MetricLabel("host", host),
+        MetricLabel("failure", "timeout"),
+        MetricLabel("is_final", "true")
+      )
+
+  /** Counter for the number of retried HTTP requests per host */
+  def httpRetriedRequests(host: String): Metric[Counter, Long, MetricState.Counter] =
+    Metric
+      .counter("zioflow_http_retried_requests_total")
+      .tagged("host", host)
+
   private def statusToLabel(status: FlowStatus): String =
     status match {
       case FlowStatus.Running   => "running"
       case FlowStatus.Suspended => "suspended"
       case FlowStatus.Paused    => "paused"
       case FlowStatus.Done      => "done"
+    }
+
+  private def httpFailureToLabel(maybeFailure: Option[HttpFailure]): String =
+    maybeFailure match {
+      case Some(httpFailure) =>
+        httpFailure match {
+          case HttpFailure.ResponseBodyDecodeFailure(_, _) => "failed_to_decode_body"
+          case HttpFailure.FailedToReceiveResponseBody(_)  => "failed_to_receive_response"
+          case HttpFailure.FailedToSendRequest(_)          => "failed_to_send_request"
+          case HttpFailure.Non200Response(_)               => "non200_response"
+          case HttpFailure.CircuitBreakerOpen              => "circuit_breaker"
+        }
+      case None => "fatal"
     }
 }

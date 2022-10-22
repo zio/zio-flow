@@ -27,7 +27,7 @@ import zio.{ZEnvironment, ZIO, ZLayer}
 final case class DefaultOperationExecutor(
   env: ZEnvironment[EventLoopGroup with ChannelFactory],
   policies: HttpOperationPolicies,
-  perHostRetryLogic: TMap[String, TPromise[Nothing, RetryLogic]]
+  perHostRetryLogic: TMap[String, TPromise[Nothing, HttpRetryLogic]]
 ) extends OperationExecutor {
 
   override def execute[Input, Result](
@@ -55,10 +55,12 @@ final case class DefaultOperationExecutor(
           ZIO.logInfo(s"Request ${api.method} $host") *>
             retryLogic(api.method, finalHost) {
               api
-                .call(finalHost)(input) // TODO: typed http error type, retryLogic to handle it
+                .call(finalHost)(input)
                 .sandbox
                 .tapBoth(
-                  failure => ZIO.logErrorCause(s"Request ${api.method} $finalHost failed", failure),
+                  failure =>
+                    ZIO.logErrorCause(s"Request ${api.method} $finalHost failed", failure) *>
+                      ZIO.fail(failure),
                   result => ZIO.logDebug(s"Request ${api.method} $finalHost succeeded with result $result")
                 )
             }.provideEnvironment(env)
@@ -67,19 +69,19 @@ final case class DefaultOperationExecutor(
         ZIO.dieMessage(s"Unsupported operation ${operation.getClass.getName}")
     }
 
-  private def getOrCreateRetryLogic(host: String, policy: HttpOperationPolicy): ZIO[Any, Nothing, RetryLogic] =
+  private def getOrCreateRetryLogic(host: String, policy: HttpOperationPolicy): ZIO[Any, Nothing, HttpRetryLogic] =
     perHostRetryLogic
       .get(host)
       .flatMap {
         case Some(promise) => promise.await.map(Right(_))
         case None =>
-          TPromise.make[Nothing, RetryLogic].flatMap { promise =>
+          TPromise.make[Nothing, HttpRetryLogic].flatMap { promise =>
             perHostRetryLogic.put(host, promise).as(Left(promise))
           }
       }
       .commit
       .flatMap {
-        case Left(promise) => RetryLogic.make(policy).flatMap(logic => promise.succeed(logic).commit.as(logic))
+        case Left(promise) => HttpRetryLogic.make(policy).flatMap(logic => promise.succeed(logic).commit.as(logic))
         case Right(logic)  => ZIO.succeed(logic)
       }
 }
@@ -90,7 +92,7 @@ object DefaultOperationExecutor {
       for {
         env         <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build
         policies    <- ZIO.service[HttpOperationPolicies]
-        retryLogics <- TMap.empty[String, TPromise[Nothing, RetryLogic]].commit
+        retryLogics <- TMap.empty[String, TPromise[Nothing, HttpRetryLogic]].commit
       } yield DefaultOperationExecutor(env, policies, retryLogics)
     }
 }

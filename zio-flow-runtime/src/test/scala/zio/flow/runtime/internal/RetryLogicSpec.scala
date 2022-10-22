@@ -24,7 +24,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
       suite("timeout")(
         test("action can finish before the timeout") {
           for {
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -40,7 +40,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         },
         test("timeout is applied") {
           for {
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -59,7 +59,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("always") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -94,7 +94,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("open circuit breaker") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -132,7 +132,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("for specific status") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -170,7 +170,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("for 4xx status") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -208,7 +208,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("for 5xx status") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -246,7 +246,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("or") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -289,7 +289,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("number of retries") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -322,7 +322,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("elapsed time") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -357,7 +357,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
         test("both gets used") {
           for {
             tryCount <- Ref.make(0)
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -407,7 +407,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
       suite("max parallel requests")(
         test("enforced") {
           for {
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 2,
                               hostOverride = None,
@@ -441,7 +441,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
                                      override def onSuccess(): ZIO[Any, Nothing, Unit] = successCount.update(_ + 1)
                                      override def onFailure(): ZIO[Any, Nothing, Unit] = failureCount.update(_ + 1)
                                    }
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,
@@ -488,7 +488,7 @@ object RetryLogicSpec extends ZIOSpecDefault {
 
                                      override def onFailure(): ZIO[Any, Nothing, Unit] = failureCount.update(_ + 1)
                                    }
-            retryLogic <- RetryLogic.make(
+            retryLogic <- HttpRetryLogic.make(
                             HttpOperationPolicy(
                               maxParallelRequestCount = 10,
                               hostOverride = None,

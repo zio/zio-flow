@@ -1,7 +1,7 @@
 package zio.flow.runtime.internal
 
 import zio.ZIO
-import zio.flow.runtime.internal.RetryLogic.{optionallyJittered, repetitionToSchedule, retryLimitToSchedule}
+import zio.flow.runtime.internal.HttpRetryLogic.{optionallyJittered, repetitionToSchedule, retryLimitToSchedule}
 import zio.flow.runtime.operation.http.RetryPolicy
 import zio.stm.TRef
 
