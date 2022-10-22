@@ -125,7 +125,7 @@ final case class RocksDbKeyValueStore(
       } yield result
     }
 
-  override def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit] =
+  override def delete(namespace: String, key: Chunk[Byte], marker: Option[Timestamp]): IO[Throwable, Unit] =
     (for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
@@ -134,10 +134,26 @@ final case class RocksDbKeyValueStore(
              case Some(rawVersions) =>
                for {
                  versions <- decodeRawVersions(rawVersions)
-                 _ <- ZIO.foreachDiscard(versions) { timestamp =>
+                 toDelete = marker match {
+                              case Some(markerTimestamp) =>
+                                versions.dropWhile(_ > markerTimestamp).drop(1)
+                              case None =>
+                                versions
+                            }
+                 _ <-
+                   if (versions.size == toDelete.size)
+                     rocksDB.delete(versionNamespace, key.toArray)
+                   else
+                     rocksDB.put(
+                       versionNamespace,
+                       key.toArray,
+                       ProtobufCodec
+                         .encode(Schema[List[Timestamp]])(versions.take(versions.length - toDelete.length))
+                         .toArray
+                     )
+                 _ <- ZIO.foreachDiscard(toDelete) { timestamp =>
                         rocksDB.delete(dataNamespace, getVersionedKey(key, timestamp).toArray)
                       }
-                 _ <- rocksDB.delete(versionNamespace, key.toArray)
                } yield ()
              case None =>
                ZIO.unit
@@ -175,7 +191,7 @@ final case class RocksDbKeyValueStore(
       case None => ZIO.none
     }
 
-  private def decodeRawVersions(rawVersions: Array[Byte]) =
+  private def decodeRawVersions(rawVersions: Array[Byte]): ZIO[Any, Throwable, List[Timestamp]] =
     ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
       case Left(failure) =>
         ZIO.fail(new Throwable(s"Failed to decode versions: $failure"))

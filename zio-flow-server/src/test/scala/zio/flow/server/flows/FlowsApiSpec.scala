@@ -536,7 +536,7 @@ object FlowsApiSpec extends ApiSpecBase {
       _    <- mock.resumeRequests.set(Set.empty)
       _ <- KeyValueStore
              .scanAll("_zflow_workflow_templates")
-             .mapZIO(kv => KeyValueStore.delete("_zflow_workflow_templates", kv._1))
+             .mapZIO(kv => KeyValueStore.delete("_zflow_workflow_templates", kv._1, None))
              .runDrain
     } yield ()
 

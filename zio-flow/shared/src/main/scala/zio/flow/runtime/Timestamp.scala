@@ -33,4 +33,6 @@ object Timestamp {
     Timestamp(_),
     _.value
   )
+
+  implicit val ordering: Ordering[Timestamp] = (x: Timestamp, y: Timestamp) => x.value.compareTo(y.value)
 }

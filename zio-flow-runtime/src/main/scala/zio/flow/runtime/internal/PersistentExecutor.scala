@@ -160,7 +160,7 @@ final case class PersistentExecutor(
              case Some(state) =>
                for {
                  _ <- kvStore
-                        .delete(Namespaces.workflowState, id.toRaw)
+                        .delete(Namespaces.workflowState, id.toRaw, None)
                         .mapError(ExecutorError.KeyValueStoreError("delete", _))
                  _ <- state.result.delete().provideEnvironment(promiseEnv)
                } yield ()

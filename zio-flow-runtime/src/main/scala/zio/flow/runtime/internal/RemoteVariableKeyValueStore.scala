@@ -104,7 +104,7 @@ final case class RemoteVariableKeyValueStore(
   def delete(name: RemoteVariableName, scope: RemoteVariableScope): IO[ExecutorError, Unit] = {
     ZIO.logDebug(s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope") *>
       keyValueStore
-        .delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)))
+        .delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), None)
         .mapError(ExecutorError.KeyValueStoreError("delete", _))
   } @@ metrics.variableAccessCount(VariableAccess.Delete, kindOf(scope))
 

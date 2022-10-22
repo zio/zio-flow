@@ -82,7 +82,7 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
         expressionAttributeValues = Map(
           ExpressionAttributeValueVariable(RequestExpressionPlaceholder.keyColumn) -> dynamoDbKeyValue(namespace, key)
         ) ++ before.map(timestamp =>
-          (ExpressionAttributeValueVariable(RequestExpressionPlaceholder.timestampColumn)) -> longValue(
+          ExpressionAttributeValueVariable(RequestExpressionPlaceholder.timestampColumn) -> longValue(
             timestamp.value
           )
         )
@@ -195,8 +195,25 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
       .flatMap(bytesOption => ZStream.fromIterable(bytesOption))
   }
 
-  override def delete(namespace: String, key: Chunk[Byte]): IO[IOException, Unit] =
-    getAllTimestamps(namespace, key)
+  override def delete(namespace: String, key: Chunk[Byte], marker: Option[Timestamp]): IO[IOException, Unit] =
+    marker match {
+      case Some(markerTimestamp) =>
+        for {
+          timestamps <- getAllTimestamps(namespace, key).runCollect.map(_.sorted)
+          before      = timestamps.takeWhile(_ <= markerTimestamp)
+          toDelete    = if (before.nonEmpty) before.init else Chunk.empty
+          _          <- delete(namespace, key, ZStream.fromChunk(toDelete))
+        } yield ()
+      case None =>
+        delete(namespace, key, getAllTimestamps(namespace, key))
+    }
+
+  private def delete(
+    namespace: String,
+    key: Chunk[Byte],
+    timestamps: ZStream[Any, IOException, Timestamp]
+  ): ZIO[Any, IOException, Unit] =
+    timestamps
       .map(timestamp => DeleteRequest(dynamoDbKey(namespace, key, timestamp)))
       .grouped(25)
       .mapZIO(items =>
@@ -211,7 +228,6 @@ final class DynamoDbKeyValueStore(dynamoDB: DynamoDb) extends KeyValueStore {
           .mapError(ioExceptionOf(s"Error retrieving or reading value for <$namespace> namespace", _))
       )
       .runDrain
-
 }
 
 object DynamoDbKeyValueStore {
@@ -275,7 +291,7 @@ object DynamoDbKeyValueStore {
 
   private def longValue(n: Long): AttributeValue =
     AttributeValue(
-      n = NumberAttributeValue(n.toString())
+      n = NumberAttributeValue(n.toString)
     )
 
   private def dynamoDbKeyValue(namespace: String, key: Chunk[Byte]): AttributeValue =

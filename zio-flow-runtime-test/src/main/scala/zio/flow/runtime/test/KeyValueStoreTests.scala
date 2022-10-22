@@ -59,9 +59,58 @@ final case class KeyValueStoreTests[R](name: String, initializeDb: ZIO[R with Sc
             initializeDb *> {
               for {
                 _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
-                _      <- KeyValueStore.delete(namespace, key)
+                _      <- KeyValueStore.delete(namespace, key, None)
                 latest <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1)))
               } yield assert(latest)(isNone)
+            }
+          }
+        }
+      },
+      test("should be able to delete all versions of a key-value pair") {
+        checkN(10)(
+          Generators.namespace,
+          Generators.nonEmptyByteChunkGen,
+          Generators.byteChunkGen,
+          Generators.byteChunkGen,
+          Generators.byteChunkGen
+        ) { (namespace, key, value1, value2, value3) =>
+          ZIO.scoped[R with KeyValueStore] {
+            initializeDb *> {
+              for {
+                _      <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+                _      <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+                _      <- KeyValueStore.put(namespace, key, value3, Timestamp(5L))
+                _      <- KeyValueStore.delete(namespace, key, None)
+                latest <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(5L)))
+              } yield assert(latest)(isNone)
+            }
+          }
+        }
+      },
+      test("should be able to delete all versions before a specific marker") {
+        checkN(10)(
+          Generators.namespace,
+          Generators.nonEmptyByteChunkGen,
+          Generators.byteChunkGen,
+          Generators.byteChunkGen,
+          Generators.byteChunkGen,
+          Gen.long(2, 4)
+        ) { (namespace, key, value1, value2, value3, marker) =>
+          ZIO.scoped[R with KeyValueStore] {
+            initializeDb *> {
+              for {
+                _  <- KeyValueStore.put(namespace, key, value1, Timestamp(1L))
+                _  <- KeyValueStore.put(namespace, key, value2, Timestamp(2L))
+                _  <- KeyValueStore.put(namespace, key, value3, Timestamp(5L))
+                _  <- KeyValueStore.delete(namespace, key, Some(Timestamp(marker)))
+                v3 <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(5L)))
+                v2 <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
+                v1 <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
+              } yield assertTrue(
+                v3 == Some(value3),
+                v2 == Some(value2),
+                v1 == None
+              )
             }
           }
         }
