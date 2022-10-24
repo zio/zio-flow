@@ -81,6 +81,20 @@ final case class RocksDbKeyValueStore(
       lastTimestamp    <- getLastTimestamp(rawVersions, None)
     } yield lastTimestamp
 
+  /** Gets all the stored timestamps for a given key */
+  override def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] =
+    ZStream.fromIterableZIO {
+      for {
+        versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
+        rawVersions      <- rocksDB.get(versionNamespace, key.toArray)
+        versions <- rawVersions match {
+                      case Some(value) =>
+                        decodeRawVersions(value)
+                      case None => ZIO.succeed(List.empty)
+                    }
+      } yield versions
+    }
+
   def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])] =
     ZStream.unwrap {
       for {

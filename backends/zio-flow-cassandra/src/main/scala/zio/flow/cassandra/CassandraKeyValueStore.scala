@@ -206,7 +206,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   ): zio.IO[Throwable, Option[Timestamp]] =
     getLatestImpl(namespace, key, before = None).map(_.map(_._2))
 
-  private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {
+  override def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {
     val query = cqlSelect
       .column(timestampColumnName)
       .whereColumn(namespaceColumnName)

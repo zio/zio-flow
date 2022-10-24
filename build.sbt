@@ -132,9 +132,10 @@ lazy val zioFlowRuntimeTest = project
   .settings(stdSettings("zio-flow-runtime-test"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio-test" % Version.zio
-    )
+      "dev.zio"                      %% "zio-test" % Version.zio
+    ) ++ commonTestDependencies.map(_ % Test)
   )
+  .settings(testFrameworks += zioTest)
   .dependsOn(zioFlowRuntime)
 
 // Database backends

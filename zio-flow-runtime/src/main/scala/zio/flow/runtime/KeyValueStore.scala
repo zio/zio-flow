@@ -75,6 +75,9 @@ trait KeyValueStore {
    */
   def getLatestTimestamp(namespace: String, key: Chunk[Byte]): IO[Throwable, Option[Timestamp]]
 
+  /** Gets all the stored timestamps for a given key */
+  def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp]
+
   /**
    * Get all key-value pairs of the given namespace, using the latest timestamp
    * for each
@@ -145,6 +148,9 @@ object KeyValueStore {
       _.getLatest(namespace, key, before)
     )
 
+  def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[KeyValueStore, Throwable, Timestamp] =
+    ZStream.serviceWithStream(_.getAllTimestamps(namespace, key))
+
   def scanAll(namespace: String): ZStream[KeyValueStore, Throwable, (Chunk[Byte], Chunk[Byte])] =
     ZStream.serviceWithStream(
       _.scanAll(namespace)
@@ -202,6 +208,20 @@ object KeyValueStore {
           }
       }
 
+    /** Gets all the stored timestamps for a given key */
+    override def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] =
+      ZStream.fromIterableZIO {
+        namespaces.get.map { ns =>
+          ns.get(namespace)
+            .flatMap(_.get(key))
+            .map {
+              case Nil     => List.empty[Timestamp]
+              case entries => entries.map(_.timestamp)
+            }
+            .getOrElse(List.empty)
+        }
+      }
+
     override def scanAll(namespace: String): ZStream[Any, Throwable, (Chunk[Byte], Chunk[Byte])] =
       ZStream.unwrap {
         namespaces.get.map { ns =>
@@ -231,9 +251,8 @@ object KeyValueStore {
             ns.get(namespace) match {
               case Some(data) =>
                 val values          = data.getOrElse(key, List.empty)
-                val before          = values.takeWhile(_.timestamp <= markerTimestamp)
-                val toDelete        = math.max(0, before.length - 1)
-                val remainingValues = values.drop(toDelete)
+                val after           = values.takeWhile(_.timestamp > markerTimestamp)
+                val remainingValues = values.take(after.length + 1)
 
                 if (remainingValues.isEmpty)
                   ns.updated(namespace, data - key)

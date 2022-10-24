@@ -40,7 +40,7 @@ final case class RemoteVariableKeyValueStore(
     value: Chunk[Byte],
     timestamp: Timestamp
   ): IO[ExecutorError, Boolean] = {
-    ZIO.logDebug(s"Storing variable $name in scope $scope with timestamp $timestamp") *>
+    ZIO.logDebug(s"Storing variable $name in scope $scope with timestamp ${timestamp.value}") *>
       metrics.variableSizeBytes(kindOf(scope)).update(value.size) *>
       keyValueStore
         .put(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), value, timestamp)
@@ -90,7 +90,6 @@ final case class RemoteVariableKeyValueStore(
       .mapError(ExecutorError.KeyValueStoreError("getLatestTimestamp", _))
       .flatMap {
         case Some(value) =>
-//        ZIO.logDebug(s"Read latest timestamp of variable ${RemoteVariableName.unwrap(name)} from scope $scope") *>
           ZIO.some((value, scope))
         case None =>
           scope.parentScope match {
@@ -101,13 +100,18 @@ final case class RemoteVariableKeyValueStore(
           }
       }
 
+  def getAllTimestamps(name: RemoteVariableName, scope: RemoteVariableScope): ZStream[Any, ExecutorError, Timestamp] =
+    keyValueStore
+      .getAllTimestamps(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)))
+      .mapError(ExecutorError.KeyValueStoreError("getAllTimestamps", _))
+
   def delete(
     name: RemoteVariableName,
     scope: RemoteVariableScope,
     marker: Option[Timestamp]
   ): IO[ExecutorError, Unit] = {
     ZIO.logDebug(
-      s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope with${marker.map(ts => s" marker $ts").getOrElse(" no marker")}"
+      s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope with${marker.map(ts => s" marker ${ts.value}").getOrElse(" no marker")}"
     ) *>
       keyValueStore
         .delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), marker)
@@ -173,6 +177,12 @@ object RemoteVariableKeyValueStore {
     scope: RemoteVariableScope
   ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Option[(Timestamp, RemoteVariableScope)]] =
     ZIO.serviceWithZIO(_.getLatestTimestamp(name, scope))
+
+  def getAllTimestamps(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope
+  ): ZStream[RemoteVariableKeyValueStore, ExecutorError, Timestamp] =
+    ZStream.serviceWithStream(_.getAllTimestamps(name, scope))
 
   def delete(
     name: RemoteVariableName,
