@@ -206,7 +206,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   ): zio.IO[Throwable, Option[Timestamp]] =
     getLatestImpl(namespace, key, before = None).map(_.map(_._2))
 
-  private def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {
+  override def getAllTimestamps(namespace: String, key: Chunk[Byte]): ZStream[Any, Throwable, Timestamp] = {
     val query = cqlSelect
       .column(timestampColumnName)
       .whereColumn(namespaceColumnName)
@@ -248,27 +248,35 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .flatten
   }
 
-  override def delete(namespace: String, key: Chunk[Byte]): IO[Throwable, Unit] =
-    getAllTimestamps(namespace, key).runCollect.flatMap { timestamps =>
-      val delete = cqlDelete
-        .whereColumn(namespaceColumnName)
-        .isEqualTo(
-          literal(namespace)
-        )
-        .whereColumn(keyColumnName)
-        .isEqualTo(
-          byteBufferFrom(key)
-        )
-        .whereColumn(timestampColumnName)
-        .in(timestamps.map(t => literal(t.value)): _*)
-        .build()
+  override def delete(namespace: String, key: Chunk[Byte], marker: Option[Timestamp]): IO[Throwable, Unit] =
+    for {
+      timestamps <- getAllTimestamps(namespace, key).runCollect
+      toDelete = marker match {
+                   case Some(markerTimestamp) =>
+                     val before = timestamps.takeWhile(_ <= markerTimestamp)
+                     if (before.isEmpty) Chunk.empty else before.init
+                   case None =>
+                     timestamps
+                 }
+      delete = cqlDelete
+                 .whereColumn(namespaceColumnName)
+                 .isEqualTo(
+                   literal(namespace)
+                 )
+                 .whereColumn(keyColumnName)
+                 .isEqualTo(
+                   byteBufferFrom(key)
+                 )
+                 .whereColumn(timestampColumnName)
+                 .in(toDelete.map(t => literal(t.value)): _*)
+                 .build()
 
-      executeAsync(delete)
-        .mapBoth(
-          new IOException(s"Error deleting key-value pair from <$namespace> namespace", _),
-          _ => ()
-        )
-    }
+      _ <- executeAsync(delete)
+             .mapBoth(
+               new IOException(s"Error deleting key-value pair from <$namespace> namespace", _),
+               _ => ()
+             )
+    } yield ()
 
   private def toInsert(namespace: String, key: Chunk[Byte], timestamp: Timestamp, value: Chunk[Byte]): SimpleStatement =
     cqlInsert

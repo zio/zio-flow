@@ -160,7 +160,7 @@ final case class PersistentExecutor(
              case Some(state) =>
                for {
                  _ <- kvStore
-                        .delete(Namespaces.workflowState, id.toRaw)
+                        .delete(Namespaces.workflowState, id.toRaw, None)
                         .mapError(ExecutorError.KeyValueStoreError("delete", _))
                  _ <- state.result.delete().provideEnvironment(promiseEnv)
                } yield ()
@@ -1212,44 +1212,63 @@ final case class PersistentExecutor(
   private[flow] def startGarbageCollector(): ZIO[Scope, Nothing, Unit] =
     ZStream.fromQueue(gcQueue).mapZIO(cmd => garbageCollect(cmd.finished)).runDrain.forkScoped.unit
 
+  private def mergeKeepingLowestTimestamps[K](a: Map[K, Timestamp], b: Map[K, Timestamp]): Map[K, Timestamp] =
+    b.foldLeft(a) { case (map, (key, timestamp)) =>
+      map.updated(key, map.getOrElse(key, timestamp).min(timestamp))
+    }
+
   private def garbageCollect(finished: Promise[Nothing, Any]): ZIO[Any, Nothing, Unit] = {
     for {
       _                  <- ZIO.logInfo(s"Garbage Collection starting")
       allStoredVariables <- remoteVariableKvStore.allStoredVariables.runCollect.map(_.toSet)
       allWorkflows       <- workflows.keys.commit
       allStates          <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
-      allTopLevelReferencedVariables =
-        allStates.foldLeft(Set.empty[ScopedRemoteVariableName]) { case (vars, state) =>
-          state.current.variableUsage
-            .unionAll(
-              state.envStack.map(_.variableUsage)
-            )
-            .unionAll(
-              state.stack.map {
-                case Instruction.PopEnv       => VariableUsage.none
-                case Instruction.PushEnv(env) => env.variableUsage
-                case Instruction.Continuation(onError, onSuccess) =>
-                  onError.variableUsage.union(onSuccess.variableUsage)
-                case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
-                case Instruction.CommitTransaction     => VariableUsage.none
-              }
-            )
-            .variables
-            .map(name => ScopedRemoteVariableName(name, state.id.asScope)) union vars
-        }
-      allReferencedVariables <- recursiveGetReferencedVariables(
-                                  allStoredVariables = allStoredVariables,
-                                  topLevelVariables = allTopLevelReferencedVariables,
-                                  variables = allTopLevelReferencedVariables,
-                                  alreadyRead = Set.empty
-                                )
-      unusedVariables = allStoredVariables.diff(allReferencedVariables)
+      allReferencedVariables <- ZIO.foldLeft(allStates)(Map.empty[ScopedRemoteVariableName, Timestamp]) {
+                                  case (vars, state) =>
+                                    val topLevelReferencedVariables = state.current.variableUsage
+                                      .unionAll(
+                                        state.envStack.map(_.variableUsage)
+                                      )
+                                      .unionAll(
+                                        state.stack.map {
+                                          case Instruction.PopEnv       => VariableUsage.none
+                                          case Instruction.PushEnv(env) => env.variableUsage
+                                          case Instruction.Continuation(onError, onSuccess) =>
+                                            onError.variableUsage.union(onSuccess.variableUsage)
+                                          case Instruction.CaptureRetry(onRetry) => onRetry.variableUsage
+                                          case Instruction.CommitTransaction     => VariableUsage.none
+                                        }
+                                      )
+                                      .variables
+                                      .map(name => ScopedRemoteVariableName(name, state.id.asScope))
+
+                                    for {
+                                      referencedVariables <- recursiveGetReferencedVariables(
+                                                               allStoredVariables = allStoredVariables,
+                                                               topLevelVariables = topLevelReferencedVariables,
+                                                               variables = topLevelReferencedVariables,
+                                                               alreadyRead = Set.empty
+                                                             )
+                                    } yield mergeKeepingLowestTimestamps(
+                                      vars,
+                                      referencedVariables.map(scopedVar => (scopedVar, state.lastTimestamp)).toMap
+                                    )
+                                }
+      unusedVariables = allStoredVariables.diff(allReferencedVariables.keySet)
       _ <-
         ZIO.logDebug(
           s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(_.asString).mkString(", ")}"
         )
       _ <- ZIO.foreachDiscard(unusedVariables) { scopedVar =>
-             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope) @@ metrics.gcDeletions
+             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, None) @@ metrics.gcDeletions
+           }
+      _ <- ZIO.logDebug(
+             s"Garbage collector keeps referenced variables from the given timestamps: ${allReferencedVariables.map {
+               case (scopedVar, timestamp) => scopedVar.asString + " -> " + timestamp
+             }.mkString(", ")}"
+           )
+      _ <- ZIO.foreachDiscard(allReferencedVariables) { case (scopedVar, timestamp) =>
+             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, Some(timestamp))
            }
       _ <- ZIO.logInfo(s"Garbage Collection finished")
     } yield ()

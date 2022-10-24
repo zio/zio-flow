@@ -5,7 +5,7 @@ import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.mock.MockedOperation
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, Timestamp}
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -184,7 +184,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
 
   protected def testGCFlow[E: Schema, A: Schema](
     label: String
-  )(flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A])(assert: (A, Set[ScopedRemoteVariableName]) => TestResult) =
+  )(
+    flow: ZFlow[Any, Nothing, Unit] => ZFlow[Any, E, A]
+  )(assert: (A, Map[ScopedRemoteVariableName, Chunk[Timestamp]]) => TestResult) =
     test(label) {
       for {
         _            <- ZIO.logDebug(s"=== testGCFlow $label started === ")
@@ -234,7 +236,14 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
               _ <- ZIO.logDebug("Forcing GC")
               _ <- executor.forceGarbageCollection()
               vars <-
-                RemoteVariableKeyValueStore.allStoredVariables.runCollect
+                RemoteVariableKeyValueStore.allStoredVariables
+                  .mapZIO(scopedVar =>
+                    RemoteVariableKeyValueStore.getAllTimestamps(scopedVar.name, scopedVar.scope).runCollect.map {
+                      timestamps =>
+                        scopedVar -> timestamps
+                    }
+                  )
+                  .runCollect
                   .provideSome[DurableLog with KeyValueStore](
                     RemoteVariableKeyValueStore.layer,
                     Configuration.inMemory,
@@ -249,7 +258,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
               result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
                           fiber.join
                         }
-            } yield (result, vars.toSet)
+            } yield (result, vars.toMap)
           }
         }
       } yield assert.tupled(results)

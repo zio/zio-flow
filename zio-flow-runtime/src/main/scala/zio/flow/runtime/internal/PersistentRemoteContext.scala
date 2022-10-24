@@ -58,7 +58,7 @@ final case class PersistentRemoteContext(
       }
 
   override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
-    remoteVariableStore.delete(name, scope)
+    remoteVariableStore.delete(name, scope, None)
 
   override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
     executionEnvironment.configuration.get[A](key)

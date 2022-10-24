@@ -61,7 +61,7 @@ final case class KVStoreBasedTemplates(kvStore: KeyValueStore) extends Templates
 
   def delete(templateId: TemplateId): ZIO[Any, Throwable, Unit] =
     kvStore
-      .delete(namespace, templateId.toRaw)
+      .delete(namespace, templateId.toRaw, None)
 }
 
 object KVStoreBasedTemplates {

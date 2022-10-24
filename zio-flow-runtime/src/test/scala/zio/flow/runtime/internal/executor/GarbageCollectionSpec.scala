@@ -145,6 +145,52 @@ object GarbageCollectionSpec extends PersistentExecutorBaseSpec {
             )
           )
         )
+      },
+      testGCFlow("Old version of variables gets cleaned up") { break =>
+        for {
+          v1 <- ZFlow.newVar[Int]("v1", 1)
+          v2 <- ZFlow.newVar[Int]("v2", 1)
+          fiber1 <- (for {
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- v1.update(_ + 1)
+                      _ <- ZFlow.sleep(100.seconds)
+                      r <- v1.get
+                    } yield r).fork
+          fiber2 <- (for {
+                      _ <- v2.update(_ + 1)
+                      _ <- v2.update(_ + 1)
+                      _ <- v2.update(_ + 1)
+                      _ <- v2.update(_ + 1)
+                      _ <- v2.update(_ + 1)
+                      _ <- v2.update(_ + 1)
+                      _ <- ZFlow.sleep(100.seconds)
+                      r <- v2.get
+                    } yield r).fork
+          _  <- break
+          r1 <- fiber1.await
+          r2 <- fiber2.await
+        } yield (r1, r2)
+      } { (result, vars) =>
+        val sv1 = ScopedRemoteVariableName(
+          RemoteVariableName("v1"),
+          RemoteVariableScope.TopLevel(FlowId("Old version of variables gets cleaned up"))
+        )
+        val sv2 = ScopedRemoteVariableName(
+          RemoteVariableName("v2"),
+          RemoteVariableScope.TopLevel(FlowId("Old version of variables gets cleaned up"))
+        )
+        assertTrue(
+          result._1 == Right(9),
+          result._2 == Right(7),
+          vars.getOrElse(sv1, Chunk.empty).length == 1,
+          vars.getOrElse(sv2, Chunk.empty).length == 1
+        )
       }
     )
 }
