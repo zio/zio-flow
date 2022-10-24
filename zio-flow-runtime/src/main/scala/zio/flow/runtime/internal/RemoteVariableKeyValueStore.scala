@@ -101,10 +101,16 @@ final case class RemoteVariableKeyValueStore(
           }
       }
 
-  def delete(name: RemoteVariableName, scope: RemoteVariableScope): IO[ExecutorError, Unit] = {
-    ZIO.logDebug(s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope") *>
+  def delete(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope,
+    marker: Option[Timestamp]
+  ): IO[ExecutorError, Unit] = {
+    ZIO.logDebug(
+      s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope with${marker.map(ts => s" marker $ts").getOrElse(" no marker")}"
+    ) *>
       keyValueStore
-        .delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), None)
+        .delete(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), marker)
         .mapError(ExecutorError.KeyValueStoreError("delete", _))
   } @@ metrics.variableAccessCount(VariableAccess.Delete, kindOf(scope))
 
@@ -146,6 +152,34 @@ object RemoteVariableKeyValueStore {
         executionEnvironment <- ZIO.service[ExecutionEnvironment]
       } yield new RemoteVariableKeyValueStore(kvStore, readVariables, executionEnvironment, durableLog, lastIndex)
     }
+
+  def put(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope,
+    value: Chunk[Byte],
+    timestamp: Timestamp
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Boolean] =
+    ZIO.serviceWithZIO(_.put(name, scope, value, timestamp))
+
+  def getLatest(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope,
+    before: Option[Timestamp]
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Option[(Chunk[Byte], RemoteVariableScope)]] =
+    ZIO.serviceWithZIO(_.getLatest(name, scope, before))
+
+  def getLatestTimestamp(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Option[(Timestamp, RemoteVariableScope)]] =
+    ZIO.serviceWithZIO(_.getLatestTimestamp(name, scope))
+
+  def delete(
+    name: RemoteVariableName,
+    scope: RemoteVariableScope,
+    marker: Option[Timestamp]
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Unit] =
+    ZIO.serviceWithZIO(_.delete(name, scope, marker))
 
   def getReadVariables: ZIO[RemoteVariableKeyValueStore, Nothing, Set[ScopedRemoteVariableName]] =
     ZIO.serviceWithZIO(_.getReadVariables)
