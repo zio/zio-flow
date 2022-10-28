@@ -52,7 +52,7 @@ final case class DefaultOperationExecutor(
         val policy = policies.policyForHost(host)
         getOrCreateRetryLogic(host, policy).flatMap { retryLogic =>
           val finalHost = policy.hostOverride.getOrElse(host)
-          ZIO.logInfo(s"Request ${api.method} $host") *>
+          ZIO.logInfo(s"Request $operation") *>
             retryLogic(api.method, finalHost) {
               api
                 .call(finalHost)(input)

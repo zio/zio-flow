@@ -166,7 +166,7 @@ object Remote {
           for {
             result <- inner.evalDynamic
             _ <-
-              ZIO.debug(s"$message " + result.toString)
+              ZIO.logDebug(s"$message " + result.toString)
           } yield result
         case DebugMode.Track =>
           inner.evalDynamic @@ metrics.remoteEvaluationCount(message) @@ metrics.remoteEvaluationTimeMillis(message)

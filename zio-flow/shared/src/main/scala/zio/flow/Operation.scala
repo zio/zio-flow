@@ -16,9 +16,12 @@
 
 package zio.flow
 
-import zio.schema._
-import zio.flow.operation.http.API
+import zio.flow.Operation.Http.toPathString
+import zio.flow.operation.http.{API, Path, RequestInput}
 import zio.flow.serialization.FlowSchemaAst
+import zio.schema._
+
+import scala.collection.mutable
 
 /**
  * Operation describes the way a zio-flow workflow communicates with the outside
@@ -68,6 +71,9 @@ object Operation {
   ) extends Operation[Input2, Result] {
     override val inputSchema: Schema[_ >: Input2]  = schema
     override val resultSchema: Schema[_ <: Result] = inner.resultSchema
+
+    override def toString: String =
+      s"${inner}.contramap"
   }
 
   object ContraMap {
@@ -103,6 +109,9 @@ object Operation {
   ) extends Operation[Input, Result2] {
     override val inputSchema: Schema[_ >: Input]    = inner.inputSchema
     override val resultSchema: Schema[_ <: Result2] = schema
+
+    override def toString: String =
+      s"${inner}.map"
   }
 
   object Map {
@@ -137,6 +146,9 @@ object Operation {
   ) extends Operation[Input, Result] {
     override val inputSchema: Schema[_ >: Input]   = api.requestInput.schema
     override val resultSchema: Schema[_ <: Result] = api.outputSchema
+
+    override def toString: String =
+      s"[${api.method} $host/${toPathString(api)}"
   }
 
   object Http {
@@ -154,6 +166,39 @@ object Operation {
 
     def schemaCase[Input, Result]: Schema.Case[Http[Input, Result], Operation[Input, Result]] =
       Schema.Case("Http", schema[Input, Result], _.asInstanceOf[Http[Input, Result]])
+
+    def toPathString[Input, Output](api: API[Input, Output]): String = {
+      val builder = new mutable.StringBuilder()
+      requestInputToPathString(api.requestInput, builder)
+      builder.toString()
+    }
+
+    private def requestInputToPathString[Input](input: RequestInput[Input], builder: mutable.StringBuilder): Unit =
+      input match {
+        case RequestInput.ZipWith(left, right, _) =>
+          requestInputToPathString(left, builder)
+          requestInputToPathString(right, builder)
+        case path: Path[_] =>
+          pathToPathString(path, builder)
+        case _ =>
+          ()
+      }
+
+    private def pathToPathString[Input](path: Path[Input], builder: mutable.StringBuilder): Unit =
+      path match {
+        case Path.Literal(s) =>
+          builder.append('/')
+          builder.append(s)
+          ()
+        case Path.ZipWith(left, right, _) =>
+          pathToPathString(left, builder)
+          pathToPathString(right, builder)
+        case Path.Match(_) =>
+          builder.append('/')
+          builder.append("<input>")
+          ()
+      }
+
   }
 
   private val typeId: TypeId = TypeId.parse("zio.flow.Operation")
