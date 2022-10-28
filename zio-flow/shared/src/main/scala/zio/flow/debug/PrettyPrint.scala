@@ -81,10 +81,12 @@ object PrettyPrint {
         prettyPrintRemote(input, builder, indent)
         builder.append(" => ")
         prettyPrintRemote(result, builder, indent)
-      case Remote.EvaluateUnboundRemoteFunction(f, a) =>
-        prettyPrintRemote(f, builder, indent)
-        builder.append(" called with ")
-        prettyPrintRemote(a, builder, indent)
+      case Remote.Bind(unbound, value, inner) =>
+        prettyPrintRemote(unbound, builder, indent)
+        builder.append(" bound to ")
+        prettyPrintRemote(value, builder, indent)
+        builder.append(" then ")
+        prettyPrintRemote(inner, builder, indent)
       case Remote.Unary(value, operator) =>
         builder.append(operator)
         prettyPrintRemote(value, builder, indent)
@@ -808,15 +810,15 @@ object PrettyPrint {
         prettyPrintRemote(svar, builder, indent)
         builder.append(" with ")
         prettyPrintRemote(f, builder, indent)
-      case ZFlow.Fold(value, ifError, ifSuccess) =>
+      case fold @ ZFlow.Fold(value, _, _) =>
         builder.append("fold\n")
         prettyPrintFlow(value, builder, indent + 2)
         nl(indent + 2)
-        builder.append("ifError ")
-        prettyPrintRemote(ifError, builder, indent + 2)
+        builder.append("errorCase ")
+        prettyPrintRemote(fold.onError, builder, indent + 2)
         nl(indent + 2)
         builder.append("ifSuccess ")
-        prettyPrintRemote(ifSuccess, builder, indent + 2)
+        prettyPrintRemote(fold.onSuccess, builder, indent + 2)
       case ZFlow.Log(message) =>
         builder.append("log ")
         prettyPrintRemote(message, builder, indent)

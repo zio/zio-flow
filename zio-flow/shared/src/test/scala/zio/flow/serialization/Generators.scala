@@ -17,7 +17,6 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.internal.{DurablePromise, RemoteVariableScope, ScopedRemoteVariableName}
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
   BinaryIntegralOperator,
@@ -75,18 +74,6 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genTransactionId: Gen[Sized, TransactionId] =
     Gen.alphaNumericStringBounded(1, 16).map(TransactionId.unsafeMake)
-
-  lazy val genScope: Gen[Sized, RemoteVariableScope] =
-    Gen.suspend {
-      Gen.oneOf(
-        genFlowId.map(RemoteVariableScope.TopLevel),
-        (genFlowId <*> genScope).map { case (id, scope) => RemoteVariableScope.Fiber(id, scope) },
-        (genTransactionId <*> genScope).map { case (id, scope) => RemoteVariableScope.Transactional(scope, id) }
-      )
-    }
-
-  lazy val genScopedRemoteVariableName: Gen[Sized, ScopedRemoteVariableName] =
-    (genRemoteVariableName <*> genScope).map { case (name, scope) => ScopedRemoteVariableName(name, scope) }
 
   lazy val genBindingName: Gen[Sized, BindingName] =
     Gen.uuid.map(BindingName.apply(_))
@@ -574,11 +561,15 @@ trait Generators extends DefaultJavaTimeSchemas {
            )
     } yield Remote.UnboundRemoteFunction(v.asInstanceOf[Remote.Unbound[Any]], r)
 
-  lazy val genEvaluateUnboundRemoteFunction: Gen[Sized, Remote[Any]] =
+  lazy val genBind: Gen[Sized, Remote[Any]] =
     for {
       f <- genUnboundRemoteFunction
       a <- genLiteral
-    } yield Remote.EvaluateUnboundRemoteFunction(f.asInstanceOf[Remote.UnboundRemoteFunction[Any, Any]], a)
+    } yield Remote.Bind(
+      f.asInstanceOf[UnboundRemoteFunction[Any, Any]].input,
+      a,
+      f.asInstanceOf[UnboundRemoteFunction[Any, Any]].result
+    )
 
   lazy val genRemoteEither: Gen[Sized, Remote[Any]] =
     for {
@@ -798,7 +789,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       .oneOf(
         genLiteral,
         genRemoteSome,
-        genEvaluateUnboundRemoteFunction
+        genBind
       )
       .map(ZFlow.Return(_))
 
@@ -807,7 +798,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       .oneOf(
         genLiteral,
         genRemoteSome,
-        genEvaluateUnboundRemoteFunction
+        genBind
       )
       .map(ZFlow.Fail(_))
 
@@ -838,14 +829,22 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       flow         <- genZFlowNow
       successValue <- genDynamicValue
-      ifSuccess =
-        UnboundRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
-          ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
-        )
-      ifError =
-        UnboundRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
-          ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
-        )
+      ifSuccess <- Gen.elements(
+                     None,
+                     Some(
+                       UnboundRemoteFunction.make[Instant, ZFlow[Any, ZNothing, Any]]((_: Remote[Instant]) =>
+                         ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
+                       )
+                     )
+                   )
+      ifError <- Gen.elements(
+                   None,
+                   Some(
+                     UnboundRemoteFunction.make[Nothing, ZFlow[Any, ZNothing, Any]]((_: Remote[Nothing]) =>
+                       ZFlow.Return(Remote.Literal(successValue)).asInstanceOf[ZFlow[Any, ZNothing, Any]].toRemote
+                     )
+                   )
+                 )
     } yield ZFlow.Fold[Any, Nothing, ZNothing, Instant, Any](flow, ifError, ifSuccess)
 
   lazy val genZFlowLog: Gen[Sized, ZFlow.Log] =
@@ -929,7 +928,7 @@ trait Generators extends DefaultJavaTimeSchemas {
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
       name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genBinary, genEvaluateUnboundRemoteFunction)
+      initial <- Gen.oneOf(genLiteral, genBinary, genBind)
     } yield ZFlow.NewVar(name, initial)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =
@@ -1042,7 +1041,7 @@ trait Generators extends DefaultJavaTimeSchemas {
     for {
       id        <- genFlowId
       promiseId <- Gen.string1(Gen.asciiChar)
-      promise    = DurablePromise[E, A](PromiseId(promiseId))
+      promise    = PromiseId(promiseId)
     } yield ExecutingFlow(id, promise)
 }
 

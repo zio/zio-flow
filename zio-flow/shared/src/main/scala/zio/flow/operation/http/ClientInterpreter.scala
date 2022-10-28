@@ -11,13 +11,15 @@ import zio.schema.codec.JsonCodec
 private[http] object ClientInterpreter {
   def interpret[Input, Output](host: String)(
     api: API[Input, Output]
-  )(input: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Response] = {
+  )(input: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Response] = {
     val method = api.method.toZioHttpMethod
     val state  = new RequestState()
     parseUrl(api.requestInput, state)(input)
     val (url, headers, body) = state.result
     val data                 = body.fold(zhttp.http.Body.empty)(zhttp.http.Body.fromChunk)
-    Client.request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
+    Client
+      .request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
+      .mapError(HttpFailure.FailedToSendRequest)
   }
 
   private[http] class RequestState {

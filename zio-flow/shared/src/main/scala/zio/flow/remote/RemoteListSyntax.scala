@@ -349,51 +349,57 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
     self.reverse.head.trackInternal("List#last")
 
   def lastIndexOf[B >: A](elem: Remote[B]): Remote[Int] = {
-    val ridx = self.reverse.indexOf(elem)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - 1 - ridx
-    )
+    Remote.bind(self.reverse.indexOf(elem)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - 1 - ridx
+      )
+    }
   }.trackInternal("List#lastIndexOf")
 
   def lastIndexOf[B >: A](elem: Remote[B], end: Remote[Int]): Remote[Int] = {
-    val ridx = self.reverse.indexOf(elem, self.length - 1 - end)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - 1 - ridx
-    )
+    Remote.bind(self.reverse.indexOf(elem, self.length - 1 - end)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - 1 - ridx
+      )
+    }
   }.trackInternal("List#lastIndexOf")
 
   def lastIndexOfSlice[B >: A](that: Remote[List[B]]): Remote[Int] = {
-    val ridx = self.reverse.indexOfSlice(that.reverse)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - ridx - that.length
-    )
+    Remote.bind(self.reverse.indexOfSlice(that.reverse)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - ridx - that.length
+      )
+    }
   }.trackInternal("List#lastIndexOfSlice")
 
   def lastIndexOfSlice[B >: A](that: Remote[List[B]], end: Remote[Int]): Remote[Int] = {
-    val ridx = self.reverse.indexOfSlice(that.reverse, self.length - 1 - end)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - ridx - that.length
-    )
+    Remote.bind(self.reverse.indexOfSlice(that.reverse, self.length - 1 - end)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - ridx - that.length
+      )
+    }
   }.trackInternal("List#lastIndexOfSlice")
 
   def lastIndexWhere(p: Remote[A] => Remote[Boolean]): Remote[Int] = {
-    val ridx = self.reverse.indexWhere(p)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - 1 - ridx
-    )
+    Remote.bind(self.reverse.indexWhere(p)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - 1 - ridx
+      )
+    }
   }.trackInternal("List#lastIndexWhere")
 
   def lastIndexWhere(p: Remote[A] => Remote[Boolean], end: Remote[Int]): Remote[Int] = {
-    val ridx = self.reverse.indexWhere(p, self.length - 1 - end)
-    (ridx === -1).ifThenElse(
-      ifTrue = Remote(-1),
-      ifFalse = self.length - 1 - ridx
-    )
+    Remote.bind(self.reverse.indexWhere(p, self.length - 1 - end)) { ridx =>
+      (ridx === -1).ifThenElse(
+        ifTrue = Remote(-1),
+        ifFalse = self.length - 1 - ridx
+      )
+    }
   }.trackInternal("List#lastIndexWhere")
 
   def lastOption: Remote[Option[A]] =
@@ -594,20 +600,23 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
   def partition(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
     Remote
       .recurseSimple(Remote.tuple2((Remote.tuple2((Remote.nil[A], Remote.nil[A])), self))) { (input, rec) =>
-        val satisfies      = input._1._1
-        val doesNotSatisfy = input._1._2
-        val remaining      = input._2
+        Remote.bind(input._1._1) { satisfies =>
+          Remote.bind(input._1._2) { doesNotSatisfy =>
+            val remaining = input._2
 
-        Remote
-          .UnCons(remaining)
-          .fold(
-            Remote.tuple2((Remote.tuple2((satisfies.reverse, doesNotSatisfy.reverse)), Remote.nil[A]))
-          ) { tuple =>
-            p(tuple._1).ifThenElse(
-              ifTrue = rec(Remote.tuple2((Remote.tuple2((tuple._1 :: satisfies, doesNotSatisfy)), tuple._2))),
-              ifFalse = rec(Remote.tuple2((Remote.tuple2((satisfies, tuple._1 :: doesNotSatisfy)), tuple._2)))
-            )
+            Remote
+              .UnCons(remaining)
+              .fold(
+                Remote.tuple2((Remote.tuple2((satisfies.reverse, doesNotSatisfy.reverse)), Remote.nil[A]))
+              ) { tuple =>
+                p(tuple._1).ifThenElse(
+                  ifTrue = rec(Remote.tuple2((Remote.tuple2((tuple._1 :: satisfies, doesNotSatisfy)), tuple._2))),
+                  ifFalse = rec(Remote.tuple2((Remote.tuple2((satisfies, tuple._1 :: doesNotSatisfy)), tuple._2)))
+                )
+
+              }
           }
+        }
       }
       ._1
       .trackInternal("List#partition")
@@ -615,32 +624,37 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
   def partitionMap[A1, A2](p: Remote[A] => Remote[Either[A1, A2]]): Remote[(List[A1], List[A2])] =
     Remote
       .recurseSimple(Remote.tuple2((Remote.tuple2((Remote.nil[A1], Remote.nil[A2])), self))) { (input, rec) =>
-        val leftList  = input._1._1
-        val rightList = input._1._2
-        val remaining = input._2
+        Remote.bind(input._1._1) { leftList =>
+          Remote.bind(input._1._2) { rightList =>
+            val remaining = input._2
 
-        Remote
-          .UnCons(remaining)
-          .fold(
-            Remote.tuple2((Remote.tuple2((leftList.reverse, rightList.reverse)), Remote.nil[A]))
-          ) { tuple =>
-            p(tuple._1).fold(
-              left => rec(Remote.tuple2((Remote.tuple2((left :: leftList, rightList)), tuple._2))),
-              right => rec(Remote.tuple2((Remote.tuple2((leftList, right :: rightList)), tuple._2)))
-            )
+            Remote
+              .UnCons(remaining)
+              .fold(
+                Remote.tuple2((Remote.tuple2((leftList.reverse, rightList.reverse)), Remote.nil[A]))
+              ) { tuple =>
+                p(tuple._1).fold(
+                  left => rec(Remote.tuple2((Remote.tuple2((left :: leftList, rightList)), tuple._2))),
+                  right => rec(Remote.tuple2((Remote.tuple2((leftList, right :: rightList)), tuple._2)))
+                )
+              }
           }
+        }
       }
       ._1
       .trackInternal("List#partitionMap")
 
   def patch[B >: A](from: Remote[Int], other: Remote[List[B]], replaced: Remote[Int]): Remote[List[B]] = {
-    val safeFrom = math.min(self.length, math.max(0, from))
-    val safeTo   = math.min(self.length, math.max(0, from + replaced))
-    val selfB    = self.widen[List[B]]
-    selfB
-      .take(safeFrom)
-      .concat(other)
-      .concat(selfB.drop(safeTo))
+    Remote.bind(math.min(self.length, math.max(0, from))) { safeFrom =>
+      Remote.bind(math.min(self.length, math.max(0, from + replaced))) { safeTo =>
+        Remote.bind(self.widen[List[B]]) { selfB =>
+          selfB
+            .take(safeFrom)
+            .concat(other)
+            .concat(selfB.drop(safeTo))
+        }
+      }
+    }
   }.trackInternal("List#patch")
 
   def permutations: Remote[List[List[A]]] =
@@ -779,13 +793,14 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
       .ifThenElse(
         ifTrue = Remote
           .recurse[List[A], List[List[A]]](self) { (remaining, rec) =>
-            val next  = remaining.drop(step)
-            val slice = remaining.take(size)
-
-            (next.length < size).ifThenElse(
-              ifTrue = Remote.list(slice),
-              ifFalse = slice :: rec(next)
-            )
+            Remote.bind(remaining.drop(step)) { next =>
+              Remote.bind(remaining.take(size)) { slice =>
+                (next.length < size).ifThenElse(
+                  ifTrue = Remote.list(slice),
+                  ifFalse = slice :: rec(next)
+                )
+              }
+            }
           },
         ifFalse = Remote.nil[List[A]]
       )

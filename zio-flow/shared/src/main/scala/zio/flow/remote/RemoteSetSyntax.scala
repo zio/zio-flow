@@ -167,15 +167,15 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
   def nonEmpty: Remote[Boolean] =
     toList.nonEmpty
 
-  def partition(p: Remote[A] => Remote[Boolean]): Remote[(Set[A], Set[A])] = {
-    val tuple = toList.partition(p)
-    (tuple._1.toSet, tuple._2.toSet)
-  }
+  def partition(p: Remote[A] => Remote[Boolean]): Remote[(Set[A], Set[A])] =
+    Remote.bind(toList.partition(p)) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet)
+    }
 
-  def partitionMap[A1, A2](p: Remote[A] => Remote[Either[A1, A2]]): Remote[(Set[A1], Set[A2])] = {
-    val tuple = toList.partitionMap(p)
-    (tuple._1.toSet, tuple._2.toSet)
-  }
+  def partitionMap[A1, A2](p: Remote[A] => Remote[Either[A1, A2]]): Remote[(Set[A1], Set[A2])] =
+    Remote.bind(toList.partitionMap(p)) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet)
+    }
 
   def product(implicit numeric: Numeric[A]): Remote[A] =
     toList.product
@@ -222,15 +222,15 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
   def sliding(size: Remote[Int]): Remote[List[Set[A]]] =
     sliding(size, 1)
 
-  def span(p: Remote[A] => Remote[Boolean]): Remote[(Set[A], Set[A])] = {
-    val tuple = toList.span(p)
-    (tuple._1.toSet, tuple._2.toSet)
-  }
+  def span(p: Remote[A] => Remote[Boolean]): Remote[(Set[A], Set[A])] =
+    Remote.bind(toList.span(p)) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet)
+    }
 
-  def splitAt(n: Remote[Int]): Remote[(Set[A], Set[A])] = {
-    val tuple = toList.splitAt(n)
-    (tuple._1.toSet, tuple._2.toSet)
-  }
+  def splitAt(n: Remote[Int]): Remote[(Set[A], Set[A])] =
+    Remote.bind(toList.splitAt(n)) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet)
+    }
 
   def subsetOf(that: Remote[Set[A]]): Remote[Boolean] =
     forall(that.contains)
@@ -262,15 +262,15 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
   def union(that: Remote[Set[A]]): Remote[Set[A]] =
     toList.concat(that.toList).toSet
 
-  def unzip[A1, A2](implicit ev: A =:= (A1, A2)): Remote[(Set[A1], Set[A2])] = {
-    val tuple = toList.unzip
-    (tuple._1.toSet, tuple._2.toSet)
-  }
+  def unzip[A1, A2](implicit ev: A =:= (A1, A2)): Remote[(Set[A1], Set[A2])] =
+    Remote.bind(toList.unzip) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet)
+    }
 
-  def unzip3[A1, A2, A3](implicit ev: A =:= (A1, A2, A3)): Remote[(Set[A1], Set[A2], Set[A3])] = {
-    val tuple = toList.unzip3
-    (tuple._1.toSet, tuple._2.toSet, tuple._3.toSet)
-  }
+  def unzip3[A1, A2, A3](implicit ev: A =:= (A1, A2, A3)): Remote[(Set[A1], Set[A2], Set[A3])] =
+    Remote.bind(toList.unzip3) { tuple =>
+      (tuple._1.toSet, tuple._2.toSet, tuple._3.toSet)
+    }
 
   def zip[B](that: Remote[Set[B]]): Remote[Set[(A, B)]] =
     toList.zip(that.toList).toSet

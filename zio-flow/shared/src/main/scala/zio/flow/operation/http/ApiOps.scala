@@ -27,21 +27,24 @@ import java.nio.charset.StandardCharsets
 final class APIOps[Input, Output: API.NotUnit, Id](
   val self: API.WithId[Input, Output, Id]
 ) {
-  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Output] =
-    ClientInterpreter.interpret(host)(self)(params).flatMap(_.body.asChunk).flatMap { string =>
-      if (self.outputSchema == Schema[Unit])
-        ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, Throwable, Output]]
-      else {
-        JsonCodec.decode(self.outputSchema)(string) match {
-          case Left(err) =>
-            ZIO.fail(new Error(s"Could not parse response ${new String(string.toArray, StandardCharsets.UTF_8)}: $err"))
-          case Right(value) => ZIO.succeed(value)
+  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output] =
+    ClientInterpreter
+      .interpret(host)(self)(params)
+      .flatMap(_.body.asChunk.mapError(HttpFailure.FailedToReceiveResponseBody))
+      .flatMap { string =>
+        if (self.outputSchema == Schema[Unit])
+          ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output]]
+        else {
+          JsonCodec.decode(self.outputSchema)(string) match {
+            case Left(err) =>
+              ZIO.fail(HttpFailure.ResponseBodyDecodeFailure(err, new String(string.toArray, StandardCharsets.UTF_8)))
+            case Right(value) => ZIO.succeed(value)
+          }
         }
       }
-    }
 }
 
 final class APIOpsUnit[Input, Id](val self: API.WithId[Input, Unit, Id]) {
-  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, Throwable, Unit] =
+  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Unit] =
     ClientInterpreter.interpret(host)(self)(params).unit
 }
