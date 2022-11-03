@@ -311,7 +311,6 @@ final case class PersistentExecutor(
 
         val scope         = updatedState.scope
         val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
-//        ZIO.logDebug(s"onSuccess in scope ${scope} with value ${value}") *>
         remoteContext {
           updatedState.stack match {
             case Nil =>

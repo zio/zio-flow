@@ -23,6 +23,9 @@ import zio.schema.{DeriveSchema, Schema}
 final case class ScopedRemoteVariableName(name: RemoteVariableName, scope: RemoteVariableScope) {
   def asString: String = getScopePrefix(scope) + name
 
+  override def toString: String =
+    scope.toString + "::" + name.toString
+
   private def getScopePrefix(scope: RemoteVariableScope): String =
     scope match {
       case RemoteVariableScope.TopLevel(flowId) =>

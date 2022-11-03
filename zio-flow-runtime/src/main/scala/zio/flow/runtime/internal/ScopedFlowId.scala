@@ -43,6 +43,9 @@ final case class ScopedFlowId(name: FlowId, parentStack: List[FlowId]) {
 
   def child(childName: FlowId): ScopedFlowId =
     ScopedFlowId(childName, name :: parentStack)
+
+  override def toString: String =
+    "[" + parentStack.reverse.mkString("/") + "]/" + name
 }
 
 object ScopedFlowId {
