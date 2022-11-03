@@ -29,7 +29,7 @@ import zio.flow.serialization.FlowSchemaAst
 sealed trait RequestInput[A] extends Product with Serializable { self =>
   val schema: Schema[A]
 
-  private[http] def ++[B](that: RequestInput[B])(implicit zipper: Zipper[A, B]): RequestInput[zipper.Out] =
+  private[flow] def ++[B](that: RequestInput[B])(implicit zipper: Zipper[A, B]): RequestInput[zipper.Out] =
     RequestInput.ZipWith[A, B, zipper.Out](self, that, zipper)
 }
 
@@ -46,7 +46,7 @@ object RequestInput {
       .:+:(Body.schemaCase[A])
   )
 
-  private[http] final case class ZipWith[A, B, C](
+  private[flow] final case class ZipWith[A, B, C](
     left: RequestInput[A],
     right: RequestInput[B],
     zipper: Zipper.WithOut[A, B, C]
@@ -109,7 +109,7 @@ object Header {
   def schemaCase[A]: Schema.Case[Header[A], RequestInput[A]] =
     Schema.Case("Header", schema[A], _.asInstanceOf[Header[A]])
 
-  private[http] final case class SingleHeader[A](name: String, override val schema: Schema[A]) extends Header[A]
+  private[flow] final case class SingleHeader[A](name: String, override val schema: Schema[A]) extends Header[A]
   object SingleHeader {
     private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header.SingleHeader")
 
@@ -126,7 +126,7 @@ object Header {
       Schema.Case("SingleHeader", schema[A], _.asInstanceOf[SingleHeader[A]])
   }
 
-  private[http] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
+  private[flow] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
       extends Header[C] {
 
     lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
@@ -152,7 +152,7 @@ object Header {
 
   }
 
-  private[http] case class Optional[A](headers: Header[A]) extends Header[Option[A]] {
+  private[flow] case class Optional[A](headers: Header[A]) extends Header[Option[A]] {
     lazy val schema: Schema[Option[A]] = Schema.option(headers.schema)
   }
 
@@ -215,7 +215,7 @@ object Query {
   def schemaCase[A]: Schema.Case[Query[A], RequestInput[A]] =
     Schema.Case("Query", schema[A], _.asInstanceOf[Query[A]])
 
-  private[http] final case class SingleParam[A](name: String, override val schema: Schema[A]) extends Query[A]
+  private[flow] final case class SingleParam[A](name: String, override val schema: Schema[A]) extends Query[A]
 
   object SingleParam {
     private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query.SingleParam")
@@ -234,7 +234,7 @@ object Query {
 
   }
 
-  private[http] final case class ZipWith[A, B, C](left: Query[A], right: Query[B], zipper: Zipper.WithOut[A, B, C])
+  private[flow] final case class ZipWith[A, B, C](left: Query[A], right: Query[B], zipper: Zipper.WithOut[A, B, C])
       extends Query[C] {
     val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
@@ -259,7 +259,7 @@ object Query {
 
   }
 
-  private[http] case class Optional[A](params: Query[A]) extends Query[Option[A]] {
+  private[flow] case class Optional[A](params: Query[A]) extends Query[Option[A]] {
     lazy val schema: Schema[Option[A]] = Schema.option(params.schema)
   }
 
@@ -314,7 +314,7 @@ object Path {
   def schemaCase[A]: Schema.Case[Path[A], RequestInput[A]] =
     Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]])
 
-  private[http] final case class Literal(string: String) extends Path[Unit] {
+  private[flow] final case class Literal(string: String) extends Path[Unit] {
     lazy val schema: Schema[Unit] = Schema.singleton(())
   }
 
@@ -325,7 +325,7 @@ object Path {
       Schema.Case("Literal", schema, _.asInstanceOf[Literal])
   }
 
-  private[http] final case class Match[A](schema: Schema[A]) extends Path[A]
+  private[flow] final case class Match[A](schema: Schema[A]) extends Path[A]
 
   object Match {
     private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Path.Match")
@@ -341,7 +341,7 @@ object Path {
       Schema.Case("Match", schema[A], _.asInstanceOf[Match[A]])
   }
 
-  private[http] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
+  private[flow] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
       extends Path[C] {
     lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
