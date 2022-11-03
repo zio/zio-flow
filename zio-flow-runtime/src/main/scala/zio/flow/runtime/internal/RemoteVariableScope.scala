@@ -116,6 +116,8 @@ object RemoteVariableScope {
     override val parentScope: Option[RemoteVariableScope] = None
 
     override def rootScope: RemoteVariableScope = this
+
+    override def toString: String = flowId.toString
   }
 
   final case class Fiber(flowId: FlowId, parent: RemoteVariableScope) extends RemoteVariableScope {
@@ -123,6 +125,9 @@ object RemoteVariableScope {
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
 
     override def rootScope: RemoteVariableScope = parent.rootScope
+
+    override def toString: String =
+      parent.toString + "/" + flowId.toString
   }
 
   final case class Transactional(parent: RemoteVariableScope, transaction: TransactionId) extends RemoteVariableScope {
@@ -131,5 +136,8 @@ object RemoteVariableScope {
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
 
     override def rootScope: RemoteVariableScope = parent.rootScope
+
+    override def toString: String =
+      parent.toString + ":" + transaction.toString
   }
 }

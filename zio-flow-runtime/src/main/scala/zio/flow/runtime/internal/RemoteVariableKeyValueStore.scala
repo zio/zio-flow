@@ -40,7 +40,7 @@ final case class RemoteVariableKeyValueStore(
     value: Chunk[Byte],
     timestamp: Timestamp
   ): IO[ExecutorError, Boolean] = {
-    ZIO.logDebug(s"Storing variable $name in scope $scope with timestamp ${timestamp.value}") *>
+    ZIO.logTrace(s"Storing variable $name in scope $scope with timestamp ${timestamp.value}") *>
       metrics.variableSizeBytes(kindOf(scope)).update(value.size) *>
       keyValueStore
         .put(Namespaces.variables, key(ScopedRemoteVariableName(name, scope)), value, timestamp)
@@ -66,7 +66,7 @@ final case class RemoteVariableKeyValueStore(
       .mapError(ExecutorError.KeyValueStoreError("getLatest", _))
       .flatMap {
         case Some(value) =>
-          ZIO.logDebug(s"Read variable $name from scope $scope before $before") *>
+          ZIO.logTrace(s"Read variable $name from scope $scope before $before") *>
             readVariables
               .put(ScopedRemoteVariableName(name, scope))
               .as(Some((value, scope)))
@@ -110,7 +110,7 @@ final case class RemoteVariableKeyValueStore(
     scope: RemoteVariableScope,
     marker: Option[Timestamp]
   ): IO[ExecutorError, Unit] = {
-    ZIO.logDebug(
+    ZIO.logTrace(
       s"Deleting ${RemoteVariableName.unwrap(name)} from scope $scope with${marker.map(ts => s" marker ${ts.value}").getOrElse(" no marker")}"
     ) *>
       keyValueStore

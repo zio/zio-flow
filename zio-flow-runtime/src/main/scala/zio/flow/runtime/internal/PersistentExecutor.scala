@@ -62,7 +62,18 @@ final case class PersistentExecutor(
     for {
       resultPromise <- start(id, flow).orDieWith(_.toException)
       promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
-      _             <- ZIO.log(s"$id finished with $promiseResult")
+      _ <-
+        promiseResult match {
+          case Left(Left(executorError)) =>
+            ZIO.logWarningCause(
+              s"$id finished with executor error ${executorError.toMessage}",
+              Cause.die(executorError.toException)
+            )
+          case Left(Right(_)) =>
+            ZIO.logInfo(s"$id finished with failure")
+          case Right(_) =>
+            ZIO.logInfo(s"$id finished with success")
+        }
       result <- promiseResult match {
                   case Left(Left(failure)) => ZIO.die(failure.toException)
                   case Left(Right(dynamicError)) =>
@@ -112,7 +123,7 @@ final case class PersistentExecutor(
       _ <- ZIO.foreachDiscard(deserializedStates) { case (id, state) =>
              for {
                promise <- Promise.make[Nothing, PersistentExecutor.RuntimeState]
-               _       <- ZIO.log(s"Restarting $id")
+               _       <- ZIO.logInfo(s"Restarting $id")
                _       <- workflows.put(id, promise).commit
                _       <- run(state, promise) @@ metrics.flowStarted(metrics.StartType.Continued)
              } yield ()
@@ -300,7 +311,6 @@ final case class PersistentExecutor(
 
         val scope         = updatedState.scope
         val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
-//        ZIO.logDebug(s"onSuccess in scope ${scope} with value ${value}") *>
         remoteContext {
           updatedState.stack match {
             case Nil =>
@@ -510,9 +520,9 @@ final case class PersistentExecutor(
               start   <- Clock.instant
               end     <- RemoteContext.eval(instant)(instantSchema)
               duration = Duration.between(start, end)
-              _       <- ZIO.logInfo(s"Sleeping for $duration")
+              _       <- ZIO.logDebug(s"Sleeping for $duration")
               _       <- Clock.sleep(duration)
-              _       <- ZIO.logInfo(s"Resuming execution after sleeping $duration")
+              _       <- ZIO.logDebug(s"Resuming execution after sleeping $duration")
               result  <- onSuccess(())
             } yield result
 
@@ -631,7 +641,7 @@ final case class PersistentExecutor(
           case await @ Await(execFlow) =>
             for {
               executingFlow <- RemoteContext.eval(execFlow)
-              _             <- ZIO.log("Waiting for result")
+              _             <- ZIO.logDebug("Waiting for result")
               result <-
                 DurablePromise
                   .make[Either[ExecutorError, DynamicValue], FlowResult](
@@ -641,7 +651,17 @@ final case class PersistentExecutor(
                   )
                   .awaitEither
                   .provideEnvironment(promiseEnv)
-              _ <- ZIO.log(s"Await got result: $result")
+              _ <- result match {
+                     case Left(Left(executorError)) =>
+                       ZIO.logWarningCause(
+                         s"Awaited fiber failed with ${executorError.toMessage}",
+                         Cause.die(executorError.toException)
+                       )
+                     case Left(Right(_)) =>
+                       ZIO.logDebug(s"Awaited fiber failed")
+                     case Right(_) =>
+                       ZIO.logDebug(s"Awaited fiber succeeded")
+                   }
               stepResult <-
                 result.fold(
                   error =>
@@ -674,7 +694,6 @@ final case class PersistentExecutor(
                 )
               result <- resultPromise.awaitEither
                           .provideEnvironment(promiseEnv)
-                          .tapErrorCause(c => ZIO.log(s"Failed: $c"))
                           .timeout(d)
               stepResult <- result match {
                               case Some(Right(dynamicSuccess)) =>
@@ -807,7 +826,7 @@ final case class PersistentExecutor(
 
           case Log(remoteMessage) =>
             RemoteContext.eval(remoteMessage).flatMap { message =>
-              ZIO.log(message) *> onSuccess(())
+              ZIO.logInfo(message) *> onSuccess(())
             }
         }
       }
@@ -976,7 +995,10 @@ final case class PersistentExecutor(
                      .fail(Left(error))
                      .provideEnvironment(promiseEnv)
                      .catchAll { error2 =>
-                       ZIO.logFatal(s"Failed to serialize execution failure: $error2")
+                       ZIO.logFatalCause(
+                         s"Failed to serialize execution failure: ${error2.toMessage}",
+                         Cause.die(error2.toException)
+                       )
                      }
               _ <- updateFinishedFlowMetrics(
                      metrics.FlowResult.Death,

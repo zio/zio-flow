@@ -48,7 +48,6 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
       test("Get namespaces") {
         (for {
           path <- ZIO.service[Path]
-          _    <- ZIO.debug(path.toString())
           _ <-
             ZIO
               .service[IndexedStore]
