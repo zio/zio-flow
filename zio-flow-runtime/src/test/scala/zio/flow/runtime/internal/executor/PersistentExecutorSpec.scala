@@ -21,8 +21,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         "testUrlForActivity.com",
         API.get("").input[Int].output[Int]
       ),
-      ZFlow.succeed(12),
-      ZFlow.unit
+      check = Activity.checkNotSupported,
+      compensate = Activity.compensateNotSupported
     )
 
   override def flowSpec
@@ -136,6 +136,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           methodMatcher = equalTo("GET"),
           result = () => 12
         )
+      ),
+      testFlow("Activity's check") {
+        testActivity.copy(
+          check = ZFlow.succeed(111)
+        )(12)
+      }(
+        assert = result => assertTrue(result == 111),
+        mock = MockedOperation.Empty
       ),
       testFlow("iterate") {
         ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
@@ -263,36 +271,36 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
             "activity1Undo1",
             "activity1Undo1",
             Operation.Http("http://activity1/undo/1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity1Undo2 = Activity(
             "activity1Undo2",
             "activity1Undo2",
             Operation.Http("http://activity1/undo/2", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity2Undo = Activity(
             "activity2Undo",
             "activity2Undo",
             Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
 
           val activity1 = Activity(
             "activity1",
             "activity1",
             Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity1Undo1(n) *> activity1Undo2(n)).unit
           )
           val activity2 = Activity(
             "activity2",
             "activity2",
             Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
           )
 
@@ -377,29 +385,29 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
             "activity1Undo",
             "activity1Undo",
             Operation.Http("http://activity1/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity2Undo = Activity(
             "activity2Undo",
             "activity2Undo",
             Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
 
           val activity1 = Activity(
             "activity1",
             "activity1",
             Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity1Undo(n)).unit
           )
           val activity2 = Activity(
             "activity2",
             "activity2",
             Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
           )
 

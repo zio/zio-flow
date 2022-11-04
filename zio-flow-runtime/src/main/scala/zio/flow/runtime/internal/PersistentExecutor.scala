@@ -572,17 +572,35 @@ final case class PersistentExecutor(
 
           case RunActivity(input, activity) =>
             for {
-              inp    <- RemoteContext.eval(input)(activity.inputSchema)
-              output <- operationExecutor.execute(inp, activity.operation).either
-              result <- output match {
-                          case Left(error) => failWith(DynamicValueHelpers.of(error))
-                          case Right(success) =>
-                            val remoteSuccess = Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
-                            // TODO: take advantage of activity.check
-                            onSuccess(
-                              remoteSuccess,
-                              StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
+              inp <- RemoteContext.eval(input)(activity.inputSchema)
+              result <- if (activity.check == Activity.checkNotSupported) {
+                          for {
+                            output <- operationExecutor.execute(inp, activity.operation).either
+                            result <- output match {
+                                        case Left(error) => failWith(DynamicValueHelpers.of(error))
+                                        case Right(success) =>
+                                          val remoteSuccess =
+                                            Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
+                                          onSuccess(
+                                            remoteSuccess,
+                                            StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
+                                          )
+                                      }
+                          } yield result
+                        } else {
+                          val checkOrRun =
+                            activity.check.orElse(
+                              activity
+                                .copy(check = Activity.checkNotSupported)
+                                .apply(input.widen)
                             )
+
+                          ZIO.succeed(
+                            StepResult(
+                              StateChange.setCurrent(checkOrRun),
+                              continue = true
+                            )
+                          )
                         }
             } yield result
 
