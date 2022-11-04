@@ -37,8 +37,8 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
       "getPolicyClaimStatus.com",
       http.API.get("").input[Policy].output[Boolean]
     ),
-    ZFlow.succeed(true),
-    ZFlow.unit
+    check = Activity.checkNotSupported,
+    compensate = Activity.compensateNotSupported
   )
 
   val getFireRisk: Activity[Policy, Double] = Activity[Policy, Double](
@@ -48,8 +48,8 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
       "getFireRiskForProperty.com",
       http.API.get("").input[Policy].output[Double]
     ),
-    ZFlow.succeed(0.23),
-    ZFlow.unit
+    check = Activity.checkNotSupported,
+    compensate = Activity.compensateNotSupported
   )
 
   val isManualEvalRequired: Activity[(Policy, Double), Boolean] = Activity[(Policy, Double), Boolean](
@@ -59,8 +59,8 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
       "isManualEvalRequired.com",
       http.API.get("").input[(Policy, Double)].output[Boolean]
     ),
-    ZFlow.succeed(true),
-    ZFlow.unit
+    check = Activity.checkNotSupported,
+    compensate = Activity.compensateNotSupported
   )
 
   def waitAndSetEvalDoneToTrue(evaluationDone: Remote[RemoteVariableReference[Boolean]]): ZFlow[Any, ZNothing, Unit] =
@@ -111,8 +111,8 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
         "createRenewedPolicy.com",
         http.API.get("").input[(Boolean, Double)].output[Option[Policy]]
       ),
-      ZFlow.succeed(Remote.none[Policy]),
-      ZFlow.unit
+      check = Activity.checkNotSupported,
+      compensate = Activity.compensateNotSupported
     )
 
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
