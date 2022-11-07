@@ -512,6 +512,16 @@ final case class PersistentExecutor(
               onSuccess(coerceRemote(Remote(currInstant)))
             }
 
+          case Random =>
+            zio.Random.nextDouble.flatMap { value =>
+              onSuccess(Remote(value))
+            }
+
+          case RandomUUID =>
+            zio.Random.nextUUID.flatMap { value =>
+              onSuccess(Remote(value))
+            }
+
           case Input() =>
             onSuccess(state.currentEnvironment)
 

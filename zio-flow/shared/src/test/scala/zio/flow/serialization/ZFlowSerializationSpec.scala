@@ -68,7 +68,9 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
       test("Interrupt")(roundtripCheck(codec, genZFlowInterrupt)),
       test("NewVar")(roundtripCheck(codec, genZFlowNewVar)),
       test("Fail")(roundtripCheck(codec, genZFlowFail)),
-      test("Iterate")(roundtripCheck(codec, genZFlowIterate))
+      test("Iterate")(roundtripCheck(codec, genZFlowIterate)),
+      test("Random")(roundtripCheck(codec, genZFlowRandom)),
+      test("RandomUUID")(roundtripCheck(codec, genZFlowRandomUUID))
     )
 
   private def roundtripCheck(

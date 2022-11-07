@@ -16,9 +16,11 @@
 
 package zio.flow
 
-import zio.{Duration, ZNothing}
+import zio.{Chunk, Duration, ZNothing}
 import zio.flow.Remote._
 import zio.schema.{CaseSet, Schema, TypeId}
+
+import java.util.UUID
 
 /**
  * ZFlow is a serializable executable workflow.
@@ -204,6 +206,18 @@ sealed trait ZFlow[-R, +E, +A] {
 
   /** Provide a value as this flow's input */
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
+
+  /** Repeats this flow n times and collect all the results */
+  final def replicate(n: Remote[Int]): ZFlow[R, E, Chunk[A]] =
+    ZFlow.unwrap {
+      Chunk.fill(n)(self).foldLeft[ZFlow[R, E, Chunk[A]]](ZFlow.succeed(Remote.emptyChunk[A])) { case (items, next) =>
+        ZFlow.unwrap(items).flatMap { chunk =>
+          ZFlow.unwrap(next).map { elem =>
+            chunk :+ elem
+          }
+        }
+      }
+    }
 
   /**
    * Try to execute this flow but timeout after the given duration.
@@ -672,6 +686,30 @@ object ZFlow {
       Schema.Case("Provide", schema[R, E, A], _.asInstanceOf[Provide[R, E, A]])
   }
 
+  final case object Random extends ZFlow[Any, Nothing, Double] {
+    override protected def substituteRec[B](f: Substitutions): ZFlow[Any, Nothing, Double] =
+      Random
+
+    override private[flow] val variableUsage = VariableUsage.none
+
+    val schema: Schema[Random.type] = Schema.singleton(Random)
+
+    def schemaCase[R, E, A]: Schema.Case[Random.type, ZFlow[R, E, A]] =
+      Schema.Case("Random", schema, _.asInstanceOf[Random.type])
+  }
+
+  final case object RandomUUID extends ZFlow[Any, Nothing, UUID] {
+    override protected def substituteRec[B](f: Substitutions): ZFlow[Any, Nothing, UUID] =
+      RandomUUID
+
+    override private[flow] val variableUsage = VariableUsage.none
+
+    val schema: Schema[RandomUUID.type] = Schema.singleton(RandomUUID)
+
+    def schemaCase[R, E, A]: Schema.Case[RandomUUID.type, ZFlow[R, E, A]] =
+      Schema.Case("RandomUUID", schema, _.asInstanceOf[RandomUUID.type])
+  }
+
   final case class Read[A](svar: Remote[RemoteVariableReference[A]]) extends ZFlow[Any, Nothing, A] {
     override protected def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, A] =
       Read(svar.substitute(f))
@@ -977,6 +1015,22 @@ object ZFlow {
   def now: ZFlow[Any, ZNothing, Instant] = Now
 
   /**
+   * Generates a random floating point number between 0 and 1
+   *
+   * For generating random values for different data types use the
+   * [[zio.flow.Random]] API.
+   */
+  def random: ZFlow[Any, ZNothing, Double] = Random
+
+  /**
+   * Generates a random UUID
+   *
+   * For generating random values for different data types use the
+   * [[zio.flow.Random]] API.
+   */
+  def randomUUID: ZFlow[Any, ZNothing, UUID] = RandomUUID
+
+  /**
    * Creates a flow that allows it's body run recursively
    *
    * @param initial
@@ -1111,6 +1165,8 @@ object ZFlow {
         .:+:(NewVar.schemaCase[R, E, A])
         .:+:(Fail.schemaCase[R, E, A])
         .:+:(Iterate.schemaCase[R, E, A])
+        .:+:(Random.schemaCase[R, E, A])
+        .:+:(RandomUUID.schemaCase[R, E, A])
     )
 
   lazy val schemaAny: Schema[ZFlow[Any, Any, Any]]     = createSchema[Any, Any, Any]

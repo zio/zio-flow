@@ -59,6 +59,10 @@ sealed trait Numeric[A] {
 
   def toShort(value: A): Short
 
+  def toChar(value: A): Char
+
+  def toByte(value: A): Byte
+
   def toLong(value: A): Long
 
   def toFloat(value: A): Float
@@ -146,6 +150,10 @@ object Numeric extends NumericImplicits0 {
 
     override def toShort(value: Int): Short = value.toShort
 
+    override def toChar(value: Int): Char = value.toChar
+
+    override def toByte(value: Int): Byte = value.toByte
+
     override def toLong(value: Int): Long = value.toLong
 
     override def toFloat(value: Int): Float = value.toFloat
@@ -182,6 +190,12 @@ object Numeric extends NumericImplicits0 {
     "NumericChar",
     Schema.singleton[NumericChar.type](NumericChar),
     _.asInstanceOf[NumericChar.type]
+  )
+
+  private val byteCase: Schema.Case[NumericByte.type, Numeric[Any]] = Schema.Case[NumericByte.type, Numeric[Any]](
+    "NumericByte",
+    Schema.singleton[NumericByte.type](NumericByte),
+    _.asInstanceOf[NumericByte.type]
   )
 
   private val shortCase: Schema.Case[NumericShort.type, Numeric[Any]] = Schema.Case[NumericShort.type, Numeric[Any]](
@@ -244,6 +258,7 @@ object Numeric extends NumericImplicits0 {
         .:+:(doubleCase)
         .:+:(bigDecimalCase)
         .:+:(intCase)
+        .:+:(byteCase)
     )
 
 }
@@ -297,6 +312,10 @@ sealed trait NumericImplicits0 {
     override def toInt(value: Char): Int = value.toInt
 
     override def toShort(value: Char): Short = value.toShort
+
+    override def toChar(value: Char): Char = value
+
+    override def toByte(value: Char): Byte = value.toByte
 
     override def toLong(value: Char): Long = value.toLong
 
@@ -379,6 +398,10 @@ sealed trait NumericImplicits0 {
 
     override def toShort(value: Short): Short = value
 
+    override def toChar(value: Short): Char = value.toChar
+
+    override def toByte(value: Short): Byte = value.toByte
+
     override def toLong(value: Short): Long = value.toLong
 
     override def toFloat(value: Short): Float = value.toFloat
@@ -410,6 +433,91 @@ sealed trait NumericImplicits0 {
     override def decExact(value: Short): Short = Math.decrementExact(value.toInt).toShort
   }
   implicit case object NumericShort extends NumericShort
+
+  trait NumericByte extends Numeric[Byte] with Integral[Byte] {
+    override val schema: Schema[Byte] = implicitly[Schema[Byte]]
+
+    override def conversions(value: Byte): ScalaNumericAnyConversions = value
+
+    override def fromLong(value: Long): Remote[Byte] = Remote(value.toByte)
+
+    override def parse(s: String): Option[Byte] =
+      Try(s.toByte).toOption
+
+    override def add(left: Byte, right: Byte): Byte = (left + right).toByte
+
+    override def sub(left: Byte, right: Byte): Byte = (left - right).toByte
+
+    override def mul(left: Byte, right: Byte): Byte = (left * right).toByte
+
+    override def div(left: Byte, right: Byte): Byte = (left / right).toByte
+
+    override def mod(left: Byte, right: Byte): Byte = (left % right).toByte
+
+    override def neg(value: Byte): Byte = (-value).toByte
+
+    override def bitwiseNegate(value: Byte): Byte = (~value).toByte
+
+    override def abs(value: Byte): Byte = value.abs
+
+    override def sign(value: Byte): Byte = if (value == 0) 0 else if (value < 0) -1 else 1
+
+    override def min(left: Byte, right: Byte): Byte = left.min(right)
+
+    override def max(left: Byte, right: Byte): Byte = left.max(right)
+
+    override def leftShift(left: Byte, right: Byte): Byte = (left << right.toInt).toByte
+
+    override def rightShift(left: Byte, right: Byte): Byte = (left >> right.toInt).toByte
+
+    override def unsignedRightShift(left: Byte, right: Byte): Byte = (left >>> right.toInt).toByte
+
+    override def and(left: Byte, right: Byte): Byte = (left & right).toByte
+
+    override def or(left: Byte, right: Byte): Byte = (left | right).toByte
+
+    override def xor(left: Byte, right: Byte): Byte = (left ^ right).toByte
+
+    override def toInt(value: Byte): Int = value.toInt
+
+    override def toShort(value: Byte): Short = value.toShort
+
+    override def toChar(value: Byte): Char = value.toChar
+
+    override def toByte(value: Byte): Byte = value
+
+    override def toLong(value: Byte): Long = value.toLong
+
+    override def toFloat(value: Byte): Float = value.toFloat
+
+    override def toDouble(value: Byte): Double = value.toDouble
+
+    override def toBigDecimal(value: Byte): BigDecimal = BigDecimal(value.toLong)
+
+    override def toBinaryString(value: Byte): String = value.toInt.toBinaryString
+
+    override def toHexString(value: Byte): String = value.toInt.toHexString
+
+    override def toOctalString(value: Byte): String = value.toInt.toOctalString
+
+    override def addExact(left: Byte, right: Byte): Byte = Math.addExact(left.toInt, right.toInt).toByte
+
+    override def subExact(left: Byte, right: Byte): Byte = Math.subtractExact(left.toInt, right.toInt).toByte
+
+    override def mulExact(left: Byte, right: Byte): Byte = Math.multiplyExact(left.toInt, right.toInt).toByte
+
+    override def negExact(value: Byte): Byte = Math.negateExact(value.toInt).toByte
+
+    override def floorDiv(left: Byte, right: Byte): Byte = Math.floorDiv(left.toInt, right.toInt).toByte
+
+    override def floorMod(left: Byte, right: Byte): Byte = Math.floorMod(left.toInt, right.toInt).toByte
+
+    override def incExact(value: Byte): Byte = Math.incrementExact(value.toInt).toByte
+
+    override def decExact(value: Byte): Byte = Math.decrementExact(value.toInt).toByte
+  }
+
+  implicit case object NumericByte extends NumericByte
 
   trait NumericLong extends Numeric[Long] with Integral[Long] {
     override val schema: Schema[Long] = implicitly[Schema[Long]]
@@ -460,6 +568,10 @@ sealed trait NumericImplicits0 {
     override def toInt(value: Long): Int = value.toInt
 
     override def toShort(value: Long): Short = value.toShort
+
+    override def toChar(value: Long): Char = value.toChar
+
+    override def toByte(value: Long): Byte = value.toByte
 
     override def toLong(value: Long): Long = value
 
@@ -538,6 +650,10 @@ sealed trait NumericImplicits0 {
     override def toInt(value: BigInt): Int = value.toInt
 
     override def toShort(value: BigInt): Short = value.toShort
+
+    override def toChar(value: BigInt): Char = value.toChar
+
+    override def toByte(value: BigInt): Byte = value.toByte
 
     override def toLong(value: BigInt): Long = value.toLong
 
@@ -619,6 +735,10 @@ sealed trait NumericImplicits0 {
 
     override def toShort(value: Float): Short = value.toShort
 
+    override def toChar(value: Float): Char = value.toChar
+
+    override def toByte(value: Float): Byte = value.toByte
+
     override def toLong(value: Float): Long = value.toLong
 
     override def toFloat(value: Float): Float = value
@@ -663,6 +783,10 @@ sealed trait NumericImplicits0 {
 
     override def toShort(value: Double): Short = value.toShort
 
+    override def toChar(value: Double): Char = value.toChar
+
+    override def toByte(value: Double): Byte = value.toByte
+
     override def toLong(value: Double): Long = value.toLong
 
     override def toFloat(value: Double): Float = value.toFloat
@@ -706,6 +830,10 @@ sealed trait NumericImplicits0 {
     override def toInt(value: BigDecimal): Int = value.toInt
 
     override def toShort(value: BigDecimal): Short = value.toShort
+
+    override def toChar(value: BigDecimal): Char = value.toChar
+
+    override def toByte(value: BigDecimal): Byte = value.toByte
 
     override def toLong(value: BigDecimal): Long = value.toLong
 
@@ -770,6 +898,13 @@ sealed trait Integral[A] {
 
 object Integral {
 
+  private val byteCase: Schema.Case[Numeric.NumericByte.type, Integral[Any]] =
+    Schema.Case[Numeric.NumericByte.type, Integral[Any]](
+      "NumericByte",
+      Schema.singleton[Numeric.NumericByte.type](Numeric.NumericByte),
+      _.asInstanceOf[Numeric.NumericByte.type]
+    )
+
   private val shortCase: Schema.Case[Numeric.NumericShort.type, Integral[Any]] =
     Schema.Case[Numeric.NumericShort.type, Integral[Any]](
       "NumericShort",
@@ -809,6 +944,7 @@ object Integral {
         .:+:(longCase)
         .:+:(bigIntCase)
         .:+:(intCase)
+        .:+:(byteCase)
     )
 }
 
