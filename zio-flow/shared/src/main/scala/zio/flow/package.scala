@@ -55,7 +55,7 @@ package object flow extends Syntax with Schemas with InstantModule { self =>
     def unsafeMake(name: String): FlowId = wrap(name)
 
     def newRandom: ZIO[Any, Nothing, FlowId] =
-      Random.nextUUID.map(rid => wrap(rid.toString))
+      zio.Random.nextUUID.map(rid => wrap(rid.toString))
   }
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {

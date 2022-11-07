@@ -884,6 +884,10 @@ object PrettyPrint {
         prettyPrintRemote(step, builder, indent)
         builder.append(" while ")
         prettyPrintRemote(predicate, builder, indent)
+      case ZFlow.Random =>
+        builder.append("random")
+      case ZFlow.RandomUUID =>
+        builder.append("randomUUID")
     }
   }
 }

@@ -401,6 +401,14 @@ trait Generators extends DefaultJavaTimeSchemas {
       for {
         pair          <- genNumeric
         (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToByte(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
+      } yield (RemoteConversions.NumericToChar(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
+      for {
+        pair          <- genNumeric
+        (numeric, gen) = pair
       } yield (RemoteConversions.NumericToShort(numeric).asInstanceOf[RemoteConversions[Any, Any]], gen),
       for {
         pair          <- genNumeric
@@ -803,6 +811,9 @@ trait Generators extends DefaultJavaTimeSchemas {
       .map(ZFlow.Fail(_))
 
   lazy val genZFlowNow: Gen[Any, ZFlow.Now.type] = Gen.const(ZFlow.Now)
+
+  lazy val genZFlowRandom: Gen[Any, ZFlow.Random.type]         = Gen.const(ZFlow.Random)
+  lazy val genZFlowRandomUUID: Gen[Any, ZFlow.RandomUUID.type] = Gen.const(ZFlow.RandomUUID)
 
   lazy val genZFlowWaitTill: Gen[Any, ZFlow.WaitTill] =
     Gen.instant.map(Remote(_)).map(ZFlow.WaitTill(_))

@@ -843,6 +843,26 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         ZFlow.fromEither(Remote.left[Int, String](11))
       } { result =>
         assert(result)(fails(equalTo(11)))
+      },
+      testFlow("replicate") {
+        ZFlow.succeed(11).replicate(5)
+      } { result =>
+        assertTrue(result == Chunk(11, 11, 11, 11, 11))
+      },
+      testFlow("random") {
+        ZFlow.random
+      } { result =>
+        assertTrue(result >= 0.0 && result <= 1.0)
+      },
+      testFlow("random replicate") {
+        ZFlow.random.replicate(5).flatMap(chunk => ZFlow.log(chunk.toString).as(chunk))
+      } { result =>
+        assertTrue(result.size == 5 && result.distinct.size > 1)
+      },
+      testFlow("random UUID replicate") {
+        ZFlow.randomUUID.replicate(5).flatMap(chunk => ZFlow.log(chunk.toString).as(chunk))
+      } { result =>
+        assertTrue(result.size == 5 && result.distinct.size == 5)
       }
     )
 

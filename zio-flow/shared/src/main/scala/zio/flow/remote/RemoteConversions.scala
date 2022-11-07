@@ -38,6 +38,20 @@ object RemoteConversions {
     override def apply(value: A): Int = numeric.toInt(value)
   }
 
+  final case class NumericToChar[A](numeric: Numeric[A]) extends RemoteConversions[A, Char] {
+    override val inputSchema: Schema[A]     = numeric.schema
+    override val outputSchema: Schema[Char] = Schema[Char]
+
+    override def apply(value: A): Char = numeric.toChar(value)
+  }
+
+  final case class NumericToByte[A](numeric: Numeric[A]) extends RemoteConversions[A, Byte] {
+    override val inputSchema: Schema[A]     = numeric.schema
+    override val outputSchema: Schema[Byte] = Schema[Byte]
+
+    override def apply(value: A): Byte = numeric.toByte(value)
+  }
+
   final case class NumericToShort[A](numeric: Numeric[A]) extends RemoteConversions[A, Short] {
     override val inputSchema: Schema[A]      = numeric.schema
     override val outputSchema: Schema[Short] = Schema[Short]
@@ -196,6 +210,30 @@ object RemoteConversions {
         _.numeric
       ),
       _.asInstanceOf[NumericToInt[Any]]
+    )
+
+  private val numericToCharCase: Schema.Case[NumericToChar[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToChar",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToChar"),
+        Schema.Field("numeric", Numeric.schema),
+        (numeric: Numeric[Any]) => NumericToChar(numeric),
+        _.numeric
+      ),
+      _.asInstanceOf[NumericToChar[Any]]
+    )
+
+  private val numericToByteCase: Schema.Case[NumericToByte[Any], RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "NumericToByte",
+      Schema.CaseClass1(
+        TypeId.parse("zio.flow.remote.RemoteConversions.NumericToByte"),
+        Schema.Field("numeric", Numeric.schema),
+        (numeric: Numeric[Any]) => NumericToByte(numeric),
+        _.numeric
+      ),
+      _.asInstanceOf[NumericToByte[Any]]
     )
 
   private val numericToShortCase: Schema.Case[NumericToShort[Any], RemoteConversions[Any, Any]] =
@@ -406,6 +444,8 @@ object RemoteConversions {
           numericToIntCase,
           CaseSet.Empty[RemoteConversions[Any, Any]]()
         )
+        .:+:(numericToCharCase)
+        .:+:(numericToByteCase)
         .:+:(numericToShortCase)
         .:+:(numericToLongCase)
         .:+:(numericToFloatCase)
