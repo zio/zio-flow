@@ -128,7 +128,10 @@ object BinaryOperators {
     override val outputSchema: Schema[Boolean] = Schema[Boolean]
 
     override def apply(left: Regex, right: String): Boolean =
-      left.matches(right)
+      right match {
+        case left(_*) => true
+        case _        => false
+      }
   }
 
   case object RegexReplaceAllIn extends BinaryOperators[Regex, (String, String), String] {
