@@ -491,7 +491,7 @@ object FlowsApiSpec extends ApiSpecBase {
       executorMock,
       KeyValueStore.inMemory,
       KVStoreBasedTemplates.layer
-    ) @@ TestAspect.withLiveClock @@ TestAspect.sequential
+    ) @@ TestAspect.withLiveClock @@ TestAspect.sequential @@ TestAspect.flaky
 
   private def decodeStartResponse(response: Response): ZIO[Any, java.io.Serializable, StartResponse] =
     for {
