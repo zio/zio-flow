@@ -22,6 +22,7 @@ import zio.flow.remote.numeric._
 import zio.flow.remote.text.UnaryStringOperator
 
 import scala.annotation.nowarn
+import scala.util.matching.Regex
 
 final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   implicit private val remoteTracking: InternalRemoteTracking = InternalRemoteTracking(trackingEnabled)
@@ -249,16 +250,17 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   def prependedAll(prefix: Remote[String]): Remote[String] =
     prefix ++: self
 
-  // TODO: convert to regex once remote regex is supported
+  def r: Remote[Regex] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToRegex))
 
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
     self.map(ch => (ch === oldChar).ifThenElse(newChar, ch)).trackInternal("String#replace")
 
-  @nowarn def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    Remote.fail("TODO: built-in regex replace support")
+  def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    regex.r.replaceAllIn(self, replacement)
 
-  @nowarn def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    Remote.fail("TODO: built-in regex replace support")
+  def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    regex.r.replaceFirstIn(self, replacement)
 
   def reverse: Remote[String] =
     self.toList.reverse.mkString.trackInternal("String#reverse")
@@ -378,10 +380,12 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
       .trackInternal("String#toBooleanOption")
 
   def toByte: Remote[Byte] =
-    Remote.fail("TODO: byte not supported")
+    toByteOption.fold(Remote.fail("Invalid byte"))(n => n).trackInternal("String#toByte")
 
   def toByteOption: Remote[Option[Byte]] =
-    Remote.fail("TODO: byte not supported")
+    Remote
+      .Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericByte)))
+      .trackInternal("String#toByteOption")
 
   def toDouble: Remote[Double] =
     toDoubleOption.fold(Remote.fail("Invalid double"))(n => n).trackInternal("String#toDouble")

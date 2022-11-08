@@ -22,6 +22,7 @@ import zio.{Chunk, Duration}
 
 import java.time.temporal.{ChronoField, ChronoUnit}
 import scala.util.Try
+import scala.util.matching.Regex
 
 trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
 
@@ -111,6 +112,12 @@ trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
     Schema[String].transformOrFail(
       s => Try(ChronoField.valueOf(s)).toEither.left.map(_.getMessage),
       (unit: ChronoField) => Right(unit.name())
+    )
+
+  implicit val regexSchema: Schema[Regex] =
+    Schema[String].transformOrFail(
+      s => Try(s.r).toEither.left.map(_.getMessage),
+      (r: Regex) => Right(r.regex)
     )
 }
 
