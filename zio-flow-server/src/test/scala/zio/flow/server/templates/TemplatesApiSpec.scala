@@ -176,7 +176,7 @@ object TemplatesApiSpec extends ApiSpecBase {
       ZLayer(
         ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
       )
-    ) @@ TestAspect.sequential
+    ) @@ TestAspect.sequential @@ TestAspect.flaky
 
   private def reset() =
     KeyValueStore
