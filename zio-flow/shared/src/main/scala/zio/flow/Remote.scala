@@ -553,15 +553,15 @@ object Remote {
       Schema.Case("Unary", schema, _.asInstanceOf[Unary[In, Out]])
   }
 
-  final case class Binary[In, Out](
-    left: Remote[In],
-    right: Remote[In],
-    operator: BinaryOperators[In, Out]
+  final case class Binary[In1, In2, Out](
+    left: Remote[In1],
+    right: Remote[In2],
+    operator: BinaryOperators[In1, In2, Out]
   ) extends Remote[Out] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
-        l      <- left.eval(operator.inputSchema)
-        r      <- right.eval(operator.inputSchema)
+        l      <- left.eval(operator.inputSchema1)
+        r      <- right.eval(operator.inputSchema2)
         result <- ZIO.attempt(operator(l, r)).mapError(RemoteEvaluationError.EvaluationException)
       } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, result)
 
@@ -574,20 +574,20 @@ object Remote {
   object Binary {
     private val typeId: TypeId = TypeId.parse("zio.flow.Remote.Binary")
 
-    def schema[In, Out]: Schema[Binary[In, Out]] =
-      Schema.CaseClass3[Remote[In], Remote[In], BinaryOperators[In, Out], Binary[In, Out]](
+    def schema[In1, In2, Out]: Schema[Binary[In1, In2, Out]] =
+      Schema.CaseClass3[Remote[In1], Remote[In2], BinaryOperators[In1, In2, Out], Binary[In1, In2, Out]](
         typeId,
-        Schema.Field("left", Schema.defer(Remote.schema[In])),
-        Schema.Field("right", Schema.defer(Remote.schema[In])),
-        Schema.Field("operator", BinaryOperators.schema[In, Out]),
+        Schema.Field("left", Schema.defer(Remote.schema[In1])),
+        Schema.Field("right", Schema.defer(Remote.schema[In2])),
+        Schema.Field("operator", BinaryOperators.schema[In1, In2, Out]),
         Binary.apply,
         _.left,
         _.right,
         _.operator
       )
 
-    def schemaCase[In, Out]: Schema.Case[Binary[In, Out], Remote[Out]] =
-      Schema.Case("Binary", schema, _.asInstanceOf[Binary[In, Out]])
+    def schemaCase[In1, In2, Out]: Schema.Case[Binary[In1, In2, Out], Remote[Out]] =
+      Schema.Case("Binary", schema, _.asInstanceOf[Binary[In1, In2, Out]])
   }
 
   final case class RemoteEither[A, B](
@@ -3626,7 +3626,7 @@ object Remote {
       .:+:(Config.schemaCase[A])
       .:+:(Unbound.schemaCase[A])
       .:+:(Unary.schemaCase[Any, A])
-      .:+:(Binary.schemaCase[Any, A])
+      .:+:(Binary.schemaCase[Any, Any, A])
       .:+:(UnboundRemoteFunction.schemaCase[Any, A])
       .:+:(Bind.schemaCase[Any, A])
       .:+:(RemoteEither.schemaCase[A])

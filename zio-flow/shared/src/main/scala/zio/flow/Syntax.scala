@@ -22,6 +22,7 @@ import zio.flow.remote.RemoteTuples._
 
 import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
+import scala.util.matching.Regex
 
 trait Syntax {
 
@@ -269,6 +270,9 @@ trait Syntax {
   implicit def remoteStringInterpolator(ctx: StringContext): RemoteStringInterpolator = new RemoteStringInterpolator(
     ctx
   )
+
+  implicit def RemoteRegex(remote: Remote[Regex]): RemoteRegexSyntax =
+    new RemoteRegexSyntax(remote)
 
   implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
     new RemoteExecutingFlowSyntax[E, A](remote)

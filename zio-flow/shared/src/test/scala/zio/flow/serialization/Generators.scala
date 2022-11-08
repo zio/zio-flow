@@ -44,7 +44,8 @@ import zio.flow.{
   RemoteVariableName,
   RemoteVariableReference,
   TransactionId,
-  ZFlow
+  ZFlow,
+  regexSchema
 }
 import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema, TypeId}
 import zio.test.{Gen, Sized}
@@ -56,7 +57,12 @@ import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
 import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
 
+import scala.util.matching.Regex
+
 trait Generators extends DefaultJavaTimeSchemas {
+
+  lazy val genRegex: Gen[Sized, Regex] =
+    Gen.oneOf(Gen.const(".+".r), Gen.const("[0-9]*".r))
 
   lazy val genDynamicValue: Gen[Sized, DynamicValue] =
     Gen.oneOf(
@@ -476,6 +482,13 @@ trait Generators extends DefaultJavaTimeSchemas {
       ),
       Gen.const(
         (RemoteConversions.StringToInstant.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))
+      ),
+      Gen.const((RemoteConversions.StringToRegex.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))),
+      Gen.const(
+        (
+          RemoteConversions.RegexToString.asInstanceOf[RemoteConversions[Any, Any]],
+          genRegex.map(Remote(_))
+        )
       )
     )
 
@@ -518,30 +531,77 @@ trait Generators extends DefaultJavaTimeSchemas {
       } yield (UnaryOperators.Str(op).asInstanceOf[UnaryOperators[Any, Any]], Gen.string.map(Remote(_)))
     )
 
-  lazy val genBinaryOperators: Gen[Sized, (BinaryOperators[Any, Any], Gen[Sized, Remote[Any]])] =
+  lazy val genBinaryOperators
+    : Gen[Sized, (BinaryOperators[Any, Any, Any], Gen[Sized, Remote[Any]], Gen[Sized, Remote[Any]])] =
     Gen.oneOf(
       for {
         op            <- genBinaryNumericOperator
         pair          <- genNumeric
         (numeric, gen) = pair
-      } yield (BinaryOperators.Numeric(op, numeric).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      } yield (BinaryOperators.Numeric(op, numeric).asInstanceOf[BinaryOperators[Any, Any, Any]], gen, gen),
       for {
         op               <- genBinaryFractionalOperator
         pair             <- genFractional
         (fractional, gen) = pair
-      } yield (BinaryOperators.Fractional(op, fractional).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      } yield (BinaryOperators.Fractional(op, fractional).asInstanceOf[BinaryOperators[Any, Any, Any]], gen, gen),
       for {
         op             <- genBinaryIntegralOperator
         pair           <- genIntegral
         (integral, gen) = pair
-      } yield (BinaryOperators.Integral(op, integral).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      } yield (BinaryOperators.Integral(op, integral).asInstanceOf[BinaryOperators[Any, Any, Any]], gen, gen),
       for {
         pair          <- genNumeric
         (numeric, gen) = pair
-      } yield (BinaryOperators.LessThanEqual(numeric.schema).asInstanceOf[BinaryOperators[Any, Any]], gen),
+      } yield (BinaryOperators.LessThanEqual(numeric.schema).asInstanceOf[BinaryOperators[Any, Any, Any]], gen, gen),
       for {
         op <- genBinaryBooleanOperator
-      } yield (BinaryOperators.Bool(op).asInstanceOf[BinaryOperators[Any, Any]], Gen.boolean.map(Remote(_)))
+      } yield (
+        BinaryOperators.Bool(op).asInstanceOf[BinaryOperators[Any, Any, Any]],
+        Gen.boolean.map(Remote(_)),
+        Gen.boolean.map(Remote(_))
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexUnapplySeq.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          Gen.string.map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexFindFirstIn.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          Gen.string.map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexMatches.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          Gen.string.map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexReplaceAllIn.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          (Gen.string <*> Gen.string).map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexReplaceFirstIn.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          (Gen.string <*> Gen.string).map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.RegexSplit.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          genRegex.map(Remote(_)),
+          Gen.string.map(Remote(_))
+        )
+      )
     )
 
   lazy val genUnary: Gen[Sized, Remote[Any]] =
@@ -553,10 +613,10 @@ trait Generators extends DefaultJavaTimeSchemas {
 
   lazy val genBinary: Gen[Sized, Remote[Any]] =
     for {
-      pair           <- genBinaryOperators
-      (operator, gen) = pair
-      left           <- gen
-      right          <- gen
+      pair                  <- genBinaryOperators
+      (operator, gen1, gen2) = pair
+      left                  <- gen1
+      right                 <- gen2
     } yield Remote.Binary(left, right, operator)
 
   lazy val genUnboundRemoteFunction: Gen[Sized, Remote[Any]] =

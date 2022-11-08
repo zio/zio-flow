@@ -17,11 +17,13 @@
 package zio.flow.remote
 
 import zio.Duration
-import zio.flow.{Instant, instantSchema}
+import zio.flow.{Instant, instantSchema, regexSchema}
 import zio.flow.remote.numeric._
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, Schema, TypeId}
+
+import scala.util.matching.Regex
 
 sealed trait RemoteConversions[In, Out] {
   val inputSchema: Schema[In]
@@ -198,6 +200,22 @@ object RemoteConversions {
 
     override def apply(value: Instant): (Long, Int) =
       (value.getEpochSecond, value.getNano)
+  }
+
+  case object StringToRegex extends RemoteConversions[String, Regex] {
+    override val inputSchema: Schema[String] = Schema[String]
+    override val outputSchema: Schema[Regex] = Schema[Regex]
+
+    override def apply(value: String): Regex =
+      value.r
+  }
+
+  case object RegexToString extends RemoteConversions[Regex, String] {
+    override val inputSchema: Schema[Regex]   = Schema[Regex]
+    override val outputSchema: Schema[String] = Schema[String]
+
+    override def apply(value: Regex): String =
+      value.regex
   }
 
   private val numericToIntCase: Schema.Case[NumericToInt[Any], RemoteConversions[Any, Any]] =
@@ -434,6 +452,20 @@ object RemoteConversions {
       _.asInstanceOf[InstantToTuple.type]
     )
 
+  private val stringToRegex: Schema.Case[StringToRegex.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "StringToRegex",
+      Schema.singleton(StringToRegex),
+      _.asInstanceOf[StringToRegex.type]
+    )
+
+  private val regexToString: Schema.Case[RegexToString.type, RemoteConversions[Any, Any]] =
+    Schema.Case(
+      "RegexToString",
+      Schema.singleton(RegexToString),
+      _.asInstanceOf[RegexToString.type]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -465,5 +497,7 @@ object RemoteConversions {
         .:+:(stringToInstantCase)
         .:+:(tupleToInstant)
         .:+:(instantToTuple)
+        .:+:(stringToRegex)
+        .:+:(regexToString)
     )
 }
