@@ -1,8 +1,8 @@
 object Version {
   val Scala212 = "2.12.15"
   val Scala213 = "2.13.8"
-  val Scala3   = "3.1.0"
-  val Silencer = "1.7.8"
+  val Scala3   = "3.2.1"
+  val Silencer = "1.7.12"
 
   val zio                  = "2.0.3"
   val zioNio               = "2.0.0"
