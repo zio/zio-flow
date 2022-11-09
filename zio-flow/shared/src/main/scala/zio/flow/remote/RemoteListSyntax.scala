@@ -259,6 +259,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
 
   // TODO: groupBy etc if we have support for Remote[Map[K, V]]
 
+  def grouped(size: Remote[Int]): Remote[List[List[A]]] =
+    ??? // TODO
+
   def head: Remote[A] =
     self.headOption.fold(Remote.fail(s"List is empty"))((h: Remote[A]) => h).trackInternal("List#head")
 
@@ -881,6 +884,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
       .trackInternal("List#takeWhile")
 
   def toList: Remote[List[A]] = self
+
+  def toMap[K, V](implicit ev: A <:< (K, V)): Remote[Map[K, V]] =
+    Remote.ListToMap(self.asInstanceOf[Remote[List[(K, V)]]]).trackInternal("List#toMap")
 
   def toSet: Remote[Set[A]] =
     Remote.ListToSet(self).trackInternal("List#toSet")

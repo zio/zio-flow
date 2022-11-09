@@ -359,6 +359,9 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def toList: Remote[List[A]] =
     self.asInstanceOf[Remote[List[A]]].trackInternal("Chunk#toList")
 
+  def toMap[K, V](implicit ev: A <:< (K, V)): Remote[Map[K, V]] =
+    self.toList.toMap
+
   def toSet: Remote[Set[A]] =
     toList.toSet.trackInternal("Chunk#toSet")
 

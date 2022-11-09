@@ -256,6 +256,9 @@ final class RemoteSetSyntax[A](val self: Remote[Set[A]]) extends AnyVal {
   def toList: Remote[List[A]] =
     Remote.SetToList(self)
 
+  def toMap[K, V](implicit ev: A <:< (K, V)): Remote[Map[K, V]] =
+    toList.toMap
+
   def toSet: Remote[Set[A]] =
     self
 

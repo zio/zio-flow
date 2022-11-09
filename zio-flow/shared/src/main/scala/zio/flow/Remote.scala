@@ -2838,6 +2838,74 @@ object Remote {
       Schema.Case("ListToString", schema, _.asInstanceOf[ListToString])
   }
 
+  final case class ListToMap[K, V](list: Remote[List[(K, V)]]) extends Remote[Map[K, V]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      list.evalDynamic.flatMap {
+        case DynamicValue.Sequence(values) =>
+          ZIO
+            .foreach(values) {
+              case DynamicValue.Tuple(k, v) => ZIO.succeed((k, v))
+              case other: DynamicValue =>
+                ZIO.fail(
+                  RemoteEvaluationError.UnexpectedDynamicValue(
+                    s"Unexpected element value in Remote.ListToMap of type ${other.getClass.getSimpleName}"
+                  )
+                )
+            }
+            .map(DynamicValue.Dictionary)
+        case other: DynamicValue =>
+          ZIO.fail(
+            RemoteEvaluationError.UnexpectedDynamicValue(
+              s"Unexpected value in Remote.ListToMap of type ${other.getClass.getSimpleName}"
+            )
+          )
+      }
+
+    override private[flow] def variableUsage: VariableUsage =
+      list.variableUsage
+
+    override protected def substituteRec(f: Substitutions): Remote[Map[K, V]] =
+      ListToMap(list.substituteRec(f))
+  }
+
+  object ListToMap {
+    def schema[K, V]: Schema[ListToMap[K, V]] =
+      Schema.defer(Remote.schema[List[(K, V)]].transform(ListToMap(_), _.list))
+
+    def schemaCase[A]: Schema.Case[ListToMap[Any, Any], Remote[A]] =
+      Schema.Case("ListToMap", schema, _.asInstanceOf[ListToMap[Any, Any]])
+  }
+
+  final case class MapToList[K, V](set: Remote[Map[K, V]]) extends Remote[List[(K, V)]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      set.evalDynamic.flatMap {
+        case DynamicValue.Dictionary(values) =>
+          ZIO.succeed(DynamicValue.Sequence(values.map { case (k, v) =>
+            DynamicValue.Tuple(k, v)
+          }))
+        case other: DynamicValue =>
+          ZIO.fail(
+            RemoteEvaluationError.UnexpectedDynamicValue(
+              s"Unexpected value in Remote.MapToList of type ${other.getClass.getSimpleName}"
+            )
+          )
+      }
+
+    override private[flow] def variableUsage: VariableUsage =
+      set.variableUsage
+
+    override protected def substituteRec(f: Substitutions): Remote[List[(K, V)]] =
+      MapToList(set.substituteRec(f))
+  }
+
+  object MapToList {
+    def schema[K, V]: Schema[MapToList[K, V]] =
+      Schema.defer(Remote.schema[Map[K, V]].transform(MapToList(_), _.set))
+
+    def schemaCase[A]: Schema.Case[MapToList[Any, Any], Remote[A]] =
+      Schema.Case("MapToList", schema, _.asInstanceOf[MapToList[Any, Any]])
+  }
+
   final case class OpticGet[S, A, R](optic: RemoteOptic[S, A], value: Remote[S]) extends Remote[R] {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       value.evalDynamic.flatMap { dynValue =>
@@ -3065,6 +3133,8 @@ object Remote {
 
   def emptyChunk[A]: Remote[Chunk[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
+  def emptyMap[K, V]: Remote[Map[K, V]] = Remote.Literal(DynamicValue.Dictionary(Chunk.empty))
+
   def fail[A](message: String): Remote[A] =
     Remote.Fail(message)
 
@@ -3103,6 +3173,9 @@ object Remote {
 
   def list[A](values: Remote[A]*): Remote[List[A]] =
     values.foldRight(nil[A])((elem, lst) => Remote.Cons(lst, elem))
+
+  def map[K, V](values: Remote[(K, V)]*): Remote[Map[K, V]] =
+    list(values: _*).toMap
 
   def nil[A]: Remote[List[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
@@ -3670,6 +3743,8 @@ object Remote {
       .:+:(ListToSet.schemaCase[A])
       .:+:(SetToList.schemaCase[A])
       .:+:(ListToString.schemaCase[A])
+      .:+:(ListToMap.schemaCase[A])
+      .:+:(MapToList.schemaCase[A])
       .:+:(OpticGet.schemaCase[A])
       .:+:(OpticSet.schemaCase[A])
   )

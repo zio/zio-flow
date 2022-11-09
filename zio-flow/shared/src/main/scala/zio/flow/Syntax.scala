@@ -296,4 +296,7 @@ trait Syntax {
   implicit def RemoteChunkCompanion(chunk: Chunk.type): RemoteChunkCompanionSyntax = new RemoteChunkCompanionSyntax(
     chunk
   )
+
+  implicit def RemoteMap[K, V](remote: Remote[Map[K, V]]): RemoteMapSyntax[K, V] =
+    new RemoteMapSyntax[K, V](remote, trackingEnabled = false)
 }

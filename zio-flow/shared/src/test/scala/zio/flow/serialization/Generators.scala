@@ -810,6 +810,18 @@ trait Generators extends DefaultJavaTimeSchemas {
       remoteList = Remote(set)
     } yield Remote.SetToList(remoteList)
 
+  lazy val genListToMap: Gen[Sized, Remote[Any]] =
+    for {
+      lst       <- Gen.listOf(Gen.alphaNumericString <*> Gen.int)
+      remoteList = Remote(lst)
+    } yield Remote.ListToMap(remoteList)
+
+  lazy val genMapToList: Gen[Sized, Remote[Any]] =
+    for {
+      set       <- Gen.mapOf(Gen.alphaNumericString, Gen.int)
+      remoteList = Remote(set)
+    } yield Remote.MapToList(remoteList)
+
   lazy val genListToString: Gen[Sized, Remote[Any]] =
     for {
       list  <- Gen.listOf(Gen.int)

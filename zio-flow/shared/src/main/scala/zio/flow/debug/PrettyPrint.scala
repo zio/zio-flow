@@ -772,12 +772,22 @@ object PrettyPrint {
       case Remote.DurationFromAmount(_, _) => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
-      case Remote.RemoteSome(_)            => ???
-      case Remote.FoldOption(_, _, _)      => ???
-      case Remote.Recurse(_, _, _)         => ???
-      case Remote.RecurseWith(_, _)        => ???
-      case Remote.SetToList(_)             => ???
-      case Remote.ListToSet(_)             => ???
+      case Remote.RemoteSome(_)       => ???
+      case Remote.FoldOption(_, _, _) => ???
+      case Remote.Recurse(_, _, _)    => ???
+      case Remote.RecurseWith(_, _)   => ???
+      case Remote.SetToList(set) =>
+        prettyPrintRemote(set)
+        builder.append(".toList")
+      case Remote.ListToSet(list) =>
+        prettyPrintRemote(list)
+        builder.append(".toSet")
+      case Remote.MapToList(map) =>
+        prettyPrintRemote(map)
+        builder.append(".toList")
+      case Remote.ListToMap(list) =>
+        prettyPrintRemote(list)
+        builder.append(".toMap")
       case Remote.ListToString(_, _, _, _) => ???
       case Remote.OpticGet(_, _)           => ???
       case Remote.OpticSet(_, _, _)        => ???
