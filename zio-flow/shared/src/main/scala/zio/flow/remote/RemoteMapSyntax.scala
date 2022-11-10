@@ -250,13 +250,13 @@ final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: 
     ((key, value) :: removed(key).toList).toMap.trackInternal("Map#updated")
 
   def toList: Remote[List[(K, V)]] =
-    Remote.MapToList(self)
+    Remote.MapToList(self).trackInternal("Map#toList")
 
   def toSet: Remote[Set[(K, V)]] =
-    toList.toSet
+    toList.toSet.trackInternal("Map#toSet")
 
   def unzip: Remote[(List[K], List[V])] =
-    toList.unzip.trackInternal("Map#unzip")
+    toList.unzip[K, V].trackInternal("Map#unzip")
 
   def values: Remote[List[V]] =
     toList.map(_._2).trackInternal("Map#values")
