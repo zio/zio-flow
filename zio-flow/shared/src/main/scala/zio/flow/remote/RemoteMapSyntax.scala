@@ -20,15 +20,13 @@ import zio.flow._
 import zio.flow.debug.TrackRemotes
 import zio.schema.Schema
 
-import scala.annotation.nowarn
-
 final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: Boolean) {
   implicit private val remoteTracking: InternalRemoteTracking = InternalRemoteTracking(trackingEnabled)
   private val syntax                                          = TrackRemotes.ifEnabled
   import syntax._
 
-  @nowarn def +[V1 >: V](key: Remote[K], value: Remote[V1]): Remote[Map[K, V1]] =
-    updated(key, value).trackInternal("Map#+")
+  def +[V1 >: V](pair: Remote[(K, V)]): Remote[Map[K, V1]] =
+    updated(pair._1, pair._2).trackInternal("Map#+")
 
   def ++[V2 >: V](xs: Remote[Map[K, V2]]): Remote[Map[K, V2]] =
     concat(xs).trackInternal("Map#++")
@@ -49,7 +47,7 @@ final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: 
     toList.concat(xs.toList).toMap.trackInternal("Map#concat")
 
   def contains(key: Remote[K]): Remote[Boolean] =
-    toList.exists(_._1 == key).trackInternal("Map#contains")
+    toList.exists(_._1 === key).trackInternal("Map#contains")
 
   def corresponds[B](that: Remote[List[B]])(p: (Remote[(K, V)], Remote[B]) => Remote[Boolean]): Remote[Boolean] =
     toList.corresponds(that)(p).trackInternal("Map#corresponds")
@@ -97,7 +95,7 @@ final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: 
     toList.forall(p).trackInternal("Map#forall")
 
   def get(key: Remote[K]): Remote[Option[V]] =
-    toList.find(_._1 == key).map(_._2).trackInternal("Map#get")
+    toList.find(_._1 === key).map(_._2).trackInternal("Map#get")
 
   def getOrElse[V1 >: V](key: Remote[K], default: Remote[V1]): Remote[V1] =
     get(key).getOrElse(default).trackInternal("Map#getOrElse")
@@ -196,7 +194,7 @@ final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: 
     toList.reduceRightOption(op).trackInternal("Map#reduceRightOption")
 
   def removed(key: Remote[K]): Remote[Map[K, V]] =
-    toList.filterNot(_._1 == key).toMap.trackInternal("Map#removed")
+    toList.filterNot(pair => pair._1 === key).toMap.trackInternal("Map#removed")
 
   def removedAll(keys: Remote[List[K]]): Remote[Map[K, V]] =
     keys.foldLeft(self)((remaining, key) => remaining.removed(key)).trackInternal("Map#removedAll")
