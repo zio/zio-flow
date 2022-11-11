@@ -126,7 +126,8 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
       remoteTest("fold")(
         Remote
           .map(1 -> 10, 2 -> 20, 3 -> 30)
-          .fold((0, 0))((kv1, kv2) => (kv1._1 + kv2._1, kv1._2 + kv2._2)) <-> (6, 60)
+          .fold((0, 0))((kv1, kv2) => (kv1._1 + kv2._1, kv1._2 + kv2._2))
+          .<->((6, 60))
       ),
       remoteTest("foldLeft")(
         Remote
