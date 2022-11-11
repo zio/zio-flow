@@ -122,6 +122,39 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
           "world2" -> 100,
           "other"  -> 2
         )
+      ),
+      remoteTest("fold")(
+        Remote
+          .map(1 -> 10, 2 -> 20, 3 -> 30)
+          .fold((0, 0))((kv1, kv2) => (kv1._1 + kv2._1, kv1._2 + kv2._2)) <-> (6, 60)
+      ),
+      remoteTest("foldLeft")(
+        Remote
+          .map(1 -> 10, 2 -> 20, 3 -> 30)
+          .foldLeft(0)((n, kv) => n + kv._1 + kv._2) <-> 66
+      ),
+      remoteTest("foldRight")(
+        Remote
+          .map(1 -> 10, 2 -> 20, 3 -> 30)
+          .foldRight(0)((kv, n) => n + kv._1 + kv._2) <-> 66
+      ),
+      remoteTest("forall")(
+        Remote
+          .map(1 -> 10, 2 -> 20, 3 -> 30)
+          .forall(kv => kv._2 === (kv._1 * 10)) <-> true,
+        Remote
+          .map(1 -> 10, 2 -> 21, 3 -> 30)
+          .forall(kv => kv._2 === (kv._1 * 10)) <-> false
+      ),
+      remoteTest("get")(
+        Remote.map("hello" -> 1, "world" -> 2).get("hello") <-> Some(1),
+        Remote.map("hello" -> 1, "world" -> 2).get("unknown") <-> None,
+        Remote.map[String, Int]().get("x") <-> None
+      ),
+      remoteTest("getOrElse")(
+        Remote.map("hello" -> 1, "world" -> 2).getOrElse("hello", 1000) <-> 1,
+        Remote.map("hello" -> 1, "world" -> 2).getOrElse("unknown", 1000) <-> 1000,
+        Remote.map[String, Int]().getOrElse("x", 1000) <-> 1000
       )
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory) @@ TestAspect.fromLayer(
       Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))
