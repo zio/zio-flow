@@ -16,14 +16,7 @@ ZIO Flow is an engine for executing persistent, distributed, fault-tolerant appl
 ZIO Flow helps you orchestrate complex business logic, without having to worry about fallible systems, transient failures, manual rollbacks, or other infrastructure.
 
 # Documentation
-[ZIO Flow Microsite](https://zio.github.io/zio-flow/)
-
-# Contributing
-[Documentation for contributors](https://zio.github.io/zio-flow/docs/about/about_contributing)
-
-## Code of Conduct
-
-See the [Code of Conduct](https://zio.github.io/zio-flow/docs/about/about_coc)
+[ZIO Flow Microsite](https://zio.dev/zio-flow/)
 
 ## Support
 
