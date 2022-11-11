@@ -133,7 +133,19 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     toList.forall(p).trackInternal("Chunk#forall")
 
-  // TODO: groupBy etc if we have support for Remote[Map[K, V]]
+  def groupBy[K](f: Remote[A] => Remote[K]): Remote[Map[K, Chunk[A]]] =
+    toList.groupBy(f).map(pair => (pair._1, Chunk.fromList(pair._2))).trackInternal("Chunk#groupBy")
+
+  def groupMap[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B]): Remote[Map[K, Chunk[B]]] =
+    toList.groupMap(key)(f).map(pair => (pair._1, Chunk.fromList(pair._2))).trackInternal("Chunk#groupMap")
+
+  def groupMapReduce[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B])(
+    reduce: (Remote[B], Remote[B]) => Remote[B]
+  ): Remote[Map[K, B]] =
+    toList.groupMapReduce(key)(f)(reduce).trackInternal("Chunk#groupMapReduce")
+
+  def grouped(size: Remote[Int]): Remote[Chunk[Chunk[A]]] =
+    Chunk.fromList(toList.grouped(size).map(Chunk.fromList(_))).trackInternal("Chunk#grouped")
 
   def head: Remote[A] =
     toList.head.trackInternal("Chunk#head")

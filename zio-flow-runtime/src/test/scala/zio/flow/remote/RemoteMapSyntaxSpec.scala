@@ -156,6 +156,97 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
         Remote.map("hello" -> 1, "world" -> 2).getOrElse("hello", 1000) <-> 1,
         Remote.map("hello" -> 1, "world" -> 2).getOrElse("unknown", 1000) <-> 1000,
         Remote.map[String, Int]().getOrElse("x", 1000) <-> 1000
+      ),
+      remoteTest("groupBy")(
+        Remote
+          .map("abc" -> 'a', "def" -> 'd', "ba" -> 'b', "" -> ' ', "a" -> 'a', "b" -> 'b', "c" -> 'c', "de" -> 'd')
+          .groupBy(_._1.length) <-> Map(
+          3 -> Map("abc" -> 'a', "def" -> 'd'),
+          2 -> Map("ba" -> 'b', "de" -> 'd'),
+          0 -> Map("" -> ' '),
+          1 -> Map("a" -> 'a', "b" -> 'b', "c" -> 'c')
+        )
+      ),
+      remoteTest("groupByMap")(
+        Remote
+          .map("abc" -> 'a', "def" -> 'd', "ba" -> 'b', "" -> ' ', "a" -> 'a', "b" -> 'b', "c" -> 'c', "de" -> 'd')
+          .groupMap(_._1.length)(s => s._1 + s._1) <-> Map(
+          3 -> List("abcabc", "defdef"),
+          2 -> List("baba", "dede"),
+          0 -> List(""),
+          1 -> List("aa", "bb", "cc")
+        )
+      ),
+      remoteTest("groupByMapReduce")(
+        Remote
+          .map("abc" -> 'a', "def" -> 'd', "ba" -> 'b', "" -> ' ', "a" -> 'a', "b" -> 'b', "c" -> 'c', "de" -> 'd')
+          .groupMapReduce(_._1.length)(s => s._1.length)(_ + _) <-> Map(
+          3 -> 6,
+          2 -> 4,
+          0 -> 0,
+          1 -> 3
+        )
+      ),
+      remoteTest("grouped")(
+        Remote
+          .map("abc" -> 'a', "def" -> 'd', "ba" -> 'b', "" -> ' ', "a" -> 'a', "b" -> 'b', "c" -> 'c', "de" -> 'd')
+          .grouped(2) <-> List(
+          Map("abc" -> 'a', "def" -> 'd'),
+          Map("ba"  -> 'b', ""    -> ' '),
+          Map("a"   -> 'a', "b"   -> 'b'),
+          Map("c"   -> 'c', "de"  -> 'd')
+        )
+      ),
+      remoteTest("head")(
+        Remote.map("a" -> 1, "b" -> 2).head.<->(("a" -> 1))
+      ),
+      remoteTest("headOption")(
+        Remote.map("a" -> 1, "b" -> 2).headOption <-> Some(("a" -> 1)),
+        Remote.emptyMap[String, Int].headOption <-> None
+      ),
+      remoteTest("init")(
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).init <-> Map("a" -> 1, "b" -> 2),
+        Remote.emptyMap[String, Int].init failsWithRemoteFailure "List is empty"
+      ),
+      remoteTest("inits")(
+        Remote.emptyMap[String, Int].inits <-> List(Map.empty[String, Int]),
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).inits <-> List(
+          Map("a" -> 1, "b" -> 2, "c" -> 3),
+          Map("a" -> 1, "b" -> 2),
+          Map("a" -> 1),
+          Map.empty[String, Int]
+        )
+      ),
+      remoteTest("isDefinedAt")(
+        Remote.map("hello" -> 1, "world" -> 2).isDefinedAt("hello") <-> true,
+        Remote.map("hello" -> 1, "world" -> 2).isDefinedAt("unknown") <-> false,
+        Remote.map[String, Int]().isDefinedAt("x") <-> false
+      ),
+      remoteTest("isEmpty")(
+        Remote.map("a" -> 1, "b" -> 2).isEmpty <-> false,
+        Remote.emptyMap[String, Int].isEmpty <-> true
+      ),
+      remoteTest("keySet")(
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).keySet <-> Set("a", "b", "c"),
+        Remote.emptyMap[String, Int].keySet <-> Set.empty[String]
+      ),
+      remoteTest("keys")(
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).keys <-> List("a", "b", "c"),
+        Remote.emptyMap[String, Int].keys <-> List.empty[String]
+      ),
+      remoteTest("last")(
+        Remote.map("a" -> 1, "b" -> 2).last.<->(("b" -> 2))
+      ),
+      remoteTest("lastOption")(
+        Remote.map("a" -> 1, "b" -> 2).lastOption <-> Some(("b" -> 2)),
+        Remote.emptyMap[String, Int].lastOption <-> None
+      ),
+      remoteTest("lift")(
+        Remote.set("a", "b", "c", "d").map[Option[Int]](Remote.map("a" -> 1, "b" -> 2).lift) <-> Set(
+          Some(1),
+          Some(2),
+          None
+        )
       )
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory) @@ TestAspect.fromLayer(
       Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))

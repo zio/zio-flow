@@ -101,15 +101,17 @@ final class RemoteMapSyntax[K, V](val self: Remote[Map[K, V]], trackingEnabled: 
     get(key).getOrElse(default).trackInternal("Map#getOrElse")
 
   def groupBy[K2](f: Remote[(K, V)] => Remote[K2]): Remote[Map[K2, Map[K, V]]] =
-    ??? // TODO
+    toList.groupBy(f).map(pair => (pair._1, pair._2.toMap)).trackInternal("Map#groupBy")
 
-  def groupMap[K2, B](key: Remote[(K, V)] => K2)(f: Remote[(K, V)] => Remote[B]): Remote[Map[K2, List[B]]] =
-    ??? // TODO
+  def groupMap[K2, B](key: Remote[(K, V)] => Remote[K2])(f: Remote[(K, V)] => Remote[B]): Remote[Map[K2, List[B]]] =
+    toList.groupMap(key)(f).map(pair => (pair._1, pair._2)).trackInternal("Map#groupMap")
 
-  def groupMapReduce[K2, B](key: Remote[(K, V)] => K2)(f: Remote[(K, V)] => Remote[B])(
+  def groupMapReduce[K2, B](key: Remote[(K, V)] => Remote[K2])(f: Remote[(K, V)] => Remote[B])(
     reduce: (Remote[B], Remote[B]) => Remote[B]
   ): Remote[Map[K2, B]] =
-    ??? // TODO
+    toList
+      .groupMapReduce(key)(f)(reduce)
+      .trackInternal("Map#groupMapReduce")
 
   def grouped(size: Remote[Int]): Remote[List[Map[K, V]]] =
     toList.grouped(size).map(_.toMap).trackInternal("Map#grouped")

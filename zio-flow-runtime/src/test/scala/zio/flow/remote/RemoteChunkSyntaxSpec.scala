@@ -179,6 +179,40 @@ object RemoteChunkSyntaxSpec extends RemoteSpecBase {
         Remote.chunk(1, 2, 3, 4).forall(_ % 2 === 0) <-> false,
         Remote.chunk(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
       ),
+      remoteTest("groupBy")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupBy(_.length) <-> Map(
+          3 -> Chunk("abc", "def"),
+          2 -> Chunk("ba", "de"),
+          0 -> Chunk(""),
+          1 -> Chunk("a", "b", "c")
+        )
+      ),
+      remoteTest("groupByMap")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMap(_.length)(s => s + s) <-> Map(
+          3 -> Chunk("abcabc", "defdef"),
+          2 -> Chunk("baba", "dede"),
+          0 -> Chunk(""),
+          1 -> Chunk("aa", "bb", "cc")
+        )
+      ),
+      remoteTest("groupByMapReduce")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMapReduce(_.length)(s => s.length)(_ + _) <-> Map(
+          3 -> 6,
+          2 -> 4,
+          0 -> 0,
+          1 -> 3
+        )
+      ),
+      remoteTest("grouped")(
+        Remote.emptyChunk[Int].grouped(3) <-> Chunk.empty[Chunk[Int]],
+        Remote.chunk(1, 2, 3, 4, 5, 6, 7, 8).grouped(3) <-> Chunk(Chunk(1, 2, 3), Chunk(4, 5, 6), Chunk(7, 8))
+      ),
       remoteTest("head")(
         Remote.emptyChunk[Int].head failsWithRemoteFailure "List is empty",
         Remote.chunk(1, 2, 3).head <-> 1

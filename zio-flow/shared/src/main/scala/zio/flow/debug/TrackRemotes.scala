@@ -22,6 +22,7 @@ import zio.flow.remote.{
   RemoteChunkSyntax,
   RemoteListSyntax,
   RemoteMapSyntax,
+  RemoteSetSyntax,
   RemoteStringSyntax
 }
 import zio.flow.{Remote, Syntax}
@@ -41,6 +42,9 @@ object TrackRemotes extends Syntax {
 
   override implicit def RemoteMap[K, V](remote: Remote[Map[K, V]]): RemoteMapSyntax[K, V] =
     new RemoteMapSyntax(remote, trackingEnabled = true)
+
+  override implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] =
+    new RemoteSetSyntax[A](remote, trackingEnabled = true)
 
   def ifEnabled(implicit remoteTracking: InternalRemoteTracking): Syntax =
     if (remoteTracking.enabled)

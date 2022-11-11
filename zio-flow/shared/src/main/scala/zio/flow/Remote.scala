@@ -3131,9 +3131,16 @@ object Remote {
   def config[A: Schema](key: ConfigKey): Remote[A] =
     Config(key, implicitly[Schema[A]])
 
+  def either[A, B](
+    either: Either[Remote[A], Remote[B]]
+  ): Remote[Either[A, B]] =
+    RemoteEither(either)
+
   def emptyChunk[A]: Remote[Chunk[A]] = Remote.Literal(DynamicValue.Sequence(Chunk.empty))
 
   def emptyMap[K, V]: Remote[Map[K, V]] = Remote.Literal(DynamicValue.Dictionary(Chunk.empty))
+
+  def emptySet[A]: Remote[Set[A]] = Remote.Literal(DynamicValue.SetValue(Set.empty))
 
   def fail[A](message: String): Remote[A] =
     Remote.Fail(message)
@@ -3201,10 +3208,8 @@ object Remote {
 
   def right[A, B](value: Remote[B]): Remote[Either[A, B]] = Remote.RemoteEither(Right(value))
 
-  def either[A, B](
-    either: Either[Remote[A], Remote[B]]
-  ): Remote[Either[A, B]] =
-    RemoteEither(either)
+  def set[A](values: Remote[A]*): Remote[Set[A]] =
+    list(values: _*).toSet
 
   def some[A](value: Remote[A]): Remote[Option[A]] = Remote.RemoteSome(value)
 
