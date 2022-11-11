@@ -3,7 +3,7 @@ import BuildHelper._
 inThisBuild(
   List(
     organization := "dev.zio",
-    homepage     := Some(url("https://zio.github.io/zio-flow/")),
+    homepage     := Some(url("https://zio.dev/zio-flow/")),
     licenses     := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer(
@@ -254,17 +254,10 @@ lazy val docs = project
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     scalacOptions += "-Xlog-implicits",
-    libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % Version.zio
-    ),
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioFlowJVM),
-    ScalaUnidoc / unidoc / target              := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
-    cleanFiles += (ScalaUnidoc / unidoc / target).value,
-    docusaurusCreateSite     := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
-    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value
+    libraryDependencies ++= Seq("dev.zio" %% "zio" % Version.zio)
   )
   .dependsOn(zioFlowJVM)
-  .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
+  .enablePlugins(WebsitePlugin)
 
 lazy val examples = project
   .in(file("zio-flow-examples"))
