@@ -42,7 +42,7 @@ jobs:
       - name: Cache scala dependencies
         uses: coursier/cache-action@v5
       - name: Check Document Generation
-        run: sbt docs/docusaurusCreateSite
+        run: sbt compileDocs
 
   publishLocal:
     runs-on: ubuntu-20.04
