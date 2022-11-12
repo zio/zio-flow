@@ -247,6 +247,174 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
           Some(2),
           None
         )
+      ),
+      remoteTest("map")(
+        Remote.map("a" -> 1, "b" -> 2).map(pair => (pair._2, pair._1)) <-> Map(1 -> "a", 2 -> "b"),
+        Remote.emptyMap[String, Int].map(pair => (pair._2, pair._1)) <-> Map.empty[Int, String]
+      ),
+      remoteTest("mkString")(
+        Remote.map("a" -> 1, "b" -> 2).mkString <-> "(a,1)(b,2)",
+        Remote.map("a" -> 1, "b" -> 2).mkString("-") <-> "(a,1)-(b,2)",
+        Remote.map("a" -> 1, "b" -> 2).mkString("<<", "-", ">>") <-> "<<(a,1)-(b,2)>>"
+      ),
+      remoteTest("nonEmpty")(
+        Remote.map("a" -> 1, "b" -> 2).nonEmpty <-> true,
+        Remote.emptyMap[String, Int].nonEmpty <-> false
+      ),
+      remoteTest("partition")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
+          .partition(pair => pair._1.length > 1) <-> (Map(
+          "aa"  -> 1,
+          "bbb" -> 10,
+          "cc"  -> 11
+        ), Map(
+          "a" -> 0,
+          "d" -> 100
+        ))
+      ),
+      remoteTest("partitionMap")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
+          .partitionMap(pair => (pair._1.length > 1).ifThenElse(Remote.left(pair._2), Remote.right(pair._2))) <-> (
+          List(1, 10, 11),
+          List(0, 100)
+        )
+      ),
+      remoteTest("reduce")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduce((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+      ),
+      remoteTest("reduceOption")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
+        Remote.emptyMap[Int, Int].reduceOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> None
+      ),
+      remoteTest("reduceLeft")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceLeft((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+      ),
+      remoteTest("reduceLeftOption")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceLeftOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
+        Remote.emptyMap[Int, Int].reduceLeftOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> None
+      ),
+      remoteTest("reduceRight")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceRight((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+      ),
+      remoteTest("reduceRightOption")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceRightOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
+        Remote.emptyMap[Int, Int].reduceRightOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> None
+      ),
+      remoteTest("removed")(
+        Remote.map("a" -> 1, "b" -> 2).removed("a") <-> Map("b" -> 2),
+        Remote.map("a" -> 1, "b" -> 2).removed("c") <-> Map("a" -> 1, "b" -> 2)
+      ),
+      remoteTest("removedAll")(
+        (Remote.map("hello" -> 1, "world" -> 2) removedAll List("world")) <-> Map("hello" -> 1),
+        (Remote.map("hello" -> 1, "world" -> 2) removedAll List("hello", "world")) <-> Map.empty[String, Int],
+        (Remote.map("hello" -> 1, "world" -> 2) removedAll List("something")) <-> Map("hello" -> 1, "world" -> 2)
+      ),
+      remoteTest("scan")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).scan((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2)) <-> List(
+          (0, 0),
+          (1, 10),
+          (3, 30),
+          (6, 60)
+        )
+      ),
+      remoteTest("scanLeft")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).scanLeft((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2)) <-> List(
+          (0, 0),
+          (1, 10),
+          (3, 30),
+          (6, 60)
+        )
+      ),
+      remoteTest("scanRight")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).scanRight((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2)) <-> List(
+          (6, 60),
+          (5, 50),
+          (3, 30),
+          (0, 0)
+        )
+      ),
+      remoteTest("size")(
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).size <-> 3,
+        Remote.emptyMap[Int, Int].size <-> 0
+      ),
+      remoteTest("slice")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
+          .slice(2, 4) <-> Map("bbb" -> 10, "cc" -> 11)
+      ),
+      remoteTest("sliding")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
+          .sliding(3) <-> List(
+          Map("aa"  -> 1, "a"   -> 0, "bbb" -> 10),
+          Map("a"   -> 0, "bbb" -> 10, "cc" -> 11),
+          Map("bbb" -> 10, "cc" -> 11, "d"  -> 100)
+        )
+      ),
+      remoteTest("span")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 5, "d" -> 100)
+          .span(pair => pair._2 < 10) <-> (Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100))
+      ),
+      remoteTest("splitAt")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 5, "d" -> 100)
+          .splitAt(2) <-> (Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100))
+      ),
+      remoteTest("tail")(
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).tail <-> Map("b" -> 2, "c" -> 3),
+        Remote.emptyMap[String, Int].tail failsWithRemoteFailure "List is empty"
+      ),
+      remoteTest("tails")(
+        Remote.emptyMap[String, Int].tails <-> List(Map.empty[String, Int]),
+        Remote.map("a" -> 1, "b" -> 2, "c" -> 3).tails <-> List(
+          Map("a" -> 1, "b" -> 2, "c" -> 3),
+          Map("b" -> 2, "c" -> 3),
+          Map("c" -> 3),
+          Map.empty[String, Int]
+        )
+      ),
+      remoteTest("take")(
+        Remote
+          .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 5, "d" -> 100)
+          .take(2) <-> Map("aa" -> 1, "a" -> 0)
+      ),
+      remoteTest("takeRight")(
+        Remote
+          .map("cc" -> 5, "d" -> 100)
+          .takeRight(2) <-> Map("cc" -> 5, "d" -> 100)
+      ),
+      remoteTest("updated")(
+        Remote.map("hello" -> 1).updated("world", 2) <-> Map("hello" -> 1, "world" -> 2),
+        Remote.map("hello" -> 1, "world" -> 2).updated("world", 3) <-> Map("hello" -> 1, "world" -> 3),
+        Remote.map("hello" -> 1, "world" -> 2).updated("hello", 3) <-> Map("hello" -> 3, "world" -> 2)
+      ),
+      remoteTest("toList")(
+        Remote.map("hello" -> 1, "world" -> 2).toList <-> List(("hello", 1), ("world", 2))
+      ),
+      remoteTest("toSet")(
+        Remote.map("hello" -> 1, "world" -> 2).toSet <-> Set(("hello", 1), ("world", 2))
+      ),
+      remoteTest("unzip")(
+        Remote.map("hello" -> 1, "world" -> 2).unzip <-> (List("hello", "world"), List(1, 2))
+      ),
+      remoteTest("values")(
+        Remote.map("hello" -> 1, "world" -> 2).values <-> List(1, 2)
+      ),
+      remoteTest("zip")(
+        Remote.map("hello" -> 1, "world" -> 2).zip(List('x', 'y')) <-> List((("hello", 1), 'x'), (("world", 2), 'y'))
+      ),
+      remoteTest("zipAll")(
+        Remote.map("hello" -> 1, "world" -> 2).zipAll(List('x'), ("???", 0), '!') <-> List(
+          (("hello", 1), 'x'),
+          (("world", 2), '!')
+        ),
+        Remote.map("hello" -> 1).zipAll(List('x', 'y'), ("???", 0), '!') <-> List(
+          (("hello", 1), 'x'),
+          (("???", 0), 'y')
+        )
       )
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory) @@ TestAspect.fromLayer(
       Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))
