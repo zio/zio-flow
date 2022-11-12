@@ -264,39 +264,48 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
       remoteTest("partition")(
         Remote
           .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
-          .partition(pair => pair._1.length > 1) <-> (Map(
-          "aa"  -> 1,
-          "bbb" -> 10,
-          "cc"  -> 11
-        ), Map(
-          "a" -> 0,
-          "d" -> 100
-        ))
+          .partition(pair => pair._1.length > 1)
+          .<->(
+            (
+              Map(
+                "aa"  -> 1,
+                "bbb" -> 10,
+                "cc"  -> 11
+              ),
+              Map(
+                "a" -> 0,
+                "d" -> 100
+              )
+            )
+          )
       ),
       remoteTest("partitionMap")(
         Remote
           .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 11, "d" -> 100)
-          .partitionMap(pair => (pair._1.length > 1).ifThenElse(Remote.left(pair._2), Remote.right(pair._2))) <-> (
-          List(1, 10, 11),
-          List(0, 100)
-        )
+          .partitionMap(pair => (pair._1.length > 1).ifThenElse(Remote.left(pair._2), Remote.right(pair._2)))
+          .<->(
+            (
+              List(1, 10, 11),
+              List(0, 100)
+            )
+          )
       ),
       remoteTest("reduce")(
-        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduce((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduce((a, b) => (a._1 + b._1, a._2 + b._2)).<->((6, 60))
       ),
       remoteTest("reduceOption")(
         Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
         Remote.emptyMap[Int, Int].reduceOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> None
       ),
       remoteTest("reduceLeft")(
-        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceLeft((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceLeft((a, b) => (a._1 + b._1, a._2 + b._2)).<->((6, 60))
       ),
       remoteTest("reduceLeftOption")(
         Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceLeftOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
         Remote.emptyMap[Int, Int].reduceLeftOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> None
       ),
       remoteTest("reduceRight")(
-        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceRight((a, b) => (a._1 + b._1, a._2 + b._2)) <-> (6, 60)
+        Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceRight((a, b) => (a._1 + b._1, a._2 + b._2)).<->((6, 60))
       ),
       remoteTest("reduceRightOption")(
         Remote.map(1 -> 10, 2 -> 20, 3 -> 30).reduceRightOption((a, b) => (a._1 + b._1, a._2 + b._2)) <-> Some((6, 60)),
@@ -356,12 +365,14 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
       remoteTest("span")(
         Remote
           .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 5, "d" -> 100)
-          .span(pair => pair._2 < 10) <-> (Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100))
+          .span(pair => pair._2 < 10)
+          .<->((Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100)))
       ),
       remoteTest("splitAt")(
         Remote
           .map("aa" -> 1, "a" -> 0, "bbb" -> 10, "cc" -> 5, "d" -> 100)
-          .splitAt(2) <-> (Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100))
+          .splitAt(2)
+          .<->((Map("aa" -> 1, "a" -> 0), Map("bbb" -> 10, "cc" -> 5, "d" -> 100)))
       ),
       remoteTest("tail")(
         Remote.map("a" -> 1, "b" -> 2, "c" -> 3).tail <-> Map("b" -> 2, "c" -> 3),
@@ -398,7 +409,7 @@ object RemoteMapSyntaxSpec extends RemoteSpecBase {
         Remote.map("hello" -> 1, "world" -> 2).toSet <-> Set(("hello", 1), ("world", 2))
       ),
       remoteTest("unzip")(
-        Remote.map("hello" -> 1, "world" -> 2).unzip <-> (List("hello", "world"), List(1, 2))
+        Remote.map("hello" -> 1, "world" -> 2).unzip.<->((List("hello", "world"), List(1, 2)))
       ),
       remoteTest("values")(
         Remote.map("hello" -> 1, "world" -> 2).values <-> List(1, 2)
