@@ -148,7 +148,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("grouped")(
         Remote("").grouped(2) <-> List.empty[String],
         Remote("hello").grouped(3) <-> List("hel", "lo")
-      ) @@ TestAspect.ignore, // TODO
+      ),
       remoteTest("head")(
         Remote("").head failsWithRemoteFailure "List is empty",
         Remote("hello").head <-> 'h'

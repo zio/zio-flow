@@ -15,7 +15,12 @@ addSbtPlugin("org.scalameta"                     % "sbt-scalafmt"               
 addSbtPlugin("pl.project13.scala"                % "sbt-jcstress"                  % "0.2.0")
 addSbtPlugin("pl.project13.scala"                % "sbt-jmh"                       % "0.4.3")
 addSbtPlugin("dev.zio"                           % "zio-sbt-website"               % "0.0.0+80-e5b408eb-SNAPSHOT")
+addSbtPlugin("org.scoverage"                     % "sbt-scoverage"                 % "2.0.5")
 
 libraryDependencies += "org.scalameta" % "scalameta_2.12" % "4.5.4"
 
 resolvers += Resolver.sonatypeRepo("public")
+
+ThisBuild / libraryDependencySchemes ++= Seq(
+  "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
+)

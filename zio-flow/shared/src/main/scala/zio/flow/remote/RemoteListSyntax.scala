@@ -257,7 +257,38 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
       ._1
       .trackInternal("List#forall")
 
-  // TODO: groupBy etc if we have support for Remote[Map[K, V]]
+  def groupBy[K](f: Remote[A] => Remote[K]): Remote[Map[K, List[A]]] =
+    self.reverse
+      .foldLeft(Remote.emptyMap[K, List[A]]) { (map, elem) =>
+        Remote.bind(f(elem)) { key =>
+          Remote.bind(map.getOrElse(key, Remote.nil[A])) { baseList =>
+            map.updated(key, elem :: baseList)
+          }
+        }
+      }
+      .trackInternal("List#groupBy")
+
+  def groupMap[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B]): Remote[Map[K, List[B]]] =
+    self
+      .map(a => (key(a), f(a)))
+      .groupBy(_._1)
+      .map(pair => (pair._1, pair._2.map(_._2)))
+      .trackInternal("List#groupMap")
+
+  def groupMapReduce[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B])(
+    reduce: (Remote[B], Remote[B]) => Remote[B]
+  ): Remote[Map[K, B]] =
+    groupMap(key)(f).map(pair => (pair._1, pair._2.reduce(reduce))).trackInternal("List#groupMapReduce")
+
+  def grouped(size: Remote[Int]): Remote[List[List[A]]] =
+    Remote.recurse[List[A], List[List[A]]](self) { (input, rec) =>
+      input.isEmpty.ifThenElse(
+        Remote.nil,
+        Remote.bind(input.splitAt(size)) { splitPair =>
+          splitPair._1 :: rec(splitPair._2)
+        }
+      )
+    }
 
   def head: Remote[A] =
     self.headOption.fold(Remote.fail(s"List is empty"))((h: Remote[A]) => h).trackInternal("List#head")
@@ -881,6 +912,9 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
       .trackInternal("List#takeWhile")
 
   def toList: Remote[List[A]] = self
+
+  def toMap[K, V](implicit ev: A <:< (K, V)): Remote[Map[K, V]] =
+    Remote.ListToMap(self.asInstanceOf[Remote[List[(K, V)]]]).trackInternal("List#toMap")
 
   def toSet: Remote[Set[A]] =
     Remote.ListToSet(self).trackInternal("List#toSet")

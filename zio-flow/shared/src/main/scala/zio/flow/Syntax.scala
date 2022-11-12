@@ -256,7 +256,8 @@ trait Syntax {
     new RemoteListSyntax[A](remote, trackingEnabled = false)
   implicit def RemoteListCompanion(list: List.type): RemoteListCompanionSyntax = new RemoteListCompanionSyntax(list)
 
-  implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] = new RemoteSetSyntax[A](remote)
+  implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] =
+    new RemoteSetSyntax[A](remote, trackingEnabled = false)
 
   implicit def RemoteListChar(remote: Remote[List[Char]]): RemoteListCharSyntax = new RemoteListCharSyntax(remote)
 
@@ -296,4 +297,7 @@ trait Syntax {
   implicit def RemoteChunkCompanion(chunk: Chunk.type): RemoteChunkCompanionSyntax = new RemoteChunkCompanionSyntax(
     chunk
   )
+
+  implicit def RemoteMap[K, V](remote: Remote[Map[K, V]]): RemoteMapSyntax[K, V] =
+    new RemoteMapSyntax[K, V](remote, trackingEnabled = false)
 }

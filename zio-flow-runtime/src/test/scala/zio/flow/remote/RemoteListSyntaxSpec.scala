@@ -188,6 +188,40 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.list(1, 2, 3, 4).forall(_ % 2 === 0) <-> false,
         Remote.list(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
       ),
+      remoteTest("groupBy")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupBy(_.length) <-> Map(
+          3 -> List("abc", "def"),
+          2 -> List("ba", "de"),
+          0 -> List(""),
+          1 -> List("a", "b", "c")
+        )
+      ),
+      remoteTest("groupByMap")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMap(_.length)(s => s + s) <-> Map(
+          3 -> List("abcabc", "defdef"),
+          2 -> List("baba", "dede"),
+          0 -> List(""),
+          1 -> List("aa", "bb", "cc")
+        )
+      ),
+      remoteTest("groupByMapReduce")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMapReduce(_.length)(s => s.length)(_ + _) <-> Map(
+          3 -> 6,
+          2 -> 4,
+          0 -> 0,
+          1 -> 3
+        )
+      ),
+      remoteTest("grouped")(
+        Remote.nil[Int].grouped(3) <-> List.empty[List[Int]],
+        Remote.list(1, 2, 3, 4, 5, 6, 7, 8).grouped(3) <-> List(List(1, 2, 3), List(4, 5, 6), List(7, 8))
+      ),
       remoteTest("head")(
         Remote.nil[Int].head failsWithRemoteFailure "List is empty",
         Remote.list(1, 2, 3).head <-> 1

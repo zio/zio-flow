@@ -95,6 +95,8 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       test("recurseWith")(roundtripCheck(codec, genRecurseWith)),
       test("listToSet")(roundtripCheck(codec, genListToSet)),
       test("setToList")(roundtripCheck(codec, genSetToList)),
+      test("listToMap")(roundtripCheck(codec, genMapToList)),
+      test("mapToList")(roundtripCheck(codec, genListToMap)),
       test("listToString")(roundtripCheck(codec, genListToString)),
       test("stringToCharList")(roundtripCheck(codec, genStringToCharList)),
       test("charListToString")(roundtripCheck(codec, genCharListToString)),

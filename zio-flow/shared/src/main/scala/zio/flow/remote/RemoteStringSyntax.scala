@@ -138,10 +138,19 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   def forall(p: Remote[Char] => Remote[Boolean]): Remote[Boolean] =
     self.toList.forall(p).trackInternal("String#forall")
 
-  // TODO: groupBy if we have support for Remote[Map[K, V]]
+  def groupBy[K](f: Remote[Char] => Remote[K]): Remote[Map[K, String]] =
+    self.toList.groupBy(f).map(pair => (pair._1, pair._2.mkString)).trackInternal("String#groupBy")
 
-  @nowarn def grouped(n: Remote[Int]): Remote[List[String]] =
-    Remote.fail(s"TODO: not implemented") // TODO
+  def groupMap[K, B](key: Remote[Char] => Remote[K])(f: Remote[Char] => Remote[B]): Remote[Map[K, List[B]]] =
+    self.toList.groupMap(key)(f).map(pair => (pair._1, pair._2)).trackInternal("String#groupMap")
+
+  def groupMapReduce[K, B](key: Remote[Char] => Remote[K])(f: Remote[Char] => Remote[B])(
+    reduce: (Remote[B], Remote[B]) => Remote[B]
+  ): Remote[Map[K, B]] =
+    self.toList.groupMapReduce(key)(f)(reduce).trackInternal("String#groupMapReduce")
+
+  def grouped(n: Remote[Int]): Remote[List[String]] =
+    self.toList.grouped(n).map(_.mkString).trackInternal("String#grouped")
 
   def head: Remote[Char] =
     self.toList.head.trackInternal("String#head")
