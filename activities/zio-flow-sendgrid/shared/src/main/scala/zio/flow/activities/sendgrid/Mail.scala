@@ -13,7 +13,7 @@ final case class Mail(
   content: List[Content],
   attachments: Option[List[Attachment]] = None,
   template_id: Option[String] = None,
-  //headers: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
+  // headers: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
   categories: Option[List[CategoryName]] = None,
   custom_args: Option[String] = None,
   send_at: Option[Int] = None, // TODO: should be Instant
