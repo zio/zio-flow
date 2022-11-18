@@ -10,9 +10,9 @@ final case class Personalization(
   bcc: Option[List[EmailAddress]] = None,
   subject: Option[String] = None,
   // headers: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
-  //substitutions: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
-  //dynamic_template_data: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
-  //custom_args: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
+  // substitutions: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
+  // dynamic_template_data: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
+  // custom_args: Map[String, String], // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
   send_at: Option[Int] = None // TODO: should be instant
 )
 

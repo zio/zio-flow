@@ -37,7 +37,7 @@ final case class RocksDbIndexedStore(
 
   def addTopic(topic: String): IO[Throwable, ColumnFamilyHandle] =
     for {
-      //TODO : Only catch "Column Family already exists"
+      // TODO : Only catch "Column Family already exists"
       colFamHandle <- getOrCreateNamespace(topic)
       _ <- rocksDB
              .put(
