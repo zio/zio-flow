@@ -23,7 +23,7 @@ final case class Message(
   error_code: Option[Int],
   price_unit: Option[String],
   api_version: String
-  //subresource_uris:  Map[String, String] // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
+  // subresource_uris:  Map[String, String] // TODO: this should be a dynamic Json object - is DynamicValue applicable here?
 )
 
 object Message {
