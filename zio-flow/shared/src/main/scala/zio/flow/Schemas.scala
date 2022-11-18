@@ -24,7 +24,7 @@ import java.time.temporal.{ChronoField, ChronoUnit}
 import scala.util.Try
 import scala.util.matching.Regex
 
-trait Schemas extends LowerPrioritySchemas with DefaultJavaTimeSchemas {
+trait Schemas extends LowerPrioritySchemas {
 
   // NOTE: Schema.Fail would be more correct but that makes it unserializable currently
   implicit val schemaZNothing: Schema[ZNothing] =

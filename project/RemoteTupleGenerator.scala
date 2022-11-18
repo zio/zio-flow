@@ -103,8 +103,8 @@ object RemoteTupleGenerator extends AutoPlugin {
                 )
             )
 
-            def schemaCase[A]: Schema.Case[$anySelfType, Remote[A]] =
-              Schema.Case(${model.tupleLit}, schema[..$anyTypeParams], _.asInstanceOf[$anySelfType])
+            def schemaCase[A]: Schema.Case[Remote[A], $anySelfType] =
+              Schema.Case(${model.tupleLit}, schema[..$anyTypeParams], _.asInstanceOf[$anySelfType], x => x.asInstanceOf[Remote[A]], _.isInstanceOf[$anySelfType])
        }
        """
     }
