@@ -40,11 +40,34 @@ trait Schemas extends LowerPrioritySchemas {
   implicit lazy val schemaThrowable: Schema[Throwable] =
     Schema.CaseClass4(
       TypeId.parse("java.lang.Throwable"),
-      field1 = Schema.Field("cause", Schema.defer(Schema[Option[Throwable]])),
-      field2 = Schema.Field("message", Schema[Option[String]]),
-      field3 = Schema.Field("stackTrace", Schema[Chunk[StackTraceElement]]),
-      field4 = Schema.Field("suppressed", Schema.defer(Schema[Chunk[Throwable]])),
-      construct = (
+      field01 = Schema.Field(
+        "cause",
+        Schema.defer(Schema[Option[Throwable]]),
+        get0 = throwable => {
+          val cause = throwable.getCause
+          if (cause == null || cause == throwable) None else Some(cause)
+        },
+        set0 = (a: Throwable, v: Option[Throwable]) => ???
+      ),
+      field02 = Schema.Field(
+        "message",
+        Schema[Option[String]],
+        get0 = throwable => Option(throwable.getMessage),
+        set0 = (a: Throwable, v: Option[String]) => ???
+      ),
+      field03 = Schema.Field(
+        "stackTrace",
+        Schema[Chunk[StackTraceElement]],
+        get0 = throwable => Chunk.fromArray(throwable.getStackTrace),
+        set0 = (a: Throwable, v: Chunk[StackTraceElement]) => ???
+      ),
+      field04 = Schema.Field(
+        "suppressed",
+        Schema.defer(Schema[Chunk[Throwable]]),
+        get0 = throwable => Chunk.fromArray(throwable.getSuppressed),
+        set0 = (a: Throwable, v: Chunk[Throwable]) => ???
+      ),
+      construct0 = (
         cause: Option[Throwable],
         message: Option[String],
         stackTrace: Chunk[StackTraceElement],
@@ -54,52 +77,77 @@ trait Schemas extends LowerPrioritySchemas {
         throwable.setStackTrace(stackTrace.toArray)
         suppressed.foreach(throwable.addSuppressed)
         throwable
-      },
-      extractField1 = throwable => {
-        val cause = throwable.getCause
-        if (cause == null || cause == throwable) None else Some(cause)
-      },
-      extractField2 = throwable => Option(throwable.getMessage),
-      extractField3 = throwable => Chunk.fromArray(throwable.getStackTrace),
-      extractField4 = throwable => Chunk.fromArray(throwable.getSuppressed)
+      }
     )
 
   implicit lazy val schemaStackTraceElement: Schema[StackTraceElement] =
     Schema.CaseClass4(
       TypeId.parse("java.lang.StackTraceElement"),
-      field1 = Schema.Field("declaringClass", Schema[String]),
-      field2 = Schema.Field("methodName", Schema[String]),
-      field3 = Schema.Field("fileName", Schema[String]),
-      field4 = Schema.Field("lineNumber", Schema[Int]),
-      construct = (declaringClass: String, methodName: String, fileName: String, lineNumber: Int) =>
-        new StackTraceElement(declaringClass, methodName, fileName, lineNumber),
-      extractField1 = stackTraceElement => stackTraceElement.getClassName,
-      extractField2 = stackTraceElement => stackTraceElement.getMethodName,
-      extractField3 = stackTraceElement => stackTraceElement.getFileName,
-      extractField4 = stackTraceElement => stackTraceElement.getLineNumber
+      field01 = Schema.Field(
+        "declaringClass",
+        Schema[String],
+        get0 = stackTraceElement => stackTraceElement.getClassName,
+        set0 = (a: StackTraceElement, v: String) => ???
+      ),
+      field02 = Schema.Field(
+        "methodName",
+        Schema[String],
+        get0 = stackTraceElement => stackTraceElement.getMethodName,
+        set0 = (a: StackTraceElement, v: String) => ???
+      ),
+      field03 = Schema.Field(
+        "fileName",
+        Schema[String],
+        get0 = stackTraceElement => stackTraceElement.getFileName,
+        set0 = (a: StackTraceElement, v: String) => ???
+      ),
+      field04 = Schema.Field(
+        "lineNumber",
+        Schema[Int],
+        get0 = stackTraceElement => stackTraceElement.getLineNumber,
+        set0 = (a: StackTraceElement, v: Int) => ???
+      ),
+      construct0 = (declaringClass: String, methodName: String, fileName: String, lineNumber: Int) =>
+        new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
     )
 
   implicit def schemaTry[A](implicit schema: Schema[A]): Schema[scala.util.Try[A]] =
     Schema.Enum2[scala.util.Failure[A], scala.util.Success[A], scala.util.Try[A]](
       TypeId.parse("scala.util.Try"),
-      case1 = Schema.Case("Failure", schemaFailure, _.asInstanceOf[scala.util.Failure[A]]),
-      case2 = Schema.Case("Success", schemaSuccess, _.asInstanceOf[scala.util.Success[A]])
+      case1 = Schema.Case(
+        "Failure",
+        schemaFailure,
+        _.asInstanceOf[scala.util.Failure[A]],
+        x => x,
+        _.isInstanceOf[scala.util.Failure[A]]
+      ),
+      case2 = Schema.Case(
+        "Success",
+        schemaSuccess,
+        _.asInstanceOf[scala.util.Success[A]],
+        x => x,
+        _.isInstanceOf[scala.util.Success[A]]
+      )
     )
 
   implicit def schemaFailure[A]: Schema[scala.util.Failure[A]] =
     Schema.CaseClass1(
       TypeId.parse("scala.util.Failure"),
-      field = Schema.Field("exception", Schema[Throwable]),
-      construct = (throwable: Throwable) => scala.util.Failure(throwable),
-      extractField = _.exception
+      field0 = Schema.Field(
+        "exception",
+        Schema[Throwable],
+        get0 = _.exception,
+        set0 = (a: scala.util.Failure[A], v: Throwable) => a.copy(exception = v)
+      ),
+      defaultConstruct0 = (throwable: Throwable) => scala.util.Failure(throwable)
     )
 
   implicit def schemaSuccess[A](implicit schema: Schema[A]): Schema[scala.util.Success[A]] =
     Schema.CaseClass1(
       TypeId.parse("scala.util.Success"),
-      field = Schema.Field("value", schema),
-      construct = (value: A) => scala.util.Success(value),
-      extractField = _.value
+      field0 =
+        Schema.Field("value", schema, get0 = _.value, set0 = (a: scala.util.Success[A], v: A) => a.copy(value = v)),
+      defaultConstruct0 = (value: A) => scala.util.Success(value)
     )
 
   implicit val chronoUnitSchema: Schema[ChronoUnit] =
