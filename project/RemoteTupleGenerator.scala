@@ -113,8 +113,8 @@ object RemoteTupleGenerator extends AutoPlugin {
       val accessors =
         model.typeParamTypes.zipWithIndex.map { case (t, i) =>
           q"""def ${Term.Name(s"_${i + 1}")}: Remote[$t] = Remote.TupleAccess(self, ${Lit.Int(i)}, ${Lit.Int(
-            model.size
-          )})"""
+              model.size
+            )})"""
         }.toList
 
       q"""

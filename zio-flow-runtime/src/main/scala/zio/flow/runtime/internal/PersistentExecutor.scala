@@ -294,7 +294,12 @@ final case class PersistentExecutor(
     def step(
       state: State[E, A]
     ): ZIO[
-      RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
+      RemoteContext
+        with VirtualClock
+        with KeyValueStore
+        with RemoteVariableKeyValueStore
+        with ExecutionEnvironment
+        with DurableLog,
       ExecutorError,
       StepResult
     ] = {
@@ -996,49 +1001,49 @@ final case class PersistentExecutor(
       messages  <- Queue.unbounded[ExecutionCommand]
 
       fiber <- {
-        for {
-          _ <- startGate.await
-          _ <- {
-            for {
-              state <- saveStateChange(
-                         initialState.id.asFlowId,
-                         initialState,
-                         StateChange.resetExecutionTime,
-                         initialState.lastTimestamp
-                       )
-              _ <- ref.set(state)
-              _ <- runSteps(ref, messages, executionStartedAt = now)
-                     .provide(
-                       ZLayer.succeed(execEnv),
-                       ZLayer.succeed(kvStore),
-                       ZLayer.succeed(durableLog),
-                       ZLayer(VirtualClock.make(state.lastTimestamp)),
-                       ZLayer.succeed(remoteVariableKvStore)
-                     ) @@ metrics.executorErrorCount
-            } yield ()
-          }.catchAll { error =>
-            for {
-              _ <- ZIO.logErrorCause(s"Persistent executor ${initialState.id} failed", Cause.fail(error))
-              _ <- initialState.result
-                     .fail(Left(error))
-                     .provideEnvironment(promiseEnv)
-                     .catchAll { error2 =>
-                       ZIO.logFatalCause(
-                         s"Failed to serialize execution failure: ${error2.toMessage}",
-                         Cause.die(error2.toException)
-                       )
-                     }
-              _ <- updateFinishedFlowMetrics(
-                     metrics.FlowResult.Death,
-                     initialState.startedAt,
-                     initialState.totalExecutionTime
-                   )
-            } yield ()
-          }
-        } yield ()
-      }.ensuring {
-        workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
-      }.fork
+                 for {
+                   _ <- startGate.await
+                   _ <- {
+                          for {
+                            state <- saveStateChange(
+                                       initialState.id.asFlowId,
+                                       initialState,
+                                       StateChange.resetExecutionTime,
+                                       initialState.lastTimestamp
+                                     )
+                            _ <- ref.set(state)
+                            _ <- runSteps(ref, messages, executionStartedAt = now)
+                                   .provide(
+                                     ZLayer.succeed(execEnv),
+                                     ZLayer.succeed(kvStore),
+                                     ZLayer.succeed(durableLog),
+                                     ZLayer(VirtualClock.make(state.lastTimestamp)),
+                                     ZLayer.succeed(remoteVariableKvStore)
+                                   ) @@ metrics.executorErrorCount
+                          } yield ()
+                        }.catchAll { error =>
+                          for {
+                            _ <- ZIO.logErrorCause(s"Persistent executor ${initialState.id} failed", Cause.fail(error))
+                            _ <- initialState.result
+                                   .fail(Left(error))
+                                   .provideEnvironment(promiseEnv)
+                                   .catchAll { error2 =>
+                                     ZIO.logFatalCause(
+                                       s"Failed to serialize execution failure: ${error2.toMessage}",
+                                       Cause.die(error2.toException)
+                                     )
+                                   }
+                            _ <- updateFinishedFlowMetrics(
+                                   metrics.FlowResult.Death,
+                                   initialState.startedAt,
+                                   initialState.totalExecutionTime
+                                 )
+                          } yield ()
+                        }
+                 } yield ()
+               }.ensuring {
+                 workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
+               }.fork
       runtimeState = PersistentExecutor.RuntimeState(
                        result = initialState.result,
                        fiber = fiber,
@@ -1095,7 +1100,12 @@ final case class PersistentExecutor(
     stateChange: PersistentExecutor.StateChange,
     recordingContext: RecordingRemoteContext
   ): ZIO[
-    RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
+    RemoteContext
+      with VirtualClock
+      with KeyValueStore
+      with RemoteVariableKeyValueStore
+      with ExecutionEnvironment
+      with DurableLog,
     ExecutorError,
     PersistentExecutor.State[_, _]
   ] = {
@@ -1314,8 +1324,8 @@ final case class PersistentExecutor(
            }
       _ <- ZIO.logDebug(
              s"Garbage collector keeps referenced variables from the given timestamps: ${allReferencedVariables.map {
-               case (scopedVar, timestamp) => scopedVar.asString + " -> " + timestamp
-             }.mkString(", ")}"
+                 case (scopedVar, timestamp) => scopedVar.asString + " -> " + timestamp
+               }.mkString(", ")}"
            )
       _ <- ZIO.foreachDiscard(allReferencedVariables) { case (scopedVar, timestamp) =>
              remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, Some(timestamp))
