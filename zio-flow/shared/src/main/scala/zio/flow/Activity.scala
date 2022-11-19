@@ -164,11 +164,31 @@ object Activity {
       Unit
     ], Activity[R, A]](
       typeId,
-      Schema.Field("name", Schema[String]),
-      Schema.Field("description", Schema[String]),
-      Schema.Field("operation", Operation.schema[R, A]),
-      Schema.Field("check", ZFlow.schema[R, ActivityError, A]),
-      Schema.Field("compensate", ZFlow.schema[A, ActivityError, Unit]),
+      Schema.Field("name", Schema[String], get0 = _.name, set0 = (a: Activity[R, A], v: String) => a.copy(name = v)),
+      Schema.Field(
+        "description",
+        Schema[String],
+        get0 = _.description,
+        set0 = (a: Activity[R, A], v: String) => a.copy(description = v)
+      ),
+      Schema.Field(
+        "operation",
+        Operation.schema[R, A],
+        get0 = _.operation,
+        set0 = (a: Activity[R, A], v: Operation[R, A]) => a.copy(operation = v)
+      ),
+      Schema.Field(
+        "check",
+        ZFlow.schema[R, ActivityError, A],
+        get0 = _.check,
+        set0 = (a: Activity[R, A], v: ZFlow[R, ActivityError, A]) => a.copy(check = v)
+      ),
+      Schema.Field(
+        "compensate",
+        ZFlow.schema[A, ActivityError, Unit],
+        get0 = _.compensate,
+        set0 = (a: Activity[R, A], v: ZFlow[A, ActivityError, Unit]) => a.copy(compensate = v)
+      ),
       { case (name, description, operation, check, compensate) =>
         Activity(
           name,
@@ -177,11 +197,6 @@ object Activity {
           check,
           compensate
         )
-      },
-      _.name,
-      _.description,
-      _.operation,
-      _.check,
-      _.compensate
+      }
     )
 }
