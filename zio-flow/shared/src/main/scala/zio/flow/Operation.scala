@@ -117,7 +117,7 @@ object Operation {
         schema[Any, Input, Result],
         _.asInstanceOf[ContraMap[Any, Input, Result]],
         x => x,
-        _.isInstanceOf[ContraMap[Any, Input, Result]]
+        _.isInstanceOf[ContraMap[_, _, _]]
       )
   }
 
@@ -173,7 +173,7 @@ object Operation {
         schema[Input, Any, Result2],
         _.asInstanceOf[Map[Input, Any, Result2]],
         x => x,
-        _.isInstanceOf[Map[Input, Any, Result2]]
+        _.isInstanceOf[Map[_, _, _]]
       )
   }
 

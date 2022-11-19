@@ -1,6 +1,5 @@
 package zio.flow.operation.http
 
-import zio.flow._
 import zio.schema.{DeriveSchema, Schema}
 import zio.test.{ZIOSpecDefault, assertTrue}
 

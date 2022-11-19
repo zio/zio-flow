@@ -4,7 +4,7 @@ import zio.Scope
 import zio.flow.serialization.FlowSchemaAst
 import zio.flow.test._
 import zio.schema.{DynamicValue, Schema}
-import zio.schema.ast.SchemaAst
+import zio.schema.meta.MetaSchema
 import zio.schema.codec.JsonCodec
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
@@ -92,9 +92,11 @@ object CreateMessageSpec extends ZIOSpecDefault {
       ),
       test("schema is serializable") {
         val ast          = CreateMessage.schema.ast
-        val roundtripAst = JsonCodec.decode(SchemaAst.schema)(JsonCodec.encode(SchemaAst.schema)(ast))
+        val roundtripAst = JsonCodec.decode(MetaSchema.schema)(JsonCodec.encode(MetaSchema.schema)(ast))
         val roundtripAst2 =
-          JsonCodec.decode(SchemaAst.schema)(JsonCodec.encode(SchemaAst.schema)(roundtripAst.toOption.get.toSchema.ast))
+          JsonCodec.decode(MetaSchema.schema)(
+            JsonCodec.encode(MetaSchema.schema)(roundtripAst.toOption.get.toSchema.ast)
+          )
         assertTrue(
           roundtripAst == Right(ast),
           roundtripAst2 == Right(ast),

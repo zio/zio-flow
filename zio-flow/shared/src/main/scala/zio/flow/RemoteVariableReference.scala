@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.schema.{DeriveSchema, Schema, TypeId}
+import zio.schema.{Schema, TypeId}
 
 /**
  * Represents a reference to a persisted remote variable of type A

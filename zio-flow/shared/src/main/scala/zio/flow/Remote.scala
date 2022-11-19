@@ -138,8 +138,8 @@ object Remote {
     def schema[A]: Schema[Literal[A]] =
       Schema[DynamicValue].transform(Literal(_), _.value)
 
-    def schemaCase[A]: Schema.Case[Literal[A], Remote[A]] =
-      Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Literal[A]] =
+      Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]], x => x, _.isInstanceOf[Literal[A]])
   }
 
   final case class Fail[A](message: String) extends Remote[A] {
@@ -155,8 +155,8 @@ object Remote {
     def schema[A]: Schema[Fail[A]] =
       Schema[String].transform(Fail(_), _.message)
 
-    def schemaCase[A]: Schema.Case[Fail[A], Remote[A]] =
-      Schema.Case("Fail", schema[A], _.asInstanceOf[Fail[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Fail[A]] =
+      Schema.Case("Fail", schema[A], _.asInstanceOf[Fail[A]], x => x, _.isInstanceOf[Fail[A]])
   }
 
   final case class Debug[A](inner: Remote[A], message: String, debugMode: Debug.DebugMode) extends Remote[A] {
@@ -194,18 +194,22 @@ object Remote {
       Schema.defer {
         Schema.CaseClass3[Remote[A], String, DebugMode, Debug[A]](
           typeId,
-          Schema.Field("inner", Remote.schema[A]),
-          Schema.Field("message", Schema[String]),
-          Schema.Field("debugMode", Schema[DebugMode]),
-          Debug.apply,
-          _.inner,
-          _.message,
-          _.debugMode
+          Schema
+            .Field("inner", Remote.schema[A], get0 = _.inner, set0 = (a: Debug[A], v: Remote[A]) => a.copy(inner = v)),
+          Schema
+            .Field("message", Schema[String], get0 = _.message, set0 = (a: Debug[A], v: String) => a.copy(message = v)),
+          Schema.Field(
+            "debugMode",
+            Schema[DebugMode],
+            get0 = _.debugMode,
+            set0 = (a: Debug[A], v: DebugMode) => a.copy(debugMode = v)
+          ),
+          Debug.apply
         )
       }
 
-    def schemaCase[A]: Schema.Case[Debug[A], Remote[A]] =
-      Schema.Case("Debug", schema[A], _.asInstanceOf[Debug[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Debug[A]] =
+      Schema.Case("Debug", schema[A], _.asInstanceOf[Debug[A]], x => x, _.isInstanceOf[Debug[A]])
   }
 
   final case class Flow[R, E, A](flow: ZFlow[R, E, A]) extends Remote[ZFlow[R, E, A]] {
@@ -229,8 +233,14 @@ object Remote {
           )
       )
 
-    def schemaCase[A]: Schema.Case[Flow[Any, Any, Any], Remote[A]] =
-      Schema.Case("Flow", schema[Any, Any, Any], _.asInstanceOf[Flow[Any, Any, Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], Flow[Any, Any, Any]] =
+      Schema.Case(
+        "Flow",
+        schema[Any, Any, Any],
+        _.asInstanceOf[Flow[Any, Any, Any]],
+        x => x.asInstanceOf[Remote[A]],
+        _.isInstanceOf[Flow[_, _, _]]
+      )
   }
 
   final case class Nested[A](remote: Remote[A]) extends Remote[Remote[A]] {
@@ -254,8 +264,14 @@ object Remote {
     def schema[A]: Schema[Nested[A]] =
       Schema.defer(Remote.schema[A].transform(Nested(_), _.remote))
 
-    def schemaCase[A]: Schema.Case[Nested[Any], Remote[A]] =
-      Schema.Case("Nested", schema[Any], _.asInstanceOf[Nested[Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], Nested[Any]] =
+      Schema.Case(
+        "Nested",
+        schema[Any],
+        _.asInstanceOf[Nested[Any]],
+        x => x.asInstanceOf[Remote[A]],
+        _.isInstanceOf[Nested[_]]
+      )
   }
 
   final case class VariableReference[A](ref: RemoteVariableReference[A]) extends Remote[RemoteVariableReference[A]] {
@@ -283,13 +299,23 @@ object Remote {
     def schema[A]: Schema[VariableReference[A]] =
       Schema.CaseClass1[RemoteVariableReference[A], VariableReference[A]](
         typeId,
-        Schema.Field("ref", Schema[RemoteVariableReference[A]]),
-        VariableReference(_),
-        _.ref
+        Schema.Field(
+          "ref",
+          Schema[RemoteVariableReference[A]],
+          get0 = _.ref,
+          set0 = (a: VariableReference[A], v: RemoteVariableReference[A]) => a.copy(ref = v)
+        ),
+        VariableReference(_)
       )
 
-    def schemaCase[A]: Schema.Case[VariableReference[Any], Remote[A]] =
-      Schema.Case("VariableReference", schema[Any], _.asInstanceOf[VariableReference[Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], VariableReference[Any]] =
+      Schema.Case(
+        "VariableReference",
+        schema[Any],
+        _.asInstanceOf[VariableReference[Any]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[VariableReference[_]]
+      )
   }
 
   final case class Ignore() extends Remote[Unit] {
@@ -306,8 +332,8 @@ object Remote {
   object Ignore {
     val schema: Schema[Ignore] = Schema[Unit].transform(_ => Ignore(), _ => ())
 
-    def schemaCase[A]: Schema.Case[Ignore, Remote[A]] =
-      Schema.Case("Ignore", schema, _.asInstanceOf[Ignore])
+    def schemaCase[A]: Schema.Case[Remote[A], Ignore] =
+      Schema.Case("Ignore", schema, _.asInstanceOf[Ignore], _.asInstanceOf[Remote[A]], _.isInstanceOf[Ignore])
   }
 
   final case class Variable[A](identifier: RemoteVariableName) extends Remote[A] {
@@ -339,13 +365,23 @@ object Remote {
     def schema[A]: Schema[Variable[A]] =
       Schema.CaseClass1[RemoteVariableName, Variable[A]](
         typeId,
-        Schema.Field("identifier", Schema[RemoteVariableName]),
-        construct = (identifier: RemoteVariableName) => Variable(identifier),
-        extractField = (variable: Variable[A]) => variable.identifier
+        Schema.Field(
+          "identifier",
+          Schema[RemoteVariableName],
+          get0 = _.identifier,
+          set0 = (a: Variable[A], v: RemoteVariableName) => a.copy(identifier = v)
+        ),
+        (identifier: RemoteVariableName) => Variable(identifier)
       )
 
-    def schemaCase[A]: Schema.Case[Variable[A], Remote[A]] =
-      Schema.Case("Variable", schema, _.asInstanceOf[Variable[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Variable[A]] =
+      Schema.Case(
+        "Variable",
+        schema,
+        _.asInstanceOf[Variable[A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[Variable[_]]
+      )
   }
 
   final case class Config[A](key: ConfigKey, schema: Schema[A]) extends Remote[A] {
@@ -377,15 +413,18 @@ object Remote {
     def schema[A]: Schema[Config[A]] =
       Schema.CaseClass2[ConfigKey, FlowSchemaAst, Config[A]](
         typeId,
-        Schema.Field("key", Schema[ConfigKey]),
-        Schema.Field("schema", FlowSchemaAst.schema),
-        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema[A]),
-        _.key,
-        cfg => FlowSchemaAst.fromSchema(cfg.schema)
+        Schema.Field("key", Schema[ConfigKey], get0 = _.key, set0 = (a: Config[A], v: ConfigKey) => a.copy(key = v)),
+        Schema.Field(
+          "schema",
+          FlowSchemaAst.schema,
+          get0 = cfg => FlowSchemaAst.fromSchema(cfg.schema),
+          set0 = (cfg, schema) => cfg.copy(schema = schema.toSchema)
+        ),
+        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema[A])
       )
 
-    def schemaCase[A]: Schema.Case[Config[A], Remote[A]] =
-      Schema.Case("Config", schema, _.asInstanceOf[Config[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Config[A]] =
+      Schema.Case("Config", schema, _.asInstanceOf[Config[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Config[_]])
   }
 
   final case class Unbound[A](identifier: BindingName) extends Remote[A] {
@@ -414,13 +453,17 @@ object Remote {
     def schema[A]: Schema[Unbound[A]] =
       Schema.CaseClass1[BindingName, Unbound[A]](
         typeId,
-        Schema.Field("identifier", Schema[BindingName]),
-        construct = (identifier: BindingName) => Unbound(identifier),
-        extractField = (variable: Unbound[A]) => variable.identifier
+        Schema.Field(
+          "identifier",
+          Schema[BindingName],
+          get0 = _.identifier,
+          set0 = (a: Unbound[A], v: BindingName) => a.copy(identifier = v)
+        ),
+        (identifier: BindingName) => Unbound(identifier)
       )
 
-    def schemaCase[A]: Schema.Case[Unbound[A], Remote[A]] =
-      Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Unbound[A]] =
+      Schema.Case("Unbound", schema, _.asInstanceOf[Unbound[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Unbound[_]])
   }
 
   final case class UnboundRemoteFunction[A, B] private[flow] (
@@ -453,15 +496,29 @@ object Remote {
     def schema[A, B]: Schema[UnboundRemoteFunction[A, B]] =
       Schema.CaseClass2[Unbound[A], Remote[B], UnboundRemoteFunction[A, B]](
         typeId,
-        Schema.Field("variable", Unbound.schema[A]),
-        Schema.Field("result", Schema.defer(Remote.schema[B])),
-        UnboundRemoteFunction.apply(_, _),
-        _.input,
-        _.result
+        Schema.Field(
+          "input",
+          Unbound.schema[A],
+          get0 = _.input,
+          set0 = (a: UnboundRemoteFunction[A, B], v: Unbound[A]) => a.copy(input = v)
+        ),
+        Schema.Field(
+          "result",
+          Schema.defer(Remote.schema[B]),
+          get0 = _.result,
+          set0 = (a: UnboundRemoteFunction[A, B], v: Remote[B]) => a.copy(result = v)
+        ),
+        UnboundRemoteFunction.apply(_, _)
       )
 
-    def schemaCase[A, B]: Schema.Case[UnboundRemoteFunction[A, B], Remote[B]] =
-      Schema.Case("UnboundRemoteFunction", schema, _.asInstanceOf[UnboundRemoteFunction[A, B]])
+    def schemaCase[A, B]: Schema.Case[Remote[B], UnboundRemoteFunction[A, B]] =
+      Schema.Case(
+        "UnboundRemoteFunction",
+        schema,
+        _.asInstanceOf[UnboundRemoteFunction[A, B]],
+        _.asInstanceOf[Remote[B]],
+        _.isInstanceOf[UnboundRemoteFunction[_, _]]
+      )
   }
 
   type ===>[A, B] = UnboundRemoteFunction[A, B]
@@ -502,21 +559,35 @@ object Remote {
       Schema.defer {
         Schema.CaseClass3[Unbound[A], Remote[A], Remote[B], Bind[A, B]](
           typeId,
-          Schema.Field("unbound", Unbound.schema[A]),
-          Schema.Field("value", Remote.schema[A]),
-          Schema.Field("inner", Remote.schema[B]),
-          Bind.apply,
-          _.unbound,
-          _.value,
-          _.inner
+          Schema.Field(
+            "unbound",
+            Unbound.schema[A],
+            get0 = _.unbound,
+            set0 = (a: Bind[A, B], v: Unbound[A]) => a.copy(unbound = v)
+          ),
+          Schema.Field(
+            "value",
+            Remote.schema[A],
+            get0 = _.value,
+            set0 = (a: Bind[A, B], v: Remote[A]) => a.copy(value = v)
+          ),
+          Schema.Field(
+            "inner",
+            Remote.schema[B],
+            get0 = _.inner,
+            set0 = (a: Bind[A, B], v: Remote[B]) => a.copy(inner = v)
+          ),
+          Bind.apply
         )
       }
 
-    def schemaCase[A, B]: Schema.Case[Bind[A, B], Remote[B]] =
-      Schema.Case[Bind[A, B], Remote[B]](
+    def schemaCase[A, B]: Schema.Case[Remote[B], Bind[A, B]] =
+      Schema.Case(
         "Bind",
-        schema[A, B],
-        _.asInstanceOf[Bind[A, B]]
+        schema,
+        _.asInstanceOf[Bind[A, B]],
+        _.asInstanceOf[Remote[B]],
+        _.isInstanceOf[Bind[_, _]]
       )
   }
 
@@ -542,15 +613,29 @@ object Remote {
     def schema[In, Out]: Schema[Unary[In, Out]] =
       Schema.CaseClass2[Remote[In], UnaryOperators[In, Out], Unary[In, Out]](
         typeId,
-        Schema.Field("value", Schema.defer(Remote.schema[In])),
-        Schema.Field("operator", UnaryOperators.schema[In, Out]),
-        Unary.apply,
-        _.value,
-        _.operator
+        Schema.Field(
+          "value",
+          Schema.defer(Remote.schema[In]),
+          get0 = _.value,
+          set0 = (a: Unary[In, Out], v: Remote[In]) => a.copy(value = v)
+        ),
+        Schema.Field(
+          "operator",
+          UnaryOperators.schema[In, Out],
+          get0 = _.operator,
+          set0 = (a: Unary[In, Out], v: UnaryOperators[In, Out]) => a.copy(operator = v)
+        ),
+        Unary.apply
       )
 
-    def schemaCase[In, Out]: Schema.Case[Unary[In, Out], Remote[Out]] =
-      Schema.Case("Unary", schema, _.asInstanceOf[Unary[In, Out]])
+    def schemaCase[In, Out]: Schema.Case[Remote[Out], Unary[In, Out]] =
+      Schema.Case(
+        "Unary",
+        schema,
+        _.asInstanceOf[Unary[In, Out]],
+        _.asInstanceOf[Remote[Out]],
+        _.isInstanceOf[Unary[_, _]]
+      )
   }
 
   final case class Binary[In1, In2, Out](
@@ -577,17 +662,35 @@ object Remote {
     def schema[In1, In2, Out]: Schema[Binary[In1, In2, Out]] =
       Schema.CaseClass3[Remote[In1], Remote[In2], BinaryOperators[In1, In2, Out], Binary[In1, In2, Out]](
         typeId,
-        Schema.Field("left", Schema.defer(Remote.schema[In1])),
-        Schema.Field("right", Schema.defer(Remote.schema[In2])),
-        Schema.Field("operator", BinaryOperators.schema[In1, In2, Out]),
-        Binary.apply,
-        _.left,
-        _.right,
-        _.operator
+        Schema.Field(
+          "left",
+          Schema.defer(Remote.schema[In1]),
+          get0 = _.left,
+          set0 = (a: Binary[In1, In2, Out], v: Remote[In1]) => a.copy(left = v)
+        ),
+        Schema.Field(
+          "right",
+          Schema.defer(Remote.schema[In2]),
+          get0 = _.right,
+          set0 = (a: Binary[In1, In2, Out], v: Remote[In2]) => a.copy(right = v)
+        ),
+        Schema.Field(
+          "operator",
+          BinaryOperators.schema[In1, In2, Out],
+          get0 = _.operator,
+          set0 = (a: Binary[In1, In2, Out], v: BinaryOperators[In1, In2, Out]) => a.copy(operator = v)
+        ),
+        Binary.apply
       )
 
-    def schemaCase[In1, In2, Out]: Schema.Case[Binary[In1, In2, Out], Remote[Out]] =
-      Schema.Case("Binary", schema, _.asInstanceOf[Binary[In1, In2, Out]])
+    def schemaCase[In1, In2, Out]: Schema.Case[Remote[Out], Binary[In1, In2, Out]] =
+      Schema.Case(
+        "Binary",
+        schema,
+        _.asInstanceOf[Binary[In1, In2, Out]],
+        _.asInstanceOf[Remote[Out]],
+        _.isInstanceOf[Binary[_, _, _]]
+      )
   }
 
   final case class RemoteEither[A, B](
@@ -641,8 +744,14 @@ object Remote {
           )
       }
 
-    def schemaCase[A]: Schema.Case[RemoteEither[Any, Any], Remote[A]] =
-      Schema.Case("RemoteEither", schema[Any, Any], _.asInstanceOf[RemoteEither[Any, Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], RemoteEither[Any, Any]] =
+      Schema.Case(
+        "RemoteEither",
+        schema[Any, Any],
+        _.asInstanceOf[RemoteEither[Any, Any]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[RemoteEither[_, _]]
+      )
   }
 
   final case class FoldEither[A, B, C](
@@ -686,23 +795,41 @@ object Remote {
         FoldEither[A, B, C]
       ](
         typeId,
-        Schema.Field("either", Schema.defer(Remote.schema[Either[A, B]])),
-        Schema.Field("left", UnboundRemoteFunction.schema[A, C]),
-        Schema.Field("right", UnboundRemoteFunction.schema[B, C]),
+        Schema.Field(
+          "either",
+          Schema.defer(Remote.schema[Either[A, B]]),
+          get0 = _.either,
+          set0 = (a: FoldEither[A, B, C], v: Remote[Either[A, B]]) => a.copy(either = v)
+        ),
+        Schema.Field(
+          "left",
+          UnboundRemoteFunction.schema[A, C],
+          get0 = _.left,
+          set0 = (a: FoldEither[A, B, C], v: UnboundRemoteFunction[A, C]) => a.copy(left = v)
+        ),
+        Schema.Field(
+          "right",
+          UnboundRemoteFunction.schema[B, C],
+          get0 = _.right,
+          set0 = (a: FoldEither[A, B, C], v: UnboundRemoteFunction[B, C]) => a.copy(right = v)
+        ),
         { case (either, left, right) =>
           FoldEither(
             either,
             left,
             right
           )
-        },
-        _.either,
-        _.left,
-        _.right
+        }
       )
 
-    def schemaCase[A, B, C]: Schema.Case[FoldEither[A, B, C], Remote[C]] =
-      Schema.Case("FoldEither", schema[A, B, C], _.asInstanceOf[FoldEither[A, B, C]])
+    def schemaCase[A, B, C]: Schema.Case[Remote[C], FoldEither[A, B, C]] =
+      Schema.Case(
+        "FoldEither",
+        schema[A, B, C],
+        _.asInstanceOf[FoldEither[A, B, C]],
+        _.asInstanceOf[Remote[C]],
+        _.isInstanceOf[FoldEither[_, _, _]]
+      )
   }
 
   final case class Try[A](either: Either[Remote[Throwable], Remote[A]]) extends Remote[scala.util.Try[A]] {
@@ -764,8 +891,8 @@ object Remote {
           )
       )
 
-    def schemaCase[A]: Schema.Case[Try[Any], Remote[A]] =
-      Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], Try[Any]] =
+      Schema.Case("Try", schema[Any], _.asInstanceOf[Try[Any]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Try[_]])
   }
 
   // beginning of generated tuple constructors
@@ -779,6 +906,7 @@ object Remote {
 
   object Tuple2 extends RemoteTuple2.ConstructStatic[Tuple2] {
     def construct[T1, T2](t1: Remote[T1], t2: Remote[T2]): Tuple2[T1, T2] = Tuple2(t1, t2)
+    def checkInstance[A](remote: Remote[A]): Boolean                      = remote.isInstanceOf[Tuple2[_, _]]
   }
 
   final case class Tuple3[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3])
@@ -792,6 +920,7 @@ object Remote {
 
   object Tuple3 extends RemoteTuple3.ConstructStatic[Tuple3] {
     def construct[T1, T2, T3](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3]): Tuple3[T1, T2, T3] = Tuple3(t1, t2, t3)
+    def checkInstance[A](remote: Remote[A]): Boolean                                              = remote.isInstanceOf[Tuple3[_, _, _]]
   }
 
   final case class Tuple4[T1, T2, T3, T4](t1: Remote[T1], t2: Remote[T2], t3: Remote[T3], t4: Remote[T4])
@@ -810,6 +939,7 @@ object Remote {
       t3: Remote[T3],
       t4: Remote[T4]
     ): Tuple4[T1, T2, T3, T4] = Tuple4(t1, t2, t3, t4)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple4[_, _, _, _]]
   }
 
   final case class Tuple5[T1, T2, T3, T4, T5](
@@ -838,6 +968,7 @@ object Remote {
       t4: Remote[T4],
       t5: Remote[T5]
     ): Tuple5[T1, T2, T3, T4, T5] = Tuple5(t1, t2, t3, t4, t5)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple5[_, _, _, _, _]]
   }
 
   final case class Tuple6[T1, T2, T3, T4, T5, T6](
@@ -869,6 +1000,7 @@ object Remote {
       t5: Remote[T5],
       t6: Remote[T6]
     ): Tuple6[T1, T2, T3, T4, T5, T6] = Tuple6(t1, t2, t3, t4, t5, t6)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple6[_, _, _, _, _, _]]
   }
 
   final case class Tuple7[T1, T2, T3, T4, T5, T6, T7](
@@ -881,16 +1013,15 @@ object Remote {
     t7: Remote[T7]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7)]
       with RemoteTuple7.Construct[T1, T2, T3, T4, T5, T6, T7] {
-    override protected def substituteRec(f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7)] =
-      Tuple7(
-        t1.substitute(f),
-        t2.substitute(f),
-        t3.substitute(f),
-        t4.substitute(f),
-        t5.substitute(f),
-        t6.substitute(f),
-        t7.substitute(f)
-      )
+    override protected def substituteRec(f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7)] = Tuple7(
+      t1.substitute(f),
+      t2.substitute(f),
+      t3.substitute(f),
+      t4.substitute(f),
+      t5.substitute(f),
+      t6.substitute(f),
+      t7.substitute(f)
+    )
     override private[flow] val variableUsage = VariableUsage.none
       .union(t1.variableUsage)
       .union(t2.variableUsage)
@@ -911,6 +1042,7 @@ object Remote {
       t6: Remote[T6],
       t7: Remote[T7]
     ): Tuple7[T1, T2, T3, T4, T5, T6, T7] = Tuple7(t1, t2, t3, t4, t5, t6, t7)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple7[_, _, _, _, _, _, _]]
   }
 
   final case class Tuple8[T1, T2, T3, T4, T5, T6, T7, T8](
@@ -924,9 +1056,7 @@ object Remote {
     t8: Remote[T8]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8)]
       with RemoteTuple8.Construct[T1, T2, T3, T4, T5, T6, T7, T8] {
-    override protected def substituteRec(
-      f: Remote.Substitutions
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] = Tuple8(
+    override protected def substituteRec(f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7, T8)] = Tuple8(
       t1.substitute(f),
       t2.substitute(f),
       t3.substitute(f),
@@ -958,6 +1088,7 @@ object Remote {
       t7: Remote[T7],
       t8: Remote[T8]
     ): Tuple8[T1, T2, T3, T4, T5, T6, T7, T8] = Tuple8(t1, t2, t3, t4, t5, t6, t7, t8)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple8[_, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9](
@@ -972,19 +1103,18 @@ object Remote {
     t9: Remote[T9]
   ) extends Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)]
       with RemoteTuple9.Construct[T1, T2, T3, T4, T5, T6, T7, T8, T9] {
-    override protected def substituteRec(
-      f: Remote.Substitutions
-    ): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] = Tuple9(
-      t1.substitute(f),
-      t2.substitute(f),
-      t3.substitute(f),
-      t4.substitute(f),
-      t5.substitute(f),
-      t6.substitute(f),
-      t7.substitute(f),
-      t8.substitute(f),
-      t9.substitute(f)
-    )
+    override protected def substituteRec(f: Remote.Substitutions): Remote[(T1, T2, T3, T4, T5, T6, T7, T8, T9)] =
+      Tuple9(
+        t1.substitute(f),
+        t2.substitute(f),
+        t3.substitute(f),
+        t4.substitute(f),
+        t5.substitute(f),
+        t6.substitute(f),
+        t7.substitute(f),
+        t8.substitute(f),
+        t9.substitute(f)
+      )
     override private[flow] val variableUsage = VariableUsage.none
       .union(t1.variableUsage)
       .union(t2.variableUsage)
@@ -1009,6 +1139,7 @@ object Remote {
       t8: Remote[T8],
       t9: Remote[T9]
     ): Tuple9[T1, T2, T3, T4, T5, T6, T7, T8, T9] = Tuple9(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple9[_, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10](
@@ -1064,6 +1195,7 @@ object Remote {
       t9: Remote[T9],
       t10: Remote[T10]
     ): Tuple10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10] = Tuple10(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple10[_, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11](
@@ -1123,6 +1255,7 @@ object Remote {
       t10: Remote[T10],
       t11: Remote[T11]
     ): Tuple11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11] = Tuple11(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple11[_, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12](
@@ -1187,6 +1320,7 @@ object Remote {
       t12: Remote[T12]
     ): Tuple12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12] =
       Tuple12(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12)
+    def checkInstance[A](remote: Remote[A]): Boolean = remote.isInstanceOf[Tuple12[_, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13](
@@ -1255,6 +1389,8 @@ object Remote {
       t13: Remote[T13]
     ): Tuple13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13] =
       Tuple13(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple13[_, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14](
@@ -1327,6 +1463,8 @@ object Remote {
       t14: Remote[T14]
     ): Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] =
       Tuple14(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple14[_, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15](
@@ -1403,6 +1541,8 @@ object Remote {
       t15: Remote[T15]
     ): Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15] =
       Tuple15(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16](
@@ -1483,6 +1623,8 @@ object Remote {
       t16: Remote[T16]
     ): Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16] =
       Tuple16(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17](
@@ -1567,6 +1709,8 @@ object Remote {
       t17: Remote[T17]
     ): Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17] =
       Tuple17(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18](
@@ -1655,6 +1799,8 @@ object Remote {
       t18: Remote[T18]
     ): Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18] =
       Tuple18(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19](
@@ -1767,6 +1913,8 @@ object Remote {
       t19: Remote[T19]
     ): Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19] =
       Tuple19(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20](
@@ -1884,6 +2032,8 @@ object Remote {
       t20: Remote[T20]
     ): Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20] =
       Tuple20(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple21[
@@ -2029,6 +2179,8 @@ object Remote {
       t21: Remote[T21]
     ): Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21] =
       Tuple21(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
 
   final case class Tuple22[
@@ -2182,6 +2334,8 @@ object Remote {
       t22: Remote[T22]
     ): Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22] =
       Tuple22(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22)
+    def checkInstance[A](remote: Remote[A]): Boolean =
+      remote.isInstanceOf[Tuple22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
   }
   // end of generated tuple constructors
 
@@ -2230,18 +2384,21 @@ object Remote {
       Schema.defer(
         Schema.CaseClass3[Remote[T], Int, Int, TupleAccess[T, A]](
           typeId,
-          Schema.Field("tuple", Remote.schema[T]),
-          Schema.Field("n", Schema[Int]),
-          Schema.Field("arity", Schema[Int]),
-          TupleAccess(_, _, _),
-          _.tuple,
-          _.n,
-          _.arity
+          Schema.Field("tuple", Remote.schema[T], get0 = _.tuple, set0 = (o, v) => o.copy(tuple = v)),
+          Schema.Field("n", Schema[Int], get0 = _.n, set0 = (o, v) => o.copy(n = v)),
+          Schema.Field("arity", Schema[Int], get0 = _.arity, set0 = (o, v) => o.copy(arity = v)),
+          TupleAccess(_, _, _)
         )
       )
 
-    def schemaCase[A]: Schema.Case[TupleAccess[Any, A], Remote[A]] =
-      Schema.Case("TupleAccess", schema[Any, A], _.asInstanceOf[TupleAccess[Any, A]])
+    def schemaCase[A]: Schema.Case[Remote[A], TupleAccess[Any, A]] =
+      Schema.Case(
+        "TupleAccess",
+        schema[Any, A],
+        _.asInstanceOf[TupleAccess[Any, A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[TupleAccess[_, _]]
+      )
   }
 
   final case class Branch[A](predicate: Remote[Boolean], ifTrue: Remote[A], ifFalse: Remote[A]) extends Remote[A] {
@@ -2270,18 +2427,15 @@ object Remote {
       Schema.defer(
         Schema.CaseClass3[Remote[Boolean], Remote[A], Remote[A], Branch[A]](
           typeId,
-          Schema.Field("predicate", Remote.schema[Boolean]),
-          Schema.Field("ifTrue", Remote.schema[A]),
-          Schema.Field("ifFalse", Remote.schema[A]),
-          { case (predicate, ifTrue, ifFalse) => Branch(predicate, ifTrue, ifFalse) },
-          _.predicate,
-          _.ifTrue,
-          _.ifFalse
+          Schema.Field("predicate", Remote.schema[Boolean], get0 = _.predicate, set0 = (o, v) => o.copy(predicate = v)),
+          Schema.Field("ifTrue", Remote.schema[A], get0 = _.ifTrue, set0 = (o, v) => o.copy(ifTrue = v)),
+          Schema.Field("ifFalse", Remote.schema[A], get0 = _.ifFalse, set0 = (o, v) => o.copy(ifFalse = v)),
+          { case (predicate, ifTrue, ifFalse) => Branch(predicate, ifTrue, ifFalse) }
         )
       )
 
-    def schemaCase[A]: Schema.Case[Branch[A], Remote[A]] =
-      Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Branch[A]] =
+      Schema.Case("Branch", schema[A], _.asInstanceOf[Branch[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Branch[_]])
   }
 
   case class StringToCharList(remoteString: Remote[String]) extends Remote[List[Char]] {
@@ -2307,8 +2461,14 @@ object Remote {
         )
     )
 
-    def schemaCase[A]: Schema.Case[StringToCharList, Remote[A]] =
-      Schema.Case("StringToCharList", schema, _.asInstanceOf[StringToCharList])
+    def schemaCase[A]: Schema.Case[Remote[A], StringToCharList] =
+      Schema.Case(
+        "StringToCharList",
+        schema,
+        _.asInstanceOf[StringToCharList],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[StringToCharList]
+      )
   }
 
   case class CharListToString(remoteString: Remote[List[Char]]) extends Remote[String] {
@@ -2334,8 +2494,14 @@ object Remote {
         )
     )
 
-    def schemaCase[A]: Schema.Case[CharListToString, Remote[A]] =
-      Schema.Case("CharListToString", schema, _.asInstanceOf[CharListToString])
+    def schemaCase[A]: Schema.Case[Remote[A], CharListToString] =
+      Schema.Case(
+        "CharListToString",
+        schema,
+        _.asInstanceOf[CharListToString],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[CharListToString]
+      )
   }
 
   final case class Equal[A](left: Remote[A], right: Remote[A]) extends Remote[Boolean] {
@@ -2360,16 +2526,14 @@ object Remote {
       Schema.defer(
         Schema.CaseClass2[Remote[A], Remote[A], Equal[A]](
           typeId,
-          Schema.Field("left", Remote.schema[A]),
-          Schema.Field("right", Remote.schema[A]),
-          { case (left, right) => Equal(left, right) },
-          _.left,
-          _.right
+          Schema.Field("left", Remote.schema[A], get0 = _.left, set0 = (o, v) => o.copy(left = v)),
+          Schema.Field("right", Remote.schema[A], get0 = _.right, set0 = (o, v) => o.copy(right = v)),
+          { case (left, right) => Equal(left, right) }
         )
       )
 
-    def schemaCase[A]: Schema.Case[Equal[Any], Remote[A]] =
-      Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], Equal[Any]] =
+      Schema.Case("Equal", schema[Any], _.asInstanceOf[Equal[Any]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Equal[_]])
   }
 
   final case class Fold[A, B](list: Remote[List[A]], initial: Remote[B], body: UnboundRemoteFunction[(B, A), B])
@@ -2419,18 +2583,26 @@ object Remote {
       Schema.defer(
         Schema.CaseClass3[Remote[List[A]], Remote[B], UnboundRemoteFunction[(B, A), B], Fold[A, B]](
           typeId,
-          Schema.Field("list", Remote.schema[List[A]]),
-          Schema.Field("initial", Remote.schema[B]),
-          Schema.Field("body", UnboundRemoteFunction.schema[(B, A), B]),
-          { case (list, initial, body) => Fold(list, initial, body) },
-          _.list,
-          _.initial,
-          _.body
+          Schema.Field("list", Remote.schema[List[A]], get0 = _.list, set0 = (o, v) => o.copy(list = v)),
+          Schema.Field("initial", Remote.schema[B], get0 = _.initial, set0 = (o, v) => o.copy(initial = v)),
+          Schema.Field(
+            "body",
+            UnboundRemoteFunction.schema[(B, A), B],
+            get0 = _.body,
+            set0 = (o, v) => o.copy(body = v)
+          ),
+          { case (list, initial, body) => Fold(list, initial, body) }
         )
       )
 
-    def schemaCase[A]: Schema.Case[Fold[Any, A], Remote[A]] =
-      Schema.Case("Fold", schema[Any, A], _.asInstanceOf[Fold[Any, A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Fold[Any, A]] =
+      Schema.Case(
+        "Fold",
+        schema[Any, A],
+        _.asInstanceOf[Fold[Any, A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[Fold[_, _]]
+      )
   }
 
   final case class Cons[A](list: Remote[List[A]], head: Remote[A]) extends Remote[List[A]] {
@@ -2462,16 +2634,14 @@ object Remote {
       Schema.defer(
         Schema.CaseClass2[Remote[List[A]], Remote[A], Cons[A]](
           typeId,
-          Schema.Field("list", Remote.schema[List[A]]),
-          Schema.Field("head", Remote.schema[A]),
-          Cons.apply,
-          _.list,
-          _.head
+          Schema.Field("list", Remote.schema[List[A]], get0 = _.list, set0 = (o, v) => o.copy(list = v)),
+          Schema.Field("head", Remote.schema[A], get0 = _.head, set0 = (o, v) => o.copy(head = v)),
+          Cons.apply
         )
       )
 
-    def schemaCase[A]: Schema.Case[Cons[A], Remote[A]] =
-      Schema.Case("Cons", schema[A], _.asInstanceOf[Cons[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Cons[A]] =
+      Schema.Case("Cons", schema[A], _.asInstanceOf[Cons[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Cons[_]])
   }
 
   final case class UnCons[A](list: Remote[List[A]]) extends Remote[Option[(A, List[A])]] {
@@ -2513,8 +2683,8 @@ object Remote {
         )
     )
 
-    def schemaCase[A]: Schema.Case[UnCons[A], Remote[A]] =
-      Schema.Case("UnCons", schema[A], _.asInstanceOf[UnCons[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], UnCons[A]] =
+      Schema.Case("UnCons", schema[A], _.asInstanceOf[UnCons[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[UnCons[_]])
   }
 
   final case class DurationFromAmount(amount: Remote[Long], temporalUnit: Remote[ChronoUnit]) extends Remote[Duration] {
@@ -2539,16 +2709,25 @@ object Remote {
       Schema.defer(
         Schema.CaseClass2[Remote[Long], Remote[ChronoUnit], DurationFromAmount](
           typeId,
-          Schema.Field("amount", Remote.schema[Long]),
-          Schema.Field("temporalUnit", Remote.schema[ChronoUnit]),
-          DurationFromAmount.apply,
-          _.amount,
-          _.temporalUnit
+          Schema.Field("amount", Remote.schema[Long], get0 = _.amount, set0 = (o, v) => o.copy(amount = v)),
+          Schema.Field(
+            "temporalUnit",
+            Remote.schema[ChronoUnit],
+            get0 = _.temporalUnit,
+            set0 = (o, v) => o.copy(temporalUnit = v)
+          ),
+          DurationFromAmount.apply
         )
       )
 
-    def schemaCase[A]: Schema.Case[DurationFromAmount, Remote[A]] =
-      Schema.Case("DurationFromAmount", schema, _.asInstanceOf[DurationFromAmount])
+    def schemaCase[A]: Schema.Case[Remote[A], DurationFromAmount] =
+      Schema.Case(
+        "DurationFromAmount",
+        schema,
+        _.asInstanceOf[DurationFromAmount],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[DurationFromAmount]
+      )
   }
 
   final case class Lazy[A](value: () => Remote[A]) extends Remote[A] {
@@ -2566,8 +2745,8 @@ object Remote {
     def schema[A]: Schema[Lazy[A]] =
       Schema.defer(Remote.schema[A].transform((a: Remote[A]) => Lazy(() => a), _.value()))
 
-    def schemaCase[A]: Schema.Case[Lazy[A], Remote[A]] =
-      Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], Lazy[A]] =
+      Schema.Case("Lazy", schema, _.asInstanceOf[Lazy[A]], _.asInstanceOf[Remote[A]], _.isInstanceOf[Lazy[_]])
   }
 
   final case class RemoteSome[A](value: Remote[A]) extends Remote[Option[A]] {
@@ -2587,8 +2766,14 @@ object Remote {
     def schema[A]: Schema[RemoteSome[A]] =
       Schema.defer(Remote.schema[A].transform(RemoteSome(_), _.value))
 
-    def schemaCase[A]: Schema.Case[RemoteSome[A], Remote[A]] =
-      Schema.Case("RemoteSome", schema, _.asInstanceOf[RemoteSome[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], RemoteSome[A]] =
+      Schema.Case(
+        "RemoteSome",
+        schema,
+        _.asInstanceOf[RemoteSome[A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[RemoteSome[_]]
+      )
   }
 
   final case class FoldOption[A, B](
@@ -2629,18 +2814,26 @@ object Remote {
       Schema.defer(
         Schema.CaseClass3[Remote[Option[A]], Remote[B], UnboundRemoteFunction[A, B], FoldOption[A, B]](
           typeId,
-          Schema.Field("option", Remote.schema[Option[A]]),
-          Schema.Field("ifEmpty", Remote.schema[B]),
-          Schema.Field("ifNonEmpty", UnboundRemoteFunction.schema[A, B]),
-          FoldOption.apply,
-          _.option,
-          _.ifEmpty,
-          _.ifNonEmpty
+          Schema.Field("option", Remote.schema[Option[A]], get0 = _.option, set0 = (o, v) => o.copy(option = v)),
+          Schema.Field("ifEmpty", Remote.schema[B], get0 = _.ifEmpty, set0 = (o, v) => o.copy(ifEmpty = v)),
+          Schema.Field(
+            "ifNonEmpty",
+            UnboundRemoteFunction.schema[A, B],
+            get0 = _.ifNonEmpty,
+            set0 = (o, v) => o.copy(ifNonEmpty = v)
+          ),
+          FoldOption.apply
         )
       )
 
-    def schemaCase[A]: Schema.Case[FoldOption[Any, A], Remote[A]] =
-      Schema.Case("FoldOption", schema, _.asInstanceOf[FoldOption[Any, A]])
+    def schemaCase[A]: Schema.Case[Remote[A], FoldOption[Any, A]] =
+      Schema.Case(
+        "FoldOption",
+        schema,
+        _.asInstanceOf[FoldOption[Any, A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[FoldOption[_, _]]
+      )
   }
 
   final case class Recurse[A, B](
@@ -2678,18 +2871,21 @@ object Remote {
         Schema
           .CaseClass3[RecursionId, Remote[A], UnboundRemoteFunction[A, B], Recurse[A, B]](
             typeId,
-            Schema.Field("id", Schema[RecursionId]),
-            Schema.Field("initial", Remote.schema[A]),
-            Schema.Field("body", UnboundRemoteFunction.schema[A, B]),
-            Recurse(_, _, _),
-            _.id,
-            _.initial,
-            _.body
+            Schema.Field("id", Schema[RecursionId], get0 = _.id, set0 = (o, v) => o.copy(id = v)),
+            Schema.Field("initial", Remote.schema[A], get0 = _.initial, set0 = (o, v) => o.copy(initial = v)),
+            Schema.Field("body", UnboundRemoteFunction.schema[A, B], get0 = _.body, set0 = (o, v) => o.copy(body = v)),
+            Recurse(_, _, _)
           )
       }
 
-    def schemaCase[A, B]: Schema.Case[Recurse[A, B], Remote[B]] =
-      Schema.Case("Recurse", schema, _.asInstanceOf[Recurse[A, B]])
+    def schemaCase[A, B]: Schema.Case[Remote[B], Recurse[A, B]] =
+      Schema.Case(
+        "Recurse",
+        schema,
+        _.asInstanceOf[Recurse[A, B]],
+        _.asInstanceOf[Remote[B]],
+        _.isInstanceOf[Recurse[_, _]]
+      )
   }
 
   final case class RecurseWith[A, B](id: RecursionId, value: Remote[A]) extends Remote[B] {
@@ -2723,16 +2919,20 @@ object Remote {
       Schema.defer {
         Schema.CaseClass2[RecursionId, Remote[A], RecurseWith[A, B]](
           typeId,
-          Schema.Field("id", Schema[RecursionId]),
-          Schema.Field("value", Remote.schema[A]),
-          RecurseWith(_, _),
-          _.id,
-          _.value
+          Schema.Field("id", Schema[RecursionId], get0 = _.id, set0 = (o, v) => o.copy(id = v)),
+          Schema.Field("value", Remote.schema[A], get0 = _.value, set0 = (o, v) => o.copy(value = v)),
+          RecurseWith(_, _)
         )
       }
 
-    def schemaCase[A, B]: Schema.Case[RecurseWith[A, B], Remote[B]] =
-      Schema.Case("RecurseWith", schema, _.asInstanceOf[RecurseWith[A, B]])
+    def schemaCase[A, B]: Schema.Case[Remote[B], RecurseWith[A, B]] =
+      Schema.Case(
+        "RecurseWith",
+        schema,
+        _.asInstanceOf[RecurseWith[A, B]],
+        _.asInstanceOf[Remote[B]],
+        _.isInstanceOf[RecurseWith[_, _]]
+      )
   }
 
   final case class ListToSet[A](list: Remote[List[A]]) extends Remote[Set[A]] {
@@ -2759,8 +2959,14 @@ object Remote {
     def schema[A]: Schema[ListToSet[A]] =
       Schema.defer(Remote.schema[List[A]].transform(ListToSet(_), _.list))
 
-    def schemaCase[A]: Schema.Case[ListToSet[A], Remote[A]] =
-      Schema.Case("ListToSet", schema, _.asInstanceOf[ListToSet[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], ListToSet[A]] =
+      Schema.Case(
+        "ListToSet",
+        schema,
+        _.asInstanceOf[ListToSet[A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[ListToSet[_]]
+      )
   }
 
   final case class SetToList[A](set: Remote[Set[A]]) extends Remote[List[A]] {
@@ -2787,8 +2993,14 @@ object Remote {
     def schema[A]: Schema[SetToList[A]] =
       Schema.defer(Remote.schema[Set[A]].transform(SetToList(_), _.set))
 
-    def schemaCase[A]: Schema.Case[SetToList[A], Remote[A]] =
-      Schema.Case("SetToList", schema, _.asInstanceOf[SetToList[A]])
+    def schemaCase[A]: Schema.Case[Remote[A], SetToList[A]] =
+      Schema.Case(
+        "SetToList",
+        schema,
+        _.asInstanceOf[SetToList[A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[SetToList[_]]
+      )
   }
 
   final case class ListToString(
@@ -2822,20 +3034,22 @@ object Remote {
       Schema.defer(
         Schema.CaseClass4[Remote[List[String]], Remote[String], Remote[String], Remote[String], ListToString](
           typeId,
-          Schema.Field("list", Remote.schema[List[String]]),
-          Schema.Field("start", Remote.schema[String]),
-          Schema.Field("sep", Remote.schema[String]),
-          Schema.Field("end", Remote.schema[String]),
-          ListToString(_, _, _, _),
-          _.list,
-          _.start,
-          _.sep,
-          _.end
+          Schema.Field("list", Remote.schema[List[String]], get0 = _.list, set0 = (o, v) => o.copy(list = v)),
+          Schema.Field("start", Remote.schema[String], get0 = _.start, set0 = (o, v) => o.copy(start = v)),
+          Schema.Field("sep", Remote.schema[String], get0 = _.sep, set0 = (o, v) => o.copy(sep = v)),
+          Schema.Field("end", Remote.schema[String], get0 = _.end, set0 = (o, v) => o.copy(end = v)),
+          ListToString(_, _, _, _)
         )
       )
 
-    def schemaCase[A]: Schema.Case[ListToString, Remote[A]] =
-      Schema.Case("ListToString", schema, _.asInstanceOf[ListToString])
+    def schemaCase[A]: Schema.Case[Remote[A], ListToString] =
+      Schema.Case(
+        "ListToString",
+        schema,
+        _.asInstanceOf[ListToString],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[ListToString]
+      )
   }
 
   final case class ListToMap[K, V](list: Remote[List[(K, V)]]) extends Remote[Map[K, V]] {
@@ -2872,8 +3086,14 @@ object Remote {
     def schema[K, V]: Schema[ListToMap[K, V]] =
       Schema.defer(Remote.schema[List[(K, V)]].transform(ListToMap(_), _.list))
 
-    def schemaCase[A]: Schema.Case[ListToMap[Any, Any], Remote[A]] =
-      Schema.Case("ListToMap", schema, _.asInstanceOf[ListToMap[Any, Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], ListToMap[Any, Any]] =
+      Schema.Case(
+        "ListToMap",
+        schema,
+        _.asInstanceOf[ListToMap[Any, Any]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[ListToMap[_, _]]
+      )
   }
 
   final case class MapToList[K, V](set: Remote[Map[K, V]]) extends Remote[List[(K, V)]] {
@@ -2902,8 +3122,14 @@ object Remote {
     def schema[K, V]: Schema[MapToList[K, V]] =
       Schema.defer(Remote.schema[Map[K, V]].transform(MapToList(_), _.set))
 
-    def schemaCase[A]: Schema.Case[MapToList[Any, Any], Remote[A]] =
-      Schema.Case("MapToList", schema, _.asInstanceOf[MapToList[Any, Any]])
+    def schemaCase[A]: Schema.Case[Remote[A], MapToList[Any, Any]] =
+      Schema.Case(
+        "MapToList",
+        schema,
+        _.asInstanceOf[MapToList[Any, Any]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[MapToList[_, _]]
+      )
   }
 
   final case class OpticGet[S, A, R](optic: RemoteOptic[S, A], value: Remote[S]) extends Remote[R] {
@@ -2978,16 +3204,20 @@ object Remote {
       Schema.defer(
         Schema.CaseClass2[RemoteOptic[S, A], Remote[S], OpticGet[S, A, R]](
           typeId,
-          Schema.Field("optic", RemoteOptic.schema[S, A]),
-          Schema.Field("value", Remote.schema[S]),
-          OpticGet(_, _),
-          _.optic,
-          _.value
+          Schema.Field("optic", RemoteOptic.schema[S, A], get0 = _.optic, set0 = (o, v) => o.copy(optic = v)),
+          Schema.Field("value", Remote.schema[S], get0 = _.value, set0 = (o, v) => o.copy(value = v)),
+          OpticGet(_, _)
         )
       )
 
-    def schemaCase[A]: Schema.Case[OpticGet[Any, Any, A], Remote[A]] =
-      Schema.Case("OpticGet", schema, _.asInstanceOf[OpticGet[Any, Any, A]])
+    def schemaCase[A]: Schema.Case[Remote[A], OpticGet[Any, Any, A]] =
+      Schema.Case(
+        "OpticGet",
+        schema,
+        _.asInstanceOf[OpticGet[Any, Any, A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[OpticGet[_, _, _]]
+      )
   }
 
   final case class OpticSet[S, A, V, R](optic: RemoteOptic[S, A], on: Remote[S], value: Remote[V]) extends Remote[R] {
@@ -3076,18 +3306,21 @@ object Remote {
       Schema.defer(
         Schema.CaseClass3[RemoteOptic[S, A], Remote[S], Remote[V], OpticSet[S, A, V, R]](
           typeId,
-          Schema.Field("optic", RemoteOptic.schema[S, A]),
-          Schema.Field("on", Remote.schema[S]),
-          Schema.Field("value", Remote.schema[V]),
-          OpticSet(_, _, _),
-          _.optic,
-          _.on,
-          _.value
+          Schema.Field("optic", RemoteOptic.schema[S, A], get0 = _.optic, set0 = (o, v) => o.copy(optic = v)),
+          Schema.Field("on", Remote.schema[S], get0 = _.on, set0 = (o, v) => o.copy(on = v)),
+          Schema.Field("value", Remote.schema[V], get0 = _.value, set0 = (o, v) => o.copy(value = v)),
+          OpticSet(_, _, _)
         )
       )
 
-    def schemaCase[A]: Schema.Case[OpticSet[Any, Any, Any, A], Remote[A]] =
-      Schema.Case("OpticSet", schema, _.asInstanceOf[OpticSet[Any, Any, Any, A]])
+    def schemaCase[A]: Schema.Case[Remote[A], OpticSet[Any, Any, Any, A]] =
+      Schema.Case(
+        "OpticSet",
+        schema,
+        _.asInstanceOf[OpticSet[Any, Any, Any, A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[OpticSet[_, _, _, _]]
+      )
   }
 
   case class EvaluatedRemoteFunction[-A, +B](result: DynamicValue) extends AnyVal

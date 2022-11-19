@@ -90,6 +90,7 @@ object RemoteTupleGenerator extends AutoPlugin {
 
       q"""trait $name[Self[..${model.typeParamPlaceholders}] <: Construct[..${model.typeParamPlaceholderTypes}] with Remote[_]] {
           def construct[..${model.typeParams}](..${model.paramDefs}): Self[..${model.typeParamTypes}]
+          def checkInstance[A](remote: Remote[A]): Boolean
           def schema[..${model.typeParams}]: Schema[Self[..${model.typeParamTypes}]] =
             Schema.defer(
               Schema
@@ -104,7 +105,7 @@ object RemoteTupleGenerator extends AutoPlugin {
             )
 
             def schemaCase[A]: Schema.Case[Remote[A], $anySelfType] =
-              Schema.Case(${model.tupleLit}, schema[..$anyTypeParams], _.asInstanceOf[$anySelfType], x => x.asInstanceOf[Remote[A]], _.isInstanceOf[$anySelfType])
+              Schema.Case(${model.tupleLit}, schema[..$anyTypeParams], _.asInstanceOf[$anySelfType], _.asInstanceOf[Remote[A]], checkInstance)
        }
        """
     }
@@ -151,6 +152,7 @@ object RemoteTupleGenerator extends AutoPlugin {
         case (expr, (t, i)) =>
           q"""$expr.union(${Term.Name(s"t${i + 1}")}.variableUsage)"""
       }
+      val holeParams: List[Type] = model.typeParamTypes.map(t => t"_")
 
       List(
         q"""
@@ -158,7 +160,7 @@ object RemoteTupleGenerator extends AutoPlugin {
         extends Remote[${model.appliedTupleType}]
         with ${Init(appliedConstructType, Name.Anonymous(), Nil)} {
         
-          override protected def substituteRec[B](f: Remote.Substitutions): Remote[${model.appliedTupleType}] =
+          override protected def substituteRec(f: Remote.Substitutions): Remote[${model.appliedTupleType}] =
             $name(..$substitutions)
 
           override private[flow] val variableUsage = $variableUsageUnion
@@ -168,6 +170,9 @@ object RemoteTupleGenerator extends AutoPlugin {
       object $name extends ${Init(appliedConstructStaticType, Name.Anonymous(), Nil)} {
         def construct[..${model.typeParams}](..${model.paramDefs}): $typ[..${model.typeParamTypes}] =
           $name(..${model.paramRefs})
+
+        def checkInstance[A](remote: Remote[A]): Boolean =
+          remote.isInstanceOf[$typ[..$holeParams]]
       }
       """
       )

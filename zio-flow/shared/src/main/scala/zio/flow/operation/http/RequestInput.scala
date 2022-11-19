@@ -60,17 +60,20 @@ object RequestInput {
     def schema[A, B, C] =
       Schema.CaseClass3[RequestInput[A], RequestInput[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
         typeId,
-        Schema.Field("left", Schema.defer(RequestInput.schema[A])),
-        Schema.Field("right", Schema.defer(RequestInput.schema[B])),
-        Schema.Field("zipper", Zipper.schema[A, B, C]),
-        ZipWith(_, _, _),
-        _.left,
-        _.right,
-        _.zipper
+        Schema.Field("left", Schema.defer(RequestInput.schema[A]), get0 = _.left, set0 = (a, b) => a.copy(left = b)),
+        Schema.Field("right", Schema.defer(RequestInput.schema[B]), get0 = _.right, set0 = (a, b) => a.copy(right = b)),
+        Schema.Field("zipper", Zipper.schema[A, B, C], get0 = _.zipper, set0 = (a, b) => a.copy(zipper = b)),
+        ZipWith(_, _, _)
       )
 
-    def schemaCase[A]: Schema.Case[ZipWith[Any, Any, Any], RequestInput[A]] =
-      Schema.Case("ZipWith", schema[Any, Any, Any], _.asInstanceOf[ZipWith[Any, Any, Any]])
+    def schemaCase[A]: Schema.Case[RequestInput[A], ZipWith[Any, Any, Any]] =
+      Schema.Case(
+        "ZipWith",
+        schema[Any, Any, Any],
+        _.asInstanceOf[ZipWith[Any, Any, Any]],
+        _.asInstanceOf[RequestInput[A]],
+        _.isInstanceOf[ZipWith[_, _, _]]
+      )
   }
 
 }
@@ -106,8 +109,14 @@ object Header {
       .:+:(Optional.schemaCase[A])
   )
 
-  def schemaCase[A]: Schema.Case[Header[A], RequestInput[A]] =
-    Schema.Case("Header", schema[A], _.asInstanceOf[Header[A]])
+  def schemaCase[A]: Schema.Case[RequestInput[A], Header[A]] =
+    Schema.Case(
+      "Header",
+      schema[A],
+      _.asInstanceOf[Header[A]],
+      _.asInstanceOf[RequestInput[A]],
+      _.isInstanceOf[Header[A]]
+    )
 
   private[flow] final case class SingleHeader[A](name: String, override val schema: Schema[A]) extends Header[A]
   object SingleHeader {
@@ -115,15 +124,24 @@ object Header {
 
     def schema[A]: Schema[SingleHeader[A]] = Schema.CaseClass2[String, FlowSchemaAst, SingleHeader[A]](
       typeId,
-      Schema.Field("name", Schema[String]),
-      Schema.Field("schema", FlowSchemaAst.schema),
-      (name, schema) => SingleHeader(name, schema.toSchema[A]),
-      _.name,
-      header => FlowSchemaAst.fromSchema(header.schema)
+      Schema.Field("name", Schema[String], get0 = _.name, set0 = (a, b) => a.copy(name = b)),
+      Schema.Field(
+        "schema",
+        FlowSchemaAst.schema,
+        get0 = header => FlowSchemaAst.fromSchema(header.schema),
+        set0 = (a, b) => a.copy(schema = b.toSchema)
+      ),
+      (name, schema) => SingleHeader(name, schema.toSchema[A])
     )
 
-    def schemaCase[A]: Schema.Case[SingleHeader[A], Header[A]] =
-      Schema.Case("SingleHeader", schema[A], _.asInstanceOf[SingleHeader[A]])
+    def schemaCase[A]: Schema.Case[Header[A], SingleHeader[A]] =
+      Schema.Case(
+        "SingleHeader",
+        schema[A],
+        _.asInstanceOf[SingleHeader[A]],
+        _.asInstanceOf[Header[A]],
+        _.isInstanceOf[SingleHeader[A]]
+      )
   }
 
   private[flow] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
@@ -138,17 +156,20 @@ object Header {
     def schema[A, B, C] =
       Schema.CaseClass3[Header[A], Header[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
         typeId,
-        Schema.Field("left", Schema.defer(Header.schema[A])),
-        Schema.Field("right", Schema.defer(Header.schema[B])),
-        Schema.Field("zipper", Zipper.schema[A, B, C]),
-        ZipWith(_, _, _),
-        _.left,
-        _.right,
-        _.zipper
+        Schema.Field("left", Schema.defer(Header.schema[A]), get0 = _.left, set0 = (a, b) => a.copy(left = b)),
+        Schema.Field("right", Schema.defer(Header.schema[B]), get0 = _.right, set0 = (a, b) => a.copy(right = b)),
+        Schema.Field("zipper", Zipper.schema[A, B, C], get0 = _.zipper, set0 = (a, b) => a.copy(zipper = b)),
+        ZipWith(_, _, _)
       )
 
-    def schemaCase[A]: Schema.Case[ZipWith[Any, Any, Any], Header[A]] =
-      Schema.Case("ZipWith", schema[Any, Any, Any], _.asInstanceOf[ZipWith[Any, Any, Any]])
+    def schemaCase[A]: Schema.Case[Header[A], ZipWith[Any, Any, Any]] =
+      Schema.Case(
+        "ZipWith",
+        schema[Any, Any, Any],
+        _.asInstanceOf[ZipWith[Any, Any, Any]],
+        _.asInstanceOf[Header[A]],
+        _.isInstanceOf[ZipWith[_, _, _]]
+      )
 
   }
 
@@ -159,15 +180,20 @@ object Header {
   object Optional {
     private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Header.Optional")
 
-    def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
+    def schema[A]: Schema[Optional[A]] = Schema.CaseClass1[Header[A], Optional[A]](
       typeId,
-      Schema.Field("headers", Schema.defer(Header.schema[A])),
-      Optional.apply,
-      _.headers
+      Schema.Field("headers", Schema.defer(Header.schema[A]), get0 = _.headers, set0 = (a, b) => a.copy(headers = b)),
+      Optional(_)
     )
 
-    def schemaCase[A]: Schema.Case[Optional[A], Header[A]] =
-      Schema.Case("Optional", schema[A], _.asInstanceOf[Optional[A]])
+    def schemaCase[A]: Schema.Case[Header[A], Optional[A]] =
+      Schema.Case(
+        "Optional",
+        schema[A],
+        _.asInstanceOf[Optional[A]],
+        _.asInstanceOf[Header[A]],
+        _.isInstanceOf[Optional[_]]
+      )
   }
 }
 
@@ -180,15 +206,18 @@ object Body {
 
   def schema[A]: Schema[Body[A]] = Schema.CaseClass2[FlowSchemaAst, ContentType, Body[A]](
     typeId,
-    Schema.Field("schema", FlowSchemaAst.schema),
-    Schema.Field("contentType", Schema[ContentType]),
-    (ast, contentType) => Body(ast.toSchema[A], contentType),
-    s => FlowSchemaAst.fromSchema(s.schema),
-    _.contentType
+    Schema.Field(
+      "schema",
+      FlowSchemaAst.schema,
+      get0 = body => FlowSchemaAst.fromSchema(body.schema),
+      set0 = (a, b) => a.copy(schema = b.toSchema)
+    ),
+    Schema.Field("contentType", Schema[ContentType], get0 = _.contentType, set0 = (a, b) => a.copy(contentType = b)),
+    (ast, contentType) => Body(ast.toSchema[A], contentType)
   )
 
-  def schemaCase[A]: Schema.Case[Body[A], RequestInput[A]] =
-    Schema.Case("Body", schema[A], _.asInstanceOf[Body[A]])
+  def schemaCase[A]: Schema.Case[RequestInput[A], Body[A]] =
+    Schema.Case("Body", schema[A], _.asInstanceOf[Body[A]], _.asInstanceOf[RequestInput[A]], _.isInstanceOf[Body[A]])
 }
 
 /**
@@ -212,8 +241,8 @@ object Query {
       .:+:(Optional.schemaCase[A])
   )
 
-  def schemaCase[A]: Schema.Case[Query[A], RequestInput[A]] =
-    Schema.Case("Query", schema[A], _.asInstanceOf[Query[A]])
+  def schemaCase[A]: Schema.Case[RequestInput[A], Query[A]] =
+    Schema.Case("Query", schema[A], _.asInstanceOf[Query[A]], _.asInstanceOf[RequestInput[A]], _.isInstanceOf[Query[A]])
 
   private[flow] final case class SingleParam[A](name: String, override val schema: Schema[A]) extends Query[A]
 
@@ -222,15 +251,24 @@ object Query {
 
     def schema[A]: Schema[SingleParam[A]] = Schema.CaseClass2[String, FlowSchemaAst, SingleParam[A]](
       typeId,
-      Schema.Field("name", Schema[String]),
-      Schema.Field("schema", FlowSchemaAst.schema),
-      (name, schema) => SingleParam(name, schema.toSchema[A]),
-      _.name,
-      param => FlowSchemaAst.fromSchema(param.schema)
+      Schema.Field("name", Schema[String], get0 = _.name, set0 = (a, b) => a.copy(name = b)),
+      Schema.Field(
+        "schema",
+        FlowSchemaAst.schema,
+        get0 = param => FlowSchemaAst.fromSchema(param.schema),
+        set0 = (a, b) => a.copy(schema = b.toSchema)
+      ),
+      (name, schema) => SingleParam(name, schema.toSchema[A])
     )
 
-    def schemaCase[A]: Schema.Case[SingleParam[A], Query[A]] =
-      Schema.Case("SingleParam", schema[A], _.asInstanceOf[SingleParam[A]])
+    def schemaCase[A]: Schema.Case[Query[A], SingleParam[A]] =
+      Schema.Case(
+        "SingleParam",
+        schema[A],
+        _.asInstanceOf[SingleParam[A]],
+        _.asInstanceOf[Query[A]],
+        _.isInstanceOf[SingleParam[A]]
+      )
 
   }
 
@@ -245,17 +283,20 @@ object Query {
     def schema[A, B, C] =
       Schema.CaseClass3[Query[A], Query[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
         typeId,
-        Schema.Field("left", Schema.defer(Query.schema[A])),
-        Schema.Field("right", Schema.defer(Query.schema[B])),
-        Schema.Field("zipper", Zipper.schema[A, B, C]),
-        ZipWith(_, _, _),
-        _.left,
-        _.right,
-        _.zipper
+        Schema.Field("left", Schema.defer(Query.schema[A]), get0 = _.left, set0 = (a, b) => a.copy(left = b)),
+        Schema.Field("right", Schema.defer(Query.schema[B]), get0 = _.right, set0 = (a, b) => a.copy(right = b)),
+        Schema.Field("zipper", Zipper.schema[A, B, C], get0 = _.zipper, set0 = (a, b) => a.copy(zipper = b)),
+        ZipWith(_, _, _)
       )
 
-    def schemaCase[A]: Schema.Case[ZipWith[Any, Any, Any], Query[A]] =
-      Schema.Case("ZipWith", schema[Any, Any, Any], _.asInstanceOf[ZipWith[Any, Any, Any]])
+    def schemaCase[A]: Schema.Case[Query[A], ZipWith[Any, Any, Any]] =
+      Schema.Case(
+        "ZipWith",
+        schema[Any, Any, Any],
+        _.asInstanceOf[ZipWith[Any, Any, Any]],
+        _.asInstanceOf[Query[A]],
+        _.isInstanceOf[ZipWith[_, _, _]]
+      )
 
   }
 
@@ -266,15 +307,20 @@ object Query {
   object Optional {
     private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Query.Optional")
 
-    def schema[A]: Schema[Optional[A]] = Schema.CaseClass1(
+    def schema[A]: Schema[Optional[A]] = Schema.CaseClass1[Query[A], Optional[A]](
       typeId,
-      Schema.Field("params", Schema.defer(Query.schema[A])),
-      Optional.apply,
-      _.params
+      Schema.Field("params", Schema.defer(Query.schema[A]), get0 = _.params, set0 = (a, b) => a.copy(params = b)),
+      Optional.apply
     )
 
-    def schemaCase[A]: Schema.Case[Optional[A], Query[A]] =
-      Schema.Case("Optional", schema[A], _.asInstanceOf[Optional[A]])
+    def schemaCase[A]: Schema.Case[Query[A], Optional[A]] =
+      Schema.Case(
+        "Optional",
+        schema[A],
+        _.asInstanceOf[Optional[A]],
+        _.asInstanceOf[Query[A]],
+        _.isInstanceOf[Optional[_]]
+      )
   }
 }
 
@@ -311,8 +357,8 @@ object Path {
       .:+:(ZipWith.schemaCase[A])
   )
 
-  def schemaCase[A]: Schema.Case[Path[A], RequestInput[A]] =
-    Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]])
+  def schemaCase[A]: Schema.Case[RequestInput[A], Path[A]] =
+    Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]], _.asInstanceOf[RequestInput[A]], _.isInstanceOf[Path[A]])
 
   private[flow] final case class Literal(string: String) extends Path[Unit] {
     lazy val schema: Schema[Unit] = Schema.singleton(())
@@ -321,8 +367,8 @@ object Path {
   object Literal {
     def schema: Schema[Literal] = DeriveSchema.gen[Literal]
 
-    def schemaCase[A]: Schema.Case[Literal, Path[A]] =
-      Schema.Case("Literal", schema, _.asInstanceOf[Literal])
+    def schemaCase[A]: Schema.Case[Path[A], Literal] =
+      Schema.Case("Literal", schema, _.asInstanceOf[Literal], _.asInstanceOf[Path[A]], _.isInstanceOf[Literal])
   }
 
   private[flow] final case class Match[A](schema: Schema[A]) extends Path[A]
@@ -332,13 +378,17 @@ object Path {
 
     def schema[A]: Schema[Match[A]] = Schema.CaseClass1[FlowSchemaAst, Match[A]](
       typeId,
-      Schema.Field("schema", FlowSchemaAst.schema),
-      schema => Match(schema.toSchema[A]),
-      m => FlowSchemaAst.fromSchema(m.schema)
+      Schema.Field(
+        "schema",
+        FlowSchemaAst.schema,
+        get0 = m => FlowSchemaAst.fromSchema(m.schema),
+        set0 = (a, b) => a.copy(schema = b.toSchema)
+      ),
+      schema => Match(schema.toSchema[A])
     )
 
-    def schemaCase[A]: Schema.Case[Match[A], Path[A]] =
-      Schema.Case("Match", schema[A], _.asInstanceOf[Match[A]])
+    def schemaCase[A]: Schema.Case[Path[A], Match[A]] =
+      Schema.Case("Match", schema[A], _.asInstanceOf[Match[A]], _.asInstanceOf[Path[A]], _.isInstanceOf[Match[A]])
   }
 
   private[flow] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
@@ -352,16 +402,19 @@ object Path {
     def schema[A, B, C]: Schema[ZipWith[A, B, C]] =
       Schema.CaseClass3[Path[A], Path[B], Zipper.WithOut[A, B, C], ZipWith[A, B, C]](
         typeId,
-        Schema.Field("left", Schema.defer(Path.schema[A])),
-        Schema.Field("right", Schema.defer(Path.schema[B])),
-        Schema.Field("zipper", Zipper.schema[A, B, C]),
-        ZipWith(_, _, _),
-        _.left,
-        _.right,
-        _.zipper
+        Schema.Field("left", Schema.defer(Path.schema[A]), get0 = _.left, set0 = (a, b) => a.copy(left = b)),
+        Schema.Field("right", Schema.defer(Path.schema[B]), get0 = _.right, set0 = (a, b) => a.copy(right = b)),
+        Schema.Field("zipper", Zipper.schema[A, B, C], get0 = _.zipper, set0 = (a, b) => a.copy(zipper = b)),
+        ZipWith(_, _, _)
       )
 
-    def schemaCase[A]: Schema.Case[ZipWith[Any, Any, Any], Path[A]] =
-      Schema.Case("ZipWith", schema[Any, Any, Any], _.asInstanceOf[ZipWith[Any, Any, Any]])
+    def schemaCase[A]: Schema.Case[Path[A], ZipWith[Any, Any, Any]] =
+      Schema.Case(
+        "ZipWith",
+        schema[Any, Any, Any],
+        _.asInstanceOf[ZipWith[Any, Any, Any]],
+        _.asInstanceOf[Path[A]],
+        _.isInstanceOf[ZipWith[_, _, _]]
+      )
   }
 }

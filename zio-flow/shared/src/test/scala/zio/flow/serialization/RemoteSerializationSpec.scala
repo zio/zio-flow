@@ -17,8 +17,8 @@
 package zio.flow.serialization
 
 import zio.flow._
-import zio.schema.ast.SchemaAst
-import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
+import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
+import zio.schema.meta.MetaSchema
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 import zio.{ZIO, ZNothing}
@@ -32,8 +32,8 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
       ),
       test("Remote schema is serializable") {
         val schema             = Remote.schemaAny
-        val serialized         = JsonCodec.encode(SchemaAst.schema)(schema.ast)
-        val deserialized       = JsonCodec.decode(SchemaAst.schema)(serialized)
+        val serialized         = JsonCodec.encode(MetaSchema.schema)(schema.ast)
+        val deserialized       = JsonCodec.decode(MetaSchema.schema)(serialized)
         val deserializedSchema = deserialized.map(_.toSchema)
         assertTrue(
           Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
@@ -53,7 +53,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
   }
 
   private def equalityWithCodec(
-    codec: Codec
+    codec: BinaryCodec
   ): Spec[Sized with TestConfig, String] =
     suite(codec.getClass.getSimpleName)(
       test("literal") {
@@ -105,14 +105,14 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
     )
 
   private def roundtripCheck(
-    codec: Codec,
+    codec: BinaryCodec,
     gen: Gen[Sized, Remote[Any]]
   ): ZIO[Sized with TestConfig, Nothing, TestResult] =
     check(gen) { value =>
       roundtrip(codec, value)
     }
 
-  private def roundtrip(codec: Codec, value: Remote[Any]): TestResult = {
+  private def roundtrip(codec: BinaryCodec, value: Remote[Any]): TestResult = {
     val encoded = codec.encode(Remote.schemaAny)(value)
     val decoded = codec.decode(Remote.schemaAny)(encoded)
 
