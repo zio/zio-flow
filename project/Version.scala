@@ -9,7 +9,7 @@ object Version {
   val zioAws               = "5.17.224.4"
   val zioRocksDb           = "0.4.2"
   val zioSchema            = "0.2.1+7-39f57f3e-SNAPSHOT" // TODO: switch back to stable
-  val awsSdkV1             = "1.12.344"
+  val awsSdkV1             = "1.12.345"
   val cassandraJavaDriver  = "4.14.1.0"
   val rocksDbJni           = "7.7.3"
   val testContainers       = "0.40.11"
