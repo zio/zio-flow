@@ -22,6 +22,8 @@ import zio.schema.{Schema, TypeId}
 import zio.schema.meta.MetaSchema
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
+import scala.collection.immutable.ListMap
+
 object FlowSchemaAstSpec extends ZIOSpecDefault {
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("FlowSchemaAst")(
@@ -46,9 +48,25 @@ object FlowSchemaAstSpec extends ZIOSpecDefault {
       test("Record") {
         val schema = Schema.record(
           TypeId.Structural,
-          Schema.Field("x", Schema[Int], get0 = ???, set0 = ???),
-          Schema.Field("flow", ZFlow.schemaAny, get0 = ???, set0 = ???),
-          Schema.Field("remote", Remote.schemaAny, get0 = ???, set0 = ???)
+          Schema
+            .Field(
+              "x",
+              Schema[Int],
+              get0 = _("x").asInstanceOf[Int],
+              set0 = (lm: ListMap[String, Any], v: Int) => lm.updated("x", v)
+            ),
+          Schema.Field(
+            "flow",
+            ZFlow.schemaAny,
+            get0 = _("flow").asInstanceOf[ZFlow[Any, Any, Any]],
+            set0 = (lm: ListMap[String, Any], v: ZFlow[Any, Any, Any]) => lm.updated("flow", v)
+          ),
+          Schema.Field(
+            "remote",
+            Remote.schemaAny,
+            get0 = _("remote").asInstanceOf[Remote[Any]],
+            set0 = (lm: ListMap[String, Any], v: Remote[Any]) => lm.updated("remote", v)
+          )
         )
         val flowAst = FlowSchemaAst.fromSchema(schema)
         val schema2 = flowAst.toSchema
