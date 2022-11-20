@@ -47,7 +47,7 @@ import zio.flow.{
   ZFlow,
   regexSchema
 }
-import zio.schema.{DefaultJavaTimeSchemas, DynamicValue, Schema, TypeId}
+import zio.schema._
 import zio.test.{Gen, Sized}
 import zio.{Duration, ZNothing, flow}
 
@@ -59,7 +59,7 @@ import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOp
 
 import scala.util.matching.Regex
 
-trait Generators extends DefaultJavaTimeSchemas {
+trait Generators {
 
   lazy val genRegex: Gen[Sized, Regex] =
     Gen.oneOf(Gen.const(".+".r), Gen.const("[0-9]*".r))
@@ -69,7 +69,7 @@ trait Generators extends DefaultJavaTimeSchemas {
       Gen.string.map(value => DynamicValue.fromSchemaAndValue(Schema.primitive[String], value)),
       Gen.int.map(value => DynamicValue.fromSchemaAndValue(Schema.primitive[Int], value)),
       Gen.double.map(value => DynamicValue.fromSchemaAndValue(Schema.primitive[Double], value)),
-      Gen.instant.map(value => DynamicValue.fromSchemaAndValue(instantSchema, value))
+      Gen.instant.map(value => DynamicValue.fromSchemaAndValue(Schema.primitive[Instant], value))
     )
 
   lazy val genRemoteVariableName: Gen[Sized, RemoteVariableName] =

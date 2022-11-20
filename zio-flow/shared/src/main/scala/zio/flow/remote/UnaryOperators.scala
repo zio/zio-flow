@@ -139,122 +139,171 @@ object UnaryOperators {
     override def apply(value: In): Out = conversion(value)
   }
 
-  private val numericCase: Schema.Case[Numeric[Any], UnaryOperators[Any, Any]] =
+  private val numericCase: Schema.Case[UnaryOperators[Any, Any], Numeric[Any]] =
     Schema.Case(
       "Numeric",
-      Schema.CaseClass2(
+      Schema.CaseClass2[UnaryNumericOperator, zio.flow.remote.numeric.Numeric[Any], Numeric[Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.Numeric"),
-        Schema.Field("operator", Schema[UnaryNumericOperator]),
-        Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
-        (op: UnaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n),
-        _.operator,
-        _.numeric
+        Schema
+          .Field("operator", Schema[UnaryNumericOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        Schema.Field(
+          "numeric",
+          zio.flow.remote.numeric.Numeric.schema,
+          get0 = _.numeric,
+          set0 = (o, v) => o.copy(numeric = v)
+        ),
+        (op: UnaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n)
       ),
-      _.asInstanceOf[Numeric[Any]]
+      _.asInstanceOf[Numeric[Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Numeric[Any]]
     )
 
-  private val integralCase: Schema.Case[Integral[Any], UnaryOperators[Any, Any]] =
+  private val integralCase: Schema.Case[UnaryOperators[Any, Any], Integral[Any]] =
     Schema.Case(
       "Integral",
-      Schema.CaseClass2(
+      Schema.CaseClass2[UnaryIntegralOperator, zio.flow.remote.numeric.Integral[Any], Integral[Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.Integral"),
-        Schema.Field("operator", Schema[UnaryIntegralOperator]),
-        Schema.Field("integral", zio.flow.remote.numeric.Integral.schema),
-        (op: UnaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
-        _.operator,
-        _.integral
+        Schema
+          .Field("operator", Schema[UnaryIntegralOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        Schema.Field(
+          "integral",
+          zio.flow.remote.numeric.Integral.schema,
+          get0 = _.integral,
+          set0 = (o, v) => o.copy(integral = v)
+        ),
+        (op: UnaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b)
       ),
-      _.asInstanceOf[Integral[Any]]
+      _.asInstanceOf[Integral[Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Integral[Any]]
     )
 
-  private val fractionalCase: Schema.Case[Fractional[Any], UnaryOperators[Any, Any]] =
+  private val fractionalCase: Schema.Case[UnaryOperators[Any, Any], Fractional[Any]] =
     Schema.Case(
       "Fractional",
-      Schema.CaseClass2(
+      Schema.CaseClass2[UnaryFractionalOperator, zio.flow.remote.numeric.Fractional[Any], Fractional[Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.Fractional"),
-        Schema.Field("operator", Schema[UnaryFractionalOperator]),
-        Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
-        (op: UnaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f),
-        _.operator,
-        _.fractional
+        Schema
+          .Field("operator", Schema[UnaryFractionalOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        Schema.Field(
+          "fractional",
+          zio.flow.remote.numeric.Fractional.schema,
+          get0 = _.fractional,
+          set0 = (o, v) => o.copy(fractional = v)
+        ),
+        (op: UnaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f)
       ),
-      _.asInstanceOf[Fractional[Any]]
+      _.asInstanceOf[Fractional[Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Fractional[Any]]
     )
 
-  private val numericPredicateCase: Schema.Case[NumericPredicate[Any], UnaryOperators[Any, Any]] =
+  private val numericPredicateCase: Schema.Case[UnaryOperators[Any, Any], NumericPredicate[Any]] =
     Schema.Case(
       "NumericPredicate",
-      Schema.CaseClass2(
+      Schema.CaseClass2[NumericPredicateOperator, zio.flow.remote.numeric.Numeric[Any], NumericPredicate[Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.NumericPredicate"),
-        Schema.Field("operator", Schema[NumericPredicateOperator]),
-        Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
-        (op: NumericPredicateOperator, n: zio.flow.remote.numeric.Numeric[Any]) => NumericPredicate(op, n),
-        _.operator,
-        _.numeric
+        Schema.Field(
+          "operator",
+          Schema[NumericPredicateOperator],
+          get0 = _.operator,
+          set0 = (o, v) => o.copy(operator = v)
+        ),
+        Schema.Field(
+          "numeric",
+          zio.flow.remote.numeric.Numeric.schema,
+          get0 = _.numeric,
+          set0 = (o, v) => o.copy(numeric = v)
+        ),
+        (op: NumericPredicateOperator, n: zio.flow.remote.numeric.Numeric[Any]) => NumericPredicate(op, n)
       ),
-      _.asInstanceOf[NumericPredicate[Any]]
+      _.asInstanceOf[NumericPredicate[Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[NumericPredicate[Any]]
     )
 
-  private val fractionalPredicateCase: Schema.Case[FractionalPredicate[Any], UnaryOperators[Any, Any]] =
+  private val fractionalPredicateCase: Schema.Case[UnaryOperators[Any, Any], FractionalPredicate[Any]] =
     Schema.Case(
       "FractionalPredicate",
-      Schema.CaseClass2(
+      Schema.CaseClass2[FractionalPredicateOperator, zio.flow.remote.numeric.Fractional[Any], FractionalPredicate[Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.FractionalPredicate"),
-        Schema.Field("operator", Schema[FractionalPredicateOperator]),
-        Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
-        (op: FractionalPredicateOperator, n: zio.flow.remote.numeric.Fractional[Any]) => FractionalPredicate(op, n),
-        _.operator,
-        _.fractional
+        Schema.Field(
+          "operator",
+          Schema[FractionalPredicateOperator],
+          get0 = _.operator,
+          set0 = (o, v) => o.copy(operator = v)
+        ),
+        Schema.Field(
+          "fractional",
+          zio.flow.remote.numeric.Fractional.schema,
+          get0 = _.fractional,
+          set0 = (o, v) => o.copy(fractional = v)
+        ),
+        (op: FractionalPredicateOperator, n: zio.flow.remote.numeric.Fractional[Any]) => FractionalPredicate(op, n)
       ),
-      _.asInstanceOf[FractionalPredicate[Any]]
+      _.asInstanceOf[FractionalPredicate[Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[FractionalPredicate[Any]]
     )
 
-  private val charPredicateCase: Schema.Case[CharPredicate, UnaryOperators[Any, Any]] =
+  private val charPredicateCase: Schema.Case[UnaryOperators[Any, Any], CharPredicate] =
     Schema.Case(
       "CharPredicate",
-      Schema.CaseClass1(
+      Schema.CaseClass1[CharPredicateOperator, CharPredicate](
         TypeId.parse("zio.flow.remote.UnaryOperators.CharPredicate"),
-        Schema.Field("operator", Schema[CharPredicateOperator]),
-        (op: CharPredicateOperator) => CharPredicate(op),
-        _.operator
+        Schema
+          .Field("operator", Schema[CharPredicateOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        (op: CharPredicateOperator) => CharPredicate(op)
       ),
-      _.asInstanceOf[CharPredicate]
+      _.asInstanceOf[CharPredicate],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[CharPredicate]
     )
 
-  private val boolCase: Schema.Case[Bool, UnaryOperators[Any, Any]] =
+  private val boolCase: Schema.Case[UnaryOperators[Any, Any], Bool] =
     Schema.Case(
       "Bool",
-      Schema.CaseClass1(
+      Schema.CaseClass1[UnaryBooleanOperator, Bool](
         TypeId.parse("zio.flow.remote.UnaryOperators.Bool"),
-        Schema.Field("operator", Schema[UnaryBooleanOperator]),
-        (op: UnaryBooleanOperator) => Bool(op),
-        _.operator
+        Schema
+          .Field("operator", Schema[UnaryBooleanOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        (op: UnaryBooleanOperator) => Bool(op)
       ),
-      _.asInstanceOf[Bool]
+      _.asInstanceOf[Bool],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Bool]
     )
 
-  private val strCase: Schema.Case[Str, UnaryOperators[Any, Any]] =
+  private val strCase: Schema.Case[UnaryOperators[Any, Any], Str] =
     Schema.Case(
       "Str",
-      Schema.CaseClass1(
+      Schema.CaseClass1[UnaryStringOperator, Str](
         TypeId.parse("zio.flow.remote.UnaryOperators.Str"),
-        Schema.Field("operator", Schema[UnaryStringOperator]),
-        (op: UnaryStringOperator) => Str(op),
-        _.operator
+        Schema.Field("operator", Schema[UnaryStringOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        (op: UnaryStringOperator) => Str(op)
       ),
-      _.asInstanceOf[Str]
+      _.asInstanceOf[Str],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Str]
     )
 
-  private val conversionCase: Schema.Case[Conversion[Any, Any], UnaryOperators[Any, Any]] =
+  private val conversionCase: Schema.Case[UnaryOperators[Any, Any], Conversion[Any, Any]] =
     Schema.Case(
       "Conversion",
-      Schema.CaseClass1(
+      Schema.CaseClass1[RemoteConversions[Any, Any], Conversion[Any, Any]](
         TypeId.parse("zio.flow.remote.UnaryOperators.Conversion"),
-        Schema.Field("conversion", RemoteConversions.schemaAny),
-        (conversion: RemoteConversions[Any, Any]) => Conversion(conversion),
-        _.conversion
+        Schema.Field(
+          "conversion",
+          RemoteConversions.schemaAny,
+          get0 = _.conversion,
+          set0 = (o, v) => o.copy(conversion = v)
+        ),
+        (conversion: RemoteConversions[Any, Any]) => Conversion(conversion)
       ),
-      _.asInstanceOf[Conversion[Any, Any]]
+      _.asInstanceOf[Conversion[Any, Any]],
+      _.asInstanceOf[UnaryOperators[Any, Any]],
+      _.isInstanceOf[Conversion[Any, Any]]
     )
 
   def schema[In, Out]: Schema[UnaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[UnaryOperators[In, Out]]]

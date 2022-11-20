@@ -29,10 +29,10 @@ object RemoteAccessorBuilder extends AccessorBuilder {
   override type Prism[F, S, A]  = RemoteOptic.Prism[F, S, A]
   override type Traversal[S, A] = RemoteOptic.Traversal[S, A]
 
-  override def makeLens[F, S, A](product: Schema.Record[S], term: Schema.Field[A]): RemoteOptic.Lens[F, S, A] =
-    RemoteOptic.Lens(term.label)
+  override def makeLens[F, S, A](product: Schema.Record[S], term: Schema.Field[S, A]): RemoteOptic.Lens[F, S, A] =
+    RemoteOptic.Lens(term.name)
 
-  override def makePrism[F, S, A](sum: Schema.Enum[S], term: Schema.Case[A, S]): RemoteOptic.Prism[F, S, A] =
+  override def makePrism[F, S, A](sum: Schema.Enum[S], term: Schema.Case[S, A]): RemoteOptic.Prism[F, S, A] =
     RemoteOptic.Prism(sum.id, term.id)
 
   override def makeTraversal[S, A](

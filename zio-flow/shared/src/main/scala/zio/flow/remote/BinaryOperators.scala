@@ -68,14 +68,14 @@ object BinaryOperators {
       fractional.binary(operator, left, right)
   }
 
-  final case class Integral[A](operator: BinaryIntegralOperator, bitwise: zio.flow.remote.numeric.Integral[A])
+  final case class Integral[A](operator: BinaryIntegralOperator, integral: zio.flow.remote.numeric.Integral[A])
       extends BinaryOperators[A, A, A] {
-    override val inputSchema1: Schema[A] = bitwise.schema
-    override val inputSchema2: Schema[A] = bitwise.schema
-    override val outputSchema: Schema[A] = bitwise.schema
+    override val inputSchema1: Schema[A] = integral.schema
+    override val inputSchema2: Schema[A] = integral.schema
+    override val outputSchema: Schema[A] = integral.schema
 
     override def apply(left: A, right: A): A =
-      bitwise.binary(operator, left, right)
+      integral.binary(operator, left, right)
   }
 
   final case class LessThanEqual[A](schema: Schema[A]) extends BinaryOperators[A, A, Boolean] {
@@ -161,112 +161,154 @@ object BinaryOperators {
       left.split(right).toList
   }
 
-  private val numericCase: Schema.Case[Numeric[Any], BinaryOperators[Any, Any, Any]] =
+  private val numericCase: Schema.Case[BinaryOperators[Any, Any, Any], Numeric[Any]] =
     Schema.Case(
       "Numeric",
-      Schema.CaseClass2(
+      Schema.CaseClass2[BinaryNumericOperator, zio.flow.remote.numeric.Numeric[Any], Numeric[Any]](
         TypeId.parse("zio.flow.remote.BinaryOperators.Numeric"),
-        Schema.Field("operator", Schema[BinaryNumericOperator]),
-        Schema.Field("numeric", zio.flow.remote.numeric.Numeric.schema),
-        (op: BinaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n),
-        _.operator,
-        _.numeric
+        Schema
+          .Field("operator", Schema[BinaryNumericOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        Schema.Field(
+          "numeric",
+          zio.flow.remote.numeric.Numeric.schema,
+          get0 = _.numeric,
+          set0 = (o, v) => o.copy(numeric = v)
+        ),
+        (op: BinaryNumericOperator, n: zio.flow.remote.numeric.Numeric[Any]) => Numeric(op, n)
       ),
-      _.asInstanceOf[Numeric[Any]]
+      _.asInstanceOf[Numeric[Any]],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[Numeric[Any]]
     )
 
-  private val fractionalCase: Schema.Case[Fractional[Any], BinaryOperators[Any, Any, Any]] =
+  private val fractionalCase: Schema.Case[BinaryOperators[Any, Any, Any], Fractional[Any]] =
     Schema.Case(
       "Fractional",
-      Schema.CaseClass2(
+      Schema.CaseClass2[BinaryFractionalOperator, zio.flow.remote.numeric.Fractional[Any], Fractional[Any]](
         TypeId.parse("zio.flow.remote.BinaryOperators.Fractional"),
-        Schema.Field("operator", Schema[BinaryFractionalOperator]),
-        Schema.Field("fractional", zio.flow.remote.numeric.Fractional.schema),
-        (op: BinaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f),
-        _.operator,
-        _.fractional
+        Schema.Field(
+          "operator",
+          Schema[BinaryFractionalOperator],
+          get0 = _.operator,
+          set0 = (o, v) => o.copy(operator = v)
+        ),
+        Schema.Field(
+          "fractional",
+          zio.flow.remote.numeric.Fractional.schema,
+          get0 = _.fractional,
+          set0 = (o, v) => o.copy(fractional = v)
+        ),
+        (op: BinaryFractionalOperator, f: zio.flow.remote.numeric.Fractional[Any]) => Fractional(op, f)
       ),
-      _.asInstanceOf[Fractional[Any]]
+      _.asInstanceOf[Fractional[Any]],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[Fractional[Any]]
     )
 
-  private val integralCase: Schema.Case[Integral[Any], BinaryOperators[Any, Any, Any]] =
+  private val integralCase: Schema.Case[BinaryOperators[Any, Any, Any], Integral[Any]] =
     Schema.Case(
       "Integral",
-      Schema.CaseClass2(
+      Schema.CaseClass2[BinaryIntegralOperator, zio.flow.remote.numeric.Integral[Any], Integral[Any]](
         TypeId.parse("zio.flow.remote.BinaryOperators.Integral"),
-        Schema.Field("operator", Schema[BinaryIntegralOperator]),
-        Schema.Field("fractional", zio.flow.remote.numeric.Integral.schema),
-        (op: BinaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b),
-        _.operator,
-        _.bitwise
+        Schema
+          .Field("operator", Schema[BinaryIntegralOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        Schema.Field(
+          "integral",
+          zio.flow.remote.numeric.Integral.schema,
+          get0 = _.integral,
+          set0 = (o, v) => o.copy(integral = v)
+        ),
+        (op: BinaryIntegralOperator, b: zio.flow.remote.numeric.Integral[Any]) => Integral(op, b)
       ),
-      _.asInstanceOf[Integral[Any]]
+      _.asInstanceOf[Integral[Any]],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[Integral[Any]]
     )
 
-  private val lessThenEqualCase: Schema.Case[LessThanEqual[Any], BinaryOperators[Any, Any, Any]] =
+  private val lessThenEqualCase: Schema.Case[BinaryOperators[Any, Any, Any], LessThanEqual[Any]] =
     Schema.Case(
       "LessThanEqual",
       Schema.CaseClass1[FlowSchemaAst, LessThanEqual[Any]](
         TypeId.parse("zio.flow.remote.BinaryOperators.LessThanEqual"),
-        Schema.Field("schema", FlowSchemaAst.schema),
-        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema[Any]),
-        lte => FlowSchemaAst.fromSchema(lte.schema)
+        Schema.Field(
+          "schema",
+          FlowSchemaAst.schema,
+          get0 = lte => FlowSchemaAst.fromSchema(lte.schema),
+          set0 = (o, v) => o.copy(schema = v.toSchema)
+        ),
+        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema[Any])
       ),
-      _.asInstanceOf[LessThanEqual[Any]]
+      _.asInstanceOf[LessThanEqual[Any]],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[LessThanEqual[Any]]
     )
 
-  private val boolCase: Schema.Case[Bool, BinaryOperators[Any, Any, Any]] =
+  private val boolCase: Schema.Case[BinaryOperators[Any, Any, Any], Bool] =
     Schema.Case(
       "Bool",
-      Schema.CaseClass1(
+      Schema.CaseClass1[BinaryBooleanOperator, Bool](
         TypeId.parse("zio.flow.remote.BinaryOperators.Bool"),
-        Schema.Field("operator", Schema[BinaryBooleanOperator]),
-        (op: BinaryBooleanOperator) => Bool(op),
-        _.operator
+        Schema
+          .Field("operator", Schema[BinaryBooleanOperator], get0 = _.operator, set0 = (o, v) => o.copy(operator = v)),
+        (op: BinaryBooleanOperator) => Bool(op)
       ),
-      _.asInstanceOf[Bool]
+      _.asInstanceOf[Bool],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[Bool]
     )
 
-  private val regexUnapplySeqCase: Schema.Case[RegexUnapplySeq.type, BinaryOperators[Any, Any, Any]] =
+  private val regexUnapplySeqCase: Schema.Case[BinaryOperators[Any, Any, Any], RegexUnapplySeq.type] =
     Schema.Case(
       "RegexUnapplySeq",
       Schema.singleton(RegexUnapplySeq),
-      _.asInstanceOf[RegexUnapplySeq.type]
+      _.asInstanceOf[RegexUnapplySeq.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexUnapplySeq.type]
     )
 
-  private val regexFindFirstIn: Schema.Case[RegexFindFirstIn.type, BinaryOperators[Any, Any, Any]] =
+  private val regexFindFirstIn: Schema.Case[BinaryOperators[Any, Any, Any], RegexFindFirstIn.type] =
     Schema.Case(
       "RegexFindFirstIn",
       Schema.singleton(RegexFindFirstIn),
-      _.asInstanceOf[RegexFindFirstIn.type]
+      _.asInstanceOf[RegexFindFirstIn.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexFindFirstIn.type]
     )
 
-  private val regexMatches: Schema.Case[RegexMatches.type, BinaryOperators[Any, Any, Any]] =
+  private val regexMatches: Schema.Case[BinaryOperators[Any, Any, Any], RegexMatches.type] =
     Schema.Case(
       "RegexMatches",
       Schema.singleton(RegexMatches),
-      _.asInstanceOf[RegexMatches.type]
+      _.asInstanceOf[RegexMatches.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexMatches.type]
     )
 
-  private val regexReplaceAllIn: Schema.Case[RegexReplaceAllIn.type, BinaryOperators[Any, Any, Any]] =
+  private val regexReplaceAllIn: Schema.Case[BinaryOperators[Any, Any, Any], RegexReplaceAllIn.type] =
     Schema.Case(
       "RegexReplaceAllIn",
       Schema.singleton(RegexReplaceAllIn),
-      _.asInstanceOf[RegexReplaceAllIn.type]
+      _.asInstanceOf[RegexReplaceAllIn.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexReplaceAllIn.type]
     )
 
-  private val regexReplaceFirstIn: Schema.Case[RegexReplaceFirstIn.type, BinaryOperators[Any, Any, Any]] =
+  private val regexReplaceFirstIn: Schema.Case[BinaryOperators[Any, Any, Any], RegexReplaceFirstIn.type] =
     Schema.Case(
       "RegexReplaceFirstIn",
       Schema.singleton(RegexReplaceFirstIn),
-      _.asInstanceOf[RegexReplaceFirstIn.type]
+      _.asInstanceOf[RegexReplaceFirstIn.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexReplaceFirstIn.type]
     )
 
-  private val regexSplit: Schema.Case[RegexSplit.type, BinaryOperators[Any, Any, Any]] =
+  private val regexSplit: Schema.Case[BinaryOperators[Any, Any, Any], RegexSplit.type] =
     Schema.Case(
       "RegexSplit",
       Schema.singleton(RegexSplit),
-      _.asInstanceOf[RegexSplit.type]
+      _.asInstanceOf[RegexSplit.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[RegexSplit.type]
     )
 
   def schema[In1, In2, Out]: Schema[BinaryOperators[In1, In2, Out]] =

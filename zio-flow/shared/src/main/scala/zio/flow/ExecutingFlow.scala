@@ -26,10 +26,13 @@ object ExecutingFlow {
   implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
     Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[E, A]](
       typeId,
-      Schema.Field("id", Schema[FlowId]),
-      Schema.Field("result", Schema[PromiseId]),
-      { case (id, promise) => ExecutingFlow(id, promise) },
-      (ef: ExecutingFlow[E, A]) => ef.id,
-      (ef: ExecutingFlow[E, A]) => ef.result
+      Schema.Field("id", Schema[FlowId], get0 = _.id, set0 = (a: ExecutingFlow[E, A], v: FlowId) => a.copy(id = v)),
+      Schema.Field(
+        "result",
+        Schema[PromiseId],
+        get0 = _.result,
+        set0 = (a: ExecutingFlow[E, A], v: PromiseId) => a.copy(result = v)
+      ),
+      { case (id, promise) => ExecutingFlow(id, promise) }
     )
 }

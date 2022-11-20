@@ -186,61 +186,79 @@ object Numeric extends NumericImplicits0 {
   }
   implicit object NumericInt extends NumericInt
 
-  private val charCase: Schema.Case[NumericChar.type, Numeric[Any]] = Schema.Case[NumericChar.type, Numeric[Any]](
+  private val charCase: Schema.Case[Numeric[Any], NumericChar.type] = Schema.Case[Numeric[Any], NumericChar.type](
     "NumericChar",
     Schema.singleton[NumericChar.type](NumericChar),
-    _.asInstanceOf[NumericChar.type]
+    _.asInstanceOf[NumericChar.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericChar.type]
   )
 
-  private val byteCase: Schema.Case[NumericByte.type, Numeric[Any]] = Schema.Case[NumericByte.type, Numeric[Any]](
+  private val byteCase: Schema.Case[Numeric[Any], NumericByte.type] = Schema.Case[Numeric[Any], NumericByte.type](
     "NumericByte",
     Schema.singleton[NumericByte.type](NumericByte),
-    _.asInstanceOf[NumericByte.type]
+    _.asInstanceOf[NumericByte.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericByte.type]
   )
 
-  private val shortCase: Schema.Case[NumericShort.type, Numeric[Any]] = Schema.Case[NumericShort.type, Numeric[Any]](
+  private val shortCase: Schema.Case[Numeric[Any], NumericShort.type] = Schema.Case[Numeric[Any], NumericShort.type](
     "NumericShort",
     Schema.singleton[NumericShort.type](NumericShort),
-    _.asInstanceOf[NumericShort.type]
+    _.asInstanceOf[NumericShort.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericShort.type]
   )
 
-  private val longCase: Schema.Case[NumericLong.type, Numeric[Any]] = Schema.Case[NumericLong.type, Numeric[Any]](
+  private val longCase: Schema.Case[Numeric[Any], NumericLong.type] = Schema.Case[Numeric[Any], NumericLong.type](
     "NumericLong",
     Schema.singleton[NumericLong.type](NumericLong),
-    _.asInstanceOf[NumericLong.type]
+    _.asInstanceOf[NumericLong.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericLong.type]
   )
 
-  private val bigIntCase: Schema.Case[NumericBigInt.type, Numeric[Any]] =
-    Schema.Case[NumericBigInt.type, Numeric[Any]](
+  private val bigIntCase: Schema.Case[Numeric[Any], NumericBigInt.type] =
+    Schema.Case[Numeric[Any], NumericBigInt.type](
       "NumericBigInt",
       Schema.singleton[NumericBigInt.type](NumericBigInt),
-      _.asInstanceOf[NumericBigInt.type]
+      _.asInstanceOf[NumericBigInt.type],
+      _.asInstanceOf[Numeric[Any]],
+      _.isInstanceOf[NumericBigInt.type]
     )
 
-  private val floatCase: Schema.Case[NumericFloat.type, Numeric[Any]] = Schema.Case[NumericFloat.type, Numeric[Any]](
+  private val floatCase: Schema.Case[Numeric[Any], NumericFloat.type] = Schema.Case[Numeric[Any], NumericFloat.type](
     "NumericFloat",
     Schema.singleton[NumericFloat.type](NumericFloat),
-    _.asInstanceOf[NumericFloat.type]
+    _.asInstanceOf[NumericFloat.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericFloat.type]
   )
 
-  private val doubleCase: Schema.Case[NumericDouble.type, Numeric[Any]] =
-    Schema.Case[NumericDouble.type, Numeric[Any]](
+  private val doubleCase: Schema.Case[Numeric[Any], NumericDouble.type] =
+    Schema.Case[Numeric[Any], NumericDouble.type](
       "NumericDouble",
       Schema.singleton[NumericDouble.type](NumericDouble),
-      _.asInstanceOf[NumericDouble.type]
+      _.asInstanceOf[NumericDouble.type],
+      _.asInstanceOf[Numeric[Any]],
+      _.isInstanceOf[NumericDouble.type]
     )
 
-  private val bigDecimalCase: Schema.Case[NumericBigDecimal.type, Numeric[Any]] =
-    Schema.Case[NumericBigDecimal.type, Numeric[Any]](
+  private val bigDecimalCase: Schema.Case[Numeric[Any], NumericBigDecimal.type] =
+    Schema.Case[Numeric[Any], NumericBigDecimal.type](
       "NumericBigDecimal",
       Schema.singleton[NumericBigDecimal.type](NumericBigDecimal),
-      _.asInstanceOf[NumericBigDecimal.type]
+      _.asInstanceOf[NumericBigDecimal.type],
+      _.asInstanceOf[Numeric[Any]],
+      _.isInstanceOf[NumericBigDecimal.type]
     )
 
-  private val intCase: Schema.Case[NumericInt.type, Numeric[Any]] = Schema.Case[NumericInt.type, Numeric[Any]](
+  private val intCase: Schema.Case[Numeric[Any], NumericInt.type] = Schema.Case[Numeric[Any], NumericInt.type](
     "NumericInt",
     Schema.singleton[NumericInt.type](NumericInt),
-    _.asInstanceOf[NumericInt.type]
+    _.asInstanceOf[NumericInt.type],
+    _.asInstanceOf[Numeric[Any]],
+    _.isInstanceOf[NumericInt.type]
   )
 
   implicit val schema: Schema[Numeric[Any]] =
@@ -898,39 +916,49 @@ sealed trait Integral[A] {
 
 object Integral {
 
-  private val byteCase: Schema.Case[Numeric.NumericByte.type, Integral[Any]] =
-    Schema.Case[Numeric.NumericByte.type, Integral[Any]](
+  private val byteCase: Schema.Case[Integral[Any], Numeric.NumericByte.type] =
+    Schema.Case[Integral[Any], Numeric.NumericByte.type](
       "NumericByte",
       Schema.singleton[Numeric.NumericByte.type](Numeric.NumericByte),
-      _.asInstanceOf[Numeric.NumericByte.type]
+      _.asInstanceOf[Numeric.NumericByte.type],
+      _.asInstanceOf[Integral[Any]],
+      _.isInstanceOf[Numeric.NumericByte.type]
     )
 
-  private val shortCase: Schema.Case[Numeric.NumericShort.type, Integral[Any]] =
-    Schema.Case[Numeric.NumericShort.type, Integral[Any]](
+  private val shortCase: Schema.Case[Integral[Any], Numeric.NumericShort.type] =
+    Schema.Case[Integral[Any], Numeric.NumericShort.type](
       "NumericShort",
       Schema.singleton[Numeric.NumericShort.type](Numeric.NumericShort),
-      _.asInstanceOf[Numeric.NumericShort.type]
+      _.asInstanceOf[Numeric.NumericShort.type],
+      _.asInstanceOf[Integral[Any]],
+      _.isInstanceOf[Numeric.NumericShort.type]
     )
 
-  private val longCase: Schema.Case[Numeric.NumericLong.type, Integral[Any]] =
-    Schema.Case[Numeric.NumericLong.type, Integral[Any]](
+  private val longCase: Schema.Case[Integral[Any], Numeric.NumericLong.type] =
+    Schema.Case[Integral[Any], Numeric.NumericLong.type](
       "NumericLong",
       Schema.singleton[Numeric.NumericLong.type](Numeric.NumericLong),
-      _.asInstanceOf[Numeric.NumericLong.type]
+      _.asInstanceOf[Numeric.NumericLong.type],
+      _.asInstanceOf[Integral[Any]],
+      _.isInstanceOf[Numeric.NumericLong.type]
     )
 
-  private val bigIntCase: Schema.Case[Numeric.NumericBigInt.type, Integral[Any]] =
-    Schema.Case[Numeric.NumericBigInt.type, Integral[Any]](
+  private val bigIntCase: Schema.Case[Integral[Any], Numeric.NumericBigInt.type] =
+    Schema.Case[Integral[Any], Numeric.NumericBigInt.type](
       "NumericBigInt",
       Schema.singleton[Numeric.NumericBigInt.type](Numeric.NumericBigInt),
-      _.asInstanceOf[Numeric.NumericBigInt.type]
+      _.asInstanceOf[Numeric.NumericBigInt.type],
+      _.asInstanceOf[Integral[Any]],
+      _.isInstanceOf[Numeric.NumericBigInt.type]
     )
 
-  private val intCase: Schema.Case[NumericInt.type, Integral[Any]] =
-    Schema.Case[NumericInt.type, Integral[Any]](
+  private val intCase: Schema.Case[Integral[Any], NumericInt.type] =
+    Schema.Case[Integral[Any], NumericInt.type](
       "NumericInt",
       Schema.singleton[NumericInt.type](NumericInt),
-      _.asInstanceOf[NumericInt.type]
+      _.asInstanceOf[NumericInt.type],
+      _.asInstanceOf[Integral[Any]],
+      _.isInstanceOf[NumericInt.type]
     )
 
   implicit val schema: Schema[Integral[Any]] =
@@ -1330,25 +1358,31 @@ object Fractional {
     override def getExponent(value: BigDecimal): Int = Math.getExponent(value.toDouble)
   }
 
-  private val floatCase: Schema.Case[FractionalFloat.type, Fractional[Any]] =
-    Schema.Case[FractionalFloat.type, Fractional[Any]](
+  private val floatCase: Schema.Case[Fractional[Any], FractionalFloat.type] =
+    Schema.Case[Fractional[Any], FractionalFloat.type](
       "FractionalFloat",
       Schema.singleton[FractionalFloat.type](FractionalFloat),
-      _.asInstanceOf[FractionalFloat.type]
+      _.asInstanceOf[FractionalFloat.type],
+      _.asInstanceOf[Fractional[Any]],
+      _.isInstanceOf[FractionalFloat.type]
     )
 
-  private val doubleCase: Schema.Case[FractionalDouble.type, Fractional[Any]] =
-    Schema.Case[FractionalDouble.type, Fractional[Any]](
+  private val doubleCase: Schema.Case[Fractional[Any], FractionalDouble.type] =
+    Schema.Case[Fractional[Any], FractionalDouble.type](
       "FractionalDouble",
       Schema.singleton[FractionalDouble.type](FractionalDouble),
-      _.asInstanceOf[FractionalDouble.type]
+      _.asInstanceOf[FractionalDouble.type],
+      _.asInstanceOf[Fractional[Any]],
+      _.isInstanceOf[FractionalDouble.type]
     )
 
-  private val bigDecimalCase: Schema.Case[FractionalBigDecimal.type, Fractional[Any]] =
-    Schema.Case[FractionalBigDecimal.type, Fractional[Any]](
+  private val bigDecimalCase: Schema.Case[Fractional[Any], FractionalBigDecimal.type] =
+    Schema.Case[Fractional[Any], FractionalBigDecimal.type](
       "FractionalBigDecimal",
       Schema.singleton[FractionalBigDecimal.type](FractionalBigDecimal),
-      _.asInstanceOf[FractionalBigDecimal.type]
+      _.asInstanceOf[FractionalBigDecimal.type],
+      _.asInstanceOf[Fractional[Any]],
+      _.isInstanceOf[FractionalBigDecimal.type]
     )
 
   implicit val schema: Schema[Fractional[Any]] =
