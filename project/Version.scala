@@ -4,7 +4,7 @@ object Version {
   val Scala3   = "3.2.1"
   val Silencer = "1.7.12"
 
-  val zio                  = "2.0.3"
+  val zio                  = "2.0.4"
   val zioNio               = "2.0.0"
   val zioAws               = "5.17.295.6"
   val zioRocksDb           = "0.4.2"
