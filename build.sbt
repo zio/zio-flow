@@ -94,7 +94,7 @@ lazy val zioFlowRuntime = project
   .settings(stdSettings("zio-flow-runtime"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"                       %% "zhttp" % Version.zioHttp
+      "io.d11" %% "zhttp" % Version.zioHttp
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(fork := false)
@@ -106,8 +106,8 @@ lazy val zioFlowServer = project
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"                       %% "zhttp"                  % Version.zioHttp,
-      "dev.zio"                      %% "zio-metrics-connectors" % Version.zioMetricsConnectors
+      "io.d11"  %% "zhttp"                  % Version.zioHttp,
+      "dev.zio" %% "zio-metrics-connectors" % Version.zioMetricsConnectors
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(fork := false)
@@ -132,7 +132,7 @@ lazy val zioFlowRuntimeTest = project
   .settings(stdSettings("zio-flow-runtime-test"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-test" % Version.zio
+      "dev.zio" %% "zio-test" % Version.zio
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(testFrameworks += zioTest)
@@ -221,8 +221,8 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
     stdSettings("zio-flow-twilio"),
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
     ) ++ commonTestDependencies.map(_ % Test)
   )
 
@@ -236,8 +236,8 @@ lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
     stdSettings("zio-flow-sendgrid"),
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
     ) ++ commonTestDependencies.map(_ % Test)
   )
 

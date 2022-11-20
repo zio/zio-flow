@@ -97,11 +97,11 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
           fiber <- (for {
                      _   <- ZFlow.log("fiber started")
                      now <- ZFlow.now
-                     _ <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
-                     _ <- ZFlow.log("fiber finished")
+                     _   <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
+                     _   <- ZFlow.log("fiber finished")
                    } yield 10).fork
-          _ <- ZFlow.waitTill(Instant.ofEpochSecond(10L)) // wait for absolute T=10s
-          _ <- break                                      // waits for 100s
+          _      <- ZFlow.waitTill(Instant.ofEpochSecond(10L)) // wait for absolute T=10s
+          _      <- break                                      // waits for 100s
           result <- fiber.await.timeout(Duration.ofSeconds(150L))
         } yield result
       } { (result, logs1, logs2) =>
