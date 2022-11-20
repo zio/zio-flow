@@ -28,15 +28,19 @@ object TransactionFailure {
   implicit def schema[E: Schema]: Schema[TransactionFailure[E]] =
     Schema.Enum2(
       typeId,
-      Schema.Case[Retry.type, TransactionFailure[E]](
+      Schema.Case[TransactionFailure[E], Retry.type](
         "Retry",
         Schema.singleton(Retry),
-        _.asInstanceOf[Retry.type]
+        _.asInstanceOf[Retry.type],
+        _.asInstanceOf[TransactionFailure[E]],
+        _.isInstanceOf[Retry.type]
       ),
-      Schema.Case[TransactionFailure.Fail[E], TransactionFailure[E]](
+      Schema.Case[TransactionFailure[E], TransactionFailure.Fail[E]](
         "Fail",
         implicitly[Schema[E]].transform(Fail(_), _.value),
-        _.asInstanceOf[Fail[E]]
+        _.asInstanceOf[Fail[E]],
+        _.asInstanceOf[TransactionFailure[E]],
+        _.isInstanceOf[Fail[E]]
       )
     )
 

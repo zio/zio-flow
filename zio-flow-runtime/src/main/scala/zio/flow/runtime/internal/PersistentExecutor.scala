@@ -294,7 +294,12 @@ final case class PersistentExecutor(
     def step(
       state: State[E, A]
     ): ZIO[
-      RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
+      RemoteContext
+        with VirtualClock
+        with KeyValueStore
+        with RemoteVariableKeyValueStore
+        with ExecutionEnvironment
+        with DurableLog,
       ExecutorError,
       StepResult
     ] = {
@@ -528,7 +533,7 @@ final case class PersistentExecutor(
           case WaitTill(instant) =>
             for {
               start   <- Clock.instant
-              end     <- RemoteContext.eval(instant)(instantSchema)
+              end     <- RemoteContext.eval(instant)(Schema.primitive[Instant])
               duration = Duration.between(start, end)
               _       <- ZIO.logDebug(s"Sleeping for $duration")
               _       <- Clock.sleep(duration)
@@ -996,49 +1001,49 @@ final case class PersistentExecutor(
       messages  <- Queue.unbounded[ExecutionCommand]
 
       fiber <- {
-        for {
-          _ <- startGate.await
-          _ <- {
-            for {
-              state <- saveStateChange(
-                         initialState.id.asFlowId,
-                         initialState,
-                         StateChange.resetExecutionTime,
-                         initialState.lastTimestamp
-                       )
-              _ <- ref.set(state)
-              _ <- runSteps(ref, messages, executionStartedAt = now)
-                     .provide(
-                       ZLayer.succeed(execEnv),
-                       ZLayer.succeed(kvStore),
-                       ZLayer.succeed(durableLog),
-                       ZLayer(VirtualClock.make(state.lastTimestamp)),
-                       ZLayer.succeed(remoteVariableKvStore)
-                     ) @@ metrics.executorErrorCount
-            } yield ()
-          }.catchAll { error =>
-            for {
-              _ <- ZIO.logErrorCause(s"Persistent executor ${initialState.id} failed", Cause.fail(error))
-              _ <- initialState.result
-                     .fail(Left(error))
-                     .provideEnvironment(promiseEnv)
-                     .catchAll { error2 =>
-                       ZIO.logFatalCause(
-                         s"Failed to serialize execution failure: ${error2.toMessage}",
-                         Cause.die(error2.toException)
-                       )
-                     }
-              _ <- updateFinishedFlowMetrics(
-                     metrics.FlowResult.Death,
-                     initialState.startedAt,
-                     initialState.totalExecutionTime
-                   )
-            } yield ()
-          }
-        } yield ()
-      }.ensuring {
-        workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
-      }.fork
+                 for {
+                   _ <- startGate.await
+                   _ <- {
+                          for {
+                            state <- saveStateChange(
+                                       initialState.id.asFlowId,
+                                       initialState,
+                                       StateChange.resetExecutionTime,
+                                       initialState.lastTimestamp
+                                     )
+                            _ <- ref.set(state)
+                            _ <- runSteps(ref, messages, executionStartedAt = now)
+                                   .provide(
+                                     ZLayer.succeed(execEnv),
+                                     ZLayer.succeed(kvStore),
+                                     ZLayer.succeed(durableLog),
+                                     ZLayer(VirtualClock.make(state.lastTimestamp)),
+                                     ZLayer.succeed(remoteVariableKvStore)
+                                   ) @@ metrics.executorErrorCount
+                          } yield ()
+                        }.catchAll { error =>
+                          for {
+                            _ <- ZIO.logErrorCause(s"Persistent executor ${initialState.id} failed", Cause.fail(error))
+                            _ <- initialState.result
+                                   .fail(Left(error))
+                                   .provideEnvironment(promiseEnv)
+                                   .catchAll { error2 =>
+                                     ZIO.logFatalCause(
+                                       s"Failed to serialize execution failure: ${error2.toMessage}",
+                                       Cause.die(error2.toException)
+                                     )
+                                   }
+                            _ <- updateFinishedFlowMetrics(
+                                   metrics.FlowResult.Death,
+                                   initialState.startedAt,
+                                   initialState.totalExecutionTime
+                                 )
+                          } yield ()
+                        }
+                 } yield ()
+               }.ensuring {
+                 workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
+               }.fork
       runtimeState = PersistentExecutor.RuntimeState(
                        result = initialState.result,
                        fiber = fiber,
@@ -1095,7 +1100,12 @@ final case class PersistentExecutor(
     stateChange: PersistentExecutor.StateChange,
     recordingContext: RecordingRemoteContext
   ): ZIO[
-    RemoteContext with VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
+    RemoteContext
+      with VirtualClock
+      with KeyValueStore
+      with RemoteVariableKeyValueStore
+      with ExecutionEnvironment
+      with DurableLog,
     ExecutorError,
     PersistentExecutor.State[_, _]
   ] = {
@@ -1314,8 +1324,8 @@ final case class PersistentExecutor(
            }
       _ <- ZIO.logDebug(
              s"Garbage collector keeps referenced variables from the given timestamps: ${allReferencedVariables.map {
-               case (scopedVar, timestamp) => scopedVar.asString + " -> " + timestamp
-             }.mkString(", ")}"
+                 case (scopedVar, timestamp) => scopedVar.asString + " -> " + timestamp
+               }.mkString(", ")}"
            )
       _ <- ZIO.foreachDiscard(allReferencedVariables) { case (scopedVar, timestamp) =>
              remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, Some(timestamp))
@@ -1430,48 +1440,70 @@ object PersistentExecutor {
         TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.Instruction"),
         CaseSet
           .Cons(
-            Schema.Case[PopEnv.type, Instruction]("PopEnv", Schema.singleton(PopEnv), _.asInstanceOf[PopEnv.type]),
+            Schema.Case[Instruction, PopEnv.type](
+              "PopEnv",
+              Schema.singleton(PopEnv),
+              _.asInstanceOf[PopEnv.type],
+              _.asInstanceOf[Instruction],
+              _.isInstanceOf[PopEnv.type]
+            ),
             CaseSet.Empty[Instruction]()
           )
           .:+:(
-            Schema.Case[PushEnv, Instruction](
+            Schema.Case[Instruction, PushEnv](
               "PushEnv",
               Remote.schemaAny.transform(PushEnv.apply, _.env),
-              _.asInstanceOf[PushEnv]
+              _.asInstanceOf[PushEnv],
+              _.asInstanceOf[Instruction],
+              _.isInstanceOf[PushEnv]
             )
           )
           .:+:(
-            Schema.Case[Continuation[Any, Any, Any, Any, Any], Instruction](
+            Schema.Case[Instruction, Continuation[Any, Any, Any, Any, Any]](
               "Continuation",
               Schema.CaseClass2[UnboundRemoteFunction[Any, ZFlow[Any, Any, Any]], UnboundRemoteFunction[
                 Any,
                 ZFlow[Any, Any, Any]
               ], Continuation[Any, Any, Any, Any, Any]](
                 TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.Instruction.Continuation"),
-                Schema.Field("onError", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
-                Schema.Field("onSuccess", UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]]),
-                Continuation(_, _),
-                _.onError,
-                _.onSuccess
+                Schema.Field(
+                  "onError",
+                  UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]],
+                  get0 = _.onError,
+                  set0 = (a, b) => a.copy(onError = b)
+                ),
+                Schema.Field(
+                  "onSuccess",
+                  UnboundRemoteFunction.schema[Any, ZFlow[Any, Any, Any]],
+                  get0 = _.onSuccess,
+                  set0 = (a, b) => a.copy(onSuccess = b)
+                ),
+                Continuation(_, _)
               ),
-              _.asInstanceOf[Continuation[Any, Any, Any, Any, Any]]
+              _.asInstanceOf[Continuation[Any, Any, Any, Any, Any]],
+              _.asInstanceOf[Instruction],
+              _.isInstanceOf[Continuation[_, _, _, _, _]]
             )
           )
           .:+:(
-            Schema.Case[CaptureRetry[Any, Any, Any], Instruction](
+            Schema.Case[Instruction, CaptureRetry[Any, Any, Any]](
               "CaptureRetry",
               ZFlow.schemaAny.transform(
                 CaptureRetry(_),
                 _.onRetry
               ),
-              _.asInstanceOf[CaptureRetry[Any, Any, Any]]
+              _.asInstanceOf[CaptureRetry[Any, Any, Any]],
+              _.asInstanceOf[Instruction],
+              _.isInstanceOf[CaptureRetry[_, _, _]]
             )
           )
           .:+:(
-            Schema.Case[CommitTransaction.type, Instruction](
+            Schema.Case[Instruction, CommitTransaction.type](
               "CommitTransaction",
               Schema.singleton(CommitTransaction),
-              _.asInstanceOf[CommitTransaction.type]
+              _.asInstanceOf[CommitTransaction.type],
+              _.asInstanceOf[Instruction],
+              _.isInstanceOf[CommitTransaction.type]
             )
           )
       )
@@ -1781,24 +1813,111 @@ object PersistentExecutor {
     implicit def schema[E, A]: Schema[State[E, A]] =
       Schema.CaseClass18(
         TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.State"),
-        Schema.Field("id", Schema[ScopedFlowId]),
-        Schema.Field("lastTimestamp", Schema[Timestamp]),
-        Schema.Field("current", ZFlow.schemaAny),
-        Schema.Field("stack", Schema[List[Instruction]]),
-        Schema.Field("result", Schema[DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]]),
-        Schema.Field("envStack", Schema[List[Remote[_]]]),
-        Schema.Field("transactionStack", Schema[List[TransactionState]]),
-        Schema.Field("tempVarCounter", Schema[Int]),
-        Schema.Field("promiseIdCounter", Schema[Int]),
-        Schema.Field("forkCounter", Schema[Int]),
-        Schema.Field("transactionCounter", Schema[Int]),
-        Schema.Field("status", Schema[FlowStatus]),
-        Schema.Field("watchedVariables", Schema[Set[ScopedRemoteVariableName]]),
-        Schema.Field("watchPosition", Schema[Index]),
-        Schema.Field("startedAt", Schema[OffsetDateTime]),
-        Schema.Field("suspendedAt", Schema[Option[OffsetDateTime]]),
-        Schema.Field("totalExecutionTime", Schema[Duration]),
-        Schema.Field("currentExecutionTime", Schema[Duration]),
+        Schema
+          .Field("id", Schema[ScopedFlowId], get0 = _.id, set0 = (a: State[E, A], b: ScopedFlowId) => a.copy(id = b)),
+        Schema.Field(
+          "lastTimestamp",
+          Schema[Timestamp],
+          get0 = _.lastTimestamp,
+          set0 = (a: State[E, A], b: Timestamp) => a.copy(lastTimestamp = b)
+        ),
+        Schema.Field(
+          "current",
+          ZFlow.schemaAny,
+          get0 = _.current.asInstanceOf[ZFlow[Any, Any, Any]],
+          set0 = (a: State[E, A], b: ZFlow[Any, Any, Any]) => a.copy(current = b)
+        ),
+        Schema.Field(
+          "stack",
+          Schema[List[Instruction]],
+          get0 = _.stack,
+          set0 = (a: State[E, A], b: List[Instruction]) => a.copy(stack = b)
+        ),
+        Schema.Field(
+          "result",
+          Schema[DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]],
+          get0 = _.result,
+          set0 =
+            (a: State[E, A], b: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]) => a.copy(result = b)
+        ),
+        Schema.Field(
+          "envStack",
+          Schema[List[Remote[_]]],
+          get0 = _.envStack,
+          set0 = (a: State[E, A], b: List[Remote[_]]) => a.copy(envStack = b)
+        ),
+        Schema.Field(
+          "transactionStack",
+          Schema[List[TransactionState]],
+          get0 = _.transactionStack,
+          set0 = (a: State[E, A], b: List[TransactionState]) => a.copy(transactionStack = b)
+        ),
+        Schema.Field(
+          "tempVarCounter",
+          Schema[Int],
+          get0 = _.tempVarCounter,
+          set0 = (a: State[E, A], b: Int) => a.copy(tempVarCounter = b)
+        ),
+        Schema.Field(
+          "promiseIdCounter",
+          Schema[Int],
+          get0 = _.promiseIdCounter,
+          set0 = (a: State[E, A], b: Int) => a.copy(promiseIdCounter = b)
+        ),
+        Schema.Field(
+          "forkCounter",
+          Schema[Int],
+          get0 = _.forkCounter,
+          set0 = (a: State[E, A], b: Int) => a.copy(forkCounter = b)
+        ),
+        Schema.Field(
+          "transactionCounter",
+          Schema[Int],
+          get0 = _.transactionCounter,
+          set0 = (a: State[E, A], b: Int) => a.copy(transactionCounter = b)
+        ),
+        Schema.Field(
+          "status",
+          Schema[FlowStatus],
+          get0 = _.status,
+          set0 = (a: State[E, A], b: FlowStatus) => a.copy(status = b)
+        ),
+        Schema.Field(
+          "watchedVariables",
+          Schema[Set[ScopedRemoteVariableName]],
+          get0 = _.watchedVariables,
+          set0 = (a: State[E, A], b: Set[ScopedRemoteVariableName]) => a.copy(watchedVariables = b)
+        ),
+        Schema.Field(
+          "watchPosition",
+          Schema[Index],
+          get0 = _.watchPosition,
+          set0 = (a: State[E, A], b: Index) => a.copy(watchPosition = b)
+        ),
+        Schema.Field(
+          "startedAt",
+          Schema[OffsetDateTime],
+          get0 = _.startedAt,
+          set0 = (a: State[E, A], b: OffsetDateTime) => a.copy(startedAt = b)
+        ),
+        Schema.Field(
+          "suspendedAt",
+          Schema[Option[OffsetDateTime]],
+          get0 = _.suspendedAt,
+          set0 = (a: State[E, A], b: Option[OffsetDateTime]) => a.copy(suspendedAt = b)
+        ),
+        Schema.Field(
+          "totalExecutionTime",
+          Schema[Duration],
+          get0 = _.totalExecutionTime,
+          set0 = (a: State[E, A], b: Duration) => a.copy(totalExecutionTime = b)
+        ),
+        Schema.Field(
+          "currentExecutionTime",
+          Schema[Duration],
+          get0 = _.currentExecutionTime,
+          set0 = (a: State[E, A], b: Duration) => a.copy(currentExecutionTime = b)
+        ),
         (
           id: ScopedFlowId,
           lastTimestamp: Timestamp,
@@ -1838,25 +1957,7 @@ object PersistentExecutor {
             suspendedAt,
             totalExecutionTime,
             currentExecutionTime
-          ),
-        _.id,
-        _.lastTimestamp,
-        _.current.asInstanceOf[ZFlow[Any, Any, Any]],
-        _.stack,
-        _.result,
-        _.envStack,
-        _.transactionStack,
-        _.tempVarCounter,
-        _.promiseIdCounter,
-        _.forkCounter,
-        _.transactionCounter,
-        _.status,
-        _.watchedVariables,
-        _.watchPosition,
-        _.startedAt,
-        _.suspendedAt,
-        _.totalExecutionTime,
-        _.currentExecutionTime
+          )
       )
   }
 
@@ -1877,23 +1978,43 @@ object PersistentExecutor {
     implicit val schema: Schema[TransactionState] =
       Schema.CaseClass5(
         TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.TransactionState"),
-        Schema.Field("id", Schema[TransactionId]),
-        Schema.Field("accessedVariables", Schema[Map[RemoteVariableName, RecordedAccess]]),
-        Schema.Field("compensations", Schema[List[ZFlow[Any, ActivityError, Unit]]]),
-        Schema.Field("readVariables", Schema[Set[ScopedRemoteVariableName]]),
-        Schema.Field("body", ZFlow.schemaAny),
+        Schema.Field(
+          "id",
+          Schema[TransactionId],
+          get0 = _.id,
+          set0 = (a: TransactionState, b: TransactionId) => a.copy(id = b)
+        ),
+        Schema.Field(
+          "accessedVariables",
+          Schema[Map[RemoteVariableName, RecordedAccess]],
+          get0 = _.accessedVariables,
+          set0 = (a: TransactionState, b: Map[RemoteVariableName, RecordedAccess]) => a.copy(accessedVariables = b)
+        ),
+        Schema.Field(
+          "compensations",
+          Schema[List[ZFlow[Any, ActivityError, Unit]]],
+          get0 = _.compensations,
+          set0 = (a: TransactionState, b: List[ZFlow[Any, ActivityError, Unit]]) => a.copy(compensations = b)
+        ),
+        Schema.Field(
+          "readVariables",
+          Schema[Set[ScopedRemoteVariableName]],
+          get0 = _.readVariables,
+          set0 = (a: TransactionState, b: Set[ScopedRemoteVariableName]) => a.copy(readVariables = b)
+        ),
+        Schema.Field(
+          "body",
+          ZFlow.schemaAny,
+          get0 = _.body.asInstanceOf[ZFlow[Any, Any, Any]],
+          set0 = (a: TransactionState, b: ZFlow[Any, Any, Any]) => a.copy(body = b)
+        ),
         (
           id: TransactionId,
           accessedVariables: Map[RemoteVariableName, RecordedAccess],
           compensations: List[ZFlow[Any, ActivityError, Unit]],
           readVariables: Set[ScopedRemoteVariableName],
           body: ZFlow[_, _, _]
-        ) => TransactionState(id, accessedVariables, compensations, readVariables, body),
-        _.id,
-        _.accessedVariables,
-        _.compensations,
-        _.readVariables,
-        _.body.asInstanceOf[ZFlow[Any, Any, Any]]
+        ) => TransactionState(id, accessedVariables, compensations, readVariables, body)
       )
   }
 
