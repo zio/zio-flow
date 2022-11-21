@@ -51,7 +51,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                         ),
                         clientConfig
                       )
-          body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+          body <- response.body.asString
         } yield assertTrue(body == """{"entries":[]}""")
       },
       test("put twice, get all") {
@@ -66,7 +66,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request(
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t1"),
-                              data = HttpData.fromChunk(
+                              body = Body.fromChunk(
                                 JsonCodec.encode(Schema[ZFlowTemplate])(template1)
                               )
                             ),
@@ -76,7 +76,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request(
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t2"),
-                              data = HttpData.fromChunk(
+                              body = Body.fromChunk(
                                 JsonCodec.encode(Schema[ZFlowTemplate])(template2)
                               )
                             ),
@@ -90,7 +90,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                         ),
                         clientConfig
                       )
-          body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+          body <- response.body.asString
           decoded <- ZIO.fromEither(
                        JsonCodec.decode(ZFlowTemplates.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
                      )
@@ -114,7 +114,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request(
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t1"),
-                              data = HttpData.fromChunk(
+                              body = Body.fromChunk(
                                 JsonCodec.encode(Schema[ZFlowTemplate])(template1)
                               )
                             ),
@@ -124,7 +124,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request(
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t2"),
-                              data = HttpData.fromChunk(
+                              body = Body.fromChunk(
                                 JsonCodec.encode(Schema[ZFlowTemplate])(template2)
                               )
                             ),
@@ -155,7 +155,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             clientConfig
                           )
 
-          body <- getResponse1.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+          body <- getResponse1.body.asString
           decoded <- ZIO.fromEither(
                        JsonCodec.decode(ZFlowTemplate.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
                      )
@@ -176,7 +176,7 @@ object TemplatesApiSpec extends ApiSpecBase {
       ZLayer(
         ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
       )
-    ) @@ TestAspect.sequential @@ TestAspect.flaky
+    ) @@ TestAspect.sequential @@ TestAspect.flaky @@ TestAspect.withLiveClock
 
   private def reset() =
     KeyValueStore
