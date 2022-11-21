@@ -1010,9 +1010,10 @@ trait Generators {
 
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
-      name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genBinary, genBind)
-    } yield ZFlow.NewVar(name, initial)
+      name              <- Gen.string1(Gen.alphaNumericChar)
+      initial           <- Gen.oneOf(genLiteral, genBinary, genBind)
+      appendTempCounter <- Gen.boolean
+    } yield ZFlow.NewVar(name, initial, appendTempCounter)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =
     for {
