@@ -23,6 +23,7 @@ import zio.flow.remote.text.{CharConversion, CharToCodeConversion}
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, Schema, TypeId}
 
+import java.time.{OffsetDateTime, ZoneOffset}
 import scala.util.matching.Regex
 
 sealed trait RemoteConversions[In, Out] {
@@ -216,6 +217,43 @@ object RemoteConversions {
 
     override def apply(value: Regex): String =
       value.regex
+  }
+
+  case object OffsetDateTimeToInstant extends RemoteConversions[OffsetDateTime, Instant] {
+    override val inputSchema: Schema[OffsetDateTime] = Schema[OffsetDateTime]
+    override val outputSchema: Schema[Instant]       = Schema[Instant]
+
+    override def apply(value: OffsetDateTime): Instant =
+      value.toInstant
+  }
+
+  case object OffsetDateTimeToTuple
+      extends RemoteConversions[OffsetDateTime, (Int, Int, Int, Int, Int, Int, Int, ZoneOffset)] {
+    override val inputSchema: Schema[OffsetDateTime] = Schema[OffsetDateTime]
+    override val outputSchema: Schema[(Int, Int, Int, Int, Int, Int, Int, ZoneOffset)] =
+      Schema.tuple8[Int, Int, Int, Int, Int, Int, Int, ZoneOffset]
+
+    override def apply(value: OffsetDateTime): (Int, Int, Int, Int, Int, Int, Int, ZoneOffset) =
+      (
+        value.getYear,
+        value.getMonthValue,
+        value.getDayOfMonth,
+        value.getHour,
+        value.getMinute,
+        value.getSecond,
+        value.getNano,
+        value.getOffset
+      )
+  }
+
+  case object TupleToOffsetDateTime
+      extends RemoteConversions[(Int, Int, Int, Int, Int, Int, Int, ZoneOffset), OffsetDateTime] {
+    override val inputSchema: Schema[(Int, Int, Int, Int, Int, Int, Int, ZoneOffset)] =
+      Schema.tuple8[Int, Int, Int, Int, Int, Int, Int, ZoneOffset]
+    override val outputSchema: Schema[OffsetDateTime] = Schema[OffsetDateTime]
+
+    override def apply(value: (Int, Int, Int, Int, Int, Int, Int, ZoneOffset)): OffsetDateTime =
+      OffsetDateTime.of(value._1, value._2, value._3, value._4, value._5, value._6, value._7, value._8)
   }
 
   private val numericToIntCase: Schema.Case[RemoteConversions[Any, Any], NumericToInt[Any]] =
@@ -503,6 +541,33 @@ object RemoteConversions {
       _.isInstanceOf[RegexToString.type]
     )
 
+  private val offsetDateTimeToInstant: Schema.Case[RemoteConversions[Any, Any], OffsetDateTimeToInstant.type] =
+    Schema.Case(
+      "OffsetDateTimeToInstant",
+      Schema.singleton(OffsetDateTimeToInstant),
+      _.asInstanceOf[OffsetDateTimeToInstant.type],
+      _.asInstanceOf[RemoteConversions[Any, Any]],
+      _.isInstanceOf[OffsetDateTimeToInstant.type]
+    )
+
+  private val offsetDateTimeToTuple: Schema.Case[RemoteConversions[Any, Any], OffsetDateTimeToTuple.type] =
+    Schema.Case(
+      "OffsetDateTimeToTuple",
+      Schema.singleton(OffsetDateTimeToTuple),
+      _.asInstanceOf[OffsetDateTimeToTuple.type],
+      _.asInstanceOf[RemoteConversions[Any, Any]],
+      _.isInstanceOf[OffsetDateTimeToTuple.type]
+    )
+
+  private val tupleToOffsetDateTime: Schema.Case[RemoteConversions[Any, Any], TupleToOffsetDateTime.type] =
+    Schema.Case(
+      "TupleToOffsetDateTime",
+      Schema.singleton(TupleToOffsetDateTime),
+      _.asInstanceOf[TupleToOffsetDateTime.type],
+      _.asInstanceOf[RemoteConversions[Any, Any]],
+      _.isInstanceOf[TupleToOffsetDateTime.type]
+    )
+
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
   val schemaAny: Schema[RemoteConversions[Any, Any]] =
@@ -536,5 +601,8 @@ object RemoteConversions {
         .:+:(instantToTuple)
         .:+:(stringToRegex)
         .:+:(regexToString)
+        .:+:(offsetDateTimeToInstant)
+        .:+:(offsetDateTimeToTuple)
+        .:+:(tupleToOffsetDateTime)
     )
 }

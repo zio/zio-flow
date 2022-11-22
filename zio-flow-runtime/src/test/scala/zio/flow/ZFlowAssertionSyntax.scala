@@ -19,24 +19,29 @@ package zio.flow
 import zio.flow.mock.MockedOperation
 import zio.flow.runtime.{DurableLog, ExecutorError, KeyValueStore, ZFlowExecutor}
 import zio.schema.{DynamicValue, Schema}
-import zio.{Duration, Fiber, Scope, ZIO}
+import zio.{Duration, Fiber, Scope, ZIO, durationInt}
 
 object ZFlowAssertionSyntax {
 
   implicit final class InMemoryZFlowAssertion[E, A](private val zflow: ZFlow[Any, E, A]) {
-    def evaluateTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty)(implicit
+    def evaluateTestPersistent(
+      id: String,
+      mock: MockedOperation = MockedOperation.Empty,
+      gcPeriod: Duration = 5.minutes
+    )(implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
     ): ZIO[DurableLog with KeyValueStore with Configuration, E, A] =
       ZIO.scoped {
-        submitTestPersistent(id, mock).flatMap(_._2.join)
+        submitTestPersistent(id, mock, gcPeriod).flatMap(_._2.join)
       }
 
-    def submitTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty)(implicit
+    def submitTestPersistent(id: String, mock: MockedOperation = MockedOperation.Empty, gcPeriod: Duration = 5.minutes)(
+      implicit
       schemaA: Schema[A],
       schemaE: Schema[E]
     ): ZIO[Scope with DurableLog with KeyValueStore with Configuration, E, (ZFlowExecutor, Fiber[E, A])] =
-      MockExecutors.persistent(mock).flatMap { executor =>
+      MockExecutors.persistent(mock, gcPeriod).flatMap { executor =>
         executor.restartAll().orDieWith(_.toException) *>
           executor.run(FlowId.unsafeMake(id), zflow).forkScoped.map(fiber => (executor, fiber))
       }

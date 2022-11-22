@@ -16,12 +16,13 @@
 
 package zio.flow.remote
 
-import zio.flow.regexSchema
+import zio.flow.{Instant, OffsetDateTime, regexSchema}
 import zio.flow.remote.boolean.BinaryBooleanOperator
 import zio.flow.remote.numeric.{BinaryFractionalOperator, BinaryIntegralOperator, BinaryNumericOperator}
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema._
 
+import java.time.ZoneOffset
 import scala.util.matching.Regex
 
 sealed trait BinaryOperators[In1, In2, Out] {
@@ -159,6 +160,15 @@ object BinaryOperators {
 
     override def apply(left: Regex, right: String): List[String] =
       left.split(right).toList
+  }
+
+  case object InstantToOffsetDateTime extends BinaryOperators[Instant, ZoneOffset, OffsetDateTime] {
+    override val inputSchema1: Schema[Instant]        = Schema[Instant]
+    override val inputSchema2: Schema[ZoneOffset]     = Schema[ZoneOffset]
+    override val outputSchema: Schema[OffsetDateTime] = Schema[OffsetDateTime]
+
+    override def apply(left: Instant, right: ZoneOffset): OffsetDateTime =
+      java.time.OffsetDateTime.ofInstant(left, right)
   }
 
   private val numericCase: Schema.Case[BinaryOperators[Any, Any, Any], Numeric[Any]] =
@@ -311,6 +321,15 @@ object BinaryOperators {
       _.isInstanceOf[RegexSplit.type]
     )
 
+  private val instantToOffsetDateTime: Schema.Case[BinaryOperators[Any, Any, Any], InstantToOffsetDateTime.type] =
+    Schema.Case(
+      "InstantToOffsetDateTime",
+      Schema.singleton(InstantToOffsetDateTime),
+      _.asInstanceOf[InstantToOffsetDateTime.type],
+      _.asInstanceOf[BinaryOperators[Any, Any, Any]],
+      _.isInstanceOf[InstantToOffsetDateTime.type]
+    )
+
   def schema[In1, In2, Out]: Schema[BinaryOperators[In1, In2, Out]] =
     schemaAny.asInstanceOf[Schema[BinaryOperators[In1, In2, Out]]]
 
@@ -332,5 +351,6 @@ object BinaryOperators {
         .:+:(regexReplaceAllIn)
         .:+:(regexReplaceFirstIn)
         .:+:(regexSplit)
+        .:+:(instantToOffsetDateTime)
     )
 }
