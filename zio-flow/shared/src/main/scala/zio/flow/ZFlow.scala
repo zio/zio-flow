@@ -208,7 +208,7 @@ sealed trait ZFlow[-R, +E, +A] {
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
   /**
-   * Runs this workflow and the repeats it according to the given schedule. The
+   * Runs this workflow and then repeats it according to the given schedule. The
    * result is the list of all the results collected from the repeated flow.
    */
   final def repeat[Ctx](schedule: ZFlowSchedule[Ctx]): ZFlow[R, E, List[A]] =
