@@ -882,8 +882,8 @@ object PrettyPrint {
       case ZFlow.Fail(error) =>
         builder.append("fail ")
         prettyPrintRemote(error, builder, indent)
-      case ZFlow.NewVar(name, initial) =>
-        builder.append("newvar ")
+      case ZFlow.NewVar(name, initial, appendTempCounter) =>
+        builder.append(if (appendTempCounter) "newTempVar" else "newVar ")
         builder.append(name)
         builder.append(" with initial value ")
         prettyPrintRemote(initial, builder, indent)

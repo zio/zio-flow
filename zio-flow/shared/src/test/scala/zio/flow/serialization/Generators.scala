@@ -489,6 +489,32 @@ trait Generators {
           RemoteConversions.RegexToString.asInstanceOf[RemoteConversions[Any, Any]],
           genRegex.map(Remote(_))
         )
+      ),
+      Gen.const(
+        (
+          RemoteConversions.TupleToOffsetDateTime.asInstanceOf[RemoteConversions[Any, Any]],
+          Gen.int
+            .zip(Gen.int)
+            .zip(Gen.int)
+            .zip(Gen.int)
+            .zip(Gen.int)
+            .zip(Gen.int)
+            .zip(Gen.int)
+            .zip(Gen.zoneOffset)
+            .map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          RemoteConversions.OffsetDateTimeToTuple.asInstanceOf[RemoteConversions[Any, Any]],
+          Gen.offsetDateTime.map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          RemoteConversions.OffsetDateTimeToInstant.asInstanceOf[RemoteConversions[Any, Any]],
+          Gen.offsetDateTime.map(Remote(_))
+        )
       )
     )
 
@@ -600,6 +626,13 @@ trait Generators {
           BinaryOperators.RegexSplit.asInstanceOf[BinaryOperators[Any, Any, Any]],
           genRegex.map(Remote(_)),
           Gen.string.map(Remote(_))
+        )
+      ),
+      Gen.const(
+        (
+          BinaryOperators.InstantToOffsetDateTime.asInstanceOf[BinaryOperators[Any, Any, Any]],
+          Gen.instant.map(Remote(_)),
+          Gen.zoneOffset.map(Remote(_))
         )
       )
     )
@@ -1010,9 +1043,10 @@ trait Generators {
 
   lazy val genZFlowNewVar: Gen[Sized, ZFlow.NewVar[Any]] =
     for {
-      name    <- Gen.string1(Gen.alphaNumericChar)
-      initial <- Gen.oneOf(genLiteral, genBinary, genBind)
-    } yield ZFlow.NewVar(name, initial)
+      name              <- Gen.string1(Gen.alphaNumericChar)
+      initial           <- Gen.oneOf(genLiteral, genBinary, genBind)
+      appendTempCounter <- Gen.boolean
+    } yield ZFlow.NewVar(name, initial, appendTempCounter)
 
   lazy val genZFlowIterate: Gen[Any, ZFlow.Iterate[Any, Nothing, Int]] =
     for {

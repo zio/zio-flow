@@ -207,6 +207,28 @@ sealed trait ZFlow[-R, +E, +A] {
   /** Provide a value as this flow's input */
   final def provide(value: Remote[R]): ZFlow[Any, E, A] = ZFlow.Provide(value, self)
 
+  /**
+   * Runs this workflow and then repeats it according to the given schedule. The
+   * result is the list of all the results collected from the repeated flow.
+   */
+  final def repeat[Ctx](schedule: ZFlowSchedule[Ctx]): ZFlow[R, E, List[A]] =
+    self.flatMap { first =>
+      schedule.init.flatMap { context =>
+        ZFlow.recurseSimple(Remote.list(first)) {
+          (items: Remote[List[A]], rec: (Remote[List[A]] => ZFlow[R, E, List[A]])) =>
+            schedule.next(context).flatMap { (optionInstant: Remote[Option[Instant]]) =>
+              ZFlow.unwrap {
+                optionInstant.fold[ZFlow[R, E, List[A]]](forNone = ZFlow.succeed(items)) { instant =>
+                  ZFlow.waitTill(instant) *> self.flatMap { nextItem =>
+                    rec(nextItem :: items)
+                  }
+                }
+              }
+            }
+        }
+      }
+    }.map(_.reverse)
+
   /** Repeats this flow n times and collect all the results */
   final def replicate(n: Remote[Int]): ZFlow[R, E, Chunk[A]] =
     ZFlow.unwrap {
@@ -215,6 +237,18 @@ sealed trait ZFlow[-R, +E, +A] {
           ZFlow.unwrap(next).map { elem =>
             chunk :+ elem
           }
+        }
+      }
+    }
+
+  /** Delays the execution of this flow according to the given schedule. */
+  def schedule[Ctx](schedule: ZFlowSchedule[Ctx]): ZFlow[R, E, Option[A]] =
+    schedule.init.flatMap { context =>
+      schedule.next(context).flatMap { (optionInstant: Remote[Option[Instant]]) =>
+        ZFlow.unwrap {
+          optionInstant.fold[ZFlow[R, E, Option[A]]](ZFlow.succeed(Remote.none[A]))(instant =>
+            (ZFlow.waitTill(instant) *> self.map(Remote.some)).toRemote
+          )
         }
       }
     }
@@ -655,10 +689,11 @@ object ZFlow {
       )
   }
 
-  final case class NewVar[A](name: String, initial: Remote[A]) extends ZFlow[Any, Nothing, RemoteVariableReference[A]] {
+  final case class NewVar[A](name: String, initial: Remote[A], appendTempCounter: Boolean)
+      extends ZFlow[Any, Nothing, RemoteVariableReference[A]] {
 
     override protected def substituteRec[B](f: Remote.Substitutions): ZFlow[Any, Nothing, RemoteVariableReference[A]] =
-      NewVar(name, initial.substitute(f))
+      NewVar(name, initial.substitute(f), appendTempCounter)
 
     override private[flow] val variableUsage = initial.variableUsage
   }
@@ -667,11 +702,17 @@ object ZFlow {
     private val typeId: TypeId = TypeId.parse("zio.flow.ZFlow.NewVar")
 
     def schema[A]: Schema[NewVar[A]] =
-      Schema.CaseClass2[String, Remote[A], NewVar[A]](
+      Schema.CaseClass3[String, Remote[A], Boolean, NewVar[A]](
         typeId,
         Schema.Field("name", Schema[String], get0 = _.name, set0 = (a, b) => a.copy(name = b)),
         Schema.Field("initial", Remote.schema[A], get0 = _.initial, set0 = (a, b) => a.copy(initial = b)),
-        { case (name, initial) => NewVar(name, initial) }
+        Schema.Field(
+          "appendTempCounter",
+          Schema[Boolean],
+          get0 = _.appendTempCounter,
+          set0 = (a, b) => a.copy(appendTempCounter = b)
+        ),
+        { case (name, initial, appendUuid) => NewVar(name, initial, appendUuid) }
       )
 
     def schemaCase[R, E, A]: Schema.Case[ZFlow[R, E, A], NewVar[A]] =
@@ -1141,7 +1182,10 @@ object ZFlow {
    * name and initial value.
    */
   def newVar[A](name: String, initial: Remote[A]): ZFlow[Any, ZNothing, RemoteVariableReference[A]] =
-    NewVar(name, initial)
+    NewVar(name, initial, appendTempCounter = false)
+
+  def newTempVar[A](prefix: String, initial: Remote[A]): ZFlow[Any, ZNothing, RemoteVariableReference[A]] =
+    NewVar(prefix, initial, appendTempCounter = true)
 
   /** Creates a flow that returns the current time */
   def now: ZFlow[Any, ZNothing, Instant] = Now

@@ -806,20 +806,23 @@ final case class PersistentExecutor(
             else
               onError(error)
 
-          case NewVar(name, initial) =>
+          case NewVar(name, initial, appendTempCounter) =>
             for {
               initialValue <- RemoteContext.evalDynamic(initial)
+              finalName     = if (appendTempCounter) s"${name}_${state.tempVarCounter}}" else name
               remoteVariableName <-
                 RemoteVariableName
-                  .make(name)
+                  .make(finalName)
                   .toZIO
                   .mapError(msg =>
-                    ExecutorError.InvalidOperationArguments(s"Failed to create remote variable with name $name: $msg")
+                    ExecutorError
+                      .InvalidOperationArguments(s"Failed to create remote variable with name $finalName: $msg")
                   )
-              vref    = RemoteVariableReference[Any](remoteVariableName)
-              _      <- RemoteContext.setVariable(remoteVariableName, initialValue)
-              _      <- ZIO.logDebug(s"Created new variable $name")
-              result <- onSuccess(Remote(vref), StateChange.none)
+              vref = RemoteVariableReference[Any](remoteVariableName)
+              _   <- RemoteContext.setVariable(remoteVariableName, initialValue)
+              _   <- ZIO.logDebug(s"Created new variable $finalName")
+              result <-
+                onSuccess(Remote(vref), if (appendTempCounter) StateChange.increaseTempVarCounter else StateChange.none)
             } yield result
 
           case i @ Iterate(initial, step0, predicate) =>
