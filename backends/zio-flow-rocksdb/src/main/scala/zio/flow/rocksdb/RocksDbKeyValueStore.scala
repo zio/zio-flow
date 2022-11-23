@@ -221,10 +221,10 @@ final case class RocksDbKeyValueStore(
 }
 
 object RocksDbKeyValueStore {
-  val layer: ZLayer[RocksDbConfig, Throwable, KeyValueStore] =
+  val layer: ZLayer[Any, Throwable, KeyValueStore] =
     ZLayer.scoped {
       for {
-        options <- ZIO.service[RocksDbConfig]
+        options <- ZIO.config(RocksDbConfig.config.nested("rocksdb-key-value-store"))
         rocksDb <- TransactionDB.Live.openAllColumnFamilies(
                      options.toDBOptions,
                      options.toColumnFamilyOptions,
