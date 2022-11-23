@@ -68,31 +68,39 @@ object Main extends ZIOAppDefault {
       _            <- ZIO.logInfo(s"Started")
     } yield ()
 
-  private def loadCommonAwsConfig: IO[ReadError[String], CommonAwsConfig] =
+  private def zioConfigSource(configSource: Option[java.nio.file.Path]): zio.config.ConfigSource =
+    configSource match {
+      case Some(value) => TypesafeConfigSource.fromHoconFile(value.toFile)
+      case None        => TypesafeConfigSource.fromResourcePath
+    }
+
+  private def loadCommonAwsConfig(configSource: Option[java.nio.file.Path]): IO[ReadError[String], CommonAwsConfig] =
     zio.config.read(
       ConfigDescriptor.nested("aws") {
         zio.aws.core.config.descriptors.commonAwsConfig
-      } from TypesafeConfigSource.fromResourcePath
+      } from zioConfigSource(configSource)
     )
 
-  private def loadNettyClientConfig: IO[ReadError[String], NettyClientConfig] =
+  private def loadNettyClientConfig(
+    configSource: Option[java.nio.file.Path]
+  ): IO[ReadError[String], NettyClientConfig] =
     zio.config.read(
       ConfigDescriptor.nested("aws-netty") {
         zio.aws.netty.descriptors.nettyClientConfig
-      } from TypesafeConfigSource.fromResourcePath
+      } from zioConfigSource(configSource)
     )
 
-  private def dynamoDb: ZLayer[Any, Throwable, DynamoDb] =
+  private def dynamoDb(configSource: Option[java.nio.file.Path]): ZLayer[Any, Throwable, DynamoDb] =
     // TODO: once zio-aws provides support for zio.Config use that
     ZLayer.make[DynamoDb](
-      ZLayer(loadCommonAwsConfig),
-      ZLayer(loadNettyClientConfig),
+      ZLayer(loadCommonAwsConfig(configSource)),
+      ZLayer(loadNettyClientConfig(configSource)),
       NettyHttpClient.configured(),
       AwsConfig.configured(),
       DynamoDb.live
     )
 
-  private def configured(config: ServerConfig): ZIO[Any, Throwable, Unit] =
+  private def configured(config: ServerConfig, configSource: Option[java.nio.file.Path]): ZIO[Any, Throwable, Unit] =
     runServer(config.port).provide(
       Slf4jBridge.initialize,
       DefaultJvmMetrics.live.unit,
@@ -107,13 +115,13 @@ object Main extends ZIOAppDefault {
         case BackendImplementation.InMemory  => KeyValueStore.inMemory
         case BackendImplementation.RocksDb   => RocksDbKeyValueStore.layer
         case BackendImplementation.Cassandra => CassandraKeyValueStore.layer
-        case BackendImplementation.DynamoDb  => dynamoDb >>> DynamoDbKeyValueStore.layer
+        case BackendImplementation.DynamoDb  => dynamoDb(configSource) >>> DynamoDbKeyValueStore.layer
       },
       config.indexedStore match {
         case BackendImplementation.InMemory  => IndexedStore.inMemory
         case BackendImplementation.RocksDb   => RocksDbIndexedStore.layer
         case BackendImplementation.Cassandra => CassandraIndexedStore.layer
-        case BackendImplementation.DynamoDb  => dynamoDb >>> DynamoDbIndexedStore.layer
+        case BackendImplementation.DynamoDb  => dynamoDb(configSource) >>> DynamoDbIndexedStore.layer
       },
       DurableLog.layer,
       DefaultOperationExecutor.layer,
@@ -135,6 +143,6 @@ object Main extends ZIOAppDefault {
       _        <- DefaultServices.currentServices.locallyScopedWith(_.add(ServerConfig.fromTypesafe(confPath)))
       config   <- ZIO.config(ServerConfig.config)
       _        <- ZIO.logDebug(s"Loaded server configuration $config")
-      _        <- configured(config)
+      _        <- configured(config, confPath)
     } yield ()
 }

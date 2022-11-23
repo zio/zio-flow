@@ -113,7 +113,9 @@ lazy val zioFlowServer = project
     libraryDependencies ++= Seq(
       "io.d11"      %% "zhttp"                    % Version.zioHttp,
       "dev.zio"     %% "zio-metrics-connectors"   % Version.zioMetricsConnectors,
-      "com.typesafe" % "typesafe-config"          % Version.config,
+      "com.typesafe" % "config"                   % Version.config,
+      "dev.zio"     %% "zio-config"               % Version.zioConfig,
+      "dev.zio"     %% "zio-config-typesafe"      % Version.zioConfig,
       "dev.zio"     %% "zio-logging"              % Version.zioLogging,
       "dev.zio"     %% "zio-logging-slf4j-bridge" % Version.zioLogging
     ) ++ commonTestDependencies.map(_ % Test),
