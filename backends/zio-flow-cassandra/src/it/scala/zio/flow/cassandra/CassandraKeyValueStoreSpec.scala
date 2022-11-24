@@ -33,6 +33,6 @@ object CassandraKeyValueStoreSpec extends CassandraSpec {
 
   private def testUsing[R](database: ZIO[R, Nothing, CqlSession], label: String): Spec[TestEnvironment with R, Any] =
     KeyValueStoreTests(label, initializeDb = ZIO.unit).tests
-      .provideSomeLayerShared[TestEnvironment with R](ZLayer(database) >>> CassandraKeyValueStore.layer)
+      .provideSomeLayerShared[TestEnvironment with R](ZLayer(database) >>> CassandraKeyValueStore.fromSession)
 
 }
