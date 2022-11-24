@@ -1,8 +1,7 @@
 package zio.flow
 
-import zio.{Ref, ZIO, ZLayer}
+import zio.{Config, Ref, System, ZIO, ZLayer}
 import zio.schema.Schema
-import zio.System
 
 trait Configuration {
   def get[A: Schema](key: ConfigKey): ZIO[Any, Nothing, Option[A]]
@@ -35,6 +34,16 @@ object Configuration {
                      }
                    }
         ref <- Ref.make(initial)
+      } yield InMemory(ref)
+    }
+
+  def fromConfig(path: String*): ZLayer[Any, Config.Error, Configuration] =
+    ZLayer {
+      for {
+        config <- ZIO.config(path.reverse.foldLeft(Config.table(Config.string))(_.nested(_)))
+        ref <- Ref.make(
+                 config.map { case (key, value) => ConfigKey(key) -> (value: Any) }
+               )
       } yield InMemory(ref)
     }
 

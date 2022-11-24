@@ -305,8 +305,29 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 }
 
 object CassandraKeyValueStore {
+  val layer: ZLayer[Any, Throwable, KeyValueStore] =
+    ZLayer.scoped {
+      for {
+        config <- ZIO.config(CassandraConfig.config.nested("cassandra-key-value-store"))
+        session <- ZIO.acquireRelease {
+                     ZIO.fromCompletionStage(
+                       CqlSession.builder
+                         .addContactPoints(config.contactPoints.asJava)
+                         .withKeyspace(
+                           CqlIdentifier.fromCql(config.kvStoreKeyspace)
+                         )
+                         .withLocalDatacenter(config.localDatacenter)
+                         .buildAsync()
+                     )
+                   } { session =>
+                     ZIO.attemptBlocking {
+                       session.close()
+                     }.orDie
+                   }
+      } yield new CassandraKeyValueStore(session)
+    }
 
-  val layer: URLayer[CqlSession, KeyValueStore] =
+  val fromSession: URLayer[CqlSession, KeyValueStore] =
     ZLayer {
       ZIO
         .service[CqlSession]

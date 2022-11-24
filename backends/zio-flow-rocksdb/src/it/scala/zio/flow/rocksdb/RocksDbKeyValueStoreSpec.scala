@@ -16,23 +16,32 @@
 
 package zio.flow.rocksdb
 
-import zio.{ZIO, ZLayer}
+import zio.{ConfigProvider, DefaultServices, ZIO, ZLayer}
 import zio.flow.runtime.test.KeyValueStoreTests
 import zio.nio.file.Files
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault}
 
+import java.io.IOException
+
 object RocksDbKeyValueStoreSpec extends ZIOSpecDefault {
 
-  private val config = ZLayer.scoped {
-    Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq()).map { path =>
-      RocksDbConfig(path.toFile.toPath)
+  private val config: ZLayer[Any, IOException, Unit] = ZLayer.scoped {
+    Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq()).flatMap { path =>
+      DefaultServices.currentServices.locallyScopedWith(
+        _.add(
+          ConfigProvider.fromMap(
+            Map("rocksdb-key-value-store.path" -> path.toFile.toPath.toString)
+          )
+        )
+      )
     }
   }
 
-  private val kVStoreLayer = config >>> RocksDbKeyValueStore.layer
+  private val kVStoreLayer = RocksDbKeyValueStore.layer
 
   def spec: Spec[TestEnvironment, Any] =
     KeyValueStoreTests("RocksDbKeyValueStoreSpec", initializeDb = ZIO.unit).tests
       .provideSome[TestEnvironment](kVStoreLayer)
+      .provideSome[TestEnvironment](config)
 
 }
