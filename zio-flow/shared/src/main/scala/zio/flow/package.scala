@@ -24,7 +24,7 @@ import zio.schema.Schema
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-package object flow extends Syntax with Schemas with InstantModule { self =>
+package object flow extends Syntax with Schemas with InstantModule with OffsetDateTimeModule { self =>
   type RemoteVariableName = RemoteVariableName.Type
 
   private[flow] val syntax: Syntax = self

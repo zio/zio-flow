@@ -102,13 +102,24 @@ lazy val zioFlowRuntime = project
 
 lazy val zioFlowServer = project
   .in(file("zio-flow-server"))
-  .dependsOn(zioFlowRuntime % " compile->compile;test->test")
+  .dependsOn(
+    zioFlowRuntime % " compile->compile;test->test",
+    rocksdb,
+    dynamodb,
+    cassandra
+  )
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"  %% "zhttp"                  % Version.zioHttp,
-      "dev.zio" %% "zio-metrics-connectors" % Version.zioMetricsConnectors
-    ) ++ commonTestDependencies.map(_ % Test)
+      "io.d11"      %% "zhttp"                    % Version.zioHttp,
+      "dev.zio"     %% "zio-metrics-connectors"   % Version.zioMetricsConnectors,
+      "com.typesafe" % "config"                   % Version.config,
+      "dev.zio"     %% "zio-config"               % Version.zioConfig,
+      "dev.zio"     %% "zio-config-typesafe"      % Version.zioConfig,
+      "dev.zio"     %% "zio-logging"              % Version.zioLogging,
+      "dev.zio"     %% "zio-logging-slf4j-bridge" % Version.zioLogging
+    ) ++ commonTestDependencies.map(_ % Test),
+    fork := true
   )
   .settings(fork := false)
   .settings(testFrameworks += zioTest)

@@ -1,6 +1,7 @@
 package zio.flow.runtime.operation.http
 
 import zio.Duration
+import zio.Config
 
 /**
  * Specifies the behavior for calling operations on a given host
@@ -23,3 +24,16 @@ final case class HttpOperationPolicy(
   circuitBreakerPolicy: Option[RetryPolicy],
   timeout: Duration
 )
+
+object HttpOperationPolicy {
+  val config: Config[HttpOperationPolicy] =
+    (
+      Config.int("max-parallel-request-count") ++
+        Config.string("host-override").optional ++
+        Config.listOf("retry-policies", HttpRetryPolicy.config).optional.map(_.getOrElse(List.empty)) ++
+        RetryPolicy.config.nested("circuit-breaker-policy").optional ++
+        Config.duration("timeout")
+    ).map { case (maxParallelRequestCount, hostOverride, retryPolicies, circuitBreakerPolicy, timeout) =>
+      HttpOperationPolicy(maxParallelRequestCount, hostOverride, retryPolicies, circuitBreakerPolicy, timeout)
+    }
+}

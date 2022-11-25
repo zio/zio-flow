@@ -16,10 +16,8 @@
 
 package zio.flow
 
-import zio.ZLayer
-import zio.test.{TestEnvironment, ZIOSpecDefault, testEnvironment}
+trait OffsetDateTimeModule {
+  type OffsetDateTime = java.time.OffsetDateTime
 
-trait ZIOFlowBaseSpec extends ZIOSpecDefault {
-
-  override val bootstrap: ZLayer[Any, Any, TestEnvironment] = testEnvironment ++ DumpMetrics.layer
+  object OffsetDateTime {}
 }

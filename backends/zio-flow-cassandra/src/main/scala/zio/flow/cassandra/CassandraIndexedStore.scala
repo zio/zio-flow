@@ -33,6 +33,7 @@ import zio.{Chunk, IO, Schedule, Task, URLayer, ZIO, ZLayer}
 
 import java.io.IOException
 import java.nio.ByteBuffer
+import scala.jdk.CollectionConverters._
 
 final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
   import CassandraIndexedStore._
@@ -191,7 +192,29 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
 }
 
 object CassandraIndexedStore {
-  val layer: URLayer[CqlSession, IndexedStore] =
+  val layer: ZLayer[Any, Throwable, IndexedStore] =
+    ZLayer.scoped {
+      for {
+        config <- ZIO.config(CassandraConfig.config.nested("cassandra-indexed-store"))
+        session <- ZIO.acquireRelease {
+                     ZIO.fromCompletionStage(
+                       CqlSession.builder
+                         .addContactPoints(config.contactPoints.asJava)
+                         .withKeyspace(
+                           CqlIdentifier.fromCql(config.ixStoreKeyspace)
+                         )
+                         .withLocalDatacenter(config.localDatacenter)
+                         .buildAsync()
+                     )
+                   } { session =>
+                     ZIO.attemptBlocking {
+                       session.close()
+                     }.orDie
+                   }
+      } yield new CassandraIndexedStore(session)
+    }
+
+  val fromSession: URLayer[CqlSession, IndexedStore] =
     ZLayer {
       ZIO
         .service[CqlSession]

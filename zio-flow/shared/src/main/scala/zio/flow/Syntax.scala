@@ -37,6 +37,15 @@ trait Syntax {
   )
   implicit def RemoteInstantCompanion(instant: Instant.type): RemoteInstantCompanionSyntax =
     new RemoteInstantCompanionSyntax(instant)
+
+  implicit def RemoteOffsetDateTime(remote: Remote[OffsetDateTime]): RemoteOffsetDateTimeSyntax =
+    new RemoteOffsetDateTimeSyntax(
+      remote
+    )
+
+  implicit def RemoteOffsetDateTimeCompanion(instant: OffsetDateTime.type): RemoteOffsetDateTimeCompanionSyntax =
+    new RemoteOffsetDateTimeCompanionSyntax(instant)
+
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )

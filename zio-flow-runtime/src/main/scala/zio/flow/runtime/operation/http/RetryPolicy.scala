@@ -1,5 +1,7 @@
 package zio.flow.runtime.operation.http
 
+import zio.Config
+
 /**
  * Retry policy for an operation
  *
@@ -15,3 +17,14 @@ final case class RetryPolicy(
   repeatWith: Repetition,
   jitter: Boolean
 )
+
+object RetryPolicy {
+  val config: Config[RetryPolicy] =
+    (
+      RetryLimit.config.nested("fail-after") ++
+        Repetition.config.nested("repetition") ++
+        Config.boolean("jitter")
+    ).map { case (failAfter, repeatWith, jitter) =>
+      RetryPolicy(failAfter, repeatWith, jitter)
+    }
+}
