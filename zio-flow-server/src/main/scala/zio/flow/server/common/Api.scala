@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets
 trait Api {
   protected def jsonCodecResponse[T: JsonEncoder](body: T, status: Status = Status.Ok): Response =
     Response(
-      data = HttpData.fromCharSequence(implicitly[JsonEncoder[T]].encodeJson(body, None)),
+      body = Body.fromCharSequence(implicitly[JsonEncoder[T]].encodeJson(body, None)),
       headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson),
       status = status
     )
@@ -37,7 +37,7 @@ trait Api {
 
   protected def jsonCodecBody[T: JsonDecoder](request: Request): ZIO[Any, Throwable, T] =
     for {
-      payload <- request.body
+      payload <- request.body.asChunk
       result <- ZIO
                   .fromEither(
                     implicitly[JsonDecoder[T]].decodeJson(new String(payload.toArray, StandardCharsets.UTF_8))

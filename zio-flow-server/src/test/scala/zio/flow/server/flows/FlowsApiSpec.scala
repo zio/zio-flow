@@ -16,7 +16,7 @@
 
 package zio.flow.server.flows
 
-import zhttp.http.{HttpData, Method, Request, Response, Status, URL}
+import zhttp.http.{Body, Method, Request, Response, Status, URL}
 import zhttp.service.{Client, Server}
 import zio.flow.runtime.internal.PersistentExecutor
 import zio.flow.runtime.{DurablePromise, ExecutorError, FlowStatus, KeyValueStore, ZFlowExecutor}
@@ -52,7 +52,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
@@ -109,7 +109,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
@@ -150,7 +150,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
@@ -192,7 +192,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.FlowWithParameter(
                                   flow2.asInstanceOf[ZFlow[Any, Any, Any]],
@@ -240,7 +240,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Template(TemplateId("test")),
                                 None
@@ -285,7 +285,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.TemplateWithParameter(
                                   TemplateId("test"),
@@ -331,7 +331,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
@@ -393,7 +393,7 @@ object FlowsApiSpec extends ApiSpecBase {
                           Request(
                             method = Method.POST,
                             url = baseUrl.setPath("/flows"),
-                            data = HttpData.fromCharSequence(
+                            body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
@@ -495,7 +495,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
   private def decodeStartResponse(response: Response): ZIO[Any, java.io.Serializable, StartResponse] =
     for {
-      body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+      body <- response.body.asString
       result <-
         ZIO.fromEither(
           JsonCodec.decode(StartResponse.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
@@ -504,7 +504,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
   private def decodeGetAllResponse(response: Response): ZIO[Any, java.io.Serializable, GetAllResponse] =
     for {
-      body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+      body <- response.body.asString
       result <-
         ZIO.fromEither(
           JsonCodec.decode(GetAllResponse.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
@@ -513,7 +513,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
   private def decodePollResponse(response: Response): ZIO[Any, java.io.Serializable, PollResponse] =
     for {
-      body <- response.data.toByteBuf.map(_.toString(StandardCharsets.UTF_8))
+      body <- response.body.asString
       result <-
         ZIO.fromEither(PollResponse.codec.decodeJson(body))
     } yield result

@@ -48,13 +48,13 @@ object Main extends ZIOAppDefault {
 
   private val healthcheck =
     Http.collect[Request] { case GET -> !! / "healthcheck" =>
-      Response(Status.Ok, data = HttpData.fromString("zio-flow-server is running"))
+      Response(Status.Ok, body = Body.fromString("zio-flow-server is running"))
     }
 
   private val metrics =
     Http.collectZIO[Request] { case GET -> !! / "metrics" =>
       ZIO.serviceWithZIO[PrometheusPublisher](_.get).map { doc =>
-        Response(Status.Ok, data = HttpData.fromString(doc))
+        Response(Status.Ok, body = Body.fromString(doc))
       }
     }
 
