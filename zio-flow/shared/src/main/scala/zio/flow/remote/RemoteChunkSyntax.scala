@@ -340,6 +340,15 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def sliding(size: Remote[Int]): Remote[Chunk[Chunk[A]]] =
     sliding(size, 1)
 
+  def sortWith(lt: Remote[(A, A)] => Remote[Boolean]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sortWith(lt)).trackInternal("Chunk#sortWith")
+
+  def sorted(implicit schema: Schema[A]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sorted).trackInternal("Chunk#sorted")
+
+  def sortBy[B: Schema](f: Remote[A] => Remote[B]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sortBy(f)).trackInternal("Chunk#sortBy")
+
   def span(p: Remote[A] => Remote[Boolean]): Remote[(Chunk[A], Chunk[A])] =
     Remote.bind(toList.span(p)) { tuple =>
       (Chunk.fromList(tuple._1), Chunk.fromList(tuple._2)).trackInternal("Chunk#span")
@@ -349,6 +358,9 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
     Remote.bind(toList.splitAt(n)) { tuple =>
       (Chunk.fromList(tuple._1), Chunk.fromList(tuple._2)).trackInternal("Chunk#splitAt")
     }
+
+  def startsWith[B >: A](that: Remote[Chunk[B]]): Remote[Boolean] =
+    self.toList.startsWith(that.toList).trackInternal("Chunk#startsWith")
 
   def sum(implicit numeric: Numeric[A]): Remote[A] =
     toList.sum.trackInternal("Chunk#sum")

@@ -839,7 +839,14 @@ final class RemoteListSyntax[A](val self: Remote[List[A]], trackingEnabled: Bool
   def sliding(size: Remote[Int]): Remote[List[List[A]]] =
     self.sliding(size, 1)
 
-  // TODO: sortBy (sorted, sortWith) as native remote op?
+  def sortWith(lt: Remote[(A, A)] => Remote[Boolean]): Remote[List[A]] =
+    Remote.SortList(self, UnboundRemoteFunction.make[(A, A), Boolean](lt)).trackInternal("List#sortWith")
+
+  def sorted(implicit schema: Schema[A]): Remote[List[A]] =
+    self.sortWith(pair => (pair._1 < pair._2)).trackInternal("List#sorted")
+
+  def sortBy[B: Schema](f: Remote[A] => Remote[B]): Remote[List[A]] =
+    self.sortWith(pair => f(pair._1) < f(pair._2)).trackInternal("List#sortBy")
 
   def span(p: Remote[A] => Remote[Boolean]): Remote[(List[A], List[A])] =
     (self.takeWhile(p), self.dropWhile(p)).trackInternal("List#span")

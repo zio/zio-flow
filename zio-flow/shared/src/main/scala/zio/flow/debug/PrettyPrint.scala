@@ -791,6 +791,9 @@ object PrettyPrint {
       case Remote.ListToString(_, _, _, _) => ???
       case Remote.OpticGet(_, _)           => ???
       case Remote.OpticSet(_, _, _)        => ???
+      case Remote.SortList(list, _) =>
+        prettyPrintRemote(list)
+        builder.append(".sort")
     }
   }
 
