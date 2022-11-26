@@ -29,7 +29,7 @@ import zio.flow.remote.{
 import zio.flow.remote.RemoteTuples._
 import zio.flow.serialization.FlowSchemaAst
 import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
-import zio.{Chunk, Duration, ZIO}
+import zio.{Cause, Chunk, Duration, FiberFailure, ZIO}
 
 import java.time.temporal.ChronoUnit
 import scala.annotation.tailrec
@@ -176,7 +176,7 @@ object Remote {
       inner.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[A] =
-      Debug(inner.substituteRec(f), message, debugMode)
+      Debug(inner.substitute(f), message, debugMode)
   }
 
   object Debug {
@@ -2952,7 +2952,7 @@ object Remote {
       list.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[Set[A]] =
-      ListToSet(list.substituteRec(f))
+      ListToSet(list.substitute(f))
   }
 
   object ListToSet {
@@ -2986,7 +2986,7 @@ object Remote {
       set.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[List[A]] =
-      SetToList(set.substituteRec(f))
+      SetToList(set.substitute(f))
   }
 
   object SetToList {
@@ -3024,7 +3024,7 @@ object Remote {
         end.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[String] =
-      ListToString(list.substituteRec(f), start.substituteRec(f), sep.substituteRec(f), end.substituteRec(f))
+      ListToString(list.substitute(f), start.substitute(f), sep.substitute(f), end.substitute(f))
   }
 
   object ListToString {
@@ -3079,7 +3079,7 @@ object Remote {
       list.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[Map[K, V]] =
-      ListToMap(list.substituteRec(f))
+      ListToMap(list.substitute(f))
   }
 
   object ListToMap {
@@ -3115,7 +3115,7 @@ object Remote {
       set.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[List[(K, V)]] =
-      MapToList(set.substituteRec(f))
+      MapToList(set.substitute(f))
   }
 
   object MapToList {
@@ -3194,7 +3194,7 @@ object Remote {
       value.variableUsage
 
     override protected def substituteRec(f: Substitutions): Remote[R] =
-      OpticGet(optic, value.substituteRec(f))
+      OpticGet(optic, value.substitute(f))
   }
 
   object OpticGet {
@@ -3296,7 +3296,7 @@ object Remote {
       value.variableUsage.union(on.variableUsage)
 
     override protected def substituteRec(f: Substitutions): Remote[R] =
-      OpticSet(optic, on.substituteRec(f), value.substituteRec(f))
+      OpticSet(optic, on.substitute(f), value.substitute(f))
   }
 
   object OpticSet {
@@ -3320,6 +3320,67 @@ object Remote {
         _.asInstanceOf[OpticSet[Any, Any, Any, A]],
         _.asInstanceOf[Remote[A]],
         _.isInstanceOf[OpticSet[_, _, _, _]]
+      )
+  }
+
+  final case class SortList[A](list: Remote[List[A]], lt: UnboundRemoteFunction[(A, A), Boolean])
+      extends Remote[List[A]] {
+    override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
+      for {
+        dynList <- list.evalDynamic
+        runtime <- ZIO.runtime[LocalContext with RemoteContext]
+        sortedItems <- dynList match {
+                         case DynamicValue.Sequence(values) =>
+                           ZIO.attemptUnsafe { implicit u =>
+                             values.sortWith { (a, b) =>
+                               runtime.unsafe
+                                 .run(
+                                   lt.apply(Remote.Tuple2(Remote.fromDynamic(a), Remote.fromDynamic(b))).eval[Boolean]
+                                 )
+                                 .getOrThrowFiberFailure()
+                             }
+                           }.catchAll {
+                             case FiberFailure(cause: Cause[_]) =>
+                               ZIO.failCause(cause.asInstanceOf[Cause[RemoteEvaluationError]])
+                             case other: Throwable => ZIO.die(other)
+                           }
+                         case _ =>
+                           ZIO.fail(
+                             RemoteEvaluationError.UnexpectedDynamicValue(
+                               s"Unexpected value in Remote.SortList of type ${dynList.getClass.getSimpleName}"
+                             )
+                           )
+                       }
+        sortedList = DynamicValue.Sequence(sortedItems)
+      } yield sortedList
+
+    override private[flow] def variableUsage = list.variableUsage.union(lt.variableUsage)
+
+    override protected def substituteRec(f: Substitutions): Remote[List[A]] =
+      SortList(list.substitute(f), lt.substitute(f).asInstanceOf[UnboundRemoteFunction[(A, A), Boolean]])
+  }
+
+  object SortList {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Remote.SortList")
+
+    def schema[A]: Schema[SortList[A]] =
+      Schema.defer(
+        Schema.CaseClass2[Remote[List[A]], UnboundRemoteFunction[(A, A), Boolean], SortList[A]](
+          typeId,
+          Schema.Field("list", Remote.schema[List[A]], get0 = _.list, set0 = (o, v) => o.copy(list = v)),
+          Schema
+            .Field("lt", UnboundRemoteFunction.schema[(A, A), Boolean], get0 = _.lt, set0 = (o, v) => o.copy(lt = v)),
+          SortList(_, _)
+        )
+      )
+
+    def schemaCase[A]: Schema.Case[Remote[A], SortList[A]] =
+      Schema.Case(
+        "SortList",
+        schema,
+        _.asInstanceOf[SortList[A]],
+        _.asInstanceOf[Remote[A]],
+        _.isInstanceOf[SortList[_]]
       )
   }
 
