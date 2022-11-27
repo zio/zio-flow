@@ -16,14 +16,14 @@
 
 package zio.flow
 
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema.{Schema, TypeId}
 
 /**
  * Represents a reference to a persisted remote variable of type A
  *
  * Remote variables can not be shared between top level workflows, but they can
  * be accessed from forked workflows. For more information about scoping of
- * remote variables see [[zio.flow.internal.RemoteVariableScope]]
+ * remote variables see zio.flow.runtime.internal.RemoteVariableScope
  */
 case class RemoteVariableReference[A](name: RemoteVariableName) {
 
@@ -33,5 +33,18 @@ case class RemoteVariableReference[A](name: RemoteVariableName) {
   def toRemote: Remote.Variable[A] = Remote.Variable(name)
 }
 object RemoteVariableReference {
-  implicit def schema[A]: Schema[RemoteVariableReference[A]] = DeriveSchema.gen
+
+  private val anySchema: Schema[RemoteVariableReference[Any]] =
+    Schema.CaseClass1(
+      TypeId.parse("zio.flow.RemoteVariableReference"),
+      Schema.Field(
+        "name",
+        Schema[RemoteVariableName],
+        get0 = _.name,
+        set0 = (a: RemoteVariableReference[Any], v: RemoteVariableName) => a.copy(name = v)
+      ),
+      RemoteVariableReference.apply[Any]
+    )
+  implicit def schema[A]: Schema[RemoteVariableReference[A]] =
+    anySchema.asInstanceOf[Schema[RemoteVariableReference[A]]]
 }

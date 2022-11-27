@@ -78,7 +78,7 @@ object SendMailAndSMS extends ZIOAppDefault {
       _    <- ZFlow.log("SendMailAndSMS example started")
       fib1 <- sendExampleEmail.fork
       fib2 <- sendExampleSMS("hello from zio-flow!", Remote.none).fork // Send immediately
-      now <- ZFlow.now
+      now  <- ZFlow.now
       fib3 <- ZFlow.transaction { _ =>
                 for {
                   result <- sendExampleSMS(

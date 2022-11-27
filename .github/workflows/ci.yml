@@ -42,7 +42,7 @@ jobs:
       - name: Cache scala dependencies
         uses: coursier/cache-action@v5
       - name: Check Document Generation
-        run: sbt docs/docusaurusCreateSite
+        run: sbt compileDocs
 
   publishLocal:
     runs-on: ubuntu-20.04
@@ -66,7 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.12.15', '2.13.8', "3.2.0"]
+        scala: ['2.12.17', '2.13.8', "3.2.1"]
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v2.3.4
@@ -88,7 +88,7 @@ jobs:
       fail-fast: false
       matrix:
         java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.12.15', '2.13.8', "3.2.0"]
+        scala: ['2.12.17', '2.13.8', "3.2.1"]
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v2.3.4

@@ -19,8 +19,8 @@ package zio.flow.serialization
 import zio.ZIO
 import zio.flow.ZFlow
 import zio.schema.Schema
-import zio.schema.ast.SchemaAst
-import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
+import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
+import zio.schema.meta.MetaSchema
 import zio.test._
 
 object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
@@ -32,8 +32,8 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
       ),
       test("ZFlow schema is serializable") {
         val schema             = ZFlow.schema[Any, Any, Any]
-        val serialized         = JsonCodec.encode(SchemaAst.schema)(schema.ast)
-        val deserialized       = JsonCodec.decode(SchemaAst.schema)(serialized)
+        val serialized         = JsonCodec.encode(MetaSchema.schema)(schema.ast)
+        val deserialized       = JsonCodec.decode(MetaSchema.schema)(serialized)
         val deserializedSchema = deserialized.map(_.toSchema)
         assertTrue(
           Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
@@ -42,7 +42,7 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
     )
 
   private def equalityWithCodec(
-    codec: Codec
+    codec: BinaryCodec
   ): Spec[Sized with TestConfig, TestSuccess] =
     suite(codec.getClass.getSimpleName)(
       test("Return")(roundtripCheck(codec, genZFlowReturn)),
@@ -68,18 +68,20 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
       test("Interrupt")(roundtripCheck(codec, genZFlowInterrupt)),
       test("NewVar")(roundtripCheck(codec, genZFlowNewVar)),
       test("Fail")(roundtripCheck(codec, genZFlowFail)),
-      test("Iterate")(roundtripCheck(codec, genZFlowIterate))
+      test("Iterate")(roundtripCheck(codec, genZFlowIterate)),
+      test("Random")(roundtripCheck(codec, genZFlowRandom)),
+      test("RandomUUID")(roundtripCheck(codec, genZFlowRandomUUID))
     )
 
   private def roundtripCheck(
-    codec: Codec,
+    codec: BinaryCodec,
     gen: Gen[Sized, ZFlow[Any, Any, Any]]
   ): ZIO[Sized with TestConfig, Nothing, TestResult] =
     check(gen) { value =>
       roundtrip(codec, value)
     }
 
-  private def roundtrip(codec: Codec, value: ZFlow[Any, Any, Any]): TestResult = {
+  private def roundtrip(codec: BinaryCodec, value: ZFlow[Any, Any, Any]): TestResult = {
     val encoded = codec.encode(ZFlow.schema[Any, Any, Any])(value)
     val decoded = codec.decode(ZFlow.schema[Any, Any, Any])(encoded)
 

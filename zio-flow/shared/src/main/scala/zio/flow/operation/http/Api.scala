@@ -57,13 +57,20 @@ object API {
   def schema[Input, Output]: Schema[API[Input, Output]] =
     Schema.CaseClass3[HttpMethod, RequestInput[Input], FlowSchemaAst, API[Input, Output]](
       typeId,
-      Schema.Field("method", HttpMethod.schema),
-      Schema.Field("requestInput", RequestInput.schema[Input]),
-      Schema.Field("outputSchema", FlowSchemaAst.schema),
-      (method, requestInput, outputSchema) => API(method, requestInput, outputSchema.toSchema[Output]),
-      _.method,
-      _.requestInput,
-      api => FlowSchemaAst.fromSchema(api.outputSchema)
+      Schema.Field("method", HttpMethod.schema, get0 = _.method, set0 = (a, v) => a.copy(method = v)),
+      Schema.Field(
+        "requestInput",
+        RequestInput.schema[Input],
+        get0 = _.requestInput,
+        set0 = (a, v) => a.copy(requestInput = v)
+      ),
+      Schema.Field(
+        "outputSchema",
+        FlowSchemaAst.schema,
+        get0 = api => FlowSchemaAst.fromSchema(api.outputSchema),
+        set0 = (a, v) => a.copy(outputSchema = v.toSchema)
+      ),
+      (method, requestInput, outputSchema) => API(method, requestInput, outputSchema.toSchema[Output])
     )
 
   type WithId[Input, Output, Id0] = API[Input, Output] { type Id = Id0 }

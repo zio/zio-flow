@@ -22,6 +22,7 @@ import zio.flow.remote.numeric._
 import zio.flow.remote.text.UnaryStringOperator
 
 import scala.annotation.nowarn
+import scala.util.matching.Regex
 
 final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   implicit private val remoteTracking: InternalRemoteTracking = InternalRemoteTracking(trackingEnabled)
@@ -137,10 +138,19 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   def forall(p: Remote[Char] => Remote[Boolean]): Remote[Boolean] =
     self.toList.forall(p).trackInternal("String#forall")
 
-  // TODO: groupBy if we have support for Remote[Map[K, V]]
+  def groupBy[K](f: Remote[Char] => Remote[K]): Remote[Map[K, String]] =
+    self.toList.groupBy(f).map(pair => (pair._1, pair._2.mkString)).trackInternal("String#groupBy")
 
-  @nowarn def grouped(n: Remote[Int]): Remote[List[String]] =
-    Remote.fail(s"TODO: not implemented") // TODO
+  def groupMap[K, B](key: Remote[Char] => Remote[K])(f: Remote[Char] => Remote[B]): Remote[Map[K, List[B]]] =
+    self.toList.groupMap(key)(f).map(pair => (pair._1, pair._2)).trackInternal("String#groupMap")
+
+  def groupMapReduce[K, B](key: Remote[Char] => Remote[K])(f: Remote[Char] => Remote[B])(
+    reduce: (Remote[B], Remote[B]) => Remote[B]
+  ): Remote[Map[K, B]] =
+    self.toList.groupMapReduce(key)(f)(reduce).trackInternal("String#groupMapReduce")
+
+  def grouped(n: Remote[Int]): Remote[List[String]] =
+    self.toList.grouped(n).map(_.mkString).trackInternal("String#grouped")
 
   def head: Remote[Char] =
     self.toList.head.trackInternal("String#head")
@@ -226,13 +236,15 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
     self.toList.padTo(len, elem).mkString.trackInternal("String#padTo")
 
   def partition(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
-    val tuple = self.toList.partition(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.partition(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#partition")
 
   def partitionMap(p: Remote[Char] => Remote[Either[Char, Char]]): Remote[(String, String)] = {
-    val tuple = self.toList.partitionMap(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.partitionMap(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#partitionMap")
 
   def patch(from: Remote[Int], other: Remote[String], replaced: Remote[Int]): Remote[String] =
@@ -247,16 +259,17 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   def prependedAll(prefix: Remote[String]): Remote[String] =
     prefix ++: self
 
-  // TODO: convert to regex once remote regex is supported
+  def r: Remote[Regex] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToRegex))
 
   def replace(oldChar: Remote[Char], newChar: Remote[Char]): Remote[String] =
     self.map(ch => (ch === oldChar).ifThenElse(newChar, ch)).trackInternal("String#replace")
 
-  @nowarn def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    Remote.fail("TODO: built-in regex replace support")
+  def replaceAll(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    regex.r.replaceAllIn(self, replacement)
 
-  @nowarn def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
-    Remote.fail("TODO: built-in regex replace support")
+  def replaceFirst(regex: Remote[String], replacement: Remote[String]): Remote[String] =
+    regex.r.replaceFirstIn(self, replacement)
 
   def reverse: Remote[String] =
     self.toList.reverse.mkString.trackInternal("String#reverse")
@@ -273,8 +286,9 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
   // TODO: sortBy/sortWith/sorted when list supports sort
 
   def span(p: Remote[Char] => Remote[Boolean]): Remote[(String, String)] = {
-    val tuple = self.toList.span(p)
-    Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    Remote.bind(self.toList.span(p)) { tuple =>
+      Remote.tuple2((tuple._1.mkString, tuple._2.mkString))
+    }
   }.trackInternal("String#span")
 
   def split[X](separators: Remote[X])(implicit ev: RemoteTypeEither[X, Char, List[Char]]): Remote[List[String]] =
@@ -282,9 +296,11 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
       ch => self.split(Remote.list(ch)),
       chs =>
         Remote.recurse[String, List[String]](self) { (remaining, rec) =>
-          val tuple = remaining.toList.span(!chs.contains(_))
-          val next  = tuple._2.drop(1).mkString
-          (tuple._1.mkString :: next.isEmpty.ifThenElse(Remote.nil[String], rec(tuple._2.drop(1).mkString)))
+          Remote.bind(remaining.toList.span(!chs.contains(_))) { tuple =>
+            Remote.bind(tuple._2.drop(1).mkString) { next =>
+              (tuple._1.mkString :: next.isEmpty.ifThenElse(Remote.nil[String], rec(tuple._2.drop(1).mkString)))
+            }
+          }
         }
     )(separators)
       .trackInternal("String#split")
@@ -373,10 +389,12 @@ final class RemoteStringSyntax(self: Remote[String], trackingEnabled: Boolean) {
       .trackInternal("String#toBooleanOption")
 
   def toByte: Remote[Byte] =
-    Remote.fail("TODO: byte not supported")
+    toByteOption.fold(Remote.fail("Invalid byte"))(n => n).trackInternal("String#toByte")
 
   def toByteOption: Remote[Option[Byte]] =
-    Remote.fail("TODO: byte not supported")
+    Remote
+      .Unary(self, UnaryOperators.Conversion(RemoteConversions.StringToNumeric(Numeric.NumericByte)))
+      .trackInternal("String#toByteOption")
 
   def toDouble: Remote[Double] =
     toDoubleOption.fold(Remote.fail("Invalid double"))(n => n).trackInternal("String#toDouble")

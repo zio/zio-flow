@@ -57,37 +57,40 @@ object RemoteOptic {
       TypeId.parse("zio.flow.remote.RemoteOptic"),
       CaseSet
         .Cons(
-          Schema.Case[Lens[Any, A, B], RemoteOptic[A, B]](
+          Schema.Case[RemoteOptic[A, B], Lens[Any, A, B]](
             "Lens",
             Schema.CaseClass1[String, Lens[Any, A, B]](
               TypeId.parse("zio.flow.remote.RemoteOptic.Lens"),
-              Schema.Field("fieldName", Schema[String]),
-              Lens(_),
-              _.fieldName
+              Schema.Field("fieldName", Schema[String], get0 = _.fieldName, set0 = (a, b) => a.copy(fieldName = b)),
+              Lens(_)
             ),
-            _.asInstanceOf[Lens[Any, A, B]]
+            _.asInstanceOf[Lens[Any, A, B]],
+            _.asInstanceOf[RemoteOptic[A, B]],
+            _.isInstanceOf[Lens[_, _, _]]
           ),
           CaseSet.Empty[RemoteOptic[A, B]]()
         )
         .:+:(
-          Schema.Case[Prism[Any, A, B], RemoteOptic[A, B]](
+          Schema.Case[RemoteOptic[A, B], Prism[Any, A, B]](
             "Prism",
             Schema.CaseClass2[TypeId, String, Prism[Any, A, B]](
               TypeId.parse("zio.flow.remote.RemoteOptic.Prism"),
-              Schema.Field("sumTypeId", Schema[TypeId]),
-              Schema.Field("termName", Schema[String]),
-              Prism(_, _),
-              _.sumTypeId,
-              _.termName
+              Schema.Field("sumTypeId", Schema[TypeId], get0 = _.sumTypeId, set0 = (a, b) => a.copy(sumTypeId = b)),
+              Schema.Field("termName", Schema[String], get0 = _.termName, set0 = (a, b) => a.copy(termName = b)),
+              Prism(_, _)
             ),
-            _.asInstanceOf[Prism[Any, A, B]]
+            _.asInstanceOf[Prism[Any, A, B]],
+            _.asInstanceOf[RemoteOptic[A, B]],
+            _.isInstanceOf[Prism[_, _, _]]
           )
         )
         .:+:(
-          Schema.Case[Traversal[A, B], RemoteOptic[A, B]](
+          Schema.Case[RemoteOptic[A, B], Traversal[A, B]](
             "Traversal",
             Schema.singleton(Traversal[A, B]()),
-            _.asInstanceOf[Traversal[A, B]]
+            _.asInstanceOf[Traversal[A, B]],
+            _.asInstanceOf[RemoteOptic[A, B]],
+            _.isInstanceOf[Traversal[_, _]]
           )
         )
     )

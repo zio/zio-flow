@@ -102,21 +102,22 @@ final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     (unit === ChronoUnit.NANOS).ifThenElse(
       ifTrue = self,
       ifFalse = {
-        val unitDur = unit.getDuration
-        (unitDur.getSeconds > 86400L).ifThenElse(
-          ifTrue = Remote.fail("Unit is too large to be used for truncation"),
-          ifFalse = {
-            val dur = unitDur.toNanos
-            ((Remote(86400000000000L) % dur) === 0L).ifThenElse(
-              ifTrue = {
-                val nod    = self.getEpochSecond % 86400L * 1000000000L + self.getNano.toLong
-                val result = math.floorDiv(nod, dur) * dur
-                self.plusNanos(result - nod)
-              },
-              ifFalse = Remote.fail("Unit must divide into a standard day without remainder")
-            )
-          }
-        )
+        Remote.bind(unit.getDuration) { unitDur =>
+          (unitDur.getSeconds > 86400L).ifThenElse(
+            ifTrue = Remote.fail("Unit is too large to be used for truncation"),
+            ifFalse = {
+              Remote.bind(unitDur.toNanos) { dur =>
+                ((Remote(86400000000000L) % dur) === 0L).ifThenElse(
+                  ifTrue = Remote.bind(self.getEpochSecond % 86400L * 1000000000L + self.getNano.toLong) { nod =>
+                    val result = math.floorDiv(nod, dur) * dur
+                    self.plusNanos(result - nod)
+                  },
+                  ifFalse = Remote.fail("Unit must divide into a standard day without remainder")
+                )
+              }
+            }
+          )
+        }
       }
     )
 
@@ -138,17 +139,18 @@ final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
       (end.getNano - getNano).toLong
     )
 
-  private def secondsUntil(end: Remote[Instant]): Remote[Long] = {
-    val secsDiff  = math.subtractExact(end.getEpochSecond, getEpochSecond)
-    val nanosDiff = (end.getNano - getNano).toLong
-    (secsDiff > 0L && nanosDiff < 0L).ifThenElse(
-      ifTrue = secsDiff - 1L,
-      ifFalse = (secsDiff < 0L && nanosDiff > 0L).ifThenElse(
-        ifTrue = secsDiff + 1L,
-        ifFalse = secsDiff
-      )
-    )
-  }
+  private def secondsUntil(end: Remote[Instant]): Remote[Long] =
+    Remote.bind(math.subtractExact(end.getEpochSecond, getEpochSecond)) { secsDiff =>
+      Remote.bind((end.getNano - getNano).toLong) { nanosDiff =>
+        (secsDiff > 0L && nanosDiff < 0L).ifThenElse(
+          ifTrue = secsDiff - 1L,
+          ifFalse = (secsDiff < 0L && nanosDiff > 0L).ifThenElse(
+            ifTrue = secsDiff + 1L,
+            ifFalse = secsDiff
+          )
+        )
+      }
+    }
 
   def `with`(field: Remote[ChronoField], value: Remote[Long]): Remote[Instant] =
     field.`match`(

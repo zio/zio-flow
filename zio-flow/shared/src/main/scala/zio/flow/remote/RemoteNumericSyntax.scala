@@ -75,6 +75,12 @@ final class RemoteNumericSyntax[A](private val self: Remote[A]) extends AnyVal {
   def toInt(implicit numeric: Numeric[A]): Remote[Int] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToInt(numeric)))
 
+  def toChar(implicit numeric: Numeric[A]): Remote[Char] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToChar(numeric)))
+
+  def toByte(implicit numeric: Numeric[A]): Remote[Byte] =
+    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToByte(numeric)))
+
   def toShort(implicit numeric: Numeric[A]): Remote[Short] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.NumericToShort(numeric)))
 

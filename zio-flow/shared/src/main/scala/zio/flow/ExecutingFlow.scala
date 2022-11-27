@@ -16,21 +16,23 @@
 
 package zio.flow
 
-import zio.flow.internal.DurablePromise
 import zio.schema.{Schema, TypeId}
 
-final case class ExecutingFlow[+E, +A](id: FlowId, result: DurablePromise[_, _])
+final case class ExecutingFlow[+E, +A](id: FlowId, result: PromiseId)
 
 object ExecutingFlow {
   private val typeId: TypeId = TypeId.parse("zio.flow.ExecutingFlow")
 
   implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.CaseClass2[FlowId, DurablePromise[Either[Throwable, E], A], ExecutingFlow[E, A]](
+    Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[E, A]](
       typeId,
-      Schema.Field("id", Schema[FlowId]),
-      Schema.Field("result", Schema[DurablePromise[Either[Throwable, E], A]]),
-      { case (id, promise) => ExecutingFlow(id, promise) },
-      (ef: ExecutingFlow[E, A]) => ef.id,
-      (ef: ExecutingFlow[E, A]) => ef.result.asInstanceOf[DurablePromise[Either[Throwable, E], A]]
+      Schema.Field("id", Schema[FlowId], get0 = _.id, set0 = (a: ExecutingFlow[E, A], v: FlowId) => a.copy(id = v)),
+      Schema.Field(
+        "result",
+        Schema[PromiseId],
+        get0 = _.result,
+        set0 = (a: ExecutingFlow[E, A], v: PromiseId) => a.copy(result = v)
+      ),
+      { case (id, promise) => ExecutingFlow(id, promise) }
     )
 }
