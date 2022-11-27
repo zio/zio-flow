@@ -1,6 +1,7 @@
 package zio.flow.remote
 
 import zio.flow.Remote
+import zio.flow.Remote._
 import zio.flow.debug.TrackRemotes
 import zio.flow.remote.numeric.Numeric
 import zio.schema.Schema

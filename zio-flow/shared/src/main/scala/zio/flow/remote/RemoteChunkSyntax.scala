@@ -18,6 +18,7 @@ package zio.flow.remote
 
 import zio.Chunk
 import zio.flow._
+import zio.flow.Remote._
 import zio.flow.debug.TrackRemotes
 import zio.flow.remote.numeric._
 import zio.schema.Schema
@@ -260,7 +261,7 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def partition(p: Remote[A] => Remote[Boolean]): Remote[(Chunk[A], Chunk[A])] =
     Remote
       .bind(toList.partition(p)) { tuple =>
-        (Chunk.fromList(tuple._1), Chunk.fromList(tuple._2))
+        (Chunk.fromList[A](tuple._1), Chunk.fromList[A](tuple._2))
       }
       .trackInternal("Chunk#partition")
 
