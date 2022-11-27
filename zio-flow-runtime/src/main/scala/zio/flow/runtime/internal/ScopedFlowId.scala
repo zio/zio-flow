@@ -26,12 +26,11 @@ final case class ScopedFlowId(name: FlowId, parentStack: List[FlowId]) {
       case Nil            => None
     }
 
-  lazy val asFlowId: FlowId = {
+  lazy val asFlowId: FlowId =
     parent match {
       case Some(parent) => parent.asFlowId / name
       case None         => name
     }
-  }
 
   lazy val asScope: RemoteVariableScope =
     parent match {
@@ -43,6 +42,9 @@ final case class ScopedFlowId(name: FlowId, parentStack: List[FlowId]) {
 
   def child(childName: FlowId): ScopedFlowId =
     ScopedFlowId(childName, name :: parentStack)
+
+  override def toString: String =
+    "[" + parentStack.reverse.mkString("/") + "]/" + name
 }
 
 object ScopedFlowId {

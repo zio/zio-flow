@@ -33,22 +33,28 @@ object RocksDbIndexedStoreSpec extends ZIOSpecDefault {
       Files.createTempDirectoryScoped(Some("zio-rocksdb"), Seq())
     }
 
-  private val config: ZLayer[Path, Nothing, RocksDbConfig] = ZLayer.scoped {
-    ZIO.service[Path].map { path =>
-      RocksDbConfig(path.toFile.toPath)
+  private val config: ZLayer[Path, Nothing, Unit] = ZLayer.scoped {
+    ZIO.service[Path].flatMap { path =>
+      DefaultServices.currentServices.locallyScopedWith(
+        _.add(
+          ConfigProvider.fromMap(
+            Map("rocksdb-indexed-store.path" -> path.toFile.toPath.toString)
+          )
+        )
+      )
     }
   }
 
-  private val testIndexedStore: ZLayer[Any, Throwable, IndexedStore] =
-    transactionDbPath >>> config >>> RocksDbIndexedStore.layer
+  private val testIndexedStore: ZLayer[Any, Throwable, IndexedStore] = RocksDbIndexedStore.layer
 
   override def spec: Spec[TestEnvironment, Throwable] =
     suite("RocksDbIndexedStore")(
-      IndexedStoreTests("Common", initializeDb = ZIO.unit).tests.provideSomeLayer[TestEnvironment](testIndexedStore),
+      IndexedStoreTests("Common", initializeDb = ZIO.unit).tests
+        .provideSome[TestEnvironment](testIndexedStore)
+        .provideSome[TestEnvironment](transactionDbPath, config),
       test("Get namespaces") {
         (for {
           path <- ZIO.service[Path]
-          _    <- ZIO.debug(path.toString())
           _ <-
             ZIO
               .service[IndexedStore]

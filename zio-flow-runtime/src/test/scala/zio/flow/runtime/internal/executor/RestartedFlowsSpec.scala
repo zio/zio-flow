@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.runtime.internal.executor
 
 import zio.Duration
@@ -97,11 +113,11 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
           fiber <- (for {
                      _   <- ZFlow.log("fiber started")
                      now <- ZFlow.now
-                     _ <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
-                     _ <- ZFlow.log("fiber finished")
+                     _   <- ZFlow.waitTill(now.plusSeconds(220L)) // wait 220s, must finish only after restart
+                     _   <- ZFlow.log("fiber finished")
                    } yield 10).fork
-          _ <- ZFlow.waitTill(Instant.ofEpochSecond(10L)) // wait for absolute T=10s
-          _ <- break                                      // waits for 100s
+          _      <- ZFlow.waitTill(Instant.ofEpochSecond(10L)) // wait for absolute T=10s
+          _      <- break                                      // waits for 100s
           result <- fiber.await.timeout(Duration.ofSeconds(150L))
         } yield result
       } { (result, logs1, logs2) =>

@@ -16,13 +16,13 @@
 
 package zio.flow.remote
 
+import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.serialization.Generators
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.serialization.ZFlowSerializationSpec.{genExecutingFlow, genSmallChronoUnit}
-import zio.flow._
 import zio.schema.Schema
-import zio.schema.codec.{Codec, JsonCodec, ProtobufCodec}
+import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
 import zio.test.{Gen, Sized, Spec, TestConfig, TestEnvironment, TestResult, ZIOSpecDefault, assertTrue, check}
 import zio.{Scope, ZIO, ZLayer}
 
@@ -35,7 +35,7 @@ class RoundtripEvaluationSpec extends ZIOSpecDefault {
       evalWithCodec(ProtobufCodec)
     )
 
-  private def evalWithCodec(codec: Codec): Spec[Sized with TestConfig, String] =
+  private def evalWithCodec(codec: BinaryCodec): Spec[Sized with TestConfig, String] =
     suite(codec.getClass.getSimpleName)(
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
@@ -113,7 +113,7 @@ class RoundtripEvaluationSpec extends ZIOSpecDefault {
     )
 
   private def roundtripEval[A: Schema](
-    codec: Codec,
+    codec: BinaryCodec,
     value: Remote[A],
     test: (A, A) => Boolean = (a: A, b: A) => a == b
   ): ZIO[RemoteContext with LocalContext, String, TestResult] = {
@@ -124,7 +124,7 @@ class RoundtripEvaluationSpec extends ZIOSpecDefault {
 
     for {
       originalEvaluated <- value.eval[A].mapError(_.toMessage)
-      newRemote         <- ZIO.fromEither(decoded)
+      newRemote         <- ZIO.fromEither(decoded).mapError(_.message)
       newEvaluated      <- newRemote.asInstanceOf[Remote[A]].eval[A].mapError(_.toMessage)
     } yield assertTrue(test(originalEvaluated, newEvaluated))
   }

@@ -20,7 +20,8 @@ import zio.flow.debug.TrackRemotes._
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{LocalContext, Remote}
-import zio.test.{Spec, TestEnvironment}
+import zio.schema._
+import zio.test.{Gen, Spec, TestEnvironment, check}
 import zio.{Scope, ZLayer}
 
 object RemoteListSyntaxSpec extends RemoteSpecBase {
@@ -187,6 +188,40 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         Remote.nil[Int].forall(_ % 2 === 0) <-> true,
         Remote.list(1, 2, 3, 4).forall(_ % 2 === 0) <-> false,
         Remote.list(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
+      ),
+      remoteTest("groupBy")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupBy(_.length) <-> Map(
+          3 -> List("abc", "def"),
+          2 -> List("ba", "de"),
+          0 -> List(""),
+          1 -> List("a", "b", "c")
+        )
+      ),
+      remoteTest("groupByMap")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMap(_.length)(s => s + s) <-> Map(
+          3 -> List("abcabc", "defdef"),
+          2 -> List("baba", "dede"),
+          0 -> List(""),
+          1 -> List("aa", "bb", "cc")
+        )
+      ),
+      remoteTest("groupByMapReduce")(
+        Remote
+          .list("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMapReduce(_.length)(s => s.length)(_ + _) <-> Map(
+          3 -> 6,
+          2 -> 4,
+          0 -> 0,
+          1 -> 3
+        )
+      ),
+      remoteTest("grouped")(
+        Remote.nil[Int].grouped(3) <-> List.empty[List[Int]],
+        Remote.list(1, 2, 3, 4, 5, 6, 7, 8).grouped(3) <-> List(List(1, 2, 3), List(4, 5, 6), List(7, 8))
       ),
       remoteTest("head")(
         Remote.nil[Int].head failsWithRemoteFailure "List is empty",
@@ -475,6 +510,25 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
           List(3, 4, 5)
         )
       ),
+      remoteTest("sorted")(
+        check(Gen.listOf(Gen.int)) { list =>
+          Remote(list).sorted <-> list.sorted
+        }
+      ),
+      remoteTest("sortBy")(
+        check(Gen.listOf(Gen.alphaNumericString), Gen.listOf(Gen.int)) { case (stringList, intList) =>
+          (Remote(stringList).sortBy(_.length) <-> stringList.sortBy(_.length)) &&
+          (Remote(intList).sortBy(x => -x) <-> intList.sortBy(x => -x))
+        }
+      ),
+      remoteTest("sortWith")(
+        check(Gen.listOf(Gen.int.map(WrappedInt.apply))) { list =>
+          Remote(list).sortWith(pair => WrappedInt.value.get(pair._1) < WrappedInt.value.get(pair._2)) <-> list
+            .sortWith(
+              _.value < _.value
+            )
+        }
+      ),
       remoteTest("span")(
         Remote.nil[Int].span(_ < 3) <-> ((List.empty[Int], List.empty[Int])),
         Remote.list(1, 2, 3, 4, 5).span(_ < 3) <-> ((List(1, 2), List(3, 4, 5)))
@@ -557,4 +611,11 @@ object RemoteListSyntaxSpec extends RemoteSpecBase {
         List.fill(Remote(3))(Remote(1)) <-> List(1, 1, 1)
       )
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory)
+
+  final case class WrappedInt(value: Int)
+  object WrappedInt {
+    val derivedSchema                       = DeriveSchema.gen[WrappedInt]
+    implicit val schema: Schema[WrappedInt] = derivedSchema
+    val (value)                             = Remote.makeAccessors[WrappedInt](derivedSchema)
+  }
 }

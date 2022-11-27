@@ -17,7 +17,14 @@
 package zio.flow.debug
 
 import zio.Chunk
-import zio.flow.remote.{InternalRemoteTracking, RemoteChunkSyntax, RemoteListSyntax, RemoteStringSyntax}
+import zio.flow.remote.{
+  InternalRemoteTracking,
+  RemoteChunkSyntax,
+  RemoteListSyntax,
+  RemoteMapSyntax,
+  RemoteSetSyntax,
+  RemoteStringSyntax
+}
 import zio.flow.{Remote, Syntax}
 
 import scala.language.implicitConversions
@@ -31,7 +38,13 @@ object TrackRemotes extends Syntax {
     new RemoteStringSyntax(remote, trackingEnabled = true)
 
   override implicit def RemoteChunk[A](remote: Remote[Chunk[A]]): RemoteChunkSyntax[A] =
-    new RemoteChunkSyntax[A](remote, trackingEnabled = true)
+    new RemoteChunkSyntax(remote, trackingEnabled = true)
+
+  override implicit def RemoteMap[K, V](remote: Remote[Map[K, V]]): RemoteMapSyntax[K, V] =
+    new RemoteMapSyntax(remote, trackingEnabled = true)
+
+  override implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] =
+    new RemoteSetSyntax[A](remote, trackingEnabled = true)
 
   def ifEnabled(implicit remoteTracking: InternalRemoteTracking): Syntax =
     if (remoteTracking.enabled)

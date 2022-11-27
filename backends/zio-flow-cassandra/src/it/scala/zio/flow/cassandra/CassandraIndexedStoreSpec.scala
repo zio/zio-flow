@@ -33,5 +33,5 @@ object CassandraIndexedStoreSpec extends CassandraSpec {
 
   private def testUsing[R](database: ZIO[R, Nothing, CqlSession], label: String): Spec[TestEnvironment with R, Any] =
     IndexedStoreTests(label, initializeDb = ZIO.unit).tests
-      .provideSomeLayerShared[TestEnvironment with R](ZLayer(database) >>> CassandraIndexedStore.layer)
+      .provideSomeLayerShared[TestEnvironment with R](ZLayer(database) >>> CassandraIndexedStore.fromSession)
 }

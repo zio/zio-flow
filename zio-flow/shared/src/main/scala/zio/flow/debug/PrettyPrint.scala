@@ -772,15 +772,28 @@ object PrettyPrint {
       case Remote.DurationFromAmount(_, _) => ???
       case Remote.Lazy(value) =>
         prettyPrintRemote(value(), builder, indent)
-      case Remote.RemoteSome(_)            => ???
-      case Remote.FoldOption(_, _, _)      => ???
-      case Remote.Recurse(_, _, _)         => ???
-      case Remote.RecurseWith(_, _)        => ???
-      case Remote.SetToList(_)             => ???
-      case Remote.ListToSet(_)             => ???
+      case Remote.RemoteSome(_)       => ???
+      case Remote.FoldOption(_, _, _) => ???
+      case Remote.Recurse(_, _, _)    => ???
+      case Remote.RecurseWith(_, _)   => ???
+      case Remote.SetToList(set) =>
+        prettyPrintRemote(set)
+        builder.append(".toList")
+      case Remote.ListToSet(list) =>
+        prettyPrintRemote(list)
+        builder.append(".toSet")
+      case Remote.MapToList(map) =>
+        prettyPrintRemote(map)
+        builder.append(".toList")
+      case Remote.ListToMap(list) =>
+        prettyPrintRemote(list)
+        builder.append(".toMap")
       case Remote.ListToString(_, _, _, _) => ???
       case Remote.OpticGet(_, _)           => ???
       case Remote.OpticSet(_, _, _)        => ???
+      case Remote.SortList(list, _) =>
+        prettyPrintRemote(list)
+        builder.append(".sort")
     }
   }
 
@@ -872,8 +885,8 @@ object PrettyPrint {
       case ZFlow.Fail(error) =>
         builder.append("fail ")
         prettyPrintRemote(error, builder, indent)
-      case ZFlow.NewVar(name, initial) =>
-        builder.append("newvar ")
+      case ZFlow.NewVar(name, initial, appendTempCounter) =>
+        builder.append(if (appendTempCounter) "newTempVar" else "newVar ")
         builder.append(name)
         builder.append(" with initial value ")
         prettyPrintRemote(initial, builder, indent)
@@ -884,6 +897,10 @@ object PrettyPrint {
         prettyPrintRemote(step, builder, indent)
         builder.append(" while ")
         prettyPrintRemote(predicate, builder, indent)
+      case ZFlow.Random =>
+        builder.append("random")
+      case ZFlow.RandomUUID =>
+        builder.append("randomUUID")
     }
   }
 }

@@ -1,6 +1,6 @@
 ---
 id: remote
-title:  "Remote"
+title: "Remote"
 ---
 
 # Remote Values

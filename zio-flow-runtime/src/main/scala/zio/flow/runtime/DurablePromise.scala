@@ -29,14 +29,14 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     schemaA: Schema[A]
   ): ZIO[DurableLog with ExecutionEnvironment, ExecutorError, Either[E, A]] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Waiting for durable promise $promiseId") *>
+      ZIO.logTrace(s"Waiting for durable promise $promiseId") *>
         DurableLog
           .subscribe(Topics.promise(promiseId), Index(0L))
           .runHead
           .mapError(ExecutorError.LogError)
           .flatMap {
             case Some(data) =>
-              ZIO.log(s"Got durable promise result for $promiseId") *>
+              ZIO.logTrace(s"Got durable promise result for $promiseId") *>
                 ZIO
                   .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
                   .mapError(msg => ExecutorError.DeserializationError(s"awaited promise [$promiseId]", msg))
@@ -52,7 +52,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     schemaA: Schema[A]
   ): ZIO[DurableLog with ExecutionEnvironment, ExecutorError, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Setting $promiseId to failure $error") *>
+      ZIO.logDebug(s"Setting $promiseId to failure $error") *>
         DurableLog
           .append(Topics.promise(promiseId), execEnv.serializer.serialize[Either[E, A]](Left(error)))
           .mapBoth(ExecutorError.LogError, _ == 0L)
@@ -65,7 +65,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     schemaA: Schema[A]
   ): ZIO[DurableLog with ExecutionEnvironment, ExecutorError, Boolean] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Setting $promiseId to success: $value") *>
+      ZIO.logTrace(s"Setting $promiseId to success: $value") *>
         DurableLog
           .append(Topics.promise(promiseId), execEnv.serializer.serialize[Either[E, A]](Right(value)))
           .mapBoth(ExecutorError.LogError, _ == 0L)
@@ -76,14 +76,14 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     schemaA: Schema[A]
   ): ZIO[DurableLog with ExecutionEnvironment, ExecutorError, Option[Either[E, A]]] =
     ZIO.service[ExecutionEnvironment].flatMap { execEnv =>
-      ZIO.log(s"Polling durable promise $promiseId") *>
+      ZIO.logTrace(s"Polling durable promise $promiseId") *>
         DurableLog
           .getAllAvailable(Topics.promise(promiseId), Index(0L))
           .runHead
           .mapError(ExecutorError.LogError)
           .flatMap(optData =>
             ZIO.foreach(optData)(data =>
-              ZIO.log(s"Got durable promise result for $promiseId") *>
+              ZIO.logTrace(s"Got durable promise result for $promiseId") *>
                 ZIO
                   .fromEither(execEnv.deserializer.deserialize[Either[E, A]](data))
                   .mapError(msg => ExecutorError.DeserializationError(s"polled promise [$promiseId]", msg))
@@ -98,7 +98,13 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
 }
 
 object DurablePromise {
-  implicit def schema[E, A]: Schema[DurablePromise[E, A]] = DeriveSchema.gen
+  private val typeId = TypeId.parse("zio.flow.runtime.DurablePromise")
+  implicit def schema[E, A]: Schema[DurablePromise[E, A]] =
+    Schema.CaseClass1[PromiseId, DurablePromise[E, A]](
+      typeId,
+      Schema.Field("promiseId", Schema[PromiseId], get0 = _.promiseId, set0 = (a, b) => a.copy(promiseId = b)),
+      DurablePromise.apply
+    )
 
   def make[E, A](promiseId: PromiseId): DurablePromise[E, A] =
     DurablePromise(promiseId)

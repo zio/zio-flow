@@ -3,7 +3,7 @@ import BuildHelper._
 inThisBuild(
   List(
     organization := "dev.zio",
-    homepage     := Some(url("https://zio.github.io/zio-flow/")),
+    homepage     := Some(url("https://zio.dev/zio-flow/")),
     licenses     := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer(
@@ -96,7 +96,7 @@ lazy val zioFlowRuntime = project
   .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"                       %% "zhttp" % Version.zioHttp
+      "io.d11" %% "zhttp" % Version.zioHttp
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(fork := false)
@@ -104,14 +104,25 @@ lazy val zioFlowRuntime = project
 
 lazy val zioFlowServer = project
   .in(file("zio-flow-server"))
-  .dependsOn(zioFlowRuntime % " compile->compile;test->test")
+  .dependsOn(
+    zioFlowRuntime % " compile->compile;test->test",
+    rocksdb,
+    dynamodb,
+    cassandra
+  )
   .settings(dottySettings)
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"                       %% "zhttp"                  % Version.zioHttp,
-      "dev.zio"                      %% "zio-metrics-connectors" % Version.zioMetricsConnectors
-    ) ++ commonTestDependencies.map(_ % Test)
+      "io.d11"      %% "zhttp"                    % Version.zioHttp,
+      "dev.zio"     %% "zio-metrics-connectors"   % Version.zioMetricsConnectors,
+      "com.typesafe" % "config"                   % Version.config,
+      "dev.zio"     %% "zio-config"               % Version.zioConfig,
+      "dev.zio"     %% "zio-config-typesafe"      % Version.zioConfig,
+      "dev.zio"     %% "zio-logging"              % Version.zioLogging,
+      "dev.zio"     %% "zio-logging-slf4j-bridge" % Version.zioLogging
+    ) ++ commonTestDependencies.map(_ % Test),
+    fork := true
   )
   .settings(fork := false)
   .settings(testFrameworks += zioTest)
@@ -119,8 +130,8 @@ lazy val zioFlowServer = project
 lazy val zioFlowTest = crossProject(JSPlatform, JVMPlatform)
   .in(file("zio-flow-test"))
   .settings(stdSettings("zio-flow-test"))
-  .settings(dottySettings)
   .settings(crossProjectSettings)
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-test" % Version.zio
@@ -137,7 +148,7 @@ lazy val zioFlowRuntimeTest = project
   .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-test" % Version.zio
+      "dev.zio" %% "zio-test" % Version.zio
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(testFrameworks += zioTest)
@@ -205,8 +216,8 @@ lazy val dynamodb = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-dynamodb"),
-    Defaults.itSettings,
     dottySettings,
+    Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-aws-dynamodb" % Version.zioAws,
       "dev.zio" %% "zio-aws-netty"    % Version.zioAws
@@ -230,8 +241,8 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
     dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
     ) ++ commonTestDependencies.map(_ % Test)
   )
 
@@ -246,8 +257,8 @@ lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
     dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"                      %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang"                % "scala-reflect"         % scalaVersion.value % "provided"
+      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
+      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
     ) ++ commonTestDependencies.map(_ % Test)
   )
 
@@ -264,17 +275,10 @@ lazy val docs = project
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     scalacOptions += "-Xlog-implicits",
-    libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % Version.zio
-    ),
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioFlowJVM),
-    ScalaUnidoc / unidoc / target              := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
-    cleanFiles += (ScalaUnidoc / unidoc / target).value,
-    docusaurusCreateSite     := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
-    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value
+    libraryDependencies ++= Seq("dev.zio" %% "zio" % Version.zio)
   )
   .dependsOn(zioFlowJVM)
-  .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
+  .enablePlugins(WebsitePlugin)
 
 lazy val examples = project
   .in(file("zio-flow-examples"))

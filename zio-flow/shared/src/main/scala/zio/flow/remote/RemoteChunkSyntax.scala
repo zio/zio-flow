@@ -133,7 +133,19 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def forall(p: Remote[A] => Remote[Boolean]): Remote[Boolean] =
     toList.forall(p).trackInternal("Chunk#forall")
 
-  // TODO: groupBy etc if we have support for Remote[Map[K, V]]
+  def groupBy[K](f: Remote[A] => Remote[K]): Remote[Map[K, Chunk[A]]] =
+    toList.groupBy(f).map(pair => (pair._1, Chunk.fromList(pair._2))).trackInternal("Chunk#groupBy")
+
+  def groupMap[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B]): Remote[Map[K, Chunk[B]]] =
+    toList.groupMap(key)(f).map(pair => (pair._1, Chunk.fromList(pair._2))).trackInternal("Chunk#groupMap")
+
+  def groupMapReduce[K, B](key: Remote[A] => Remote[K])(f: Remote[A] => Remote[B])(
+    reduce: (Remote[B], Remote[B]) => Remote[B]
+  ): Remote[Map[K, B]] =
+    toList.groupMapReduce(key)(f)(reduce).trackInternal("Chunk#groupMapReduce")
+
+  def grouped(size: Remote[Int]): Remote[Chunk[Chunk[A]]] =
+    Chunk.fromList(toList.grouped(size).map(Chunk.fromList(_))).trackInternal("Chunk#grouped")
 
   def head: Remote[A] =
     toList.head.trackInternal("Chunk#head")
@@ -328,6 +340,15 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
   def sliding(size: Remote[Int]): Remote[Chunk[Chunk[A]]] =
     sliding(size, 1)
 
+  def sortWith(lt: Remote[(A, A)] => Remote[Boolean]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sortWith(lt)).trackInternal("Chunk#sortWith")
+
+  def sorted(implicit schema: Schema[A]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sorted).trackInternal("Chunk#sorted")
+
+  def sortBy[B: Schema](f: Remote[A] => Remote[B]): Remote[Chunk[A]] =
+    Chunk.fromList(self.toList.sortBy(f)).trackInternal("Chunk#sortBy")
+
   def span(p: Remote[A] => Remote[Boolean]): Remote[(Chunk[A], Chunk[A])] =
     Remote.bind(toList.span(p)) { tuple =>
       (Chunk.fromList(tuple._1), Chunk.fromList(tuple._2)).trackInternal("Chunk#span")
@@ -337,6 +358,9 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
     Remote.bind(toList.splitAt(n)) { tuple =>
       (Chunk.fromList(tuple._1), Chunk.fromList(tuple._2)).trackInternal("Chunk#splitAt")
     }
+
+  def startsWith[B >: A](that: Remote[Chunk[B]]): Remote[Boolean] =
+    self.toList.startsWith(that.toList).trackInternal("Chunk#startsWith")
 
   def sum(implicit numeric: Numeric[A]): Remote[A] =
     toList.sum.trackInternal("Chunk#sum")
@@ -358,6 +382,9 @@ final class RemoteChunkSyntax[A](val self: Remote[Chunk[A]], trackingEnabled: Bo
 
   def toList: Remote[List[A]] =
     self.asInstanceOf[Remote[List[A]]].trackInternal("Chunk#toList")
+
+  def toMap[K, V](implicit ev: A <:< (K, V)): Remote[Map[K, V]] =
+    self.toList.toMap
 
   def toSet: Remote[Set[A]] =
     toList.toSet.trackInternal("Chunk#toSet")

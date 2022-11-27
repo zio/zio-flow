@@ -141,7 +141,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .delete(flowId)
                 .as(Response(status = Status.Ok))
                 .catchSome { case ExecutorError.InvalidOperationArguments(details) =>
-                  ZIO.succeed(Response(status = Status.BadRequest, data = HttpData.fromString(details)))
+                  ZIO.succeed(Response(status = Status.BadRequest, body = Body.fromString(details)))
                 }
                 .mapError(_.toException)
             }

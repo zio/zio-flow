@@ -17,11 +17,12 @@
 package zio.flow.remote
 
 import zio.flow.debug.TrackRemotes._
+import zio.flow.remote.RemoteListSyntaxSpec.WrappedInt
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.{Chunk, Scope, ZLayer}
 import zio.flow.{LocalContext, Remote}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test.{Spec, TestEnvironment}
+import zio.test.{Gen, Spec, TestEnvironment, check}
 
 object RemoteChunkSyntaxSpec extends RemoteSpecBase {
   override def spec: Spec[TestEnvironment with Scope, Any] =
@@ -178,6 +179,40 @@ object RemoteChunkSyntaxSpec extends RemoteSpecBase {
         Remote.emptyChunk[Int].forall(_ % 2 === 0) <-> true,
         Remote.chunk(1, 2, 3, 4).forall(_ % 2 === 0) <-> false,
         Remote.chunk(2, 4, 6, 8).forall(_ % 2 === 0) <-> true
+      ),
+      remoteTest("groupBy")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupBy(_.length) <-> Map(
+          3 -> Chunk("abc", "def"),
+          2 -> Chunk("ba", "de"),
+          0 -> Chunk(""),
+          1 -> Chunk("a", "b", "c")
+        )
+      ),
+      remoteTest("groupByMap")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMap(_.length)(s => s + s) <-> Map(
+          3 -> Chunk("abcabc", "defdef"),
+          2 -> Chunk("baba", "dede"),
+          0 -> Chunk(""),
+          1 -> Chunk("aa", "bb", "cc")
+        )
+      ),
+      remoteTest("groupByMapReduce")(
+        Remote
+          .chunk("abc", "def", "ba", "", "a", "b", "c", "de")
+          .groupMapReduce(_.length)(s => s.length)(_ + _) <-> Map(
+          3 -> 6,
+          2 -> 4,
+          0 -> 0,
+          1 -> 3
+        )
+      ),
+      remoteTest("grouped")(
+        Remote.emptyChunk[Int].grouped(3) <-> Chunk.empty[Chunk[Int]],
+        Remote.chunk(1, 2, 3, 4, 5, 6, 7, 8).grouped(3) <-> Chunk(Chunk(1, 2, 3), Chunk(4, 5, 6), Chunk(7, 8))
       ),
       remoteTest("head")(
         Remote.emptyChunk[Int].head failsWithRemoteFailure "List is empty",
@@ -460,6 +495,25 @@ object RemoteChunkSyntaxSpec extends RemoteSpecBase {
           Chunk(3, 4, 5)
         )
       ),
+      remoteTest("sorted")(
+        check(Gen.chunkOf(Gen.int)) { chunk =>
+          Remote(chunk).sorted <-> chunk.sorted
+        }
+      ),
+      remoteTest("sortBy")(
+        check(Gen.chunkOf(Gen.alphaNumericString), Gen.chunkOf(Gen.int)) { case (stringChunk, intChunk) =>
+          (Remote(stringChunk).sortBy(_.length) <-> stringChunk.sortBy(_.length)) &&
+          (Remote(intChunk).sortBy(x => -x) <-> intChunk.sortBy(x => -x))
+        }
+      ),
+      remoteTest("sortWith")(
+        check(Gen.chunkOf(Gen.int.map(WrappedInt.apply))) { chunk =>
+          Remote(chunk).sortWith(pair => WrappedInt.value.get(pair._1) < WrappedInt.value.get(pair._2)) <-> chunk
+            .sortWith(
+              _.value < _.value
+            )
+        }
+      ),
       remoteTest("span")(
         Remote.emptyChunk[Int].span(_ < 3) <-> ((Chunk.empty[Int], Chunk.empty[Int])),
         Remote.chunk(1, 2, 3, 4, 5).span(_ < 3) <-> ((Chunk(1, 2), Chunk(3, 4, 5)))
@@ -470,11 +524,11 @@ object RemoteChunkSyntaxSpec extends RemoteSpecBase {
         Remote.chunk(1, 2, 3, 4, 5).splitAt(0) <-> ((Chunk.empty, Chunk(1, 2, 3, 4, 5))),
         Remote.chunk(1, 2, 3, 4, 5).splitAt(6) <-> ((Chunk(1, 2, 3, 4, 5), Chunk.empty))
       ),
-//      remoteTest("startsWith")(
-//        Remote.emptyChunk[Int].startsWith(Remote.chunk(1, 2)) <-> false,
-//        Remote.chunk(1, 2, 3).startsWith(Remote.chunk(1, 2)) <-> true,
-//        Remote.chunk(0, 0, 1, 2).startsWith(Remote.chunk(1, 2)) <-> false
-//      ),
+      remoteTest("startsWith")(
+        Remote.emptyChunk[Int].startsWith(Remote.chunk(1, 2)) <-> false,
+        Remote.chunk(1, 2, 3).startsWith(Remote.chunk(1, 2)) <-> true,
+        Remote.chunk(0, 0, 1, 2).startsWith(Remote.chunk(1, 2)) <-> false
+      ),
       remoteTest("sum")(
         Remote.emptyChunk[Int].sum <-> 0,
         Remote.chunk(1, 2, 3, 4).sum <-> (1 + 2 + 3 + 4)

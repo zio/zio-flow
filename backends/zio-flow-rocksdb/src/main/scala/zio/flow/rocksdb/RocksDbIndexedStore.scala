@@ -37,7 +37,7 @@ final case class RocksDbIndexedStore(
 
   def addTopic(topic: String): IO[Throwable, ColumnFamilyHandle] =
     for {
-      //TODO : Only catch "Column Family already exists"
+      // TODO : Only catch "Column Family already exists"
       colFamHandle <- getOrCreateNamespace(topic)
       _ <- rocksDB
              .put(
@@ -136,9 +136,9 @@ final case class RocksDbIndexedStore(
 
 object RocksDbIndexedStore {
 
-  def make: ZIO[RocksDbConfig with Scope, Throwable, RocksDbIndexedStore] =
+  def make: ZIO[Scope, Throwable, RocksDbIndexedStore] =
     for {
-      options <- ZIO.service[RocksDbConfig]
+      options <- ZIO.config(RocksDbConfig.config.nested("rocksdb-indexed-store"))
       rocksDb <- TransactionDB.Live.openAllColumnFamilies(
                    options.toDBOptions,
                    options.toColumnFamilyOptions,
@@ -155,9 +155,9 @@ object RocksDbIndexedStore {
       namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
     } yield RocksDbIndexedStore(rocksDb, namespaces)
 
-  def layer: ZLayer[RocksDbConfig, Throwable, IndexedStore] = ZLayer.scoped(make)
+  def layer: ZLayer[Any, Throwable, IndexedStore] = ZLayer.scoped(make)
 
-  def withEmptyTopic(topicName: String): ZLayer[RocksDbConfig, Throwable, IndexedStore] =
+  def withEmptyTopic(topicName: String): ZLayer[Any, Throwable, IndexedStore] =
     ZLayer.scoped(make.tap(store => store.addTopic(topicName)))
 
   private lazy val positionKey = ProtobufCodec.encode(Schema[String])("POSITION").toArray

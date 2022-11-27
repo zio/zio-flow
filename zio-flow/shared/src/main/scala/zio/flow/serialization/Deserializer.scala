@@ -28,11 +28,11 @@ object Deserializer {
 
   val json: Deserializer = new Deserializer {
     override def deserialize[A](value: Chunk[Byte])(implicit schema: Schema[A]): Either[String, A] =
-      JsonCodec.decode(schema)(value)
+      JsonCodec.decode(schema)(value).left.map(_.message)
   }
 
   val protobuf: Deserializer = new Deserializer {
     override def deserialize[A](value: Chunk[Byte])(implicit schema: Schema[A]): Either[String, A] =
-      ProtobufCodec.decode(schema)(value)
+      ProtobufCodec.decode(schema)(value).left.map(_.message)
   }
 }

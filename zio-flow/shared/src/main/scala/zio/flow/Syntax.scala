@@ -22,6 +22,7 @@ import zio.flow.remote.RemoteTuples._
 
 import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
+import scala.util.matching.Regex
 
 trait Syntax {
 
@@ -36,6 +37,15 @@ trait Syntax {
   )
   implicit def RemoteInstantCompanion(instant: Instant.type): RemoteInstantCompanionSyntax =
     new RemoteInstantCompanionSyntax(instant)
+
+  implicit def RemoteOffsetDateTime(remote: Remote[OffsetDateTime]): RemoteOffsetDateTimeSyntax =
+    new RemoteOffsetDateTimeSyntax(
+      remote
+    )
+
+  implicit def RemoteOffsetDateTimeCompanion(instant: OffsetDateTime.type): RemoteOffsetDateTimeCompanionSyntax =
+    new RemoteOffsetDateTimeCompanionSyntax(instant)
+
   implicit def RemoteDuration(remote: Remote[Duration]): RemoteDurationSyntax = new RemoteDurationSyntax(
     remote
   )
@@ -255,7 +265,8 @@ trait Syntax {
     new RemoteListSyntax[A](remote, trackingEnabled = false)
   implicit def RemoteListCompanion(list: List.type): RemoteListCompanionSyntax = new RemoteListCompanionSyntax(list)
 
-  implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] = new RemoteSetSyntax[A](remote)
+  implicit def RemoteSet[A](remote: Remote[Set[A]]): RemoteSetSyntax[A] =
+    new RemoteSetSyntax[A](remote, trackingEnabled = false)
 
   implicit def RemoteListChar(remote: Remote[List[Char]]): RemoteListCharSyntax = new RemoteListCharSyntax(remote)
 
@@ -269,6 +280,9 @@ trait Syntax {
   implicit def remoteStringInterpolator(ctx: StringContext): RemoteStringInterpolator = new RemoteStringInterpolator(
     ctx
   )
+
+  implicit def RemoteRegex(remote: Remote[Regex]): RemoteRegexSyntax =
+    new RemoteRegexSyntax(remote)
 
   implicit def RemoteExecutingFlow[E, A](remote: Remote[ExecutingFlow[E, A]]): RemoteExecutingFlowSyntax[E, A] =
     new RemoteExecutingFlowSyntax[E, A](remote)
@@ -292,4 +306,7 @@ trait Syntax {
   implicit def RemoteChunkCompanion(chunk: Chunk.type): RemoteChunkCompanionSyntax = new RemoteChunkCompanionSyntax(
     chunk
   )
+
+  implicit def RemoteMap[K, V](remote: Remote[Map[K, V]]): RemoteMapSyntax[K, V] =
+    new RemoteMapSyntax[K, V](remote, trackingEnabled = false)
 }

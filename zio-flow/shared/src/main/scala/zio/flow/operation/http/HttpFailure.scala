@@ -2,15 +2,16 @@ package zio.flow.operation.http
 
 import zhttp.http.Status
 import zio.flow.ActivityError
+import zio.schema.codec.DecodeError
 
 sealed trait HttpFailure {
   def toActivityError(method: HttpMethod, host: String): ActivityError
 }
 
 object HttpFailure {
-  final case class ResponseBodyDecodeFailure(reason: String, body: String) extends HttpFailure {
+  final case class ResponseBodyDecodeFailure(reason: DecodeError, body: String) extends HttpFailure {
     override def toActivityError(method: HttpMethod, host: String): ActivityError =
-      ActivityError(s"$method request to $host failed to decode response body ($body): $reason", None)
+      ActivityError(s"$method request to $host failed to decode response body ($body): ${reason.message}", None)
   }
   final case class FailedToReceiveResponseBody(reason: Throwable) extends HttpFailure {
     override def toActivityError(method: HttpMethod, host: String): ActivityError =

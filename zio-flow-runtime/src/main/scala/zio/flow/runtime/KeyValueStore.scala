@@ -123,7 +123,7 @@ object KeyValueStore {
         namespaces <- Ref.make(Map.empty[String, Map[Chunk[Byte], List[InMemoryKeyValueEntry]]])
         _ <- ZIO.addFinalizer(
                namespaces.get.flatMap { map =>
-                 ZIO.debug(map.values.map(_.size).sum.toString + " items left in kv store")
+                 ZIO.logDebug(map.values.map(_.size).sum.toString + " items left in kv store")
                }
              )
       } yield InMemoryKeyValueStore(namespaces)

@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package zio.flow.runtime.internal.executor
 
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
@@ -21,8 +37,8 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         "testUrlForActivity.com",
         API.get("").input[Int].output[Int]
       ),
-      ZFlow.succeed(12),
-      ZFlow.unit
+      check = Activity.checkNotSupported,
+      compensate = Activity.compensateNotSupported
     )
 
   override def flowSpec
@@ -136,6 +152,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           methodMatcher = equalTo("GET"),
           result = () => 12
         )
+      ),
+      testFlow("Activity's check") {
+        testActivity.copy(
+          check = ZFlow.succeed(111)
+        )(12)
+      }(
+        assert = result => assertTrue(result == 111),
+        mock = MockedOperation.Empty
       ),
       testFlow("iterate") {
         ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
@@ -263,36 +287,36 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
             "activity1Undo1",
             "activity1Undo1",
             Operation.Http("http://activity1/undo/1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity1Undo2 = Activity(
             "activity1Undo2",
             "activity1Undo2",
             Operation.Http("http://activity1/undo/2", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity2Undo = Activity(
             "activity2Undo",
             "activity2Undo",
             Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
 
           val activity1 = Activity(
             "activity1",
             "activity1",
             Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity1Undo1(n) *> activity1Undo2(n)).unit
           )
           val activity2 = Activity(
             "activity2",
             "activity2",
             Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
           )
 
@@ -377,29 +401,29 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
             "activity1Undo",
             "activity1Undo",
             Operation.Http("http://activity1/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
           val activity2Undo = Activity(
             "activity2Undo",
             "activity2Undo",
             Operation.Http("http://activity2/undo", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
-            ZFlow.unit
+            check = Activity.checkNotSupported,
+            compensate = Activity.compensateNotSupported
           )
 
           val activity1 = Activity(
             "activity1",
             "activity1",
             Operation.Http("http://activity1", API.get("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity1Undo(n)).unit
           )
           val activity2 = Activity(
             "activity2",
             "activity2",
             Operation.Http("http://activity2", API.post("").input[Int].output[Int]),
-            ZFlow.succeed(0),
+            check = Activity.checkNotSupported,
             ZFlow.input[Int].flatMap(n => activity2Undo(n)).unit
           )
 
@@ -835,6 +859,26 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         ZFlow.fromEither(Remote.left[Int, String](11))
       } { result =>
         assert(result)(fails(equalTo(11)))
+      },
+      testFlow("replicate") {
+        ZFlow.succeed(11).replicate(5)
+      } { result =>
+        assertTrue(result == Chunk(11, 11, 11, 11, 11))
+      },
+      testFlow("random") {
+        ZFlow.random
+      } { result =>
+        assertTrue(result >= 0.0 && result <= 1.0)
+      },
+      testFlow("random replicate") {
+        ZFlow.random.replicate(5).flatMap(chunk => ZFlow.log(chunk.toString).as(chunk))
+      } { result =>
+        assertTrue(result.size == 5 && result.distinct.size > 1)
+      },
+      testFlow("random UUID replicate") {
+        ZFlow.randomUUID.replicate(5).flatMap(chunk => ZFlow.log(chunk.toString).as(chunk))
+      } { result =>
+        assertTrue(result.size == 5 && result.distinct.size == 5)
       }
     )
 

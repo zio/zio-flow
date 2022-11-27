@@ -8,7 +8,7 @@ import zio.flow.{LocalContext, Remote}
 import zio.test.{Spec, TestAspect, TestEnvironment}
 
 object RemoteStringSyntaxSpec extends RemoteSpecBase {
-  val suite: Spec[TestEnvironment, Nothing] =
+  override def spec: Spec[TestEnvironment, Nothing] =
     suite("RemoteStringSyntax")(
       remoteTest("*")(
         Remote("xy") * 3 <-> "xyxyxy",
@@ -148,7 +148,7 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
       remoteTest("grouped")(
         Remote("").grouped(2) <-> List.empty[String],
         Remote("hello").grouped(3) <-> List("hel", "lo")
-      ) @@ TestAspect.ignore, // TODO
+      ),
       remoteTest("head")(
         Remote("").head failsWithRemoteFailure "List is empty",
         Remote("hello").head <-> 'h'
@@ -298,11 +298,11 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("").replaceAll("world", "WORLD") <-> "",
         Remote("hello world, hello world!").replaceAll("world", "WORLD") <-> "hello WORLD, hello WORLD!",
         Remote("hello world").replaceAll("[hel]", ".") <-> "....o wor.d"
-      ) @@ TestAspect.ignore, // TODO
+      ),
       remoteTest("replaceFirst")(
         Remote("").replaceFirst(" ", "__") <-> "",
         Remote("hello world !!!").replaceFirst(" ", "__") <-> "hello__world !!!"
-      ) @@ TestAspect.ignore, // TODO
+      ),
       remoteTest("reverse")(
         Remote("").reverse <-> "",
         Remote("hello").reverse <-> "olleh"
@@ -423,17 +423,16 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         Remote("true").toBooleanOption <-> Some(true),
         Remote("x").toBooleanOption <-> None
       ),
-      // TODO: enable once we have byte schema
-//      remoteTest("toByte")(
-//        Remote("0").toByte <-> 0,
-//        Remote("-100").toByte <-> -100,
-//        Remote("x").toByte failsWithRemoteError "Invalid byte"
-//      ),
-//      remoteTest("toByteOption")(
-//        Remote("0").toByteOption <-> Some(0),
-//        Remote("-100").toByteOption <-> Some(-100),
-//        Remote("x").toByteOption <-> None
-//      )
+      remoteTest("toByte")(
+        Remote("0").toByte <-> 0.toByte,
+        Remote("-100").toByte <-> -100.toByte,
+        Remote("x").toByte failsWithRemoteFailure "Invalid byte"
+      ),
+      remoteTest("toByteOption")(
+        Remote("0").toByteOption <-> Some(0.toByte),
+        Remote("-100").toByteOption <-> Some(-100.toByte),
+        Remote("x").toByteOption <-> None
+      ),
       remoteTest("toDouble")(
         Remote("0.0").toDouble <-> 0.0,
         Remote("-12.34").toDouble <-> -12.34,
@@ -504,6 +503,4 @@ object RemoteStringSyntaxSpec extends RemoteSpecBase {
         rs"hello ${Remote(1).toString}${Remote("!") * 3}" <-> "hello 1!!!"
       )
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory)
-
-  override def spec = suite("RemoteStringSpec")(suite)
 }
