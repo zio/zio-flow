@@ -30,7 +30,7 @@ object HttpOperationPolicy {
     (
       Config.int("max-parallel-request-count") ++
         Config.string("host-override").optional ++
-        Config.listOf("retry-policies", HttpRetryPolicy.config).optional.map(_.getOrElse(List.empty)) ++
+        Config.listOf("retry-policies", HttpRetryPolicy.config) ++
         RetryPolicy.config.nested("circuit-breaker-policy").optional ++
         Config.duration("timeout")
     ).map { case (maxParallelRequestCount, hostOverride, retryPolicies, circuitBreakerPolicy, timeout) =>
