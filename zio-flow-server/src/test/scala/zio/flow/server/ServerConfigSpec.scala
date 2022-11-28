@@ -25,7 +25,7 @@ import zio.{DefaultServices, Scope, ZIO, durationInt}
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
 import java.net.InetSocketAddress
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
 
 object ServerConfigSpec extends ZIOSpecDefault {
   override def spec: Spec[TestEnvironment with Scope, Any] =
@@ -168,8 +168,8 @@ object ServerConfigSpec extends ZIOSpecDefault {
                         serverConfig.port == 8888,
                         serverConfig.metrics.interval == 10.seconds,
                         serverConfig.gcPeriod == 1.minute,
-                        rocksDbKvStoreConfig.path == Path.of("/tmp/zio-flow.db"),
-                        rocksDbIxStoreConfig.path == Path.of("/tmp/zio-flow.db"),
+                        rocksDbKvStoreConfig.path == Paths.get("/tmp/zio-flow.db"),
+                        rocksDbIxStoreConfig.path == Paths.get("/tmp/zio-flow.db"),
                         cassandraDbKvStoreConfig.contactPoints == List(
                           new InetSocketAddress("127.0.0.1", 1111),
                           new InetSocketAddress("1.2.3.4", 2222)
