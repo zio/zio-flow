@@ -16,16 +16,16 @@
 
 package zio.flow.server
 
-import zio.flow.{ConfigKey, Configuration}
 import zio.flow.cassandra.CassandraConfig
 import zio.flow.rocksdb.RocksDbConfig
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
-import zio.{DefaultServices, Scope, ZIO, durationInt}
+import zio.flow.{ConfigKey, Configuration}
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
+import zio.{DefaultServices, Scope, ZIO, durationInt}
 
 import java.net.InetSocketAddress
-import java.nio.file.{Path, Paths}
+import java.nio.file.Paths
 
 object ServerConfigSpec extends ZIOSpecDefault {
   override def spec: Spec[TestEnvironment with Scope, Any] =
