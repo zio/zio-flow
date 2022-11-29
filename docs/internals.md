@@ -5,7 +5,9 @@ title: "Internals"
 
 # Internals
 
-## The Remoe type
+## The Remote type
+
+### Remote function application
 
 ## Persistent variables and promises
 
