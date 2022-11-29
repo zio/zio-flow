@@ -3,7 +3,10 @@ id: remote
 title: "Remote"
 ---
 
-# Remote Values
+# Remotes
+
+## Overview
+### Remote Values
 
 The `Remote` data type forms the backbone of ZIO Flow and allows us to safely describe values that may be part of computations on multiple remote nodes.
 
@@ -35,7 +38,7 @@ First, the method signatures are nearly identical! You will find this frequently
 
 Second, you will notice that the one thing that differs between these type signatures is that whereas `ZIO#map` accepts a function `A => B`, `ZFlow#map` accepts a function `Remote[A] => Remote[B]`. This makes sense because `ZIO` describes a workflow on a single machine whereas `ZFlow` describes a resilient, distributed, computation, so the values we are working with must be of the form `Remote[A]` rather than `A`.
 
-# Working With Remote Values
+### Working With Remote Values
 
 At this point you might be worried that despite these benefits, working with remote values could involve additional boilerplate. We know how to add two `Int` values, but how do we add two `Remote[Int]` values?
 
@@ -72,7 +75,7 @@ This also means that if you know how to do something in ordinary Scala you also 
 
 We are definitely working on ensuring that the experience of working with `Remote` values is as good as working with ordinary values. So if you see an area where this is not the case please reach out to us on Discord or open an issue so that we can improve it!
 
-# Working With Schemas
+### Working With Schemas
 
 As discussed above, a `Schema` describes the "structure" of some Scala type as a value. This lets us know how to serialize and deserialize the value, as well as providing other useful functional like migrations between two versions of a data type.
 
@@ -115,3 +118,17 @@ val remotePaymentMethod: Remote[PaymentMethod] =
 ```
 
 With this, you know everything you need to work with remote values as part of writing your resilient, distributed application!
+
+## Constructing remotes
+
+## Accessing custom types with optics
+
+## Writing remote functions
+
+### Recursion
+
+### Debugging 
+
+### Metrics
+
+## List of supported remote types

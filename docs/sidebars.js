@@ -1,9 +1,14 @@
 const sidebars = {
   sidebar: [
     "index",
-    "cassandra-key-value-store",
-    "dynamodb-key-value-store",
-    "remote"
+    "zflow",
+    "remote",
+    "activities",
+    "execution",
+    "backends",
+    "testing",
+    "examples",
+    "internals"
   ]
 };
 
