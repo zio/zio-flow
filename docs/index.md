@@ -19,7 +19,7 @@ ZIO Flow helps you orchestrate complex business logic, without having to worry a
 For defining ZIO Flow programs, you need to add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-flow" % ""@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow" % "@VERSION@"
 ```
 
 This module is available for Scala.js as well.
@@ -30,8 +30,8 @@ There are a couple of _activity libraries_ providing integration with 3rd party 
 and they only have to be present on the definition side of your flows. The executor does not need to have these libraries on the classpath.
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-flow-twilio" % ""@VERSION@"
-libraryDependencies += "dev.zio" %% "zio-flow-sendgrid" % ""@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-twilio" % "@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-sendgrid" % "@VERSION@"
 ```
 
 There are many ways to execute ZIO Flow programs. The easiest way is to use a compiled version of the built-in _ZIO Flow Server_:
@@ -45,14 +45,14 @@ We will provide ready to use Docker images as well in the future.
 To embed the ZIO Flow executor in your own application, you need to add the following dependency:
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-flow-runtime" % ""@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-runtime" % "@VERSION@"
 ```
 
 For more information about the executors, see [Execution](execution). 
 You will also need to choose a [persistent backend implementation](backends):
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-flow-rocksdb" % ""@VERSION@"
-libraryDependencies += "dev.zio" %% "zio-flow-dynamodb" % ""@VERSION@"
-libraryDependencies += "dev.zio" %% "zio-flow-cassandra" % ""@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-rocksdb" % "@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-dynamodb" % "@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-flow-cassandra" % "@VERSION@"
 ```

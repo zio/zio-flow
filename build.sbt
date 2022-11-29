@@ -267,7 +267,7 @@ lazy val docs = project
     scalacOptions += "-Xlog-implicits",
     libraryDependencies ++= Seq("dev.zio" %% "zio" % Version.zio)
   )
-  .dependsOn(zioFlowJVM)
+  .dependsOn(zioFlowJVM, twilioJVM, sendgridJVM)
   .enablePlugins(WebsitePlugin)
 
 lazy val examples = project
