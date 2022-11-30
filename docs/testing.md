@@ -52,7 +52,7 @@ the [execution page](execution).
 
 The recommended dependencies to provide to it are the in-memory implementations:
 
-```scala mdoc
+```scala mdoc:silent
 import zio.flow.runtime._
 
 IndexedStore.inMemory
@@ -81,7 +81,7 @@ The `MockedOperation` lives in the `zio.flow.mock` package and supports the foll
 
 Take the following example:
 
-```scala mdoc
+```scala mdoc:silent
 import zio.flow.mock._
 import zio.test.Assertion._
 
@@ -103,14 +103,14 @@ matched.
 
 If you expect an operation to be called more than once, this can be specified by using the `.repeated` modifier:
 
-```scala mdoc
+```scala mdoc:silent
 val mock2 = mock1.repeated(atMost = 10)
 ```
 
 If two different mocked operations can be expected and you don't know their order in advance, use the `orElse` or `|`
 combinator:
 
-```scala mdoc
+```scala mdoc:silent
 val mock3 = MockedOperation.Http(
   urlMatcher = equalTo("http://activity2"),
   methodMatcher = equalTo("GET"),
@@ -125,7 +125,7 @@ val mock4 = mock2 | mock3
 And finally you may want to define that you expect one particular operation to be called _after_ another one. For this
 you can use the `andThen` or `++` combinators:
 
-```scala mdoc
+```scala mdoc:silent
 val mock5 = mock1 ++ mock3
 ```
 
