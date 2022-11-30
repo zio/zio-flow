@@ -22,8 +22,6 @@ import zio._
 import zio.flow.mock.MockedOperation.Match
 import zio.schema.{DynamicValue, Schema}
 
-// TODO: move to a separate published module to support testing user flows
-
 trait MockedOperation { self =>
   def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation)
 

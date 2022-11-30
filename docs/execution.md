@@ -204,7 +204,7 @@ The file has the following sections and values:
 | Section                 | Description                                                                                                                                                                |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `port`                  | the port the server will listen on                                                                                                                                         |
-| `key-value-store`       | selects the backend to use for _key value store_, can be either `rocksdb`, `cassandra`, `dynamodb` or `in-memory`. See the [backends](backends) page for more information. | 
+| `key-value-store`       | selects the backend to use for _key value store_, can be either `rocksdb`, `cassandra`, `dynamodb` or `in-memory`. See the [backends](backends) page for more information. Currently the `key-value-store` is also used to store the _flow templates_ (discussed below). This is expected to move to its own configuration key in next versions.
 | `indexed-store`         | selects the backend to use for _indexed store_, most of the time it should be the same as `key-value-store`                                                                | 
 | `metrics.interval`      | defines the interval for collecting internal metrics                                                                                                                       | 
 | `serialization-format`  | can be either `json` or `protobuf`                                                                                                                                         | 
@@ -216,13 +216,301 @@ The file has the following sections and values:
 | `cassandra-key-value-store` | configuration for the Cassandra key value store, if it was selected by `key-value-store`                                                                                  |
 | `cassandra-indexed-store` | configuration for the Cassandra indexed store, if it was selected by `indexed-store`                                                                                      |
 
-For configuration of the _DynamoDb store_, check the documentation of the [zio-aws library](https://zio.dev/zio-aws/configuration).
+For configuration of the _DynamoDb store_, check the documentation of
+the [zio-aws library](https://zio.dev/zio-aws/configuration).
 
 #### HTTP retry policies
 
+The `policies.http` node contains two sub nodes:
+
+- `default` is the default policy for all HTTP requests that are not customized by the `per-host` settings
+- Items in `per-host` can override the default settings based on the request's host name
+
+For each host (and the default settings) you can define the following settings:
+
+- `max-parallel-request-count` is the maximum number of parallel requests that can be sent to the host
+- `host-override` should only be used in the `per-host` configurations and it allows you to change the host name of the
+  requests
+- `retry-policies` is a list of retry policies, described below
+- `circuit-breaker-policy` is an optional node describing how to reset the _circuit breaker_ for the host after it gets
+  opened
+- `timeout` is the maximum duration a request can take before get cancelled
+
+Each element in `retry-policies` is a configuration object with the following properties:
+
+`condition` specifies the condition when this specific retry policy should be used. The following condition types are
+supported:
+
+- `always` defines a retry policy that is going to match _all_ requests
+- `for-specific-status` selects a single specific HTTP status code
+- `for-4xx` defines a retry policy for cases when the server responded with any HTTP status code between 400-499
+- `for-5xx` defines a retry policy for cases when the server responded with any HTTP status code between 500-599
+- `open-circuit-breaker` defines a retry policy for the case when a request is blocked by an open _circuit breaker_
+- `or` combines two conditions, defined in the `first` and `second` sub nodes
+
+`retry-policy` defines how to retry the request; it is the same configuration structure as the one used
+for `circuit-breaker-policy`, and we are going to define it later.
+
+`break-circuit` is a boolean option. If it is `true`, when the condition of this retry policy is triggered, it will not
+only retry the request but also report this as a failure for the _circuit breaker_. The circuit breaker will open the
+circuit, making all further requests fail (with the condition `open-circuit-breaker`) for a given period.
+
+For both the `retry-polcy` of each retry policy and for the `circuit-breaker-policy` describing the resetting behavior
+of the circuit breaker the configuration structure looks the same:
+
+- `fail-after` defines the maximum number of retries, or the maximum elapsed time spent for retries
+- `repetition` defines how much time elapses between retries. it can be either a `fixed` time interval, or
+  an `exponential` one
+- `jitter` is a boolean configuration enabling some jittering for these configured intervals
 
 ### REST API
 
+The _ZIO Flow Server_ provides a HTTP REST API for working with ZIO Flow programs. This section defines all the
+available endpoints.
+
+#### `GET /healthcheck`
+
+Simple healthcheck endpoint to check that ZIO Flow server is running.
+
+#### `GET /metrics`
+
+Prometheus metrics. The list of available metrics is defined in the [metrics section](#metrics)
+
+#### `GET /templates`
+
+Get all the available _templates_ registered in the server. A _template_ in ZIO Flow server is a stored ZIO Flow program
+that optionally can have an _input parameter_ as well. By storing these on the server they get an associated _template
+ID_ and you can refer to this ID when starting a new flow instead of sending the whole serialized ZIO Flow program every
+time.
+
+The response JSON has the following structure:
+
+```json
+{
+  "entries": [
+    {
+      "templateId": "xyz",
+      "template": {
+        "flow": {
+          ...
+        }
+        "inputSchema": {
+          ...
+        }
+      }
+    },
+    ...
+  ]
+}
+```
+
+#### `GET /templates/<templateId>`
+
+Gets a single stored _flow template_ by its identifier.
+
+#### `PUT /templates/<templateId>`
+
+Stores a new _flow template_ by providing an identifier and posting the flow and input schema in the request's body.
+
+#### `DELETE /templates/<templateId>`
+
+Deletes a _flow template_ that was previously stored by the above defined `PUT` by its identifier.
+
+#### `POST /flows`
+
+Start executing a new _ZIO Flow program_.
+
+The following JSON examples show the possibilities of this endpoint:
+
+Starting execution of a ZIO Flow that has no parameters (`ZFlow.succeed(1)`) :
+
+```json
+{
+  "Flow": {
+    "flow": {
+      "Return": {
+        "Literal": {
+          "Int": 1
+        }
+      }
+    }
+  }
+}
+```
+
+Starting execution of a ZIO Flow that has a _required input parameter_ by providing this parameter's type (schema) and
+the value as well (`ZFlow.input[Int]`):
+
+```json
+{
+  "FlowWithParameter": {
+    "flow": {
+      "Input": {}
+    },
+    "schema": {
+      "Other": {
+        "toAst": {
+          "Value": {
+            "valueType": "int",
+            "path": [],
+            "optional": false
+          }
+        }
+      }
+    },
+    "value": 1
+  }
+}
+```
+
+Starting a ZIO Flow program that is stored as a _flow template_ and does not require any parameters:
+
+```json
+{
+  "Template": {
+    "templateId": "template1"
+  }
+}
+```
+
+Starting a ZIO Flow program that is stored as a _flow template_ and requires a parameter as well:
+
+```json
+{
+  "TemplateWithParameter": {
+    "templateId": "template2",
+    "value": 1
+  }
+}
+```
+
+The response JSON contains a field called `flowId` containing the started flow's identifier. It can be used to poll
+for the result of the running flow, as well as pausing, resuming or aborting it.
+
+```json
+{
+  "flowId": "xyz"
+}
+```
+
+#### `GET /flows`
+
+Gets a list of all the flows handled by the server's executor, together with their current status.
+
+The response is a mapping from _flow ID_ to _status_:
+
+```json
+{
+  "flow1": "Running",
+  "flow2": "Paused",
+  "flow3": "Done",
+  "flow4": "Suspended"
+}
+```
+
+(in reality the flow IDs are UUIDs)
+
+#### `GET /flows/<flowId>`
+
+Polls the status of a given flow. The following examples demonstrate the possible response JSONs for this request:
+
+When the flow is still running:
+
+```json
+{
+  "Running": {}
+}
+```
+
+If the flow died with an internal error, or was _aborted_ (could be any other `ExecutionError`, not just `Interrupted`):
+
+```json
+{
+  "Died": {
+    "value": {
+      "Interrupted": {}
+    }
+  }
+}
+```
+
+If the flow finished running and succeeded with a value:
+
+```json
+{
+  "Succeeded": {
+    "value": 1
+  }
+}
+```
+
+If the flow finished running and failed with a value:
+
+```json
+{
+  "Failed": {
+    "value": "flow failed!"
+  }
+}
+```
+
+#### `DELETE /flows/<flowId>`
+
+Deletes an already completed _flow_ from the executor.
+
+#### `POST /flows/<flowId>/pause`
+
+Pauses a running _flow_.
+
+#### `POST /flows/<flowId>/resume`
+
+Resumes a previously paused _flow_.
+
+#### `POST /flows/<flowId>/abort`
+
+Aborts a running flow.
+
 ## Metrics
 
+Many components of ZIO Flow report _metrics_ using ZIO's built-in metrics API. _ZIO Flow Server_ exposes these metrics
+for Prometheus via the `/metrics` endpoint. In case of using the executor embedded in your own application, the metrics
+can be sent to any metrics backend that supports the ZIO metrics API.
+
+The following list contains all the metrics reported by various components of the ZIO Flow runtime:
+
+- `zioflow_remote_evals` is a counter for (_tracked Remotes_)[remote#metrics]
+- `zioflow_remote_eval_time_ms` is a histogram for _tracked Remotes_
+- `zioflow_started_total` is a counter incremented every time a flow is started executing (either new or restarted)
+- `zioflow_active_flows` is a gauge containing the actual number of running or suspended flows
+- `zioflow_operations_total` is a counter for each primitive `ZFlow` operation that was executed
+- `zioflow_transactions_total` is a counter for the number of committed, failed or retried transactions
+- `zioflow_finished_flows_total` is a counter increased when a flow finishes with either success, failure or death
+- `zioflow_executor_error_total` is a counter for different executor errors
+- `zioflow_state_size_bytes` is a histogram for the serialized workflow state snapshots in bytes
+- `zioflow_variable_access_total` is a counter increased when a remote variable is accessed (read, write or delete)
+- `zioflow_variable_size_bytes` is a histogram of the serialized size of remote variables in bytes
+- `zioflow_finished_flow_age_ms` is a histogram of the duration between submitting the workflow and completing it
+- `zioflow_total_execution_time_ms` is a histogram of the total time a workflow was in either running or suspended state
+  during its life
+- `zioflow_suspended_time_ms` is a histogram of time fragments a workflow spends in suspended state
+- `zioflow_gc_time_ms` is a histogram of the time a full persistent garbage collection run takes
+- `zioflow_gc_deletion` is a counter for the number of remote variables deleted by the garbage collector
+- `zioflow_gc` is a counter for the number of persistent garbage collector runs
+- `zioflow_http_responses_total` is a counter for the number of HTTP operations performed
+- `zioflow_http_response_time_ms` is a histogram of the HTTP operation response times
+- `zioflow_http_failed_requests_total` is a counter for the number of failed HTTP requests
+- `zioflow_http_retried_requests_total` is a counter for the number of retried HTTP requests per host- ``
+
+The ZIO Flow Server also reports the _default JVM metrics_ provided by ZIO Core.
+
 ## Custom operation executor
+
+Writing a custom implementation of `OperationExecutor` is the intended way to extend ZIO Flow with custom ways to
+interact with the outside world. An `OperationExecutor` gets an input value and an `Operation[Input, Output]` value, and
+it has to provide a _ZIO effect_ that produces a `Result` or fails with an `ActivityError`.
+
+Support for custom operation executors is not fully ready in the current version of ZIO Flow - although you can provide
+a custom implementation when embedding the persistent executor, you cannot extend the _schema_ of the `Operation` type
+to allow serializing custom operations.
+
+This limitation will be fixed in future releases. 
