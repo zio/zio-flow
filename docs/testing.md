@@ -7,6 +7,8 @@ title: "Testing"
 
 ## Testing flows
 
+### Mocking operations
+
 ## Testing remotes
 
 ## Testing backends

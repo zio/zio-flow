@@ -100,7 +100,7 @@ object ZFlowExecutor {
    * If the executor is already running a flow with the given ID, that flow's
    * result will be awaited.
    */
-  def submit[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): ZIO[ZFlowExecutor, E, A] =
+  def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): ZIO[ZFlowExecutor, E, A] =
     ZIO.serviceWithZIO(_.run(id, flow))
 
   /**
