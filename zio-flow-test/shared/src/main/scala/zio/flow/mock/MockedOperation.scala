@@ -20,7 +20,7 @@ import zio.flow.Operation
 import zio.test.Assertion.anything
 import zio._
 import zio.flow.mock.MockedOperation.Match
-import zio.schema.{DynamicValue, Schema}
+import zio.schema.{DynamicValue, Schema, TypeId}
 
 trait MockedOperation { self =>
   def matchOperation[R, A](operation: Operation[R, A], input: R): (Option[Match[A]], MockedOperation)
@@ -82,6 +82,46 @@ object MockedOperation {
             )
           } else {
             (None, this)
+          }
+        case _ =>
+          (None, this)
+      }
+  }
+
+  final case class Custom[R, A: Schema, Op: Schema](
+    typeId: TypeId,
+    opMatcher: zio.test.Assertion[Op] = anything,
+    inputMatcher: zio.test.Assertion[R] = anything,
+    result: () => A,
+    duration: Duration = Duration.Zero
+  ) extends MockedOperation {
+    override def matchOperation[R1, A1](operation: Operation[R1, A1], input: R1): (Option[Match[A1]], MockedOperation) =
+      operation match {
+        case Operation.Custom(typeId1, op, _, _) if typeId == typeId1 =>
+          op.toTypedValue[Op] match {
+            case Left(_) => (None, this)
+            case Right(op) =>
+              val m = opMatcher.run(op) && inputMatcher.run(input.asInstanceOf[R])
+              if (m.isSuccess) {
+                val typedSchema = implicitly[Schema[A]]
+                val value       = result()
+                val reencoded   = DynamicValue.fromSchemaAndValue(typedSchema, value).toTypedValue(operation.resultSchema)
+                (
+                  Some(
+                    Match(
+                      reencoded.getOrElse(
+                        throw new IllegalStateException(
+                          s"Failed to reencode value $value with schema ${operation.resultSchema}"
+                        )
+                      ),
+                      duration
+                    )
+                  ),
+                  Empty
+                )
+              } else {
+                (None, this)
+              }
           }
         case _ =>
           (None, this)

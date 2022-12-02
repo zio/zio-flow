@@ -62,11 +62,11 @@ import zio._
 import zio.flow._
 import zio.flow.runtime._
 
-val flow: ZFlow[Int, String, Int] = ZFlow.input[Int].flatMap { n => 
+val flow: ZFlow[Int, String, Int] = ZFlow.input[Int].flatMap { n =>
   ZFlow.ifThenElse(n > 10)(ifTrue = ZFlow.succeed(1), ifFalse = ZFlow.fail("input is too low"))
 }
 
-def program: ZIO[ZFlowExecutor, String, Int] = 
+def program: ZIO[ZFlowExecutor, String, Int] =
   ZFlowExecutor.run(FlowId("test1"), flow.provide(5))
 ```
 
@@ -201,20 +201,20 @@ The configuration file pointed by `ZIO_FLOW_SERVER_CONFIG` is a _HOCON file_.
 
 The file has the following sections and values:
 
-| Section                 | Description                                                                                                                                                                |
-|-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `port`                  | the port the server will listen on                                                                                                                                         |
-| `key-value-store`       | selects the backend to use for _key value store_, can be either `rocksdb`, `cassandra`, `dynamodb` or `in-memory`. See the [backends](backends) page for more information. Currently the `key-value-store` is also used to store the _flow templates_ (discussed below). This is expected to move to its own configuration key in next versions.
-| `indexed-store`         | selects the backend to use for _indexed store_, most of the time it should be the same as `key-value-store`                                                                | 
-| `metrics.interval`      | defines the interval for collecting internal metrics                                                                                                                       | 
-| `serialization-format`  | can be either `json` or `protobuf`                                                                                                                                         | 
-| `gc-period`             | the interval                                                                                                                                                               |
-| `flow-configuration`    | a list of key-value pairs of user-defined configuration provided to flows via `Remote.config`                                                                              |
-| `policies` | definition of HTTP retry policies, explained in details below                                                                                                              |
-| `rocksdb-key-value-store` | configuration for the RocksDB key value store, if it was selected by `key-value-store`                                                                                      |
-| `rocksdb-indexed-store` | configuration for the RocksDB indexed store, if it was selected by `indexed-store`                                                                                          |
-| `cassandra-key-value-store` | configuration for the Cassandra key value store, if it was selected by `key-value-store`                                                                                  |
-| `cassandra-indexed-store` | configuration for the Cassandra indexed store, if it was selected by `indexed-store`                                                                                      |
+| Section                     | Description                                                                                                                                                                                                                                                                                                                                      |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `port`                      | the port the server will listen on                                                                                                                                                                                                                                                                                                               |
+| `key-value-store`           | selects the backend to use for _key value store_, can be either `rocksdb`, `cassandra`, `dynamodb` or `in-memory`. See the [backends](backends) page for more information. Currently the `key-value-store` is also used to store the _flow templates_ (discussed below). This is expected to move to its own configuration key in next versions. 
+| `indexed-store`             | selects the backend to use for _indexed store_, most of the time it should be the same as `key-value-store`                                                                                                                                                                                                                                      | 
+| `metrics.interval`          | defines the interval for collecting internal metrics                                                                                                                                                                                                                                                                                             | 
+| `serialization-format`      | can be either `json` or `protobuf`                                                                                                                                                                                                                                                                                                               | 
+| `gc-period`                 | the interval                                                                                                                                                                                                                                                                                                                                     |
+| `flow-configuration`        | a list of key-value pairs of user-defined configuration provided to flows via `Remote.config`                                                                                                                                                                                                                                                    |
+| `policies`                  | definition of HTTP retry policies, explained in details below                                                                                                                                                                                                                                                                                    |
+| `rocksdb-key-value-store`   | configuration for the RocksDB key value store, if it was selected by `key-value-store`                                                                                                                                                                                                                                                           |
+| `rocksdb-indexed-store`     | configuration for the RocksDB indexed store, if it was selected by `indexed-store`                                                                                                                                                                                                                                                               |
+| `cassandra-key-value-store` | configuration for the Cassandra key value store, if it was selected by `key-value-store`                                                                                                                                                                                                                                                         |
+| `cassandra-indexed-store`   | configuration for the Cassandra indexed store, if it was selected by `indexed-store`                                                                                                                                                                                                                                                             |
 
 For configuration of the _DynamoDb store_, check the documentation of
 the [zio-aws library](https://zio.dev/zio-aws/configuration).
@@ -509,8 +509,52 @@ Writing a custom implementation of `OperationExecutor` is the intended way to ex
 interact with the outside world. An `OperationExecutor` gets an input value and an `Operation[Input, Output]` value, and
 it has to provide a _ZIO effect_ that produces a `Result` or fails with an `ActivityError`.
 
-Support for custom operation executors is not fully ready in the current version of ZIO Flow - although you can provide
-a custom implementation when embedding the persistent executor, you cannot extend the _schema_ of the `Operation` type
-to allow serializing custom operations.
+As `Operation` is a sealed trait, custom operations are encoded by `Operation.Custom` with a payload represented by
+a `DynamicValue`. The payload can be converted to `DynamicValue` using a `Schema`.
 
-This limitation will be fixed in future releases. 
+The following example shows how to implement a custom operation that gets a static string (serialized as part of the
+operation) and a dynamic string from the operation's input, and pushes a concatenated string to a queue provided for the
+operation executor:
+
+```scala mdoc:silent
+import zio.schema.{DeriveSchema, DynamicValue, Schema, TypeId}
+
+final case class CustomOp(prefix: String)
+
+object CustomOp {
+  val typeId: TypeId = TypeId.parse("zio.flow.runtime.internal.executor.CustomOperationExecutorSpec.CustomOp")
+  implicit val schema: Schema[CustomOp] = DeriveSchema.gen[CustomOp]
+}
+
+/** Helper for constructing the custom operation */
+def customOp(prefix: String): Operation[String, Unit] =
+  Operation.Custom(CustomOp.typeId, DynamicValue(CustomOp(prefix)), Schema[String], Schema[Unit])
+
+/** Example usage of the custom operation in an activity */
+def customActivity(prefix: String): Activity[String, Unit] =
+  Activity(
+    "custom1",
+    "test activity using custom operation",
+    customOp(prefix),
+    Activity.checkNotSupported,
+    Activity.compensateNotSupported
+  )
+
+/** Example implementation of the custom operation executor */
+final class CustomOperationExecutor(queue: Queue[String]) extends OperationExecutor {
+  override def execute[Input, Result](
+    input: Input,
+    operation: Operation[Input, Result]
+  ): ZIO[RemoteContext, ActivityError, Result] =
+    operation match {
+      case Operation.Custom(typeId, operation, _, _) if typeId == CustomOp.typeId =>
+        for {
+          op <-
+            ZIO.fromEither(operation.toTypedValue(CustomOp.schema)).mapError(failure => ActivityError(failure, None))
+          _ <- queue.offer(op.prefix + input.asInstanceOf[String])
+        } yield ().asInstanceOf[Result]
+      case _ =>
+        ZIO.fail(ActivityError("Unsupported operation", None))
+    }
+}
+```
