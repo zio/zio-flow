@@ -16,55 +16,97 @@
 
 package zio.flow.runtime.internal
 
-import zio.flow.runtime.{ExecutorError, Timestamp}
-import zio.flow.{ConfigKey, RemoteContext, RemoteVariableName}
+import zio.flow.runtime.{DurableLog, ExecutorError, Timestamp}
+import zio.flow.{ConfigKey, ExecutionEnvironment, RemoteContext, RemoteVariableName}
 import zio.schema.{DynamicValue, Schema}
-import zio.stm.TMap
+import zio.stm.{TMap, TPromise, ZSTM}
 import zio.{Chunk, ZIO}
 
 trait RecordingRemoteContext {
-  def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]]
-  def remoteContext: RemoteContext
-  def commitContext: RemoteContext
+  def getModifiedVariables
+    : ZIO[Any, Nothing, Map[RemoteContext, (RemoteVariableScope, Chunk[(RemoteVariableName, DynamicValue)])]]
+  def remoteContext(scope: RemoteVariableScope): ZIO[Any, Nothing, RemoteContext]
   def virtualClock: VirtualClock
 }
 
 object RecordingRemoteContext {
 
-  def startRecording: ZIO[RemoteContext with VirtualClock, Nothing, RecordingRemoteContext] =
-    ZIO.service[RemoteContext].flatMap { outerRemoteContext =>
-      ZIO.service[VirtualClock].flatMap { vclock =>
-        TMap.empty[RemoteVariableName, DynamicValue].commit.map { cache =>
-          new RecordingRemoteContext {
-            override def commitContext: RemoteContext = outerRemoteContext
+  private class SingleRecordingRemoteContext(
+    val scope: RemoteVariableScope,
+    val outerRemoteContext: RemoteContext,
+    val cache: TMap[RemoteVariableName, DynamicValue]
+  ) {
+    val remoteContext: RemoteContext = new RemoteContext {
+      override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
+        cache.put(name, value).commit
 
-            override def getModifiedVariables: ZIO[Any, Nothing, Chunk[(RemoteVariableName, DynamicValue)]] =
-              cache.toChunk.commit
-
-            override val remoteContext: RemoteContext =
-              new RemoteContext {
-                override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
-                  cache.put(name, value).commit
-
-                override def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
-                  cache.get(name).commit.flatMap {
-                    case Some(result) => ZIO.some(result)
-                    case None         => outerRemoteContext.getVariable(name)
-                  }
-
-                override def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]] =
-                  outerRemoteContext.getLatestTimestamp(name)
-
-                override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
-                  cache.delete(name).commit
-
-                override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
-                  outerRemoteContext.readConfig[A](key)
-              }
-
-            override def virtualClock: VirtualClock = vclock
-          }
+      override def getVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
+        cache.get(name).commit.flatMap {
+          case Some(result) => ZIO.some(result)
+          case None         => outerRemoteContext.getVariable(name)
         }
+
+      override def getLatestTimestamp(name: RemoteVariableName): ZIO[Any, ExecutorError, Option[Timestamp]] =
+        outerRemoteContext.getLatestTimestamp(name)
+
+      override def dropVariable(name: RemoteVariableName): ZIO[Any, ExecutorError, Unit] =
+        cache.delete(name).commit
+
+      override def readConfig[A: Schema](key: ConfigKey): ZIO[Any, ExecutorError, Option[A]] =
+        outerRemoteContext.readConfig[A](key)
+    }
+  }
+
+  def startRecording: ZIO[
+    RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog,
+    Nothing,
+    RecordingRemoteContext
+  ] =
+    ZIO.service[VirtualClock].flatMap { vclock =>
+      ZIO.environment[RemoteVariableKeyValueStore with ExecutionEnvironment with VirtualClock with DurableLog].flatMap {
+        env =>
+          TMap.empty[RemoteVariableScope, TPromise[Nothing, SingleRecordingRemoteContext]].commit.map { contexts =>
+            new RecordingRemoteContext {
+              override def getModifiedVariables: ZIO[
+                Any,
+                Nothing,
+                Map[RemoteContext, (RemoteVariableScope, Chunk[(RemoteVariableName, DynamicValue)])]
+              ] =
+                contexts.toMap.flatMap { contextMap =>
+                  ZSTM.foreach(contextMap.values) { promise =>
+                    promise.await.flatMap { singleRecordingContext =>
+                      singleRecordingContext.cache.toChunk.map { kvs =>
+                        (singleRecordingContext.outerRemoteContext, (singleRecordingContext.scope, kvs))
+                      }
+                    }
+                  }
+                }.commit.map(_.toMap)
+
+              override def remoteContext(scope: RemoteVariableScope): ZIO[Any, Nothing, RemoteContext] =
+                contexts
+                  .get(scope)
+                  .flatMap {
+                    case Some(contextPromise) => contextPromise.await.map(ctx => ZIO.succeed(ctx))
+                    case None =>
+                      TPromise.make[Nothing, SingleRecordingRemoteContext].flatMap { promise =>
+                        TMap.empty[RemoteVariableName, DynamicValue].flatMap { cache =>
+                          contexts.put(scope, promise).as {
+                            PersistentRemoteContext
+                              .make(scope)
+                              .provideEnvironment(env)
+                              .map(new SingleRecordingRemoteContext(scope, _, cache))
+                              .tap(ctx => promise.succeed(ctx).commit)
+                          }
+                        }
+                      }
+                  }
+                  .commit
+                  .flatten
+                  .map(_.remoteContext)
+
+              override def virtualClock: VirtualClock = vclock
+            }
+          }
       }
     }
 }
