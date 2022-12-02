@@ -65,6 +65,7 @@ final case class DefaultOperationExecutor(
                 )
             }.provideEnvironment(env)
         }
+
       case _ =>
         ZIO.dieMessage(s"Unsupported operation ${operation.getClass.getName}")
     }
