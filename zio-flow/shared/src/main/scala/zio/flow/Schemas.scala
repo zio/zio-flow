@@ -38,32 +38,32 @@ trait Schemas extends LowerPrioritySchemas {
   )
 
   implicit lazy val schemaThrowable: Schema[Throwable] =
-    Schema.CaseClass4(
+    Schema.CaseClass4[Option[Throwable], Option[String], Chunk[StackTraceElement], Chunk[Throwable], Throwable](
       TypeId.parse("java.lang.Throwable"),
-      field01 = Schema.Field(
+      field01 = Schema.Field[Throwable, Option[Throwable]](
         "cause",
-        Schema.defer(Schema[Option[Throwable]]),
+        Schema.defer(schemaThrowable.optional),
         get0 = throwable => {
           val cause = throwable.getCause
           if (cause == null || cause == throwable) None else Some(cause)
         },
         set0 = (_: Throwable, _: Option[Throwable]) => ???
       ),
-      field02 = Schema.Field(
+      field02 = Schema.Field[Throwable, Option[String]](
         "message",
         Schema[Option[String]],
         get0 = throwable => Option(throwable.getMessage),
         set0 = (_: Throwable, _: Option[String]) => ???
       ),
-      field03 = Schema.Field(
+      field03 = Schema.Field[Throwable, Chunk[StackTraceElement]](
         "stackTrace",
         Schema[Chunk[StackTraceElement]],
         get0 = throwable => Chunk.fromArray(throwable.getStackTrace),
         set0 = (_: Throwable, _: Chunk[StackTraceElement]) => ???
       ),
-      field04 = Schema.Field(
+      field04 = Schema.Field[Throwable, Chunk[Throwable]](
         "suppressed",
-        Schema.defer(Schema[Chunk[Throwable]]),
+        Schema.defer(Schema.chunk(schemaThrowable)),
         get0 = throwable => Chunk.fromArray(throwable.getSuppressed),
         set0 = (_: Throwable, _: Chunk[Throwable]) => ???
       ),

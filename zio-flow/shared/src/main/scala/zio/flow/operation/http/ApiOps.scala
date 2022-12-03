@@ -30,7 +30,7 @@ final class APIOps[Input, Output: API.NotUnit, Id](
   def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output] =
     ClientInterpreter
       .interpret(host)(self)(params)
-      .flatMap(_.body.asChunk.mapError(HttpFailure.FailedToReceiveResponseBody))
+      .flatMap(_.body.asChunk.mapError(HttpFailure.FailedToReceiveResponseBody.apply))
       .flatMap { string =>
         if (self.outputSchema == Schema[Unit])
           ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output]]

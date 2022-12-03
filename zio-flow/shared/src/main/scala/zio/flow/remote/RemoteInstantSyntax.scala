@@ -40,9 +40,9 @@ final class RemoteInstantSyntax(val self: Remote[Instant]) extends AnyVal {
     )(Remote.fail("Unsupported unit"))
 
   def getEpochSecond: Remote[Long] =
-    Remote.Unary[Instant, (Long, Int)](self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple))._1
+    (Remote.Unary[Instant, (Long, Int)](self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple)): Remote[(Long, Int)])._1
   def getNano: Remote[Int] =
-    Remote.Unary[Instant, (Long, Int)](self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple))._2
+    (Remote.Unary[Instant, (Long, Int)](self, UnaryOperators.Conversion(RemoteConversions.InstantToTuple)): Remote[(Long, Int)])._2
 
   def isAfter(that: Remote[Instant]): Remote[Boolean] =
     self.getEpochSecond > that.getEpochSecond

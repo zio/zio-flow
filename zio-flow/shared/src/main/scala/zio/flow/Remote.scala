@@ -45,7 +45,7 @@ sealed trait Remote[+A] { self =>
 
   def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue]
   def eval[A1 >: A](implicit schema: Schema[A1]): ZIO[LocalContext with RemoteContext, RemoteEvaluationError, A1] =
-    evalDynamic.flatMap(dyn => ZIO.fromEither(dyn.toTypedValue(schema)).mapError(RemoteEvaluationError.TypeError))
+    evalDynamic.flatMap(dyn => ZIO.fromEither(dyn.toTypedValue(schema)).mapError(RemoteEvaluationError.TypeError.apply))
 
   final def iterate[A1 >: A: Schema](
     step: Remote[A1] => Remote[A1]
@@ -120,7 +120,7 @@ object Remote {
     override def eval[A1 >: A](implicit
       schemaA1: Schema[A1]
     ): ZIO[LocalContext with RemoteContext, RemoteEvaluationError, A1] =
-      ZIO.fromEither(value.toTypedValue(schemaA1)).mapError(RemoteEvaluationError.TypeError)
+      ZIO.fromEither(value.toTypedValue(schemaA1)).mapError(RemoteEvaluationError.TypeError.apply)
 
     override def equals(that: Any): Boolean =
       that match {
@@ -340,7 +340,7 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       RemoteContext
         .getVariable(identifier)
-        .mapError(RemoteEvaluationError.RemoteContextError)
+        .mapError(RemoteEvaluationError.RemoteContextError.apply)
         .flatMap {
           case None        => ZIO.fail(RemoteEvaluationError.VariableNotFound(identifier))
           case Some(value) => ZIO.succeed(value)
@@ -388,7 +388,7 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       RemoteContext
         .readConfig[A](key)(schema)
-        .mapError(RemoteEvaluationError.RemoteContextError)
+        .mapError(RemoteEvaluationError.RemoteContextError.apply)
         .flatMap {
           case None        => ZIO.fail(RemoteEvaluationError.ConfigurationNotFound(key))
           case Some(value) => ZIO.succeed(DynamicValue.fromSchemaAndValue(schema, value))
@@ -457,7 +457,7 @@ object Remote {
           "identifier",
           Schema[BindingName],
           get0 = _.identifier,
-          set0 = (a: Unbound[A], v: BindingName) => a.copy(identifier = v)
+          set0 = (a: Unbound[A], v: BindingName) => Unbound(v)
         ),
         (identifier: BindingName) => Unbound(identifier)
       )
@@ -529,11 +529,12 @@ object Remote {
         input            <- value.evalDynamic
         boundVariableName = RemoteContext.generateFreshVariableName
         variable          = Remote.Variable(boundVariableName)
-        _                <- RemoteContext.setVariable(boundVariableName, input).mapError(RemoteEvaluationError.RemoteContextError)
-        _                <- LocalContext.pushBinding(unbound.identifier, variable)
-        evaluated        <- inner.evalDynamic
-        _                <- LocalContext.popBinding(unbound.identifier)
-        resultRemote      = Remote.fromDynamic(evaluated)
+        _ <-
+          RemoteContext.setVariable(boundVariableName, input).mapError(RemoteEvaluationError.RemoteContextError.apply)
+        _           <- LocalContext.pushBinding(unbound.identifier, variable)
+        evaluated   <- inner.evalDynamic
+        _           <- LocalContext.popBinding(unbound.identifier)
+        resultRemote = Remote.fromDynamic(evaluated)
         finalResult <-
           if (resultRemote.variableUsage.bindings.contains(unbound.identifier)) {
             val substituted = resultRemote.substitute(Substitutions(Map(unbound -> variable)))
@@ -598,7 +599,7 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       for {
         v      <- value.eval(operator.inputSchema)
-        result <- ZIO.attempt(operator(v)).mapError(RemoteEvaluationError.EvaluationException)
+        result <- ZIO.attempt(operator(v)).mapError(RemoteEvaluationError.EvaluationException.apply)
       } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[Out] =
@@ -647,7 +648,7 @@ object Remote {
       for {
         l      <- left.eval(operator.inputSchema1)
         r      <- right.eval(operator.inputSchema2)
-        result <- ZIO.attempt(operator(l, r)).mapError(RemoteEvaluationError.EvaluationException)
+        result <- ZIO.attempt(operator(l, r)).mapError(RemoteEvaluationError.EvaluationException.apply)
       } yield DynamicValue.fromSchemaAndValue(operator.outputSchema, result)
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[Out] =
@@ -2346,7 +2347,7 @@ object Remote {
         dynTuple <- tuple.evalDynamic
         value <- ZIO
                    .fromEither(TupleAccess.findValueIn(dynTuple, n, arity))
-                   .mapError(RemoteEvaluationError.UnexpectedDynamicValue)
+                   .mapError(RemoteEvaluationError.UnexpectedDynamicValue.apply)
       } yield value
 
     override protected def substituteRec(f: Remote.Substitutions): Remote[A] =
@@ -2848,7 +2849,7 @@ object Remote {
                  id.toRemoteVariableName,
                  DynamicValue.fromSchemaAndValue(UnboundRemoteFunction.schema[A, B], body)
                )
-               .mapError(RemoteEvaluationError.RemoteContextError)
+               .mapError(RemoteEvaluationError.RemoteContextError.apply)
         result <- body(initial).evalDynamic
       } yield result
 
@@ -2892,14 +2893,14 @@ object Remote {
     override def evalDynamic: ZIO[LocalContext with RemoteContext, RemoteEvaluationError, DynamicValue] =
       RemoteContext
         .getVariable(id.toRemoteVariableName)
-        .mapError(RemoteEvaluationError.RemoteContextError)
+        .mapError(RemoteEvaluationError.RemoteContextError.apply)
         .flatMap {
           case None =>
             ZIO.fail(RemoteEvaluationError.RecursionNotFound(id))
           case Some(dynamicBody) =>
             ZIO
               .fromEither(dynamicBody.toTypedValue(UnboundRemoteFunction.schema[A, B]))
-              .mapError(RemoteEvaluationError.TypeError)
+              .mapError(RemoteEvaluationError.TypeError.apply)
               .flatMap { body =>
                 body(value).evalDynamic
               }
@@ -3063,7 +3064,7 @@ object Remote {
                   )
                 )
             }
-            .map(DynamicValue.Dictionary)
+            .map(DynamicValue.Dictionary.apply)
         case other: DynamicValue =>
           ZIO.fail(
             RemoteEvaluationError.UnexpectedDynamicValue(
@@ -3411,7 +3412,7 @@ object Remote {
         Literal(DynamicValue.fromSchemaAndValue(Schema[A], value))
     }
 
-  def bind[A, B](value: Remote[A])(f: Unbound[A] => Remote[B]): Remote[B] = {
+  def bind[A, B](value: Remote[A])(f: Remote[A] => Remote[B]): Remote[B] = {
     val unbound = Unbound[A](LocalContext.generateFreshBinding)
     Bind(unbound, value, f(unbound))
   }
@@ -3481,7 +3482,7 @@ object Remote {
 
   def recurse[A, B](
     initial: Remote[A]
-  )(body: (Remote[A], (Remote[A] => Remote.RecurseWith[A, B])) => Remote[B]): Remote[B] = {
+  )(body: (Remote[A], (Remote[A] => Remote[B])) => Remote[B]): Remote[B] = {
     val id = LocalContext.generateFreshRecursionId
     Remote.Recurse(
       id,
@@ -3494,7 +3495,7 @@ object Remote {
 
   def recurseSimple[A](
     initial: Remote[A]
-  )(body: (Remote[A], (Remote[A] => Remote.RecurseWith[A, A])) => Remote[A]): Remote[A] =
+  )(body: (Remote[A], (Remote[A] => Remote[A])) => Remote[A]): Remote[A] =
     recurse[A, A](initial)(body)
 
   def right[A, B](value: Remote[B]): Remote[Either[A, B]] = Remote.RemoteEither(Right(value))

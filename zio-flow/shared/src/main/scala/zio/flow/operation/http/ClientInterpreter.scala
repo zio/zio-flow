@@ -19,7 +19,7 @@ private[http] object ClientInterpreter {
     val data                 = body.fold(zhttp.http.Body.empty)(zhttp.http.Body.fromChunk)
     Client
       .request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
-      .mapError(HttpFailure.FailedToSendRequest)
+      .mapError(HttpFailure.FailedToSendRequest.apply)
   }
 
   private[http] class RequestState {
@@ -105,7 +105,7 @@ private[http] object ClientInterpreter {
       case Query.Optional(p) =>
         params.asInstanceOf[Option[Any]] match {
           case Some(params) =>
-            parseQuery(p, state)(params)
+            parseQuery[Any](p.asInstanceOf[Query[Any]], state)(params.asInstanceOf[Any])
           case None =>
             ()
         }
@@ -132,7 +132,7 @@ private[http] object ClientInterpreter {
       case Header.Optional(headers) =>
         params.asInstanceOf[Option[Any]] match {
           case Some(params) =>
-            parseHeaders(headers, state)(params)
+            parseHeaders[Any](headers.asInstanceOf[Header[Any]], state)(params.asInstanceOf[Any])
           case None =>
             ()
         }

@@ -56,7 +56,7 @@ object RemoteContext {
   def evalDynamic[A](remote: Remote[A]): ZIO[RemoteContext, ExecutorError, DynamicValue] =
     (for {
       vars0 <- LocalContext.getAllVariables
-      dyn   <- remote.evalDynamic.mapError(ExecutorError.RemoteEvaluationError)
+      dyn   <- remote.evalDynamic.mapError(ExecutorError.RemoteEvaluationError.apply)
       vars1 <- LocalContext.getAllVariables
       vars   = vars1.diff(vars0)
 
