@@ -201,7 +201,7 @@ object CassandraIndexedStore {
                        CqlSession.builder
                          .addContactPoints(config.contactPoints.asJava)
                          .withKeyspace(
-                           CqlIdentifier.fromCql(config.ixStoreKeyspace)
+                           CqlIdentifier.fromCql(config.keyspace)
                          )
                          .withLocalDatacenter(config.localDatacenter)
                          .buildAsync()

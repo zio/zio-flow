@@ -314,7 +314,7 @@ object CassandraKeyValueStore {
                        CqlSession.builder
                          .addContactPoints(config.contactPoints.asJava)
                          .withKeyspace(
-                           CqlIdentifier.fromCql(config.kvStoreKeyspace)
+                           CqlIdentifier.fromCql(config.keyspace)
                          )
                          .withLocalDatacenter(config.localDatacenter)
                          .buildAsync()

@@ -112,10 +112,7 @@ final case class PersistentExecutor(
                                     state =>
                                       (
                                         FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8)),
-                                        state.copy( // TODO: describe as an initial StateChange instead
-                                          totalExecutionTime = state.totalExecutionTime + state.currentExecutionTime,
-                                          currentExecutionTime = Duration.ZERO
-                                        )
+                                        state
                                       )
                                   )
                               }
@@ -271,12 +268,6 @@ final case class PersistentExecutor(
                                .map(
                                  _.getOrElse(freshState).asInstanceOf[State[E, A]]
                                )
-                               .map(state =>
-                                 state.copy( // TODO: describe as an initial StateChange instead
-                                   totalExecutionTime = state.totalExecutionTime + state.currentExecutionTime,
-                                   currentExecutionTime = Duration.ZERO
-                                 )
-                               )
                     result <- run(state, promise) @@ metrics.flowStarted(
                                 if (state.startedAt == now) metrics.StartType.Fresh else metrics.StartType.Continued
                               )
@@ -292,7 +283,8 @@ final case class PersistentExecutor(
     import zio.flow.ZFlow._
 
     def step(
-      state: State[E, A]
+      state: State[E, A],
+      recordingRemoteContext: RecordingRemoteContext
     ): ZIO[
       RemoteContext
         with VirtualClock
@@ -315,7 +307,8 @@ final case class PersistentExecutor(
         val updatedState = stateChange(state)
 
         val scope         = updatedState.scope
-        val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
+        val remoteContext = ZLayer(recordingRemoteContext.remoteContext(scope))
+
         remoteContext {
           updatedState.stack match {
             case Nil =>
@@ -350,9 +343,8 @@ final case class PersistentExecutor(
             case Instruction.CommitTransaction :: _ =>
               for {
                 currentContext <- ZIO.service[RemoteContext]
-                targetContext <- PersistentRemoteContext.make(
-                                   StateChange.leaveTransaction(updatedState).scope
-                                 )
+                targetContext <-
+                  recordingRemoteContext.remoteContext(StateChange.leaveTransaction(updatedState).scope)
                 commitSucceeded <-
                   commitModifiedVariablesToParent(updatedState.transactionStack.head, currentContext, targetContext)
                 result <-
@@ -395,7 +387,7 @@ final case class PersistentExecutor(
         val updatedState = stateChange(state)
 
         val scope         = updatedState.scope
-        val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
+        val remoteContext = ZLayer(recordingRemoteContext.remoteContext(scope))
 
         remoteContext {
           updatedState.stack match {
@@ -933,62 +925,59 @@ final case class PersistentExecutor(
           Logging
             .optionalTransactionId(lastState.transactionStack.headOption.map(_.id)) {
               processMessages(messages).flatMap { changesFromMessages =>
-                val scope         = lastState.scope
-                val remoteContext = ZLayer(PersistentRemoteContext.make(scope))
+                val scope = lastState.scope
 
-                remoteContext {
-                  for {
-                    recordingContext <- RecordingRemoteContext.startRecording
+                for {
+                  recordingContext <- RecordingRemoteContext.startRecording
 
-                    state0 <-
-                      persistState(
-                        lastState,
-                        changesFromMessages,
-                        recordingContext
-                      ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
+                  state0 <-
+                    persistState(
+                      lastState,
+                      changesFromMessages,
+                      recordingContext
+                    ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
 
-                    stepResult <-
-                      state0.status match {
-                        case FlowStatus.Running =>
-                          step(state0).provideSomeLayer[
-                            VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
-                          ](
-                            ZLayer.succeed(recordingContext.remoteContext)
-                          )
-                        case FlowStatus.Done =>
-                          ZIO.succeed(StepResult(StateChange.none, continue = false))
-                        case FlowStatus.Suspended =>
-                          waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
-                            timestamp =>
-                              Clock.currentDateTime.flatMap { now =>
-                                val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
-                                metrics.flowSuspendedTime
-                                  .update(suspendedDuration)
-                                  .as(
-                                    StepResult(
-                                      StateChange.resume(resetWatchedVariables = true) ++ StateChange
-                                        .advanceClock(atLeastTo = timestamp),
-                                      continue = true
-                                    )
+                  stepResult <-
+                    state0.status match {
+                      case FlowStatus.Running =>
+                        step(state0, recordingContext).provideSomeLayer[
+                          VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
+                        ](
+                          ZLayer(recordingContext.remoteContext(scope))
+                        )
+                      case FlowStatus.Done =>
+                        ZIO.succeed(StepResult(StateChange.none, continue = false))
+                      case FlowStatus.Suspended =>
+                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
+                          timestamp =>
+                            Clock.currentDateTime.flatMap { now =>
+                              val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
+                              metrics.flowSuspendedTime
+                                .update(suspendedDuration)
+                                .as(
+                                  StepResult(
+                                    StateChange.resume(resetWatchedVariables = true) ++ StateChange
+                                      .advanceClock(atLeastTo = timestamp),
+                                    continue = true
                                   )
-                              }
-                          }
-                        case FlowStatus.Paused =>
-                          ZIO.logInfo(s"Flow paused, waiting for resume command") *>
-                            waitAndProcessMessages(messages).map { changes =>
-                              StepResult(changes, continue = true)
+                                )
                             }
-                      }
-                    now <- Clock.currentDateTime
-                    state2 <-
-                      persistState(
-                        state0,
-                        stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
-                        recordingContext
-                      )
-                    _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-                  } yield stepResult
-                }
+                        }
+                      case FlowStatus.Paused =>
+                        ZIO.logInfo(s"Flow paused, waiting for resume command") *>
+                          waitAndProcessMessages(messages).map { changes =>
+                            StepResult(changes, continue = true)
+                          }
+                    }
+                  now <- Clock.currentDateTime
+                  state2 <-
+                    persistState(
+                      state0,
+                      stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
+                      recordingContext
+                    )
+                  _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                } yield stepResult
               }.flatMap { stepResult =>
                 runSteps(stateRef, messages, executionStartedAt).when(stepResult.continue).unit
               }
@@ -1103,40 +1092,34 @@ final case class PersistentExecutor(
     stateChange: PersistentExecutor.StateChange,
     recordingContext: RecordingRemoteContext
   ): ZIO[
-    RemoteContext
-      with VirtualClock
-      with KeyValueStore
-      with RemoteVariableKeyValueStore
-      with ExecutionEnvironment
-      with DurableLog,
+    VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog,
     ExecutorError,
     PersistentExecutor.State[_, _]
   ] = {
-    // TODO: optimization: do not persist state if there were no side effects
     val state1 = stateChange(state0)
     for {
-      _                    <- recordingContext.virtualClock.advance(state1.lastTimestamp)
-      modifiedVariables    <- recordingContext.getModifiedVariables
-      readVariables        <- RemoteVariableKeyValueStore.getReadVariables
-      currentTimestamp     <- recordingContext.virtualClock.current
-      modifiedVariableNames = modifiedVariables.map(_._1).toSet
+      _                 <- recordingContext.virtualClock.advance(state1.lastTimestamp)
+      modifiedVariables <- recordingContext.getModifiedVariables
+      readVariables     <- RemoteVariableKeyValueStore.getReadVariables
+      currentTimestamp  <- recordingContext.virtualClock.current
+      modifiedVariableNames = modifiedVariables.values.flatMap { case (_, variables) =>
+                                variables.map(_._1).toSet
+                              }.toSet
 
       readVariablesWithTimestamps <-
-        state1.scope.parentScope match {
-          case Some(parentScope) =>
-            PersistentRemoteContext.make(parentScope).flatMap { parentContext =>
-              ZIO
-                .foreach(Chunk.fromIterable(readVariables.map(_.name))) { name =>
-                  val wasModified = modifiedVariableNames.contains(name)
-                  parentContext.getLatestTimestamp(name).map { ts =>
-                    val finalTs = ts.map(ts => if (ts < currentTimestamp) ts else currentTimestamp)
-                    (name, finalTs, wasModified)
-                  }
+        ZIO
+          .foreach(Chunk.fromIterable(readVariables.groupBy(_.scope))) { case (scope, variables) =>
+            PersistentRemoteContext.make(scope).flatMap { context =>
+              ZIO.foreach(Chunk.fromIterable(variables.map(_.name))) { name =>
+                val wasModified = modifiedVariableNames.contains(name)
+                context.getLatestTimestamp(name).map { ts =>
+                  val finalTs = ts.map(ts => if (ts < currentTimestamp) ts else currentTimestamp)
+                  (name, finalTs, wasModified)
                 }
+              }
             }
-          case None =>
-            ZIO.succeed(Chunk.empty)
-        }
+          }
+          .map(_.flatten)
 
       _ <-
         ZIO
@@ -1145,20 +1128,28 @@ final case class PersistentExecutor(
           )
           .when(modifiedVariables.nonEmpty)
 
-      remoteContext = recordingContext.commitContext
-      _ <- ZIO.foreachDiscard(modifiedVariables) { case (name, value) =>
-             remoteContext.setVariable(name, value)
+      _ <- ZIO.foreachDiscard(modifiedVariables) { case (remoteContext, (_, values)) =>
+             ZIO.foreachDiscard(values) { case (name, value) =>
+               ZIO.debug(s"*** SAVING VAR $name ***") *>
+                 remoteContext.setVariable(name, value)
+             }
            }
       lastIndex <- RemoteVariableKeyValueStore.getLatestIndex
 
       additionalStateChanges =
         StateChange.updateLastTimestamp(currentTimestamp) ++
-          StateChange.updateWatchPosition(Index(state1.watchPosition.max(lastIndex))) ++
-          StateChange.recordAccessedVariables(readVariablesWithTimestamps) ++
-          StateChange.recordReadVariables(readVariables)
+          StateChange
+            .updateWatchPosition(Index(state1.watchPosition.max(lastIndex)))
+            .when(state1.watchPosition != lastIndex) ++
+          StateChange.recordAccessedVariables(readVariablesWithTimestamps).when(readVariablesWithTimestamps.nonEmpty) ++
+          StateChange.recordReadVariables(readVariables).when(readVariables.nonEmpty)
 
       state2 = additionalStateChanges(state1)
-      _     <- saveStateChange(state2.id.asFlowId, state0, stateChange ++ additionalStateChanges, currentTimestamp)
+
+      shouldPersist = modifiedVariables.nonEmpty || stateChange.contains(_.forcePersistence)
+
+      _ <- saveStateChange(state2.id.asFlowId, state0, stateChange ++ additionalStateChanges, currentTimestamp)
+             .when(shouldPersist)
     } yield state2
   }
 
@@ -1519,6 +1510,8 @@ object PersistentExecutor {
   sealed trait StateChange { self =>
     def ++(otherChange: StateChange): StateChange =
       (self, otherChange) match {
+        case (_, StateChange.NoChange) => self
+        case (StateChange.NoChange, _) => otherChange
         case (StateChange.SequentialChange(changes1), StateChange.SequentialChange(changes2)) =>
           StateChange.SequentialChange(changes1 ++ changes2)
         case (StateChange.SequentialChange(changes1), _) =>
@@ -1530,6 +1523,17 @@ object PersistentExecutor {
       }
 
     def apply[E, A](state: State[E, A]): State[E, A]
+
+    def when(condition: Boolean): StateChange =
+      if (condition) self else StateChange.none
+
+    def contains(condition: StateChange => Boolean): Boolean =
+      self match {
+        case StateChange.SequentialChange(changes) => changes.exists(_.contains(condition))
+        case _                                     => condition(self)
+      }
+
+    def forcePersistence: Boolean = false
   }
   object StateChange {
     private case object NoChange extends StateChange {
@@ -1562,6 +1566,8 @@ object PersistentExecutor {
               Nil
           }
         )
+
+      override def forcePersistence: Boolean = true
     }
     private final case class EnterTransaction(flow: ZFlow[Any, _, _]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] = {
@@ -1633,6 +1639,8 @@ object PersistentExecutor {
             )
           case None => state
         }
+
+      override def forcePersistence: Boolean = true
     }
     private case object IncreaseForkCounter extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -1657,6 +1665,8 @@ object PersistentExecutor {
     private case object Done extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(status = FlowStatus.Done)
+
+      override def forcePersistence: Boolean = true
     }
     private case class Resume(resetWatchedVariables: Boolean) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
@@ -1664,10 +1674,14 @@ object PersistentExecutor {
           status = FlowStatus.Running,
           watchedVariables = if (resetWatchedVariables) Set.empty else state.watchedVariables
         )
+
+      override def forcePersistence: Boolean = true
     }
     private case object Pause extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(status = FlowStatus.Paused)
+
+      override def forcePersistence: Boolean = true
     }
     private final case class UpdateWatchPosition(newWatchPosition: Index) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =

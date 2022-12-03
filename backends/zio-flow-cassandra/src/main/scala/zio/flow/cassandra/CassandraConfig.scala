@@ -23,8 +23,7 @@ import scala.util.Try
 
 final case class CassandraConfig(
   contactPoints: List[InetSocketAddress],
-  kvStoreKeyspace: String,
-  ixStoreKeyspace: String,
+  keyspace: String,
   localDatacenter: String
 )
 
@@ -46,10 +45,8 @@ object CassandraConfig {
 
   val config: Config[CassandraConfig] =
     (Config.listOf("contact-points", inetSocketAddess) ++
-      Config.string("key-value-store-keyspace") ++
-      Config.string("indexed-store-keyspace") ++
-      Config.string("local-datacenter")).map {
-      case (contactPoints, kvStoreKeyspace, ixStoreKeyspace, localDatacenter) =>
-        CassandraConfig(contactPoints, kvStoreKeyspace, ixStoreKeyspace, localDatacenter)
+      Config.string("keyspace") ++
+      Config.string("local-datacenter")).map { case (contactPoints, keyspace, localDatacenter) =>
+      CassandraConfig(contactPoints, keyspace, localDatacenter)
     }
 }

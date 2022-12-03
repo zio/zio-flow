@@ -44,7 +44,7 @@ import scala.collection.mutable
  * capabilities to mock these operations instead of using the real operation
  * executor.
  */
-trait Operation[-Input, +Result] { self =>
+sealed trait Operation[-Input, +Result] { self =>
   val inputSchema: Schema[_ >: Input]
   val resultSchema: Schema[_ <: Result]
 
@@ -245,7 +245,57 @@ object Operation {
           builder.append("<input>")
           ()
       }
+  }
 
+  final case class Custom[Input, Result](
+    typeId: TypeId,
+    operation: DynamicValue,
+    inputSchema: Schema[Input],
+    resultSchema: Schema[Result]
+  ) extends Operation[Input, Result]
+
+  object Custom {
+    private val typeId: TypeId = TypeId.parse("zio.flow.Operation.Custom")
+
+    def schema[Input, Result]: Schema[Custom[Input, Result]] =
+      Schema.CaseClass4[TypeId, DynamicValue, FlowSchemaAst, FlowSchemaAst, Custom[Input, Result]](
+        typeId,
+        Schema.Field(
+          "typeId",
+          Schema[TypeId],
+          get0 = _.typeId,
+          set0 = (a: Custom[Input, Result], v: TypeId) => a.copy(typeId = v)
+        ),
+        Schema.Field(
+          "operation",
+          Schema.dynamicValue,
+          get0 = _.operation,
+          set0 = (a: Custom[Input, Result], v: DynamicValue) => a.copy(operation = v)
+        ),
+        Schema.Field(
+          "inputSchema",
+          FlowSchemaAst.schema,
+          get0 = op => FlowSchemaAst.fromSchema(op.inputSchema),
+          set0 = (a: Custom[Input, Result], v: FlowSchemaAst) => a.copy(inputSchema = v.toSchema[Input])
+        ),
+        Schema.Field(
+          "resultSchema",
+          FlowSchemaAst.schema,
+          get0 = op => FlowSchemaAst.fromSchema(op.resultSchema),
+          set0 = (a: Custom[Input, Result], v: FlowSchemaAst) => a.copy(resultSchema = v.toSchema[Result])
+        ),
+        (typeId, operation, inputSchema, resultSchema) =>
+          Custom(typeId, operation, inputSchema.toSchema[Input], resultSchema.toSchema[Result])
+      )
+
+    def schemaCase[Input, Result]: Schema.Case[Operation[Input, Result], Custom[Input, Result]] =
+      Schema.Case(
+        "Custom",
+        schema[Input, Result],
+        _.asInstanceOf[Custom[Input, Result]],
+        x => x,
+        _.isInstanceOf[Custom[_, _]]
+      )
   }
 
   private val typeId: TypeId = TypeId.parse("zio.flow.Operation")
@@ -257,5 +307,6 @@ object Operation {
         .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
         .:+:(ContraMap.schemaCase[R, A])
         .:+:(Map.schemaCase[R, A])
+        .:+:(Custom.schemaCase[R, A])
     )
 }

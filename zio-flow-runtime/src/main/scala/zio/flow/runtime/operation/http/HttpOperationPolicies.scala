@@ -30,8 +30,6 @@ object HttpOperationPolicies {
         HttpOperationPolicy.config.nested("default").optional ++
           Config
             .table("per-host", HttpOperationPolicy.config)
-            .optional
-            .map(_.getOrElse(Map.empty[String, HttpOperationPolicy]))
       )(_.nested(_))
       for {
         config            <- ZIO.config(config)

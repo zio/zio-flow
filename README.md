@@ -28,8 +28,6 @@ Come chat with us on [![Badge-Discord]][Link-Discord].
 
 # Sponsors
 
-[![YourKit][Image-YourKit]][Link-YourKit]
-
 [YourKit][Link-YourKit] generously provides use of their monitoring and profiling tools to maximize the performance of ZIO applications.
 
 [Badge-SonatypeReleases]: https://img.shields.io/nexus/r/https/oss.sonatype.org/dev.zio/zio-flow_2.12.svg "Sonatype Releases"
@@ -38,7 +36,7 @@ Come chat with us on [![Badge-Discord]][Link-Discord].
 [Badge-CI]: https://github.com/zio/zio-flow/workflows/CI/badge.svg
 [Link-SonatypeReleases]: https://oss.sonatype.org/content/repositories/releases/dev/zio/zio-flow_2.12/ "Sonatype Releases"
 [Link-SonatypeSnapshots]: https://oss.sonatype.org/content/repositories/snapshots/dev/zio/zio-flow_2.12/ "Sonatype Snapshots"
+[Link-YourKit]: https://www.yourkit.com "YourKit"
 [Link-Discord]: https://discord.gg/2ccFBr4 "Discord"
 [Stage]: https://img.shields.io/badge/Project%20Stage-Experimental-yellow.svg
 [Stage-Page]: https://github.com/zio/zio/wiki/Project-Stages
-
