@@ -36,7 +36,6 @@ trait FlowPackageVersionSpecific {
     def unsafeMake(name: String): RemoteVariableName = wrap(name)
   }
 
-
   type FlowId = FlowId.Type
 
   object FlowId extends Newtype[String] {

@@ -858,10 +858,10 @@ trait Generators {
 
   lazy val genListToString: Gen[Sized, Remote[Any]] =
     for {
-      list      <- Gen.listOf(Gen.string)
-      start     <- Gen.string
-      sep       <- Gen.string
-      end       <- Gen.string
+      list  <- Gen.listOf(Gen.string)
+      start <- Gen.string
+      sep   <- Gen.string
+      end   <- Gen.string
     } yield Remote.ListToString(list, Remote(start), Remote(sep), Remote(end))
 
   lazy val genOpticGet: Gen[Sized, Remote[Any]] =
