@@ -6,10 +6,12 @@ import zio.schema.codec.JsonCodec
 import zio.test.{TestResult, assertTrue}
 
 package object test {
-  def assertFormUrlEncoded[A: Schema](value: A, expected: String): TestResult =
+  def assertFormUrlEncoded[A: Schema](value: A, expected: String): TestResult = {
+    val str = new String(FormUrlEncodedEncoder.encode(implicitly[Schema[A]])(value).toArray)
     assertTrue(
-      new String(FormUrlEncodedEncoder.encode(implicitly[Schema[A]])(value).toArray) == expected
+      str == expected
     )
+  }
 
   def assertJsonSerializable[A: Schema](value: A): TestResult =
     assertTrue(

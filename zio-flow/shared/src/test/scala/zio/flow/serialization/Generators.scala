@@ -45,6 +45,7 @@ import zio.flow.{
   RemoteVariableReference,
   TransactionId,
   ZFlow,
+  ZFlowSyntax,
   regexSchema
 }
 import zio.schema._
@@ -55,7 +56,7 @@ import java.time.temporal.ChronoUnit
 import zio.flow.operation.http
 import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
-import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
+import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteListSyntax, RemoteOptic, UnaryOperators}
 
 import scala.util.matching.Regex
 
@@ -857,11 +858,11 @@ trait Generators {
 
   lazy val genListToString: Gen[Sized, Remote[Any]] =
     for {
-      list  <- Gen.listOf(Gen.int)
-      start <- Gen.string
-      sep   <- Gen.string
-      end   <- Gen.string
-    } yield Remote.ListToString(Remote(list).map(_.toString), Remote(start), Remote(sep), Remote(end))
+      list      <- Gen.listOf(Gen.string)
+      start     <- Gen.string
+      sep       <- Gen.string
+      end       <- Gen.string
+    } yield Remote.ListToString(list, Remote(start), Remote(sep), Remote(end))
 
   lazy val genOpticGet: Gen[Sized, Remote[Any]] =
     Gen.oneOf(

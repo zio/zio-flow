@@ -22,8 +22,8 @@ import zio.schema.Schema
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-package object flow extends Syntax with Schemas with InstantModule with OffsetDateTimeModule with FlowPackageVersionSpecific { self =>
-  private[flow] val syntax: Syntax = self
+package object flow extends Syntax with Schemas with InstantModule with OffsetDateTimeModule with FlowPackageVersionSpecific {
+  private[flow] val syntax: Syntax = this
 
   implicit class FlowIdSyntax(val flowId: FlowId) extends AnyVal {
     def /(postfix: FlowId): FlowId = FlowId.unsafeMake(FlowId.unwrap(flowId) + "_" + FlowId.unwrap(postfix))
