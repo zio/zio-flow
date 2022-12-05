@@ -1130,8 +1130,7 @@ final case class PersistentExecutor(
 
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (remoteContext, (_, values)) =>
              ZIO.foreachDiscard(values) { case (name, value) =>
-               ZIO.debug(s"*** SAVING VAR $name ***") *>
-                 remoteContext.setVariable(name, value)
+               remoteContext.setVariable(name, value)
              }
            }
       lastIndex <- RemoteVariableKeyValueStore.getLatestIndex
@@ -1828,112 +1827,120 @@ object PersistentExecutor {
 
   object State {
     implicit def schema[E, A]: Schema[State[E, A]] =
+      schemaAny.asInstanceOf[Schema[State[E, A]]]
+
+    implicit lazy val schemaAny: Schema[State[Any, Any]] =
       Schema.CaseClass18(
         TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.State"),
         Schema
-          .Field("id", Schema[ScopedFlowId], get0 = _.id, set0 = (a: State[E, A], b: ScopedFlowId) => a.copy(id = b)),
+          .Field(
+            "id",
+            Schema[ScopedFlowId],
+            get0 = _.id,
+            set0 = (a: State[Any, Any], b: ScopedFlowId) => a.copy(id = b)
+          ),
         Schema.Field(
           "lastTimestamp",
           Schema[Timestamp],
           get0 = _.lastTimestamp,
-          set0 = (a: State[E, A], b: Timestamp) => a.copy(lastTimestamp = b)
+          set0 = (a: State[Any, Any], b: Timestamp) => a.copy(lastTimestamp = b)
         ),
         Schema.Field(
           "current",
           ZFlow.schemaAny,
           get0 = _.current.asInstanceOf[ZFlow[Any, Any, Any]],
-          set0 = (a: State[E, A], b: ZFlow[Any, Any, Any]) => a.copy(current = b)
+          set0 = (a: State[Any, Any], b: ZFlow[Any, Any, Any]) => a.copy(current = b)
         ),
         Schema.Field(
           "stack",
           Schema[List[Instruction]],
           get0 = _.stack,
-          set0 = (a: State[E, A], b: List[Instruction]) => a.copy(stack = b)
+          set0 = (a: State[Any, Any], b: List[Instruction]) => a.copy(stack = b)
         ),
         Schema.Field(
           "result",
           Schema[DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]],
           get0 = _.result,
-          set0 =
-            (a: State[E, A], b: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]) => a.copy(result = b)
+          set0 = (a: State[Any, Any], b: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]) =>
+            a.copy(result = b)
         ),
         Schema.Field(
           "envStack",
           Schema[List[Remote[_]]],
           get0 = _.envStack,
-          set0 = (a: State[E, A], b: List[Remote[_]]) => a.copy(envStack = b)
+          set0 = (a: State[Any, Any], b: List[Remote[_]]) => a.copy(envStack = b)
         ),
         Schema.Field(
           "transactionStack",
           Schema[List[TransactionState]],
           get0 = _.transactionStack,
-          set0 = (a: State[E, A], b: List[TransactionState]) => a.copy(transactionStack = b)
+          set0 = (a: State[Any, Any], b: List[TransactionState]) => a.copy(transactionStack = b)
         ),
         Schema.Field(
           "tempVarCounter",
           Schema[Int],
           get0 = _.tempVarCounter,
-          set0 = (a: State[E, A], b: Int) => a.copy(tempVarCounter = b)
+          set0 = (a: State[Any, Any], b: Int) => a.copy(tempVarCounter = b)
         ),
         Schema.Field(
           "promiseIdCounter",
           Schema[Int],
           get0 = _.promiseIdCounter,
-          set0 = (a: State[E, A], b: Int) => a.copy(promiseIdCounter = b)
+          set0 = (a: State[Any, Any], b: Int) => a.copy(promiseIdCounter = b)
         ),
         Schema.Field(
           "forkCounter",
           Schema[Int],
           get0 = _.forkCounter,
-          set0 = (a: State[E, A], b: Int) => a.copy(forkCounter = b)
+          set0 = (a: State[Any, Any], b: Int) => a.copy(forkCounter = b)
         ),
         Schema.Field(
           "transactionCounter",
           Schema[Int],
           get0 = _.transactionCounter,
-          set0 = (a: State[E, A], b: Int) => a.copy(transactionCounter = b)
+          set0 = (a: State[Any, Any], b: Int) => a.copy(transactionCounter = b)
         ),
         Schema.Field(
           "status",
           Schema[FlowStatus],
           get0 = _.status,
-          set0 = (a: State[E, A], b: FlowStatus) => a.copy(status = b)
+          set0 = (a: State[Any, Any], b: FlowStatus) => a.copy(status = b)
         ),
         Schema.Field(
           "watchedVariables",
           Schema[Set[ScopedRemoteVariableName]],
           get0 = _.watchedVariables,
-          set0 = (a: State[E, A], b: Set[ScopedRemoteVariableName]) => a.copy(watchedVariables = b)
+          set0 = (a: State[Any, Any], b: Set[ScopedRemoteVariableName]) => a.copy(watchedVariables = b)
         ),
         Schema.Field(
           "watchPosition",
           Schema[Index],
           get0 = _.watchPosition,
-          set0 = (a: State[E, A], b: Index) => a.copy(watchPosition = b)
+          set0 = (a: State[Any, Any], b: Index) => a.copy(watchPosition = b)
         ),
         Schema.Field(
           "startedAt",
           Schema[OffsetDateTime],
           get0 = _.startedAt,
-          set0 = (a: State[E, A], b: OffsetDateTime) => a.copy(startedAt = b)
+          set0 = (a: State[Any, Any], b: OffsetDateTime) => a.copy(startedAt = b)
         ),
         Schema.Field(
           "suspendedAt",
           Schema[Option[OffsetDateTime]],
           get0 = _.suspendedAt,
-          set0 = (a: State[E, A], b: Option[OffsetDateTime]) => a.copy(suspendedAt = b)
+          set0 = (a: State[Any, Any], b: Option[OffsetDateTime]) => a.copy(suspendedAt = b)
         ),
         Schema.Field(
           "totalExecutionTime",
           Schema[Duration],
           get0 = _.totalExecutionTime,
-          set0 = (a: State[E, A], b: Duration) => a.copy(totalExecutionTime = b)
+          set0 = (a: State[Any, Any], b: Duration) => a.copy(totalExecutionTime = b)
         ),
         Schema.Field(
           "currentExecutionTime",
           Schema[Duration],
           get0 = _.currentExecutionTime,
-          set0 = (a: State[E, A], b: Duration) => a.copy(currentExecutionTime = b)
+          set0 = (a: State[Any, Any], b: Duration) => a.copy(currentExecutionTime = b)
         ),
         (
           id: ScopedFlowId,

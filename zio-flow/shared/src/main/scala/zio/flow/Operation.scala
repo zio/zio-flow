@@ -268,7 +268,7 @@ object Operation {
         ),
         Schema.Field(
           "operation",
-          Schema.dynamicValue,
+          Schema.Dynamic(),
           get0 = _.operation,
           set0 = (a: Custom[Input, Result], v: DynamicValue) => a.copy(operation = v)
         ),
@@ -300,13 +300,15 @@ object Operation {
 
   private val typeId: TypeId = TypeId.parse("zio.flow.Operation")
 
-  implicit def schema[R, A]: Schema[Operation[R, A]] =
+  implicit def schema[R, A]: Schema[Operation[R, A]] = schemaAny.asInstanceOf[Schema[Operation[R, A]]]
+
+  lazy val schemaAny: Schema[Operation[Any, Any]] =
     Schema.EnumN(
       typeId,
       CaseSet
-        .Cons(Http.schemaCase[R, A], CaseSet.Empty[Operation[R, A]]())
-        .:+:(ContraMap.schemaCase[R, A])
-        .:+:(Map.schemaCase[R, A])
-        .:+:(Custom.schemaCase[R, A])
+        .Cons(Http.schemaCase[Any, Any], CaseSet.Empty[Operation[Any, Any]]())
+        .:+:(ContraMap.schemaCase[Any, Any])
+        .:+:(Map.schemaCase[Any, Any])
+        .:+:(Custom.schemaCase[Any, Any])
     )
 }

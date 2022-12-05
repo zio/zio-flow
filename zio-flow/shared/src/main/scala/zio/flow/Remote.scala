@@ -136,7 +136,7 @@ object Remote {
 
   object Literal {
     def schema[A]: Schema[Literal[A]] =
-      Schema[DynamicValue].transform(Literal(_), _.value)
+      Schema.Dynamic().transform(Literal(_), _.value)
 
     def schemaCase[A]: Schema.Case[Remote[A], Literal[A]] =
       Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]], x => x, _.isInstanceOf[Literal[A]])

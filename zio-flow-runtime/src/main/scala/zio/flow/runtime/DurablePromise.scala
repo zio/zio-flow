@@ -99,8 +99,12 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
 
 object DurablePromise {
   private val typeId = TypeId.parse("zio.flow.runtime.DurablePromise")
+
   implicit def schema[E, A]: Schema[DurablePromise[E, A]] =
-    Schema.CaseClass1[PromiseId, DurablePromise[E, A]](
+    schemaAny.asInstanceOf[Schema[DurablePromise[E, A]]]
+
+  implicit lazy val schemaAny: Schema[DurablePromise[Any, Any]] =
+    Schema.CaseClass1[PromiseId, DurablePromise[Any, Any]](
       typeId,
       Schema.Field("promiseId", Schema[PromiseId], get0 = _.promiseId, set0 = (a, b) => a.copy(promiseId = b)),
       DurablePromise.apply

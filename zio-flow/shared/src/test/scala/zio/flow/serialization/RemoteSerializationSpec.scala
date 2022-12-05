@@ -38,7 +38,7 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
         assertTrue(
           Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
         )
-      } @@ TestAspect.ignore // TODO: fix recursion
+      } //@@ TestAspect.ignore // TODO: fix recursion
     )
 
   case class TestCaseClass(a: String, b: Int)
