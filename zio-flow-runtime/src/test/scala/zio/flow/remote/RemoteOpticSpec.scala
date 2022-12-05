@@ -12,8 +12,8 @@ object RemoteOpticSpec extends RemoteSpecBase {
   final case class Person(name: String, age: Int)
 
   object Person {
-    implicit val schema = DeriveSchema.gen[Person]
-    val (name, age)     = Remote.makeAccessors[Person]
+    implicit val schema: Schema[Person] = DeriveSchema.gen[Person]
+    val (name, age)                     = Remote.makeAccessors[Person]
   }
 
   val genPerson: Gen[Any, Person] =
@@ -35,8 +35,8 @@ object RemoteOpticSpec extends RemoteSpecBase {
   case object Red   extends Color
 
   object Color {
-    implicit val schema     = DeriveSchema.gen[Color]
-    implicit val blueSchema = DeriveSchema.gen[Blue.type]
+    implicit val schema: Schema[Color]         = DeriveSchema.gen[Color]
+    implicit val blueSchema: Schema[Blue.type] = DeriveSchema.gen[Blue.type]
 
     val (blue, green, red) = Remote.makeAccessors[Color]
   }

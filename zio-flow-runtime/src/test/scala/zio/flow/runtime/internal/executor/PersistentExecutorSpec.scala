@@ -18,7 +18,7 @@ package zio.flow.runtime.internal.executor
 
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.mock.MockedOperation
-import zio.flow.operation.http.API
+import zio.flow.operation.http._
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow._
 import zio.test.Assertion._

@@ -22,7 +22,7 @@ import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.{Chunk, Scope, ZLayer}
 import zio.flow.{LocalContext, Remote}
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.test.{Gen, Spec, TestEnvironment, check}
+import zio.test._
 
 object RemoteChunkSyntaxSpec extends RemoteSpecBase {
   override def spec: Spec[TestEnvironment with Scope, Any] =

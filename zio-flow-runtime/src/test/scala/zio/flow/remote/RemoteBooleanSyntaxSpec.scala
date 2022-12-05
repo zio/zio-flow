@@ -19,7 +19,7 @@ package zio.flow.remote
 import zio.ZLayer
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.flow.{LocalContext, Remote}
+import zio.flow.{LocalContext, Remote, RemoteBoolean}
 
 object RemoteBooleanSyntaxSpec extends RemoteSpecBase {
   override def spec =

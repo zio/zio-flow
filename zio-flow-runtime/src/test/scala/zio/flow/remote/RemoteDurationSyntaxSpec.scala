@@ -21,7 +21,7 @@ import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.utils.TestGen
 import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
-import zio.test.{Gen, TestResult, check}
+import zio.test._
 
 import java.time.temporal.ChronoUnit
 

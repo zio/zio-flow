@@ -35,7 +35,7 @@ object IndexedStore {
     implicit val schema: Schema[Index] = Schema[Long].transform(Index(_), Index.unwrap)
   }
 
-  implicit class IndexSyntax(private val index: Index) extends AnyVal {
+  implicit class IndexSyntax(index: Index) {
     def next: Index = Index(index + 1)
   }
 

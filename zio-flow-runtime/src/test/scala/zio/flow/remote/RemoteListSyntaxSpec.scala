@@ -21,7 +21,7 @@ import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.flow.{LocalContext, Remote}
 import zio.schema._
-import zio.test.{Gen, Spec, TestEnvironment, check}
+import zio.test._
 import zio.{Scope, ZLayer}
 
 object RemoteListSyntaxSpec extends RemoteSpecBase {
