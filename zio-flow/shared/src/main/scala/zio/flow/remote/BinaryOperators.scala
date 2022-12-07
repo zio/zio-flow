@@ -242,11 +242,11 @@ object BinaryOperators {
         TypeId.parse("zio.flow.remote.BinaryOperators.LessThanEqual"),
         Schema.Field(
           "schema",
-          FlowSchemaAst.schema,
+          Schema.defer(FlowSchemaAst.schema),
           get0 = lte => FlowSchemaAst.fromSchema(lte.schema),
-          set0 = (o, v) => o.copy(schema = v.toSchema)
+          set0 = (o, v) => o.copy(schema = v.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema[Any])
+        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema.asInstanceOf[Schema[Any]])
       ),
       _.asInstanceOf[LessThanEqual[Any]],
       _.asInstanceOf[BinaryOperators[Any, Any, Any]],

@@ -18,7 +18,7 @@ package zio.flow
 
 import zio.flow.Operation.Http.toPathString
 import zio.flow.operation.http.{API, Path, RequestInput}
-import zio.flow.serialization.FlowSchemaAst
+import zio.flow.serialization._
 import zio.schema._
 
 import scala.collection.mutable
@@ -105,9 +105,10 @@ object Operation {
               "inputSchema",
               FlowSchemaAst.schema,
               get0 = op => FlowSchemaAst.fromSchema(op.schema),
-              set0 = (a: ContraMap[Input2, Input, Result], v: FlowSchemaAst) => a.copy(schema = v.toSchema)
+              set0 = (a: ContraMap[Input2, Input, Result], v: FlowSchemaAst) =>
+                a.copy(schema = v.toSchema.asInstanceOf[Schema[Input2]])
             ),
-            (inner, f, ast) => ContraMap(inner, f, ast.toSchema[Input2])
+            (inner, f, ast) => ContraMap(inner, f, ast.toSchema.asInstanceOf[Schema[Input2]])
           )
       }
 
@@ -161,9 +162,10 @@ object Operation {
               "inputSchema",
               FlowSchemaAst.schema,
               get0 = op => FlowSchemaAst.fromSchema(op.schema),
-              set0 = (a: Map[Input, Result, Result2], v: FlowSchemaAst) => a.copy(schema = v.toSchema)
+              set0 = (a: Map[Input, Result, Result2], v: FlowSchemaAst) =>
+                a.copy(schema = v.toSchema.asInstanceOf[Schema[Result2]])
             ),
-            (inner, f, ast) => Map(inner, f, ast.toSchema[Result2])
+            (inner, f, ast) => Map(inner, f, ast.toSchema.asInstanceOf[Schema[Result2]])
           )
       }
 
@@ -276,16 +278,23 @@ object Operation {
           "inputSchema",
           FlowSchemaAst.schema,
           get0 = op => FlowSchemaAst.fromSchema(op.inputSchema),
-          set0 = (a: Custom[Input, Result], v: FlowSchemaAst) => a.copy(inputSchema = v.toSchema[Input])
+          set0 =
+            (a: Custom[Input, Result], v: FlowSchemaAst) => a.copy(inputSchema = v.toSchema.asInstanceOf[Schema[Input]])
         ),
         Schema.Field(
           "resultSchema",
           FlowSchemaAst.schema,
           get0 = op => FlowSchemaAst.fromSchema(op.resultSchema),
-          set0 = (a: Custom[Input, Result], v: FlowSchemaAst) => a.copy(resultSchema = v.toSchema[Result])
+          set0 = (a: Custom[Input, Result], v: FlowSchemaAst) =>
+            a.copy(resultSchema = v.toSchema.asInstanceOf[Schema[Result]])
         ),
         (typeId, operation, inputSchema, resultSchema) =>
-          Custom(typeId, operation, inputSchema.toSchema[Input], resultSchema.toSchema[Result])
+          Custom(
+            typeId,
+            operation,
+            inputSchema.toSchema.asInstanceOf[Schema[Input]],
+            resultSchema.toSchema.asInstanceOf[Schema[Result]]
+          )
       )
 
     def schemaCase[Input, Result]: Schema.Case[Operation[Input, Result], Custom[Input, Result]] =

@@ -17,11 +17,10 @@
 package zio.flow.runtime.internal.executor
 
 import zio.flow.runtime.internal._
-import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.mock.MockedOperation
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, Timestamp}
+import zio.flow.runtime.{DurableLog, ExecutionEnvironment, IndexedStore, KeyValueStore, Timestamp}
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -276,7 +275,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                     ZLayer(
                       ZIO
                         .service[Configuration]
-                        .map(config => ExecutionEnvironment(Serializer.json, Deserializer.json, config))
+                        .map(config => ExecutionEnvironment(zio.flow.runtime.serialization.json, config))
                     ) // TODO: this should not be recreated here
                   )
               _ <- ZIO.logDebug(s"Adjusting clock by 200s")

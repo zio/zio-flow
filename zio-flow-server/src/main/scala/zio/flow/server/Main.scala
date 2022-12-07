@@ -31,8 +31,7 @@ import zio.flow.dynamodb.{DynamoDbIndexedStore, DynamoDbKeyValueStore}
 import zio.flow.rocksdb.{RocksDbIndexedStore, RocksDbKeyValueStore}
 import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
-import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, serialization}
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
 import zio.flow.server.flows.FlowsApi
 import zio.flow.server.templates.TemplatesApi
@@ -127,12 +126,8 @@ object Main extends ZIOAppDefault {
       DefaultOperationExecutor.layer,
       HttpOperationPolicies.fromConfig("policies", "http"),
       config.serializationFormat match {
-        case SerializationFormat.Json     => ZLayer.succeed(Serializer.json)
-        case SerializationFormat.Protobuf => ZLayer.succeed(Serializer.protobuf)
-      },
-      config.serializationFormat match {
-        case SerializationFormat.Json     => ZLayer.succeed(Deserializer.json)
-        case SerializationFormat.Protobuf => ZLayer.succeed(Deserializer.protobuf)
+        case SerializationFormat.Json     => ZLayer.succeed(serialization.json)
+        case SerializationFormat.Protobuf => ZLayer.succeed(serialization.protobuf)
       },
       PersistentExecutor.make(config.gcPeriod)
     )

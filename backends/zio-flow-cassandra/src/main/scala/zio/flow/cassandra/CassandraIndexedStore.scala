@@ -24,10 +24,11 @@ import com.datastax.oss.driver.api.querybuilder.insert.InsertInto
 import com.datastax.oss.driver.api.querybuilder.select.SelectFrom
 import com.datastax.oss.driver.api.querybuilder.update.UpdateStart
 import com.datastax.oss.driver.api.querybuilder.{Literal, QueryBuilder}
+import zio.constraintless.TypeList.{::, End}
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
-import zio.schema.Schema
-import zio.schema.codec.ProtobufCodec
+import zio.schema.codec.BinaryCodecs
+import zio.schema.codec.ProtobufCodec._
 import zio.stream.ZStream
 import zio.{Chunk, IO, Schedule, Task, URLayer, ZIO, ZLayer}
 
@@ -69,7 +70,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
     ).flatMap { result =>
       if (result.remaining > 0) {
         ZIO
-          .fromEither(ProtobufCodec.decode(Schema[Long])(blobValueOf(valueColumnName, result.one())))
+          .fromEither(codecs.decode[Long](blobValueOf(valueColumnName, result.one())))
           .mapBoth(
             error => new IOException(s"Failed to decode stored position of topic $topic: $error"),
             Index(_)
@@ -88,7 +89,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
                cqlInsert
                  .value(topicColumnName, literal(topic))
                  .value(indexColumnName, literal(-1L))
-                 .value(valueColumnName, byteBufferFrom(ProtobufCodec.encode(Schema[Long])(nextIndex.toLong)))
+                 .value(valueColumnName, byteBufferFrom(codecs.encode(nextIndex.toLong)))
                  .ifNotExists()
                  .build()
              for {
@@ -99,13 +100,13 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
              // Updating position first
              val updatePosition =
                cqlUpdate
-                 .setColumn(valueColumnName, byteBufferFrom(ProtobufCodec.encode(Schema[Long])(nextIndex.toLong)))
+                 .setColumn(valueColumnName, byteBufferFrom(codecs.encode(nextIndex.toLong)))
                  .whereColumn(topicColumnName)
                  .isEqualTo(literal(topic))
                  .whereColumn(indexColumnName)
                  .isEqualTo(literal(-1L))
                  .ifColumn(valueColumnName)
-                 .isEqualTo(byteBufferFrom(ProtobufCodec.encode(Schema[Long])(currentIndex.toLong)))
+                 .isEqualTo(byteBufferFrom(codecs.encode(currentIndex.toLong)))
                  .build()
              for {
                posUpdateResult <- executeAsync(updatePosition).mapError(Some(_))
@@ -255,4 +256,5 @@ object CassandraIndexedStore {
         .array
     )
 
+  private lazy val codecs = BinaryCodecs.make[Long :: End]
 }

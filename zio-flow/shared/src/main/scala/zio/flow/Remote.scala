@@ -416,11 +416,11 @@ object Remote {
         Schema.Field("key", Schema[ConfigKey], get0 = _.key, set0 = (a: Config[A], v: ConfigKey) => a.copy(key = v)),
         Schema.Field(
           "schema",
-          FlowSchemaAst.schema,
+          Schema.defer(FlowSchemaAst.schema),
           get0 = cfg => FlowSchemaAst.fromSchema(cfg.schema),
-          set0 = (cfg, schema) => cfg.copy(schema = schema.toSchema)
+          set0 = (cfg, schema) => cfg.copy(schema = schema.toSchema.asInstanceOf[Schema[A]])
         ),
-        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema[A])
+        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema.asInstanceOf[Schema[A]])
       )
 
     def schemaCase[A]: Schema.Case[Remote[A], Config[A]] =

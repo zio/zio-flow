@@ -20,7 +20,7 @@ import zio._
 import zio.flow.runtime.internal.PersistentExecutor.FlowResult
 import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
-import zio.flow.serialization.{Deserializer, Serializer}
+import zio.flow.runtime.serialization.ExecutorBinaryCodecs
 import zio.flow.{Configuration, FlowId, ZFlow}
 import zio.schema.{DynamicValue, Schema}
 import zio.stream.ZStream
@@ -139,12 +139,12 @@ object ZFlowExecutor {
     ZIO.serviceWithZIO(_.forceGarbageCollection())
 
   val default: ZLayer[
-    KeyValueStore with IndexedStore with Serializer with Deserializer with Configuration,
+    KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration,
     Nothing,
     ZFlowExecutor
   ] =
     ZLayer
-      .makeSome[KeyValueStore with IndexedStore with Serializer with Deserializer with Configuration, ZFlowExecutor](
+      .makeSome[KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration, ZFlowExecutor](
         DurableLog.layer,
         DefaultOperationExecutor.layer,
         HttpOperationPolicies.disabled,
@@ -153,15 +153,13 @@ object ZFlowExecutor {
 
   val defaultJson: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
     ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
-      ZLayer.succeed(Serializer.json),
-      ZLayer.succeed(Deserializer.json),
+      ZLayer.succeed(serialization.json),
       default
     )
 
   val defaultProtobuf: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
     ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
-      ZLayer.succeed(Serializer.protobuf),
-      ZLayer.succeed(Deserializer.protobuf),
+      ZLayer.succeed(serialization.protobuf),
       default
     )
 
@@ -169,8 +167,7 @@ object ZFlowExecutor {
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
-      ZLayer.succeed(Serializer.json),
-      ZLayer.succeed(Deserializer.json),
+      ZLayer.succeed(serialization.json),
       default
     )
 
@@ -178,8 +175,7 @@ object ZFlowExecutor {
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
-      ZLayer.succeed(Serializer.protobuf),
-      ZLayer.succeed(Deserializer.protobuf),
+      ZLayer.succeed(serialization.protobuf),
       default
     )
 }

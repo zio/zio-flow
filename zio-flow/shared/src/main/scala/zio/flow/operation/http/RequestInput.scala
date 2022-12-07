@@ -145,9 +145,9 @@ object Header {
           "schema",
           FlowSchemaAst.schema,
           get0 = header => FlowSchemaAst.fromSchema(header.schema),
-          set0 = (a, b) => a.copy(schema = b.toSchema)
+          set0 = (a, b) => a.copy(schema = b.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (name, schema) => SingleHeader(name, schema.toSchema[Any])
+        (name, schema) => SingleHeader(name, schema.toSchema.asInstanceOf[Schema[Any]])
       )
 
     def schemaCase[A]: Schema.Case[Header[A], SingleHeader[A]] =
@@ -234,10 +234,10 @@ object Body {
       "schema",
       FlowSchemaAst.schema,
       get0 = body => FlowSchemaAst.fromSchema(body.schema),
-      set0 = (a, b) => a.copy(schema = b.toSchema)
+      set0 = (a, b) => a.copy(schema = b.toSchema.asInstanceOf[Schema[A]])
     ),
     Schema.Field("contentType", Schema[ContentType], get0 = _.contentType, set0 = (a, b) => a.copy(contentType = b)),
-    (ast, contentType) => Body(ast.toSchema[A], contentType)
+    (ast, contentType) => Body(ast.toSchema.asInstanceOf[Schema[A]], contentType)
   )
 
   def schemaCase[A]: Schema.Case[RequestInput[A], Body[A]] =
@@ -288,9 +288,9 @@ object Query {
           "schema",
           FlowSchemaAst.schema,
           get0 = param => FlowSchemaAst.fromSchema(param.schema),
-          set0 = (a, b) => a.copy(schema = b.toSchema)
+          set0 = (a, b) => a.copy(schema = b.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (name, schema) => SingleParam(name, schema.toSchema[Any])
+        (name, schema) => SingleParam(name, schema.toSchema.asInstanceOf[Schema[Any]])
       )
 
     def schemaCase[A]: Schema.Case[Query[A], SingleParam[A]] =
@@ -428,9 +428,9 @@ object Path {
           "schema",
           FlowSchemaAst.schema,
           get0 = m => FlowSchemaAst.fromSchema(m.schema),
-          set0 = (a, b) => a.copy(schema = b.toSchema)
+          set0 = (a, b) => a.copy(schema = b.toSchema.asInstanceOf[Schema[Any]])
         ),
-        schema => Match(schema.toSchema[Any])
+        schema => Match(schema.toSchema.asInstanceOf[Schema[Any]])
       )
 
     def schemaCase[A]: Schema.Case[Path[A], Match[A]] =

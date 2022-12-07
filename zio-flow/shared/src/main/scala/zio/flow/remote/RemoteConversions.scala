@@ -408,9 +408,9 @@ object RemoteConversions {
           "schema",
           Schema[FlowSchemaAst],
           get0 = conv => FlowSchemaAst.fromSchema(conv.inputSchema),
-          set0 = (_: ToString[Any], b: FlowSchemaAst) => ToString()(b.toSchema[Any])
+          set0 = (_: ToString[Any], b: FlowSchemaAst) => ToString()(b.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (schemaAst: FlowSchemaAst) => ToString()(schemaAst.toSchema[Any])
+        (schemaAst: FlowSchemaAst) => ToString()(schemaAst.toSchema.asInstanceOf[Schema[Any]])
       ),
       _.asInstanceOf[ToString[Any]],
       _.asInstanceOf[RemoteConversions[Any, Any]],

@@ -20,16 +20,17 @@ import zio._
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.runtime.IndexedStore.Index
 import zio.flow.remote.DynamicValueHelpers
-import zio.flow.serialization._
-import zio.flow._
+import zio.flow.{runtime, _}
 import PersistentExecutor.GarbageCollectionCommand
 import zio.flow.runtime.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
+import zio.flow.runtime.serialization.ExecutorBinaryCodecs
 import zio.flow.runtime.{
   DurableLog,
   DurablePromise,
+  ExecutionEnvironment,
   ExecutorError,
-  KeyValueStore,
   FlowStatus,
+  KeyValueStore,
   Timestamp,
   ZFlowExecutor,
   metrics
@@ -53,7 +54,7 @@ final case class PersistentExecutor(
 
   import PersistentExecutor._
 
-  private val promiseEnv = ZEnvironment(durableLog, execEnv)
+  private val promiseEnv = ZEnvironment(durableLog)
 
   private def coerceRemote[A](remote: Remote[_]): Remote[A] = remote.asInstanceOf[Remote[A]]
 
@@ -61,7 +62,7 @@ final case class PersistentExecutor(
   def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] =
     for {
       resultPromise <- start(id, flow).orDieWith(_.toException)
-      promiseResult <- resultPromise.awaitEither.provideEnvironment(promiseEnv).orDieWith(_.toException)
+      promiseResult <- resultPromise.awaitEither(execEnv.codecs).provideEnvironment(promiseEnv).orDieWith(_.toException)
       _ <-
         promiseResult match {
           case Left(Left(executorError)) =>
@@ -105,10 +106,10 @@ final case class PersistentExecutor(
                                 val id = FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8))
                                 ZIO
                                   .fromEither(
-                                    execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
+                                    execEnv.codecs.decode[PersistentExecutor.State[Any, Any]](rawState)
                                   )
                                   .mapBoth(
-                                    error => ExecutorError.DeserializationError(s"state of $id", error),
+                                    error => ExecutorError.DeserializationError(s"state of $id", error.message),
                                     state =>
                                       (
                                         FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8)),
@@ -208,10 +209,10 @@ final case class PersistentExecutor(
         val id = FlowId.unsafeMake(new String(rawKey.toArray, StandardCharsets.UTF_8))
         ZIO
           .fromEither(
-            execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](rawState)
+            execEnv.codecs.decode[PersistentExecutor.State[Any, Any]](rawState)
           )
           .mapBoth(
-            error => ExecutorError.DeserializationError(s"state of $id", error),
+            error => ExecutorError.DeserializationError(s"state of $id", error.message),
             state => (id, state.status)
           )
       }
@@ -219,7 +220,7 @@ final case class PersistentExecutor(
   private def getResultFromPromise(
     resultPromise: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]
   ): ZIO[Any, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]] =
-    resultPromise.poll.provideEnvironment(promiseEnv).map(_.map(_.map(_.result)))
+    resultPromise.poll(execEnv.codecs).provideEnvironment(promiseEnv).map(_.map(_.map(_.result)))
 
   private def start[E, A](
     id: ScopedFlowId,
@@ -314,7 +315,7 @@ final case class PersistentExecutor(
             case Nil =>
               for {
                 result <- RemoteContext.evalDynamic(value)
-                _      <- state.result.succeed(FlowResult(result, updatedState.lastTimestamp))
+                _      <- state.result.succeed(FlowResult(result, updatedState.lastTimestamp))(execEnv.codecs)
                 _ <- updateFinishedFlowMetrics(
                        metrics.FlowResult.Success,
                        updatedState.startedAt,
@@ -394,7 +395,7 @@ final case class PersistentExecutor(
             case Nil =>
               for {
                 dyn <- RemoteContext.evalDynamic(value)
-                _   <- state.result.fail(Right(dyn))
+                _   <- state.result.fail(Right(dyn))(execEnv.codecs)
                 _ <- updateFinishedFlowMetrics(
                        metrics.FlowResult.Failure,
                        updatedState.startedAt,
@@ -674,7 +675,7 @@ final case class PersistentExecutor(
                       .asInstanceOf[ExecutingFlow[Either[ExecutorError, await.ValueE], await.ValueA]]
                       .result
                   )
-                  .awaitEither
+                  .awaitEither(execEnv.codecs)
                   .provideEnvironment(promiseEnv)
               _ <- result match {
                      case Left(Left(executorError)) =>
@@ -717,7 +718,8 @@ final case class PersistentExecutor(
                   state.watchPosition,
                   flow.asInstanceOf[ZFlow[Any, timeout.ValueE, timeout.ValueA]]
                 )
-              result <- resultPromise.awaitEither
+              result <- resultPromise
+                          .awaitEither(execEnv.codecs)
                           .provideEnvironment(promiseEnv)
                           .timeout(d)
               stepResult <- result match {
@@ -871,7 +873,7 @@ final case class PersistentExecutor(
         )
         .mapBoth(
           ExecutorError.LogError,
-          raw => execEnv.deserializer.deserialize[ScopedRemoteVariableName](raw)
+          raw => execEnv.codecs.decode[ScopedRemoteVariableName](raw)
         )
         .collect {
           case Right(scopedName) if watchedVariables.contains(scopedName) => scopedName
@@ -1017,7 +1019,7 @@ final case class PersistentExecutor(
                           for {
                             _ <- ZIO.logErrorCause(s"Persistent executor ${initialState.id} failed", Cause.fail(error))
                             _ <- initialState.result
-                                   .fail(Left(error))
+                                   .fail(Left(error))(execEnv.codecs)
                                    .provideEnvironment(promiseEnv)
                                    .catchAll { error2 =>
                                      ZIO.logFatalCause(
@@ -1163,8 +1165,8 @@ final case class PersistentExecutor(
                  case Some(bytes) =>
                    ZIO.logInfo(s"Using persisted state (${bytes.size} bytes)") *>
                      ZIO
-                       .fromEither(execEnv.deserializer.deserialize[PersistentExecutor.State[Any, Any]](bytes))
-                       .mapBoth(ExecutorError.DeserializationError(s"state of $id", _), Some(_))
+                       .fromEither(execEnv.codecs.decode[PersistentExecutor.State[Any, Any]](bytes))
+                       .mapBoth(error => ExecutorError.DeserializationError(s"state of $id", error.message), Some(_))
                  case None => ZIO.logInfo("No persisted state available").as(None)
                }
     } yield state
@@ -1177,7 +1179,7 @@ final case class PersistentExecutor(
   ): ZIO[Any, ExecutorError.KeyValueStoreError, State[E, A]] =
     for {
       updatedState  <- ZIO.succeed(changes(baseState))
-      persistedState = execEnv.serializer.serialize(updatedState)
+      persistedState = execEnv.codecs.encode(updatedState.asInstanceOf[State[Any, Any]])
       key            = id.toRaw
       _             <- metrics.serializedFlowStateSize.update(persistedState.size)
       _ <- kvStore
@@ -1199,7 +1201,9 @@ final case class PersistentExecutor(
                              case Some(lastState) =>
                                saveStateChange(id, lastState, StateChange.done, lastState.lastTimestamp)
                            }
-                      _ <- runtimeState.result.fail(Left(ExecutorError.Interrupted)).provideEnvironment(promiseEnv)
+                      _ <- runtimeState.result
+                             .fail(Left(ExecutorError.Interrupted))(execEnv.codecs)
+                             .provideEnvironment(promiseEnv)
                     } yield true
                   case None =>
                     ZIO.succeed(false)
@@ -1214,7 +1218,7 @@ final case class PersistentExecutor(
         .flatMap {
           case Some((bytes, scope)) =>
             ZIO
-              .fromEither(execEnv.deserializer.deserialize[DynamicValue](bytes))
+              .fromEither(execEnv.codecs.decode[DynamicValue](bytes))
               .map { dynValue =>
                 val remote = Remote.fromDynamic(dynValue)
                 remote.variableUsage.variables.map(name => ScopedRemoteVariableName(name, scope)) + name
@@ -1365,16 +1369,15 @@ object PersistentExecutor {
   def make(
     gcPeriod: Duration = 5.minutes
   ): ZLayer[
-    DurableLog with KeyValueStore with Configuration with OperationExecutor with Serializer with Deserializer,
+    DurableLog with KeyValueStore with Configuration with OperationExecutor with ExecutorBinaryCodecs,
     Nothing,
     ZFlowExecutor
   ] =
     ZLayer {
       for {
         configuration <- ZIO.service[Configuration]
-        serializer    <- ZIO.service[Serializer]
-        deserializer  <- ZIO.service[Deserializer]
-      } yield ExecutionEnvironment(serializer, deserializer, configuration, gcPeriod)
+        codecs        <- ZIO.service[ExecutorBinaryCodecs]
+      } yield runtime.ExecutionEnvironment(codecs, configuration, gcPeriod)
     } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any ++ RemoteVariableKeyValueStore.layer) >>> layer
 
   val layer: ZLayer[

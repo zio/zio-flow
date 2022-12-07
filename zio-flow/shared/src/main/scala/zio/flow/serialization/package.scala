@@ -16,14 +16,19 @@
 
 package zio.flow
 
-import zio.durationInt
-import zio.flow.serialization.{Deserializer, Serializer}
+import zio.constraintless.TypeList._
+import zio.schema.meta.ExtensibleMetaSchema
+import zio.schema.{DynamicValue, Schema}
 
-import java.time.Duration
+package object serialization {
+  type FlowSchemaAst = ExtensibleMetaSchema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
+  object FlowSchemaAst {
+    def schema: Schema[FlowSchemaAst] =
+      Schema.defer {
+        ExtensibleMetaSchema.schema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
+      }
 
-final case class ExecutionEnvironment(
-  serializer: Serializer,
-  deserializer: Deserializer,
-  configuration: Configuration,
-  gcPeriod: Duration = 5.minutes
-)
+    def fromSchema[A](schema: Schema[A]): FlowSchemaAst =
+      ExtensibleMetaSchema.fromSchema[A, Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End](schema)
+  }
+}
