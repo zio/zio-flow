@@ -23,10 +23,8 @@ import zio.schema.{DynamicValue, Schema}
 package object serialization {
   type FlowSchemaAst = ExtensibleMetaSchema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
   object FlowSchemaAst {
-    def schema: Schema[FlowSchemaAst] =
-      Schema.defer {
-        ExtensibleMetaSchema.schema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
-      }
+    lazy val schema: Schema[FlowSchemaAst] =
+      ExtensibleMetaSchema.schema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
 
     def fromSchema[A](schema: Schema[A]): FlowSchemaAst =
       ExtensibleMetaSchema.fromSchema[A, Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End](schema)

@@ -4048,6 +4048,6 @@ object Remote {
       .:+:(OpticSet.schemaCase[A])
   )
 
-  implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
-  def schema[A]: Schema[Remote[A]]            = schemaAny.asInstanceOf[Schema[Remote[A]]]
+  implicit lazy val schemaAny: Schema[Remote[Any]] = createSchema[Any]
+  def schema[A]: Schema[Remote[A]]                 = schemaAny.asInstanceOf[Schema[Remote[A]]]
 }

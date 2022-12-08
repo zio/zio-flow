@@ -570,7 +570,7 @@ object RemoteConversions {
 
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
-  val schemaAny: Schema[RemoteConversions[Any, Any]] =
+  lazy val schemaAny: Schema[RemoteConversions[Any, Any]] =
     Schema.EnumN(
       TypeId.parse("zio.flow.remote.RemoteConversions"),
       CaseSet
