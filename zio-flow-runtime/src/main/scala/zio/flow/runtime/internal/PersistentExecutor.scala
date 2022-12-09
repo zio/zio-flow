@@ -18,28 +18,19 @@ package zio.flow.runtime.internal
 
 import zio._
 import zio.flow.Remote.UnboundRemoteFunction
-import zio.flow.runtime.IndexedStore.Index
-import zio.flow.remote.DynamicValueHelpers
-import zio.flow.serialization._
 import zio.flow._
-import PersistentExecutor.GarbageCollectionCommand
+import zio.flow.remote.DynamicValueHelpers
+import zio.flow.runtime.IndexedStore.Index
+import zio.flow.runtime.internal.PersistentExecutor.GarbageCollectionCommand
 import zio.flow.runtime.metrics.{TransactionOutcome, finishedFlowAge, finishedFlowCount, flowTotalExecutionTime}
-import zio.flow.runtime.{
-  DurableLog,
-  DurablePromise,
-  ExecutorError,
-  KeyValueStore,
-  FlowStatus,
-  Timestamp,
-  ZFlowExecutor,
-  metrics
-}
-import zio.schema.{CaseSet, DeriveSchema, DynamicValue, Schema, TypeId}
+import zio.flow.runtime.{metrics, _}
+import zio.flow.serialization._
+import zio.schema._
+import zio.stm.{TMap, ZSTM}
+import zio.stream.ZStream
 
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, OffsetDateTime}
-import zio.stm.{TMap, ZSTM}
-import zio.stream.ZStream
 
 final case class PersistentExecutor(
   execEnv: ExecutionEnvironment,
@@ -48,7 +39,8 @@ final case class PersistentExecutor(
   remoteVariableKvStore: RemoteVariableKeyValueStore,
   operationExecutor: OperationExecutor,
   workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]],
-  gcQueue: Queue[GarbageCollectionCommand]
+  gcQueue: Queue[GarbageCollectionCommand],
+  flowScope: Scope
 ) extends ZFlowExecutor {
 
   import PersistentExecutor._
@@ -1035,7 +1027,7 @@ final case class PersistentExecutor(
                  } yield ()
                }.ensuring {
                  workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
-               }.fork
+               }.forkIn(flowScope)
       runtimeState = PersistentExecutor.RuntimeState(
                        result = initialState.result,
                        fiber = fiber,
@@ -1130,8 +1122,7 @@ final case class PersistentExecutor(
 
       _ <- ZIO.foreachDiscard(modifiedVariables) { case (remoteContext, (_, values)) =>
              ZIO.foreachDiscard(values) { case (name, value) =>
-               ZIO.debug(s"*** SAVING VAR $name ***") *>
-                 remoteContext.setVariable(name, value)
+               remoteContext.setVariable(name, value)
              }
            }
       lastIndex <- RemoteVariableKeyValueStore.getLatestIndex
@@ -1392,6 +1383,8 @@ object PersistentExecutor {
         execEnv               <- ZIO.service[ExecutionEnvironment]
         workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
         gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
+        flowScope             <- Scope.make
+        _                     <- Scope.addFinalizerExit(flowScope.close(_))
         _ <- Promise
                .make[Nothing, Any]
                .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
@@ -1403,7 +1396,8 @@ object PersistentExecutor {
                      remoteVariableKvStore,
                      operationExecutor,
                      workflows,
-                     gcQueue
+                     gcQueue,
+                     flowScope
                    )
         _ <- executor.startGarbageCollector()
       } yield executor
