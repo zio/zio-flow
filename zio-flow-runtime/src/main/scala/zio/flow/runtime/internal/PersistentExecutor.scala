@@ -1035,7 +1035,7 @@ final case class PersistentExecutor(
                  } yield ()
                }.ensuring {
                  workflows.delete(initialState.id.asFlowId).commit *> updateWorkflowMetrics()
-               }.fork
+               }.forkDaemon
       runtimeState = PersistentExecutor.RuntimeState(
                        result = initialState.result,
                        fiber = fiber,
