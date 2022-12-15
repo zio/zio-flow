@@ -1265,11 +1265,7 @@ object ZFlow {
   /** Creates a flow that waits for the given duration */
   def sleep(duration: Remote[Duration]): ZFlow[Any, ZNothing, Unit] =
     ZFlow.now.flatMap { now =>
-      ZFlow(now.plus(duration)).flatMap { later =>
-        ZFlow.waitTill(later).map { _ =>
-          Remote.unit
-        }
-      }
+      ZFlow.waitTill(now.plus(duration))
     }
 
   /** Creates a flow that returns the given remote value */

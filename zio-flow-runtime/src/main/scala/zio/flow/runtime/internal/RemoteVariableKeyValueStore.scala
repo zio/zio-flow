@@ -90,7 +90,8 @@ final case class RemoteVariableKeyValueStore(
       .mapError(ExecutorError.KeyValueStoreError("getLatestTimestamp", _))
       .flatMap {
         case Some(value) =>
-          ZIO.some((value, scope))
+          ZIO.logTrace(s"Found latest timestamp of $name in scope $scope: $value") *>
+            ZIO.some((value, scope))
         case None =>
           scope.parentScope match {
             case Some(parentScope) =>
