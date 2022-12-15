@@ -68,9 +68,10 @@ object API {
         "outputSchema",
         FlowSchemaAst.schema,
         get0 = api => FlowSchemaAst.fromSchema(api.outputSchema),
-        set0 = (a, v) => a.copy(outputSchema = v.toSchema)
+        set0 = (a, v) => a.copy(outputSchema = v.toSchema.asInstanceOf[Schema[Output]])
       ),
-      (method, requestInput, outputSchema) => API(method, requestInput, outputSchema.toSchema[Output])
+      (method, requestInput, outputSchema) =>
+        API(method, requestInput, outputSchema.toSchema.asInstanceOf[Schema[Output]])
     )
 
   type WithId[Input, Output, Id0] = API[Input, Output] { type Id = Id0 }

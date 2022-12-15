@@ -1,10 +1,7 @@
 package zio.flow.activities.twilio
 
-import zio.Chunk
-import zio.schema.codec.JsonCodec
+import zio.schema.codec.JsonCodec.JsonDecoder
 import zio.test.{ZIOSpecDefault, assertTrue}
-
-import java.nio.charset.StandardCharsets
 
 object MessageSpec extends ZIOSpecDefault {
   private val example: String =
@@ -37,7 +34,7 @@ object MessageSpec extends ZIOSpecDefault {
     suite("Message")(
       test("can be deserialized from JSON")(
         assertTrue(
-          JsonCodec.decode(Message.schema)(Chunk.fromArray(example.getBytes(StandardCharsets.UTF_8))) ==
+          JsonDecoder.decode(Message.schema, example) ==
             Right(
               Message(
                 account_sid = AccountSid("ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
