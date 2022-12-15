@@ -1,11 +1,8 @@
 package zio.flow.activities.sendgrid
 
-import zio.Chunk
+import zio.schema.codec.JsonCodec.JsonDecoder
 import zio.schema.{DynamicValue, Schema}
-import zio.schema.codec.JsonCodec
 import zio.test.{ZIOSpecDefault, assertTrue}
-
-import java.nio.charset.StandardCharsets
 
 object MailSpec extends ZIOSpecDefault {
 
@@ -215,7 +212,7 @@ object MailSpec extends ZIOSpecDefault {
     suite("Mail")(
       test("can be deserialized from JSON")(
         assertTrue(
-          JsonCodec.decode(Mail.schema)(Chunk.fromArray(exampleRaw.getBytes(StandardCharsets.UTF_8))) ==
+          JsonDecoder.decode(Mail.schema, exampleRaw) ==
             Right(exampleMail)
         )
       ),

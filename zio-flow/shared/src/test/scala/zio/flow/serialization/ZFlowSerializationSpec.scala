@@ -17,34 +17,48 @@
 package zio.flow.serialization
 
 import zio.ZIO
+import zio.constraintless.TypeList._
 import zio.flow.ZFlow
-import zio.schema.Schema
-import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
-import zio.schema.meta.MetaSchema
+import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
+import zio.schema.codec.{BinaryCodecs, JsonCodec, ProtobufCodec}
 import zio.test._
 
+import java.nio.charset.StandardCharsets
+
 object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
+
+  private def jsonCodecs: BinaryCodecs[ZFlow[Any, Any, Any] :: End] = {
+    import JsonCodec.schemaBasedBinaryCodec
+    BinaryCodecs.make[ZFlow[Any, Any, Any] :: End]
+  }
+
+  private def protobufCodecs: BinaryCodecs[ZFlow[Any, Any, Any] :: End] = {
+    import ProtobufCodec.protobufCodec
+    BinaryCodecs.make[ZFlow[Any, Any, Any] :: End]
+  }
+
   override def spec: Spec[TestEnvironment, Any] =
     suite("ZFlow serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec),
-        equalityWithCodec(ProtobufCodec)
+        equalityWithCodec("JSON", jsonCodecs),
+        equalityWithCodec("Protobuf", protobufCodecs)
       ),
       test("ZFlow schema is serializable") {
-        val schema             = ZFlow.schema[Any, Any, Any]
-        val serialized         = JsonCodec.encode(MetaSchema.schema)(schema.ast)
-        val deserialized       = JsonCodec.decode(MetaSchema.schema)(serialized)
+        val schema     = ZFlow.schema[Any, Any, Any]
+        val serialized = JsonEncoder.encode(FlowSchemaAst.schema, FlowSchemaAst.fromSchema(schema))
+        val deserialized =
+          JsonDecoder.decode(FlowSchemaAst.schema, new String(serialized.toArray, StandardCharsets.UTF_8))
         val deserializedSchema = deserialized.map(_.toSchema)
-        assertTrue(
-          Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
-        )
-      } @@ TestAspect.ignore // TODO: fix recursion
+        val refEq              = schema eq deserializedSchema.toOption.get
+        assertTrue(refEq)
+      }
     )
 
   private def equalityWithCodec(
-    codec: BinaryCodec
+    label: String,
+    codec: BinaryCodecs[ZFlow[Any, Any, Any] :: End]
   ): Spec[Sized with TestConfig, TestSuccess] =
-    suite(codec.getClass.getSimpleName)(
+    suite(label)(
       test("Return")(roundtripCheck(codec, genZFlowReturn)),
       test("Now")(roundtripCheck(codec, genZFlowNow)),
       test("WaitTill")(roundtripCheck(codec, genZFlowWaitTill)),
@@ -74,16 +88,16 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
     )
 
   private def roundtripCheck(
-    codec: BinaryCodec,
+    codec: BinaryCodecs[ZFlow[Any, Any, Any] :: End],
     gen: Gen[Sized, ZFlow[Any, Any, Any]]
   ): ZIO[Sized with TestConfig, Nothing, TestResult] =
     check(gen) { value =>
       roundtrip(codec, value)
     }
 
-  private def roundtrip(codec: BinaryCodec, value: ZFlow[Any, Any, Any]): TestResult = {
-    val encoded = codec.encode(ZFlow.schema[Any, Any, Any])(value)
-    val decoded = codec.decode(ZFlow.schema[Any, Any, Any])(encoded)
+  private def roundtrip(codec: BinaryCodecs[ZFlow[Any, Any, Any] :: End], value: ZFlow[Any, Any, Any]): TestResult = {
+    val encoded = codec.encode(value)
+    val decoded = codec.decode(encoded)
 
     // println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 

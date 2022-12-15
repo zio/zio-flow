@@ -1,13 +1,13 @@
 package zio.flow.activities.twilio
 
 import zio.Scope
-import zio.flow.serialization.FlowSchemaAst
 import zio.flow.test._
-import zio.schema.{DynamicValue, Schema}
+import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.schema.meta.MetaSchema
-import zio.schema.codec.JsonCodec
+import zio.schema.{DynamicValue, Schema}
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 
 object CreateMessageSpec extends ZIOSpecDefault {
@@ -91,25 +91,19 @@ object CreateMessageSpec extends ZIOSpecDefault {
         }
       ),
       test("schema is serializable") {
-        val ast          = CreateMessage.schema.ast
-        val roundtripAst = JsonCodec.decode(MetaSchema.schema)(JsonCodec.encode(MetaSchema.schema)(ast))
+        val ast = CreateMessage.schema.ast
+        val roundtripAst = JsonDecoder.decode(
+          MetaSchema.schema,
+          new String(JsonEncoder.encode(MetaSchema.schema, ast).toArray, StandardCharsets.UTF_8)
+        )
         val roundtripAst2 =
-          JsonCodec.decode(MetaSchema.schema)(
-            JsonCodec.encode(MetaSchema.schema)(roundtripAst.toOption.get.toSchema.ast)
+          JsonDecoder.decode(
+            MetaSchema.schema,
+            new String(
+              JsonEncoder.encode(MetaSchema.schema, roundtripAst.toOption.get.toSchema.ast).toArray,
+              StandardCharsets.UTF_8
+            )
           )
-        assertTrue(
-          roundtripAst == Right(ast),
-          roundtripAst2 == Right(ast),
-          Schema.structureEquality.equal(roundtripAst.toOption.get.toSchema, CreateMessage.schema),
-          Schema.structureEquality.equal(roundtripAst2.toOption.get.toSchema, CreateMessage.schema)
-        )
-      },
-      test("schema is serializable") {
-        val ast          = FlowSchemaAst.fromSchema(CreateMessage.schema)
-        val roundtripAst = JsonCodec.decode(FlowSchemaAst.schema)(JsonCodec.encode(FlowSchemaAst.schema)(ast))
-        val roundtripAst2 = JsonCodec.decode(FlowSchemaAst.schema)(
-          JsonCodec.encode(FlowSchemaAst.schema)(FlowSchemaAst.fromSchema(roundtripAst.toOption.get.toSchema))
-        )
         assertTrue(
           roundtripAst == Right(ast),
           roundtripAst2 == Right(ast),

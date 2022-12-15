@@ -2,8 +2,10 @@ package zio.flow
 
 import zio.flow.operation.http.FormUrlEncodedEncoder
 import zio.schema.Schema
-import zio.schema.codec.JsonCodec
+import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.test.{TestResult, assertTrue}
+
+import java.nio.charset.StandardCharsets
 
 package object test {
   def assertFormUrlEncoded[A: Schema](value: A, expected: String): TestResult =
@@ -13,6 +15,9 @@ package object test {
 
   def assertJsonSerializable[A: Schema](value: A): TestResult =
     assertTrue(
-      JsonCodec.decode(implicitly[Schema[A]])(JsonCodec.encode(implicitly[Schema[A]])(value)) == Right(value)
+      JsonDecoder.decode(
+        implicitly[Schema[A]],
+        new String(JsonEncoder.encode(implicitly[Schema[A]], value).toArray, StandardCharsets.UTF_8)
+      ) == Right(value)
     )
 }

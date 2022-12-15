@@ -31,7 +31,7 @@ private[flow] final case class LocaleParts(lang: String, country: Option[String]
 }
 
 private[flow] object LocaleParts {
-  implicit def schema: Schema[LocaleParts] = DeriveSchema.gen
+  implicit lazy val schema: Schema[LocaleParts] = DeriveSchema.gen
 
   def apply(jLocale: Locale): Right[Nothing, LocaleParts] =
     Right(new LocaleParts(jLocale.getLanguage, Option(jLocale.getCountry), Option(jLocale.getVariant)))
