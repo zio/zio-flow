@@ -43,8 +43,6 @@ final case class PersistentExecutor(
   flowScope: Scope
 ) extends ZFlowExecutor {
 
-  println("********* PERSISTENT EXECUTOR CREATED *************")
-
   import PersistentExecutor._
 
   private val promiseEnv = ZEnvironment(durableLog)
@@ -1171,6 +1169,8 @@ final case class PersistentExecutor(
     currentTimestamp: Timestamp
   ): ZIO[Any, ExecutorError.KeyValueStoreError, State[E, A]] =
     for {
+      _             <- ZIO.dieMessage("base state is null").when(baseState == null) // TODO: temporary check
+      _             <- ZIO.dieMessage("changes is null").when(changes == null)      // TODO: temporary check
       updatedState  <- ZIO.succeed(changes(baseState))
       persistedState = execEnv.codecs.encode(updatedState.asInstanceOf[State[Any, Any]])
       key            = id.toRaw
