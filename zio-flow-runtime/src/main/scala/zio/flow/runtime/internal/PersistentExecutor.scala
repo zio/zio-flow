@@ -43,6 +43,8 @@ final case class PersistentExecutor(
   flowScope: Scope
 ) extends ZFlowExecutor {
 
+  println("********* PERSISTENT EXECUTOR CREATED *************")
+
   import PersistentExecutor._
 
   private val promiseEnv = ZEnvironment(durableLog)
@@ -1574,7 +1576,8 @@ object PersistentExecutor {
             compensations = Nil,
             accessedVariables = Map.empty,
             readVariables = Set.empty,
-            body = flow
+            body = flow,
+            retryCount = 0
           ) :: state.transactionStack,
           transactionCounter = state.transactionCounter + 1
         )
@@ -1611,7 +1614,18 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.transactionStack.headOption match {
           case Some(txState) =>
-            val compensations = txState.compensations.foldLeft[ZFlow[Any, ActivityError, Unit]](ZFlow.unit)(_ *> _)
+            val delayMax = math.max(0, txState.retryCount % 10 - 1)
+            val delay =
+              if (delayMax == 0) ZFlow.unit
+              else {
+                import zio.flow._
+                Random
+                  .nextDoubleBetween(0.toDouble, delayMax.toDouble)
+                  .flatMap(d => ZFlow.sleep(zio.Duration.ofMillis((d * 1000.0).toLong)))
+              }
+
+            val compensations =
+              txState.compensations.foldLeft[ZFlow[Any, ActivityError, Unit]](ZFlow.unit)(_ *> _) *> delay
             val compensateAndRun: ZFlow[_, _, _] =
               ZFlow.Fold(
                 compensations,
@@ -1626,7 +1640,8 @@ object PersistentExecutor {
               transactionStack = txState.copy(
                 id = newTransactionId,
                 accessedVariables = Map.empty,
-                readVariables = Set.empty
+                readVariables = Set.empty,
+                retryCount = txState.retryCount + 1
               ) :: state.transactionStack.tail,
               status = if (suspend) FlowStatus.Suspended else FlowStatus.Running,
               watchedVariables = txState.readVariables,
@@ -1992,12 +2007,13 @@ object PersistentExecutor {
     accessedVariables: Map[RemoteVariableName, RecordedAccess],
     compensations: List[ZFlow[Any, ActivityError, Unit]],
     readVariables: Set[ScopedRemoteVariableName],
+    retryCount: Int,
     body: ZFlow[_, _, _]
   )
 
   object TransactionState {
     implicit val schema: Schema[TransactionState] =
-      Schema.CaseClass5(
+      Schema.CaseClass6(
         TypeId.parse("zio.flow.runtime.internal.PersistentExecutor.TransactionState"),
         Schema.Field(
           "id",
@@ -2024,6 +2040,12 @@ object PersistentExecutor {
           set0 = (a: TransactionState, b: Set[ScopedRemoteVariableName]) => a.copy(readVariables = b)
         ),
         Schema.Field(
+          "retryCount",
+          Schema[Int],
+          get0 = _.retryCount,
+          set0 = (a: TransactionState, b: Int) => a.copy(retryCount = b)
+        ),
+        Schema.Field(
           "body",
           ZFlow.schemaAny,
           get0 = _.body.asInstanceOf[ZFlow[Any, Any, Any]],
@@ -2034,8 +2056,9 @@ object PersistentExecutor {
           accessedVariables: Map[RemoteVariableName, RecordedAccess],
           compensations: List[ZFlow[Any, ActivityError, Unit]],
           readVariables: Set[ScopedRemoteVariableName],
+          retryCount: Int,
           body: ZFlow[_, _, _]
-        ) => TransactionState(id, accessedVariables, compensations, readVariables, body)
+        ) => TransactionState(id, accessedVariables, compensations, readVariables, retryCount, body)
       )
   }
 

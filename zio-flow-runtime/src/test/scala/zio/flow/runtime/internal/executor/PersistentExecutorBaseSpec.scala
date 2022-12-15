@@ -22,7 +22,7 @@ import zio.flow._
 import zio.flow.mock.MockedOperation
 import zio.flow.runtime.{DurableLog, ExecutionEnvironment, IndexedStore, KeyValueStore, Timestamp}
 import zio.schema.Schema
-import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
+import zio.test.{Live, Spec, TestAspect, TestClock, TestEnvironment, TestResult}
 import zio.{
   Cause,
   Chunk,
@@ -74,6 +74,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
   )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation) =
     test(label) {
       for {
+        _        <- ZIO.logDebug(s"=== testFlowAndLogsExit $label started === ")
         logQueue <- Queue.unbounded[String]
         runtime  <- ZIO.runtime[Any]
         logger = new ZLogger[String, Any] {

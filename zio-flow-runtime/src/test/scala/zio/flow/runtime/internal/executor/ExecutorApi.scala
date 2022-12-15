@@ -21,7 +21,7 @@ import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.runtime.{DurableLog, ExecutorError, FlowStatus, IndexedStore, KeyValueStore, ZFlowExecutor}
 import zio.schema.{DynamicValue, Schema}
-import zio.test.{Spec, TestClock, TestEnvironment, assertTrue}
+import zio.test.{Spec, TestAspect, TestClock, TestEnvironment, assertTrue}
 
 import java.util.concurrent.TimeUnit
 
