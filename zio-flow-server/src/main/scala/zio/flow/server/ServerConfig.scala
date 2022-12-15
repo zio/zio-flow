@@ -164,9 +164,10 @@ object ServerConfig {
       case Config.Decimal         => source.getNumber(path).map(number => BigDecimal(number.doubleValue()))
       case Config.Duration        => source.getDuration(path)
       case Config.Fail(message)   => ZIO.fail(Config.Error.InvalidData(Chunk.empty, message))
-      case Config.Fallback(left, right) =>
-        processConfig(source, path, left).orElse(
-          processConfig(source, path, right)
+      case Config.Optional(inner) => processConfig(source, path, inner).map(Some(_)).orElseSucceed(None)
+      case fallback: Config.Fallback[_] =>
+        processConfig(source, path, fallback.first).orElse(
+          processConfig(source, path, fallback.second)
         )
       case Config.Integer             => source.getNumber(path).map(number => BigInt(number.longValue()))
       case Config.Described(inner, _) => processConfig(source, path, inner)

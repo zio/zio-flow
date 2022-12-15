@@ -3,7 +3,6 @@ package zio.flow.runtime.internal.executor
 import zio.flow._
 import zio.flow.runtime.internal.PersistentExecutor
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, ZFlowExecutor}
-import zio.flow.serialization.{Deserializer, Serializer}
 import zio.schema.{DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.test.{Spec, TestEnvironment, assertTrue}
 import zio.{Chunk, Queue, ZIO, ZLayer}
@@ -58,8 +57,7 @@ object CustomOperationExecutorSpec extends PersistentExecutorBaseSpec {
                  .provideSome[DurableLog with KeyValueStore with Configuration](
                    PersistentExecutor.make(),
                    ZLayer.succeed(opExecutor),
-                   ZLayer.succeed(Serializer.json),
-                   ZLayer.succeed(Deserializer.json)
+                   ZLayer.succeed(zio.flow.runtime.serialization.json)
                  )
           items <- queue.takeAll
         } yield assertTrue(items == Chunk("test1:input1", "test2:input2"))

@@ -24,11 +24,9 @@ import zio.flow.server.common.ApiSpecBase
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId, ZFlowTemplates}
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.schema.Schema
-import zio.schema.codec.JsonCodec
+import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.test.{TestAspect, assertTrue}
-import zio.{Chunk, ZIO, ZLayer}
-
-import java.nio.charset.StandardCharsets
+import zio.{ZIO, ZLayer}
 
 object TemplatesApiSpec extends ApiSpecBase {
 
@@ -67,7 +65,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t1"),
                               body = Body.fromChunk(
-                                JsonCodec.encode(Schema[ZFlowTemplate])(template1)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template1)
                               )
                             ),
                             clientConfig
@@ -77,7 +75,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t2"),
                               body = Body.fromChunk(
-                                JsonCodec.encode(Schema[ZFlowTemplate])(template2)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template2)
                               )
                             ),
                             clientConfig
@@ -92,7 +90,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                       )
           body <- response.body.asString
           decoded <- ZIO.fromEither(
-                       JsonCodec.decode(ZFlowTemplates.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
+                       JsonDecoder.decode(ZFlowTemplates.schema, body)
                      )
         } yield assertTrue(
           putResponse1.status == Status.Ok,
@@ -115,7 +113,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t1"),
                               body = Body.fromChunk(
-                                JsonCodec.encode(Schema[ZFlowTemplate])(template1)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template1)
                               )
                             ),
                             clientConfig
@@ -125,7 +123,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                               method = Method.PUT,
                               url = baseUrl.setPath(s"/templates/t2"),
                               body = Body.fromChunk(
-                                JsonCodec.encode(Schema[ZFlowTemplate])(template2)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template2)
                               )
                             ),
                             clientConfig
@@ -157,7 +155,7 @@ object TemplatesApiSpec extends ApiSpecBase {
 
           body <- getResponse1.body.asString
           decoded <- ZIO.fromEither(
-                       JsonCodec.decode(ZFlowTemplate.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
+                       JsonDecoder.decode(ZFlowTemplate.schema, body)
                      )
         } yield assertTrue(
           putResponse1.status == Status.Ok,

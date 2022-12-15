@@ -17,10 +17,10 @@
 package zio.flow.runtime.internal
 
 import zio.flow.runtime.IndexedStore.Index
-import zio.flow.runtime.{ExecutorError, metrics}
+import zio.flow.runtime.{ExecutionEnvironment, ExecutorError, metrics}
 import zio.flow.runtime.metrics.{VariableAccess, VariableKind}
 import zio.flow.runtime.{DurableLog, KeyValueStore, Timestamp}
-import zio.flow.{ExecutionEnvironment, RemoteVariableName}
+import zio.flow.RemoteVariableName
 import zio.stm.{TRef, TSet}
 import zio.stream.ZStream
 import zio.{Chunk, IO, UIO, ZIO, ZLayer}
@@ -48,7 +48,7 @@ final case class RemoteVariableKeyValueStore(
       durableLog
         .append(
           Topics.variableChanges(scope.rootScope.flowId),
-          executionEnvironment.serializer.serialize(ScopedRemoteVariableName(name, scope))
+          executionEnvironment.codecs.encode(ScopedRemoteVariableName(name, scope))
         )
         .mapError(ExecutorError.LogError)
         .flatMap { index =>
