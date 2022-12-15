@@ -406,7 +406,7 @@ object RemoteConversions {
         TypeId.parse("zio.flow.remote.RemoteConversions.ToString"),
         Schema.Field(
           "schema",
-          Schema[FlowSchemaAst],
+          Schema.defer(FlowSchemaAst.schema),
           get0 = conv => FlowSchemaAst.fromSchema(conv.inputSchema),
           set0 = (_: ToString[Any], b: FlowSchemaAst) => ToString()(b.toSchema.asInstanceOf[Schema[Any]])
         ),
