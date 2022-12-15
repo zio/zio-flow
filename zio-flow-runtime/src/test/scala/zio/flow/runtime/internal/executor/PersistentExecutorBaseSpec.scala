@@ -102,8 +102,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
             .exit
             .fork
         flowResult <- periodicAdjustClock match {
-                        case Some(value) => waitAndPeriodicallyAdjustClock("flow result", 1.second, value, 30)(fiber.join)
-                        case None        => fiber.join
+                        case Some(value) =>
+                          waitAndPeriodicallyAdjustClock("flow result", 1.second, value, 30)(fiber.join)
+                        case None => fiber.join
                       }
         logLines <- logQueue.takeAll
       } yield assert(flowResult, logLines)
