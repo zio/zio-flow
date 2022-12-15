@@ -16,10 +16,10 @@
 
 package zio.flow.server.flows
 
-import zhttp.http.{Body, Method, Request, Response, Status, URL}
+import zhttp.http._
 import zhttp.service.{Client, Server}
 import zio.flow.runtime.internal.PersistentExecutor
-import zio.flow.runtime.{DurablePromise, ExecutorError, FlowStatus, KeyValueStore, ZFlowExecutor}
+import zio.flow.runtime._
 import zio.flow.serialization.FlowSchemaAst
 import zio.flow.server.common.ApiSpecBase
 import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
@@ -28,12 +28,11 @@ import zio.flow.server.templates.service.{KVStoreBasedTemplates, Templates}
 import zio.flow.{FlowId, PromiseId, RemoteVariableName, ZFlow}
 import zio.json.ast.Json
 import zio.schema.codec.JsonCodec
+import zio.schema.codec.JsonCodec.JsonDecoder
 import zio.schema.{DynamicValue, Schema}
 import zio.stream.ZStream
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Chunk, IO, Ref, Scope, ULayer, ZIO, ZLayer}
-
-import java.nio.charset.StandardCharsets
 
 object FlowsApiSpec extends ApiSpecBase {
   private val flow1 = ZFlow.succeed(11)
@@ -498,7 +497,7 @@ object FlowsApiSpec extends ApiSpecBase {
       body <- response.body.asString
       result <-
         ZIO.fromEither(
-          JsonCodec.decode(StartResponse.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
+          JsonDecoder.decode(StartResponse.schema, body)
         )
     } yield result
 
@@ -507,7 +506,7 @@ object FlowsApiSpec extends ApiSpecBase {
       body <- response.body.asString
       result <-
         ZIO.fromEither(
-          JsonCodec.decode(GetAllResponse.schema)(Chunk.fromArray(body.getBytes(StandardCharsets.UTF_8)))
+          JsonDecoder.decode(GetAllResponse.schema, body)
         )
     } yield result
 

@@ -307,7 +307,8 @@ object UnaryOperators {
     )
 
   def schema[In, Out]: Schema[UnaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[UnaryOperators[In, Out]]]
-  val schemaAny: Schema[UnaryOperators[Any, Any]] =
+
+  lazy val schemaAny: Schema[UnaryOperators[Any, Any]] =
     Schema.EnumN(
       TypeId.parse("zio.flow.remote.UnaryOperators"),
       CaseSet

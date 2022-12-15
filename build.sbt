@@ -97,7 +97,7 @@ lazy val zioFlowRuntime = project
       "io.d11" %% "zhttp" % Version.zioHttp
     ) ++ commonTestDependencies.map(_ % Test)
   )
-  .settings(fork := false)
+  .settings(fork := true)
   .settings(testFrameworks += zioTest)
 
 lazy val zioFlowServer = project

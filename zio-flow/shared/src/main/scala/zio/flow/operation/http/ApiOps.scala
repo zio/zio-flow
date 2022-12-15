@@ -16,11 +16,10 @@
 
 package zio.flow.operation.http
 
+import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.ZIO
-import zhttp.service.EventLoopGroup
-import zhttp.service.ChannelFactory
 import zio.schema.Schema
-import zio.schema.codec.JsonCodec
+import zio.schema.codec.JsonCodec.JsonDecoder
 
 import java.nio.charset.StandardCharsets
 
@@ -31,14 +30,16 @@ final class APIOps[Input, Output: API.NotUnit, Id](
     ClientInterpreter
       .interpret(host)(self)(params)
       .flatMap(_.body.asChunk.mapError(HttpFailure.FailedToReceiveResponseBody))
-      .flatMap { string =>
+      .flatMap { bytes =>
         if (self.outputSchema == Schema[Unit])
           ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output]]
         else {
-          JsonCodec.decode(self.outputSchema)(string) match {
+          val string = new String(bytes.toArray, StandardCharsets.UTF_8)
+          JsonDecoder.decode(self.outputSchema, string) match {
             case Left(err) =>
-              ZIO.fail(HttpFailure.ResponseBodyDecodeFailure(err, new String(string.toArray, StandardCharsets.UTF_8)))
-            case Right(value) => ZIO.succeed(value)
+              ZIO.fail(HttpFailure.ResponseBodyDecodeFailure(err, string))
+            case Right(value) =>
+              ZIO.succeed(value)
           }
         }
       }

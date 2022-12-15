@@ -16,8 +16,8 @@
 
 package zio.flow.runtime.internal
 
-import zio.flow.runtime.{DurableLog, ExecutorError, Timestamp}
-import zio.flow.{ConfigKey, ExecutionEnvironment, RemoteContext, RemoteVariableName}
+import zio.flow.runtime.{DurableLog, ExecutionEnvironment, ExecutorError, Timestamp}
+import zio.flow.{ConfigKey, RemoteContext, RemoteVariableName}
 import zio.schema.{DynamicValue, Schema}
 import zio.stm.{TMap, TPromise, ZSTM}
 import zio.{Chunk, ZIO}
