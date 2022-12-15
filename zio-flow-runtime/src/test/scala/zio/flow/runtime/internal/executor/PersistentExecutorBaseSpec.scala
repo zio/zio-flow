@@ -16,12 +16,11 @@
 
 package zio.flow.runtime.internal.executor
 
-import zio.flow.runtime.internal._
-import zio.flow.serialization.{Deserializer, Serializer}
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.mock.MockedOperation
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, Timestamp}
+import zio.flow.runtime.internal._
+import zio.flow.runtime._
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -74,7 +73,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
     flow: ZFlow[Any, E, A]
   )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation) =
     test(label) {
+      val wfId = "wf" + counter.incrementAndGet().toString
       for {
+        _        <- ZIO.logDebug(s"=== testFlowAndLogsExit $label started [$wfId] === ")
         logQueue <- Queue.unbounded[String]
         runtime  <- ZIO.runtime[Any]
         logger = new ZLogger[String, Any] {
@@ -96,13 +97,14 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                  }
         fiber <-
           flow
-            .evaluateTestPersistent("wf" + counter.incrementAndGet().toString, mock, gcPeriod)
+            .evaluateTestPersistent(wfId, mock, gcPeriod)
             .provideSomeLayer[DurableLog with KeyValueStore with Configuration](Runtime.addLogger(logger))
             .exit
             .fork
         flowResult <- periodicAdjustClock match {
-                        case Some(value) => waitAndPeriodicallyAdjustClock("flow result", 1.second, value)(fiber.join)
-                        case None        => fiber.join
+                        case Some(value) =>
+                          waitAndPeriodicallyAdjustClock("flow result", 1.second, value, 30)(fiber.join)
+                        case None => fiber.join
                       }
         logLines <- logQueue.takeAll
       } yield assert(flowResult, logLines)
@@ -187,7 +189,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                         .fork
             _ <- ZIO.logDebug(s"Adjusting clock by 20s")
             _ <- TestClock.adjust(20.seconds)
-            _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+            _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds, 30) {
                    breakPromise.await
                  }
             _         <- ZIO.logDebug("Interrupting executor")
@@ -199,7 +201,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                         .fork
             _ <- ZIO.logDebug(s"Adjusting clock by 200s")
             _ <- TestClock.adjust(200.seconds)
-            result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+            result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds, 30) {
                         fiber2.join
                       }
             logLines2 <- logQueue.takeAll
@@ -256,7 +258,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
               (executor, fiber) = pair
               _                <- ZIO.logDebug(s"Adjusting clock by 20s")
               _                <- TestClock.adjust(20.seconds)
-              _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds) {
+              _ <- waitAndPeriodicallyAdjustClock("break event", 1.second, 10.seconds, 30) {
                      breakPromise.await
                    }
               _ <- ZIO.logDebug("Forcing GC")
@@ -276,12 +278,12 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
                     ZLayer(
                       ZIO
                         .service[Configuration]
-                        .map(config => ExecutionEnvironment(Serializer.json, Deserializer.json, config))
+                        .map(config => ExecutionEnvironment(zio.flow.runtime.serialization.json, config))
                     ) // TODO: this should not be recreated here
                   )
               _ <- ZIO.logDebug(s"Adjusting clock by 200s")
               _ <- TestClock.adjust(200.seconds)
-              result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds) {
+              result <- waitAndPeriodicallyAdjustClock("executor to finish", 1.second, 10.seconds, 30) {
                           fiber.join
                         }
             } yield (result, vars.toMap)
@@ -293,21 +295,24 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
   protected def waitAndPeriodicallyAdjustClock[E, A](
     description: String,
     duration: Duration,
-    adjustment: Duration
+    adjustment: Duration,
+    maxCount: Int
   )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
       _           <- ZIO.logDebug(s"Waiting for $description")
-      maybeResult <- wait.timeout(1.second).withClock(Clock.ClockLive)
+      maybeResult <- wait.timeout(duration).withClock(Clock.ClockLive)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
-                  case None =>
+                  case None if maxCount > 0 =>
                     for {
                       _      <- ZIO.logDebug(s"Adjusting clock by $adjustment")
                       _      <- TestClock.adjust(adjustment)
                       now    <- Clock.instant
                       _      <- ZIO.logDebug(s"T=$now")
-                      result <- waitAndPeriodicallyAdjustClock(description, duration, adjustment)(wait)
+                      result <- waitAndPeriodicallyAdjustClock(description, duration, adjustment, maxCount - 1)(wait)
                     } yield result
+                  case _ =>
+                    ZIO.dieMessage(s"Timed out waiting for $description")
                 }
     } yield result
 }

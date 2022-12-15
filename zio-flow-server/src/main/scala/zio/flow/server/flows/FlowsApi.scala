@@ -41,7 +41,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                    case StartRequest.Flow(flow) =>
                      executor.start(flowId, flow).orDieWith(_.toException)
                    case StartRequest.FlowWithParameter(flow, schemaAst, inputJson) =>
-                     val schema = schemaAst.toSchema[Any]
+                     val schema = schemaAst.toSchema.asInstanceOf[Schema[Any]]
                      ZIO
                        .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
                        .mapError(message =>
@@ -75,7 +75,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                            )
                          )
                        case Some(ZFlowTemplate(flow, Some(schemaAst))) =>
-                         val schema = schemaAst.toSchema[Any]
+                         val schema = schemaAst.toSchema.asInstanceOf[Schema[Any]]
                          ZIO
                            .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
                            .mapError(message =>
