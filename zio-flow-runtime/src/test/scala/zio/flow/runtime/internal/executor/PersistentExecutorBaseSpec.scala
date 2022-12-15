@@ -62,13 +62,15 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         DurableLog.layer,
         KeyValueStore.inMemory,
         Configuration.inMemory,
-        Runtime.addLogger(ZLogger.default.filterLogLevel(_ == LogLevel.Debug).map(_.foreach(println)))
+        Runtime.removeDefaultLoggers,
+        Runtime.addLogger(TestFlowLogger.filterLogLevel(_ >= LogLevel.Debug))
       )
 
   protected def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration],
-    gcPeriod: Duration = 5.minutes
+    gcPeriod: Duration = 5.minutes,
+    maxCount: Int = 30
   )(
     flow: ZFlow[Any, E, A]
   )(assert: (Exit[E, A], Chunk[String]) => TestResult, mock: MockedOperation) =
@@ -103,7 +105,7 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
             .fork
         flowResult <- periodicAdjustClock match {
                         case Some(value) =>
-                          waitAndPeriodicallyAdjustClock("flow result", 1.second, value, 30)(fiber.join)
+                          waitAndPeriodicallyAdjustClock("flow result", 1.second, value, maxCount)(fiber.join)
                         case None => fiber.join
                       }
         logLines <- logQueue.takeAll
@@ -113,9 +115,10 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
   protected def testFlowAndLogs[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None,
-    gcPeriod: Duration = 5.minutes
+    gcPeriod: Duration = 5.minutes,
+    maxCount: Int = 30
   )(flow: ZFlow[Any, E, A])(assert: (A, Chunk[String]) => TestResult, mock: MockedOperation = MockedOperation.Empty) =
-    testFlowAndLogsExit(label, periodicAdjustClock, gcPeriod)(flow)(
+    testFlowAndLogsExit(label, periodicAdjustClock, gcPeriod, maxCount)(flow)(
       { case (exit, logs) =>
         exit.foldExit(cause => throw FiberFailure(cause), result => assert(result, logs))
       },
@@ -125,26 +128,31 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
   protected def testFlow[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None,
-    gcPeriod: Duration = 5.minutes
+    gcPeriod: Duration = 5.minutes,
+    maxCount: Int = 30
   )(
     flow: ZFlow[Any, E, A]
   )(
     assert: A => TestResult,
     mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogs(label, periodicAdjustClock, gcPeriod)(flow)({ case (result, _) => assert(result) }, mock)
+    testFlowAndLogs(label, periodicAdjustClock, gcPeriod, maxCount)(flow)({ case (result, _) => assert(result) }, mock)
 
   protected def testFlowExit[E: Schema, A: Schema](
     label: String,
     periodicAdjustClock: Option[Duration] = None,
-    gcPeriod: Duration = 5.minutes
+    gcPeriod: Duration = 5.minutes,
+    maxCount: Int = 30
   )(
     flow: ZFlow[Any, E, A]
   )(
     assert: Exit[E, A] => TestResult,
     mock: MockedOperation = MockedOperation.Empty
   ) =
-    testFlowAndLogsExit(label, periodicAdjustClock, gcPeriod)(flow)({ case (result, _) => assert(result) }, mock)
+    testFlowAndLogsExit(label, periodicAdjustClock, gcPeriod, maxCount)(flow)(
+      { case (result, _) => assert(result) },
+      mock
+    )
 
   protected def testRestartFlowAndLogs[E: Schema, A: Schema](
     label: String
@@ -299,20 +307,83 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
     maxCount: Int
   )(wait: ZIO[Any, E, A]): ZIO[Live, E, A] =
     for {
-      _           <- ZIO.logDebug(s"Waiting for $description")
+      _           <- ZIO.logTrace(s"Test runner waiting for $description")
       maybeResult <- wait.timeout(duration).withClock(Clock.ClockLive)
       result <- maybeResult match {
                   case Some(result) => ZIO.succeed(result)
                   case None if maxCount > 0 =>
                     for {
-                      _      <- ZIO.logDebug(s"Adjusting clock by $adjustment")
-                      _      <- TestClock.adjust(adjustment)
-                      now    <- Clock.instant
-                      _      <- ZIO.logDebug(s"T=$now")
+//                      _      <- ZIO.logDebug(s"Adjusting clock by $adjustment")
+                      _ <- TestClock.adjust(adjustment)
+//                      now    <- Clock.instant
+//                      _      <- ZIO.logDebug(s"T=$now")
                       result <- waitAndPeriodicallyAdjustClock(description, duration, adjustment, maxCount - 1)(wait)
                     } yield result
                   case _ =>
-                    ZIO.dieMessage(s"Timed out waiting for $description")
+                    ZIO.dieMessage(s"Test runner timed out waiting for $description")
                 }
     } yield result
+
+  object TestFlowLogger extends ZLogger[String, Unit] {
+    def apply(
+      trace: Trace,
+      fiberId: FiberId,
+      logLevel: LogLevel,
+      message0: () => String,
+      cause: Cause[Any],
+      context: FiberRefs,
+      spans0: List[LogSpan],
+      annotations: Map[String, String]
+    ): Unit = {
+      val sb = new StringBuilder()
+
+      val color = logLevel match {
+        case LogLevel.Trace   => Console.BLUE
+        case LogLevel.Info    => Console.GREEN
+        case LogLevel.Warning => Console.YELLOW
+        case LogLevel.Error   => Console.RED
+        case _                => Console.WHITE
+      }
+      sb.append(color)
+
+      sb.append("[" + annotations.getOrElse("vts", "") + "] ")
+      sb.append("[" + annotations.getOrElse("flowId", "") + "] ")
+      sb.append("[" + annotations.getOrElse("txId", "") + "] ")
+
+      val padding = math.max(0, 30 - sb.size)
+      sb.append(" " * padding)
+      sb.append(message0())
+
+      val remainingAnnotations = annotations - "vts" - "flowId" - "txId"
+      if (remainingAnnotations.nonEmpty) {
+        sb.append(" ")
+
+        val it    = remainingAnnotations.iterator
+        var first = true
+
+        while (it.hasNext) {
+          if (first) {
+            first = false
+          } else {
+            sb.append(" ")
+          }
+
+          val (key, value) = it.next()
+
+          sb.append(key)
+          sb.append("=")
+          sb.append(value)
+        }
+      }
+
+      if (cause != null && cause != Cause.empty) {
+        sb.append("\nCause:")
+          .append(cause.prettyPrint)
+          .append("\n")
+      }
+
+      sb.append(Console.RESET)
+      println(sb.toString())
+    }
+  }
 }

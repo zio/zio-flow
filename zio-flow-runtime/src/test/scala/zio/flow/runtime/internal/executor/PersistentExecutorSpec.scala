@@ -247,25 +247,28 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         } { result =>
           assertTrue(result == Right(123))
         },
-        testFlow("conflicting change of shared variable in transaction", periodicAdjustClock = Some(500.millis)) {
+        testFlow(
+          "conflicting change of shared variable in transaction",
+          periodicAdjustClock = Some(500.millis),
+          maxCount = 300
+        ) {
           for {
             var1 <- ZFlow.newVar[Int]("var1", 10)
             var2 <- ZFlow.newVar[Int]("var2", 20)
-            now  <- ZFlow.now
             fib1 <- ZFlow.transaction { _ =>
                       for {
-                        _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                        _ <- ZFlow.sleep(1.second)
                         _ <- var1.update(_ + 1)
-                        _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                        _ <- ZFlow.sleep(1.second)
                         _ <- var2.update(_ + 1)
-                        _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                        _ <- ZFlow.sleep(1.second)
                       } yield ()
                     }.fork
             fib2 <- ZFlow.transaction { _ =>
                       for {
-                        _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                        _ <- ZFlow.sleep(1.second)
                         _ <- var1.update(_ + 1)
-                        _ <- ZFlow.waitTill(now.plusSeconds(1L))
+                        _ <- ZFlow.sleep(1.second)
                         _ <- var2.update(_ + 1)
                       } yield ()
                     }.fork

@@ -36,7 +36,6 @@ final case class PersistentExecutor(
   execEnv: ExecutionEnvironment,
   durableLog: DurableLog,
   kvStore: KeyValueStore,
-  remoteVariableKvStore: RemoteVariableKeyValueStore,
   operationExecutor: OperationExecutor,
   workflows: TMap[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]],
   gcQueue: Queue[GarbageCollectionCommand],
@@ -519,9 +518,9 @@ final case class PersistentExecutor(
               start   <- Clock.instant
               end     <- RemoteContext.eval(instant)(Schema.primitive[Instant])
               duration = Duration.between(start, end)
-              _       <- ZIO.logDebug(s"Sleeping for $duration")
+              _       <- ZIO.logTrace(s"Sleeping for $duration")
               _       <- Clock.sleep(duration)
-              _       <- ZIO.logDebug(s"Resuming execution after sleeping $duration")
+              _       <- ZIO.logTrace(s"Resuming execution after sleeping $duration")
               result  <- onSuccess(())
             } yield result
 
@@ -658,7 +657,6 @@ final case class PersistentExecutor(
           case await @ Await(execFlow) =>
             for {
               executingFlow <- RemoteContext.eval(execFlow)
-              _             <- ZIO.logDebug("Waiting for result")
               result <-
                 DurablePromise
                   .make[Either[ExecutorError, DynamicValue], FlowResult](
@@ -675,9 +673,9 @@ final case class PersistentExecutor(
                          Cause.die(executorError.toException)
                        )
                      case Left(Right(_)) =>
-                       ZIO.logDebug(s"Awaited fiber failed")
+                       ZIO.logDebug(s"Awaited fiber ${executingFlow.id} failed")
                      case Right(_) =>
-                       ZIO.logDebug(s"Awaited fiber succeeded")
+                       ZIO.logDebug(s"Awaited fiber ${executingFlow.id} succeeded")
                    }
               stepResult <-
                 result.fold(
@@ -856,7 +854,7 @@ final case class PersistentExecutor(
     def waitForVariablesToChange(
       watchedVariables: Set[ScopedRemoteVariableName],
       watchPosition: Index
-    ): ZIO[Any, ExecutorError, Timestamp] =
+    ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Timestamp] =
       durableLog
         .subscribe(
           Topics.variableChanges(initialState.scope.rootScope.flowId),
@@ -872,7 +870,7 @@ final case class PersistentExecutor(
         .runHead
         .flatMap {
           case Some(scopedName) =>
-            remoteVariableKvStore
+            RemoteVariableKeyValueStore
               .getLatestTimestamp(scopedName.name, scopedName.scope)
               .flatMap {
                 case Some((timestamp, _)) => ZIO.succeed(timestamp)
@@ -909,68 +907,74 @@ final case class PersistentExecutor(
       messages: Queue[ExecutionCommand],
       executionStartedAt: OffsetDateTime
     ): ZIO[
-      VirtualClock with KeyValueStore with ExecutionEnvironment with DurableLog with RemoteVariableKeyValueStore,
+      VirtualClock with KeyValueStore with ExecutionEnvironment with DurableLog,
       ExecutorError,
       Unit
     ] =
       stateRef.get.flatMap { lastState =>
-        ZIO.logAnnotate("flowId", lastState.id.asString) {
+        ZIO.logAnnotate(
+          LogAnnotation("flowId", lastState.id.asString),
+          LogAnnotation("vts", lastState.lastTimestamp.value.toString)
+        ) {
           Logging
             .optionalTransactionId(lastState.transactionStack.headOption.map(_.id)) {
               processMessages(messages).flatMap { changesFromMessages =>
                 val scope = lastState.scope
 
-                for {
-                  recordingContext <- RecordingRemoteContext.startRecording
+                RemoteVariableKeyValueStore.layer {
+                  for {
+                    recordingContext <- RecordingRemoteContext.startRecording
 
-                  state0 <-
-                    persistState(
-                      lastState,
-                      changesFromMessages,
-                      recordingContext
-                    ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
+                    state0 <-
+                      persistState(
+                        lastState,
+                        changesFromMessages,
+                        recordingContext
+                      ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
 
-                  stepResult <-
-                    state0.status match {
-                      case FlowStatus.Running =>
-                        step(state0, recordingContext).provideSomeLayer[
-                          VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
-                        ](
-                          ZLayer(recordingContext.remoteContext(scope))
-                        )
-                      case FlowStatus.Done =>
-                        ZIO.succeed(StepResult(StateChange.none, continue = false))
-                      case FlowStatus.Suspended =>
-                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
-                          timestamp =>
-                            Clock.currentDateTime.flatMap { now =>
-                              val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
-                              metrics.flowSuspendedTime
-                                .update(suspendedDuration)
-                                .as(
-                                  StepResult(
-                                    StateChange.resume(resetWatchedVariables = true) ++ StateChange
-                                      .advanceClock(atLeastTo = timestamp),
-                                    continue = true
+                    stepResult <-
+                      state0.status match {
+                        case FlowStatus.Running =>
+                          ZIO.logTrace(state0.current.getClass.getSimpleName) *>
+                            step(state0, recordingContext).provideSomeLayer[
+                              VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
+                            ](
+                              ZLayer(recordingContext.remoteContext(scope))
+                            )
+                        case FlowStatus.Done =>
+                          ZIO.succeed(StepResult(StateChange.none, continue = false))
+                        case FlowStatus.Suspended =>
+                          waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
+                            timestamp =>
+                              Clock.currentDateTime.flatMap { now =>
+                                val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
+                                metrics.flowSuspendedTime
+                                  .update(suspendedDuration)
+                                  .as(
+                                    StepResult(
+                                      StateChange.resume(resetWatchedVariables = true) ++ StateChange
+                                        .advanceClock(atLeastTo = timestamp),
+                                      continue = true
+                                    )
                                   )
-                                )
-                            }
-                        }
-                      case FlowStatus.Paused =>
-                        ZIO.logInfo(s"Flow paused, waiting for resume command") *>
-                          waitAndProcessMessages(messages).map { changes =>
-                            StepResult(changes, continue = true)
+                              }
                           }
-                    }
-                  now <- Clock.currentDateTime
-                  state2 <-
-                    persistState(
-                      state0,
-                      stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
-                      recordingContext
-                    )
-                  _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-                } yield stepResult
+                        case FlowStatus.Paused =>
+                          ZIO.logInfo(s"Flow paused, waiting for resume command") *>
+                            waitAndProcessMessages(messages).map { changes =>
+                              StepResult(changes, continue = true)
+                            }
+                      }
+                    now <- Clock.currentDateTime
+                    state2 <-
+                      persistState(
+                        state0,
+                        stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
+                        recordingContext
+                      )
+                    _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                  } yield stepResult
+                }
               }.flatMap { stepResult =>
                 runSteps(stateRef, messages, executionStartedAt).when(stepResult.continue).unit
               }
@@ -1002,8 +1006,7 @@ final case class PersistentExecutor(
                                      ZLayer.succeed(execEnv),
                                      ZLayer.succeed(kvStore),
                                      ZLayer.succeed(durableLog),
-                                     ZLayer(VirtualClock.make(state.lastTimestamp)),
-                                     ZLayer.succeed(remoteVariableKvStore)
+                                     ZLayer(VirtualClock.make(state.lastTimestamp))
                                    ) @@ metrics.executorErrorCount
                           } yield ()
                         }.catchAll { error =>
@@ -1114,16 +1117,14 @@ final case class PersistentExecutor(
           }
           .map(_.flatten)
 
-      _ <-
-        ZIO
-          .logInfo(
-            s"Persisting changes to ${modifiedVariables.size} remote variables"
-          )
-          .when(modifiedVariables.nonEmpty)
-
-      _ <- ZIO.foreachDiscard(modifiedVariables) { case (remoteContext, (_, values)) =>
+      _ <- ZIO
+             .logTrace(s"Recording accessed variables: $readVariablesWithTimestamps")
+             .when(readVariablesWithTimestamps.nonEmpty)
+      _ <- ZIO.logTrace(s"Recording read variables: $readVariables").when(readVariables.nonEmpty)
+      _ <- ZIO.foreachDiscard(modifiedVariables) { case (remoteContext, (scope, values)) =>
              ZIO.foreachDiscard(values) { case (name, value) =>
-               remoteContext.setVariable(name, value)
+               ZIO.logTrace(s"Setting variable $name in scope $scope") *>
+                 remoteContext.setVariable(name, value)
              }
            }
       lastIndex <- RemoteVariableKeyValueStore.getLatestIndex
@@ -1139,7 +1140,6 @@ final case class PersistentExecutor(
       state2 = additionalStateChanges(state1)
 
       shouldPersist = modifiedVariables.nonEmpty || stateChange.contains(_.forcePersistence)
-
       _ <- saveStateChange(state2.id.asFlowId, state0, stateChange ++ additionalStateChanges, currentTimestamp)
              .when(shouldPersist)
     } yield state2
@@ -1176,6 +1176,7 @@ final case class PersistentExecutor(
       _ <- kvStore
              .put(Namespaces.workflowState, key, persistedState, currentTimestamp)
              .mapError(ExecutorError.KeyValueStoreError("put", _))
+      _ <- ZIO.logTrace(s"State of $id persisted")
     } yield updatedState
 
   private def interruptFlow(id: FlowId): ZIO[Any, ExecutorError, Boolean] =
@@ -1201,10 +1202,12 @@ final case class PersistentExecutor(
                 }
     } yield result
 
-  private def getAllReferences(name: ScopedRemoteVariableName): ZIO[Any, ExecutorError, Set[ScopedRemoteVariableName]] =
+  private def getAllReferences(
+    name: ScopedRemoteVariableName
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Set[ScopedRemoteVariableName]] =
     // NOTE: this could be optimized if we store some type information and only read variables that are known to be remote or flow
     ZIO.logDebug(s"Garbage collector checking $name") *>
-      remoteVariableKvStore
+      RemoteVariableKeyValueStore
         .getLatest(name.name, name.scope, before = None)
         .flatMap {
           case Some((bytes, scope)) =>
@@ -1224,7 +1227,7 @@ final case class PersistentExecutor(
     topLevelVariables: Set[ScopedRemoteVariableName],
     variables: Set[ScopedRemoteVariableName],
     alreadyRead: Set[ScopedRemoteVariableName]
-  ): ZIO[Any, ExecutorError, Set[ScopedRemoteVariableName]] = {
+  ): ZIO[RemoteVariableKeyValueStore, ExecutorError, Set[ScopedRemoteVariableName]] = {
     def withAllParents(name: ScopedRemoteVariableName): Set[ScopedRemoteVariableName] =
       name.scope.parentScope match {
         case Some(parent) => withAllParents(ScopedRemoteVariableName(name.name, parent)) + name
@@ -1258,17 +1261,28 @@ final case class PersistentExecutor(
   }
 
   private[flow] def startGarbageCollector(): ZIO[Scope, Nothing, Unit] =
-    ZStream.fromQueue(gcQueue).mapZIO(cmd => garbageCollect(cmd.finished)).runDrain.forkScoped.unit
+    ZStream
+      .fromQueue(gcQueue)
+      .mapZIO(cmd => garbageCollect(cmd.finished))
+      .runDrain
+      .forkScoped
+      .unit
+      .provideSome[Scope](
+        RemoteVariableKeyValueStore.layer,
+        ZLayer.succeed(execEnv),
+        ZLayer.succeed(durableLog),
+        ZLayer.succeed(kvStore)
+      )
 
   private def mergeKeepingLowestTimestamps[K](a: Map[K, Timestamp], b: Map[K, Timestamp]): Map[K, Timestamp] =
     b.foldLeft(a) { case (map, (key, timestamp)) =>
       map.updated(key, map.getOrElse(key, timestamp).min(timestamp))
     }
 
-  private def garbageCollect(finished: Promise[Nothing, Any]): ZIO[Any, Nothing, Unit] = {
+  private def garbageCollect(finished: Promise[Nothing, Any]): ZIO[RemoteVariableKeyValueStore, Nothing, Unit] = {
     for {
       _                  <- ZIO.logInfo(s"Garbage Collection starting")
-      allStoredVariables <- remoteVariableKvStore.allStoredVariables.runCollect.map(_.toSet)
+      allStoredVariables <- RemoteVariableKeyValueStore.allStoredVariables.runCollect.map(_.toSet)
       allWorkflows       <- workflows.keys.commit
       allStates          <- ZIO.foreach(allWorkflows)(loadState).map(_.flatten)
       allReferencedVariables <- ZIO.foldLeft(allStates)(Map.empty[ScopedRemoteVariableName, Timestamp]) {
@@ -1308,7 +1322,7 @@ final case class PersistentExecutor(
           s"Garbage collector deletes the following unreferenced variables: ${unusedVariables.map(_.asString).mkString(", ")}"
         )
       _ <- ZIO.foreachDiscard(unusedVariables) { scopedVar =>
-             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, None) @@ metrics.gcDeletions
+             RemoteVariableKeyValueStore.delete(scopedVar.name, scopedVar.scope, None) @@ metrics.gcDeletions
            }
       _ <- ZIO.logDebug(
              s"Garbage collector keeps referenced variables from the given timestamps: ${allReferencedVariables.map {
@@ -1316,7 +1330,7 @@ final case class PersistentExecutor(
                }.mkString(", ")}"
            )
       _ <- ZIO.foreachDiscard(allReferencedVariables) { case (scopedVar, timestamp) =>
-             remoteVariableKvStore.delete(scopedVar.name, scopedVar.scope, Some(timestamp))
+             RemoteVariableKeyValueStore.delete(scopedVar.name, scopedVar.scope, Some(timestamp))
            }
       _ <- ZIO.logInfo(s"Garbage Collection finished")
     } yield ()
@@ -1369,24 +1383,23 @@ object PersistentExecutor {
         configuration <- ZIO.service[Configuration]
         codecs        <- ZIO.service[ExecutorBinaryCodecs]
       } yield runtime.ExecutionEnvironment(codecs, configuration, gcPeriod)
-    } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any ++ RemoteVariableKeyValueStore.layer) >>> layer
+    } >+> (DurableLog.any ++ KeyValueStore.any ++ OperationExecutor.any) >>> layer
 
   val layer: ZLayer[
-    DurableLog with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with OperationExecutor,
+    DurableLog with KeyValueStore with ExecutionEnvironment with OperationExecutor,
     Nothing,
     ZFlowExecutor
   ] =
     ZLayer.scoped {
       for {
-        durableLog            <- ZIO.service[DurableLog]
-        kvStore               <- ZIO.service[KeyValueStore]
-        remoteVariableKvStore <- ZIO.service[RemoteVariableKeyValueStore]
-        operationExecutor     <- ZIO.service[OperationExecutor]
-        execEnv               <- ZIO.service[ExecutionEnvironment]
-        workflows             <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
-        gcQueue               <- Queue.bounded[GarbageCollectionCommand](1)
-        flowScope             <- Scope.make
-        _                     <- Scope.addFinalizerExit(flowScope.close(_))
+        durableLog        <- ZIO.service[DurableLog]
+        kvStore           <- ZIO.service[KeyValueStore]
+        operationExecutor <- ZIO.service[OperationExecutor]
+        execEnv           <- ZIO.service[ExecutionEnvironment]
+        workflows         <- TMap.empty[FlowId, Promise[Nothing, PersistentExecutor.RuntimeState]].commit
+        gcQueue           <- Queue.bounded[GarbageCollectionCommand](1)
+        flowScope         <- Scope.make
+        _                 <- Scope.addFinalizerExit(flowScope.close(_))
         _ <- Promise
                .make[Nothing, Any]
                .flatMap(finished => gcQueue.offer(GarbageCollectionCommand(finished)))
@@ -1395,7 +1408,6 @@ object PersistentExecutor {
                      execEnv,
                      durableLog,
                      kvStore,
-                     remoteVariableKvStore,
                      operationExecutor,
                      workflows,
                      gcQueue,

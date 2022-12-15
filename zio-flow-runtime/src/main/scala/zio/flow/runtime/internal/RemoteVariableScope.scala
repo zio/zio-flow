@@ -105,7 +105,7 @@ sealed trait RemoteVariableScope {
   val transactionId: Option[TransactionId]
   val parentScope: Option[RemoteVariableScope]
 
-  def rootScope: RemoteVariableScope
+  def rootScope: RemoteVariableScope.TopLevel
 }
 
 object RemoteVariableScope {
@@ -115,7 +115,7 @@ object RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = None
     override val parentScope: Option[RemoteVariableScope] = None
 
-    override def rootScope: RemoteVariableScope = this
+    override def rootScope: RemoteVariableScope.TopLevel = this
 
     override def toString: String = flowId.toString
   }
@@ -124,7 +124,7 @@ object RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = None
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
 
-    override def rootScope: RemoteVariableScope = parent.rootScope
+    override def rootScope: RemoteVariableScope.TopLevel = parent.rootScope
 
     override def toString: String =
       parent.toString + "/" + flowId.toString
@@ -135,7 +135,7 @@ object RemoteVariableScope {
     override val transactionId: Option[TransactionId]     = Some(transaction)
     override val parentScope: Option[RemoteVariableScope] = Some(parent)
 
-    override def rootScope: RemoteVariableScope = parent.rootScope
+    override def rootScope: RemoteVariableScope.TopLevel = parent.rootScope
 
     override def toString: String =
       parent.toString + ":" + transaction.toString

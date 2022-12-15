@@ -29,57 +29,51 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
   def awaitEither[Types <: TypeList](codecs: BinaryCodecs[Types])(implicit
     ev: Either[E, A] IsElementOf Types
   ): ZIO[DurableLog, ExecutorError, Either[E, A]] =
-    ZIO.logTrace(s"Waiting for durable promise $promiseId") *>
-      DurableLog
-        .subscribe(Topics.promise(promiseId), Index(0L))
-        .runHead
-        .mapError(ExecutorError.LogError)
-        .flatMap {
-          case Some(data) =>
-            ZIO.logTrace(s"Got durable promise result for $promiseId") *>
-              ZIO
-                .fromEither(codecs.decode[Either[E, A]](data))
-                .mapError(msg => ExecutorError.DeserializationError(s"awaited promise [$promiseId]", msg.message))
-          case None =>
-            ZIO.fail(ExecutorError.MissingPromiseResult(promiseId, "awaitEither"))
-        }
+    DurableLog
+      .subscribe(Topics.promise(promiseId), Index(0L))
+      .runHead
+      .mapError(ExecutorError.LogError)
+      .flatMap {
+        case Some(data) =>
+          ZIO
+            .fromEither(codecs.decode[Either[E, A]](data))
+            .mapError(msg => ExecutorError.DeserializationError(s"awaited promise [$promiseId]", msg.message))
+        case None =>
+          ZIO.fail(ExecutorError.MissingPromiseResult(promiseId, "awaitEither"))
+      }
 
   def fail[Types <: TypeList](
     error: E
   )(codecs: BinaryCodecs[Types])(implicit
     ev: Either[E, A] IsElementOf Types
   ): ZIO[DurableLog, ExecutorError, Boolean] =
-    ZIO.logDebug(s"Setting $promiseId to failure $error") *>
-      DurableLog
-        .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Left(error)))
-        .mapBoth(ExecutorError.LogError, _ == 0L)
+    DurableLog
+      .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Left(error)))
+      .mapBoth(ExecutorError.LogError, _ == 0L)
 
   def succeed[Types <: TypeList](
     value: A
   )(codecs: BinaryCodecs[Types])(implicit
     ev: Either[E, A] IsElementOf Types
   ): ZIO[DurableLog, ExecutorError, Boolean] =
-    ZIO.logTrace(s"Setting $promiseId to success: $value") *>
-      DurableLog
-        .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Right(value)))
-        .mapBoth(ExecutorError.LogError, _ == 0L)
+    DurableLog
+      .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Right(value)))
+      .mapBoth(ExecutorError.LogError, _ == 0L)
 
   def poll[Types <: TypeList](codecs: BinaryCodecs[Types])(implicit
     ev: Either[E, A] IsElementOf Types
   ): ZIO[DurableLog, ExecutorError, Option[Either[E, A]]] =
-    ZIO.logTrace(s"Polling durable promise $promiseId") *>
-      DurableLog
-        .getAllAvailable(Topics.promise(promiseId), Index(0L))
-        .runHead
-        .mapError(ExecutorError.LogError)
-        .flatMap(optData =>
-          ZIO.foreach(optData)(data =>
-            ZIO.logTrace(s"Got durable promise result for $promiseId") *>
-              ZIO
-                .fromEither(codecs.decode[Either[E, A]](data))
-                .mapError(msg => ExecutorError.DeserializationError(s"polled promise [$promiseId]", msg.message))
-          )
+    DurableLog
+      .getAllAvailable(Topics.promise(promiseId), Index(0L))
+      .runHead
+      .mapError(ExecutorError.LogError)
+      .flatMap(optData =>
+        ZIO.foreach(optData)(data =>
+          ZIO
+            .fromEither(codecs.decode[Either[E, A]](data))
+            .mapError(msg => ExecutorError.DeserializationError(s"polled promise [$promiseId]", msg.message))
         )
+      )
 
   def delete(): ZIO[DurableLog, ExecutorError, Unit] =
     DurableLog
