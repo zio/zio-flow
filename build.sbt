@@ -68,6 +68,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"                   % Version.zio,
+      "dev.zio" %% "zio-prelude"           % Version.zioPrelude,
       "dev.zio" %% "zio-schema"            % Version.zioSchema,
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
