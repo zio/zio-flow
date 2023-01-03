@@ -10,11 +10,13 @@ object RemoteTupleGenerator extends AutoPlugin {
   case class TupleModel(size: Int) {
     val typeParamTypes: List[Type.Name] = (1 to size).map(i => Type.Name(s"T$i")).toList
     val typeParams: List[Type.Param] =
-      typeParamTypes.map(name => Type.Param(Nil, name, Nil, Type.Bounds(None, None), Nil, Nil))
+      typeParamTypes.map(name => Type.Param(Nil, name, Type.ParamClause(Nil), Type.Bounds(None, None), Nil, Nil))
     val typeParamPlaceholders: List[Type.Param] =
-      typeParamTypes.map(_ => Type.Param(Nil, Name.Anonymous(), Nil, Type.Bounds(None, None), Nil, Nil))
-    val typeParamPlaceholderTypes: List[Type.Placeholder] =
-      typeParamTypes.map(_ => Type.Placeholder(Type.Bounds(None, None)))
+      typeParamTypes.map(_ =>
+        Type.Param(Nil, Name.Placeholder(), Type.ParamClause(Nil), Type.Bounds(None, None), Nil, Nil)
+      )
+    val typeParamPlaceholderTypes: List[Type.AnonymousParam] =
+      typeParamTypes.map(_ => Type.AnonymousParam(None))
 
     val tupleName: String                  = s"Tuple${size}"
     val tupleLit: Lit.String               = Lit.String(tupleName)
@@ -79,7 +81,15 @@ object RemoteTupleGenerator extends AutoPlugin {
     def generateTupleConstructorStatic(model: TupleModel): Defn.Trait = {
       val name = Type.Name(s"ConstructStatic")
 
-      val selfType      = t"Self[..${model.typeParamTypes}]"
+      val selfType = t"Self[..${model.typeParamTypes}]"
+      val selfTypeParam = Type.Param(
+        Nil,
+        Type.Name("Self"),
+        Type.ParamClause(model.typeParamPlaceholders),
+        Type.Bounds(None, Some(t"Construct[..${model.typeParamPlaceholderTypes}] with Remote[_]")),
+        Nil,
+        Nil
+      )
       val constructType = t"Construct[..${model.typeParamTypes}]"
       val fromAccessors =
         Term.Tuple((1 to model.size).map(i => q"t.asInstanceOf[$constructType].${Term.Name(s"t$i")}").toList)
@@ -88,7 +98,7 @@ object RemoteTupleGenerator extends AutoPlugin {
 
       val pattern = Pat.Tuple(model.paramRefs.map(Pat.Var(_)))
 
-      q"""trait $name[Self[..${model.typeParamPlaceholders}] <: Construct[..${model.typeParamPlaceholderTypes}] with Remote[_]] {
+      q"""trait $name[$selfTypeParam] {
           def construct[..${model.typeParams}](..${model.paramDefs}): Self[..${model.typeParamTypes}]
           def checkInstance[A](remote: Remote[A]): Boolean
           def schema[..${model.typeParams}]: Schema[Self[..${model.typeParamTypes}]] =
@@ -143,8 +153,8 @@ object RemoteTupleGenerator extends AutoPlugin {
       val implName                   = Term.Name(s"RemoteTuple${model.size}")
       val constructType              = Type.Select(implName, Type.Name("Construct"))
       val constructStaticType        = Type.Select(implName, Type.Name("ConstructStatic"))
-      val appliedConstructType       = Type.Apply(constructType, model.typeParamTypes)
-      val appliedConstructStaticType = Type.Apply(constructStaticType, List(typ))
+      val appliedConstructType       = Type.Apply(constructType, Type.ArgClause(model.typeParamTypes))
+      val appliedConstructStaticType = Type.Apply(constructStaticType, Type.ArgClause(List(typ)))
       val substitutions = model.typeParamTypes.zipWithIndex.map { case (t, i) =>
         q"""${Term.Name(s"t${i + 1}")}.substitute(f)"""
       }
@@ -158,7 +168,7 @@ object RemoteTupleGenerator extends AutoPlugin {
         q"""
       final case class $typ[..${model.typeParams}](..${model.paramDefs})
         extends Remote[${model.appliedTupleType}]
-        with ${Init(appliedConstructType, Name.Anonymous(), Nil)} {
+        with ${Init(appliedConstructType, Name.Anonymous(), Seq.empty)} {
         
           override protected def substituteRec(f: Remote.Substitutions): Remote[${model.appliedTupleType}] =
             $name(..$substitutions)
@@ -167,7 +177,7 @@ object RemoteTupleGenerator extends AutoPlugin {
         }
       """,
         q"""
-      object $name extends ${Init(appliedConstructStaticType, Name.Anonymous(), Nil)} {
+      object $name extends ${Init(appliedConstructStaticType, Name.Anonymous(), Seq.empty)} {
         def construct[..${model.typeParams}](..${model.paramDefs}): $typ[..${model.typeParamTypes}] =
           $name(..${model.paramRefs})
 
@@ -182,7 +192,7 @@ object RemoteTupleGenerator extends AutoPlugin {
       val name              = Term.Name(s"remoteTuple${model.size}Syntax")
       val implName          = Term.Name(s"RemoteTuple${model.size}")
       val syntaxType        = Type.Select(implName, Type.Name("Syntax"))
-      val appliedSyntaxType = Type.Apply(syntaxType, model.typeParamTypes)
+      val appliedSyntaxType = Type.Apply(syntaxType, Type.ArgClause(model.typeParamTypes))
 
       q"""
        implicit def $name[..${model.typeParams}](remote: Remote[${model.appliedTupleType}]): $appliedSyntaxType =
