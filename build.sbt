@@ -69,6 +69,7 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"                   % Version.zio,
+      "dev.zio" %% "zio-prelude"           % Version.zioPrelude,
       "dev.zio" %% "zio-schema"            % Version.zioSchema,
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
@@ -99,7 +100,7 @@ lazy val zioFlowRuntime = project
       "io.d11" %% "zhttp" % Version.zioHttp
     ) ++ commonTestDependencies.map(_ % Test)
   )
-  .settings(fork := false)
+  .settings(fork := true)
   .settings(testFrameworks += zioTest)
 
 lazy val zioFlowServer = project

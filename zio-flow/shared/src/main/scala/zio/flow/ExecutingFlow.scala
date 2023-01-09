@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,15 +23,17 @@ final case class ExecutingFlow[+E, +A](id: FlowId, result: PromiseId)
 object ExecutingFlow {
   private val typeId: TypeId = TypeId.parse("zio.flow.ExecutingFlow")
 
-  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] =
-    Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[E, A]](
+  implicit def schema[E, A]: Schema[ExecutingFlow[E, A]] = schemaAny.asInstanceOf[Schema[ExecutingFlow[E, A]]]
+
+  lazy val schemaAny: Schema[ExecutingFlow[Any, Any]] =
+    Schema.CaseClass2[FlowId, PromiseId, ExecutingFlow[Any, Any]](
       typeId,
-      Schema.Field("id", Schema[FlowId], get0 = _.id, set0 = (a: ExecutingFlow[E, A], v: FlowId) => a.copy(id = v)),
+      Schema.Field("id", Schema[FlowId], get0 = _.id, set0 = (a: ExecutingFlow[Any, Any], v: FlowId) => a.copy(id = v)),
       Schema.Field(
         "result",
         Schema[PromiseId],
         get0 = _.result,
-        set0 = (a: ExecutingFlow[E, A], v: PromiseId) => a.copy(result = v)
+        set0 = (a: ExecutingFlow[Any, Any], v: PromiseId) => a.copy(result = v)
       ),
       { case (id, promise) => ExecutingFlow(id, promise) }
     )

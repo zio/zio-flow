@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,42 @@
 
 package zio.flow.remote
 
+import zio.constraintless.TypeList._
 import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.serialization.Generators
 import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
 import zio.flow.serialization.ZFlowSerializationSpec.{genExecutingFlow, genSmallChronoUnit}
 import zio.schema.Schema
-import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
+import zio.schema.codec.{BinaryCodecs, JsonCodec, ProtobufCodec}
 import zio.test.{Gen, Sized, Spec, TestConfig, TestEnvironment, TestResult, ZIOSpecDefault, assertTrue, check}
 import zio.{Scope, ZIO, ZLayer}
 
 import scala.util.{Failure, Success, Try}
 
 class RoundtripEvaluationSpec extends ZIOSpecDefault {
+
+  private def jsonCodecs: BinaryCodecs[Remote[Any] :: End] = {
+    import JsonCodec.schemaBasedBinaryCodec
+    BinaryCodecs.make[Remote[Any] :: End]
+  }
+
+  private def protobufCodecs: BinaryCodecs[Remote[Any] :: End] = {
+    import ProtobufCodec.protobufCodec
+    BinaryCodecs.make[Remote[Any] :: End]
+  }
+
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("Remote roundtrip evaluation")(
-      evalWithCodec(JsonCodec),
-      evalWithCodec(ProtobufCodec)
+      evalWithCodec("JSON", jsonCodecs),
+      evalWithCodec("Protobuf", protobufCodecs)
     )
 
-  private def evalWithCodec(codec: BinaryCodec): Spec[Sized with TestConfig, String] =
-    suite(codec.getClass.getSimpleName)(
+  private def evalWithCodec(
+    label: String,
+    codec: BinaryCodecs[Remote[Any] :: End]
+  ): Spec[Sized with TestConfig, String] =
+    suite(label)(
       test("literal user type") {
         check(TestCaseClass.gen) { data =>
           val literal = Remote(data)
@@ -113,12 +128,12 @@ class RoundtripEvaluationSpec extends ZIOSpecDefault {
     )
 
   private def roundtripEval[A: Schema](
-    codec: BinaryCodec,
+    codec: BinaryCodecs[Remote[Any] :: End],
     value: Remote[A],
     test: (A, A) => Boolean = (a: A, b: A) => a == b
   ): ZIO[RemoteContext with LocalContext, String, TestResult] = {
-    val encoded = codec.encode(Remote.schemaAny)(value)
-    val decoded = codec.decode(Remote.schemaAny)(encoded)
+    val encoded = codec.encode(value.asInstanceOf[Remote[Any]])
+    val decoded = codec.decode(encoded)
 
     //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 

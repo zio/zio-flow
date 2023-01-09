@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,32 +30,35 @@ object Zipper extends ZipperLowPriority1 {
   private val typeId: TypeId = TypeId.parse("zio.flow.operation.http.Zipper")
 
   implicit def schema[A, B, C]: Schema[Zipper.WithOut[A, B, C]] =
+    schemaAny.asInstanceOf[Schema[Zipper.WithOut[A, B, C]]]
+
+  lazy val schemaAny: Schema[Zipper.WithOut[Any, Any, Any]] =
     Schema.EnumN(
       typeId,
       CaseSet
-        .Cons(zipperLeftIdentitySchemaCase[A, B, C], CaseSet.Empty[Zipper.WithOut[A, B, C]]())
-        .:+:(zipperRightIdentitySchemaCase[A, B, C])
-        .:+:(zipper2SchemaCase[A, B, C])
-        .:+:(zipper3SchemaCase[A, B, C])
-        .:+:(zipper4SchemaCase[A, B, C])
-        .:+:(zipper5SchemaCase[A, B, C])
-        .:+:(zipper6SchemaCase[A, B, C])
-        .:+:(zipper7SchemaCase[A, B, C])
-        .:+:(zipper8SchemaCase[A, B, C])
-        .:+:(zipper9SchemaCase[A, B, C])
-        .:+:(zipper10SchemaCase[A, B, C])
-        .:+:(zipper11SchemaCase[A, B, C])
-        .:+:(zipper12SchemaCase[A, B, C])
-        .:+:(zipper13SchemaCase[A, B, C])
-        .:+:(zipper14SchemaCase[A, B, C])
-        .:+:(zipper15SchemaCase[A, B, C])
-        .:+:(zipper16SchemaCase[A, B, C])
-        .:+:(zipper17SchemaCase[A, B, C])
-        .:+:(zipper18SchemaCase[A, B, C])
-        .:+:(zipper19SchemaCase[A, B, C])
-        .:+:(zipper20SchemaCase[A, B, C])
-        .:+:(zipper21SchemaCase[A, B, C])
-        .:+:(zipper22SchemaCase[A, B, C])
+        .Cons(zipperLeftIdentitySchemaCase[Any, Any, Any], CaseSet.Empty[Zipper.WithOut[Any, Any, Any]]())
+        .:+:(zipperRightIdentitySchemaCase[Any, Any, Any])
+        .:+:(zipper2SchemaCase[Any, Any, Any])
+        .:+:(zipper3SchemaCase[Any, Any, Any])
+        .:+:(zipper4SchemaCase[Any, Any, Any])
+        .:+:(zipper5SchemaCase[Any, Any, Any])
+        .:+:(zipper6SchemaCase[Any, Any, Any])
+        .:+:(zipper7SchemaCase[Any, Any, Any])
+        .:+:(zipper8SchemaCase[Any, Any, Any])
+        .:+:(zipper9SchemaCase[Any, Any, Any])
+        .:+:(zipper10SchemaCase[Any, Any, Any])
+        .:+:(zipper11SchemaCase[Any, Any, Any])
+        .:+:(zipper12SchemaCase[Any, Any, Any])
+        .:+:(zipper13SchemaCase[Any, Any, Any])
+        .:+:(zipper14SchemaCase[Any, Any, Any])
+        .:+:(zipper15SchemaCase[Any, Any, Any])
+        .:+:(zipper16SchemaCase[Any, Any, Any])
+        .:+:(zipper17SchemaCase[Any, Any, Any])
+        .:+:(zipper18SchemaCase[Any, Any, Any])
+        .:+:(zipper19SchemaCase[Any, Any, Any])
+        .:+:(zipper20SchemaCase[Any, Any, Any])
+        .:+:(zipper21SchemaCase[Any, Any, Any])
+        .:+:(zipper22SchemaCase[Any, Any, Any])
     )
 
   type WithOut[A, B, C] = Zipper[A, B] { type Out = C }

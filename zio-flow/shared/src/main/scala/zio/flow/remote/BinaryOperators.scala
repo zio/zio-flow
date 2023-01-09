@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -242,11 +242,11 @@ object BinaryOperators {
         TypeId.parse("zio.flow.remote.BinaryOperators.LessThanEqual"),
         Schema.Field(
           "schema",
-          FlowSchemaAst.schema,
+          Schema.defer(FlowSchemaAst.schema),
           get0 = lte => FlowSchemaAst.fromSchema(lte.schema),
-          set0 = (o, v) => o.copy(schema = v.toSchema)
+          set0 = (o, v) => o.copy(schema = v.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema[Any])
+        (ast: FlowSchemaAst) => LessThanEqual(ast.toSchema.asInstanceOf[Schema[Any]])
       ),
       _.asInstanceOf[LessThanEqual[Any]],
       _.asInstanceOf[BinaryOperators[Any, Any, Any]],
@@ -333,7 +333,7 @@ object BinaryOperators {
   def schema[In1, In2, Out]: Schema[BinaryOperators[In1, In2, Out]] =
     schemaAny.asInstanceOf[Schema[BinaryOperators[In1, In2, Out]]]
 
-  val schemaAny: Schema[BinaryOperators[Any, Any, Any]] =
+  lazy val schemaAny: Schema[BinaryOperators[Any, Any, Any]] =
     Schema.EnumN(
       TypeId.parse("zio.flow.remote.BinaryOperators"),
       CaseSet

@@ -1,8 +1,8 @@
 package zio.flow.runtime.internal
 
 import zio.ZIO
-import zio.flow.runtime.{DurableLog, ExecutorError, Timestamp}
-import zio.flow.{ConfigKey, ExecutionEnvironment, RemoteContext, RemoteVariableName}
+import zio.flow.runtime.{DurableLog, ExecutionEnvironment, ExecutorError, Timestamp}
+import zio.flow.{ConfigKey, RemoteContext, RemoteVariableName}
 import zio.schema.{DynamicValue, Schema}
 import zio.stm.TMap
 
@@ -19,7 +19,7 @@ final case class PersistentRemoteContext(
   override def setVariable(name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
     scopeMap.getOrElse(name, scope).commit.flatMap { variableScope =>
       virtualClock.current.flatMap { timestamp =>
-        val serializedValue = executionEnvironment.serializer.serialize(value)
+        val serializedValue = executionEnvironment.codecs.encode(value)
         remoteVariableStore
           .put(
             name,
@@ -39,7 +39,7 @@ final case class PersistentRemoteContext(
           case Some((serializedValue, variableScope)) =>
             scopeMap.put(name, variableScope).commit.zipRight {
               ZIO
-                .fromEither(executionEnvironment.deserializer.deserialize[DynamicValue](serializedValue))
+                .fromEither(executionEnvironment.codecs.decode[DynamicValue](serializedValue))
                 .map(Some(_))
                 .orDieWith(msg => new IOException(s"Failed to deserialize remote variable $name: $msg"))
             }

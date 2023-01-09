@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@
 
 package zio.flow.server.templates.service
 
+import zio.constraintless.TypeList._
 import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId}
-import zio.flow.server.templates.service.KVStoreBasedTemplates.namespace
-import zio.schema.codec.JsonCodec
+import zio.flow.server.templates.service.KVStoreBasedTemplates.{codecs, namespace}
+import zio.schema.codec.BinaryCodecs
+import zio.schema.codec.JsonCodec.schemaBasedBinaryCodec
 import zio.stream.ZStream
 import zio.{Clock, ZIO, ZLayer}
 
@@ -31,7 +33,7 @@ final case class KVStoreBasedTemplates(kvStore: KeyValueStore) extends Templates
     kvStore.scanAll(namespace).mapZIO { case (rawKey, rawFlowTemplate) =>
       val templateId = TemplateId(new String(rawKey.toArray, StandardCharsets.UTF_8))
       ZIO
-        .fromEither(JsonCodec.decode(ZFlowTemplate.schema)(rawFlowTemplate))
+        .fromEither(codecs.decode(rawFlowTemplate))
         .mapBoth(
           error => new IOException(s"Can not deserialize template $templateId: $error"),
           flowTemplate => ZFlowTemplateWithId(templateId, flowTemplate)
@@ -42,7 +44,7 @@ final case class KVStoreBasedTemplates(kvStore: KeyValueStore) extends Templates
     kvStore.getLatest(namespace, templateId.toRaw, None).flatMap {
       case Some(bytes) =>
         ZIO
-          .fromEither(JsonCodec.decode(ZFlowTemplate.schema)(bytes))
+          .fromEither(codecs.decode(bytes))
           .mapBoth(error => new IOException(s"Failed to deserialize template $templateId: $error"), Some(_))
       case None =>
         ZIO.none
@@ -54,7 +56,7 @@ final case class KVStoreBasedTemplates(kvStore: KeyValueStore) extends Templates
       _ <- kvStore.put(
              namespace,
              templateId.toRaw,
-             JsonCodec.encode(ZFlowTemplate.schema)(flowTemplate),
+             codecs.encode(flowTemplate),
              now
            )
     } yield ()
@@ -73,4 +75,5 @@ object KVStoreBasedTemplates {
     }
 
   private val namespace = "_zflow_workflow_templates"
+  private val codecs    = BinaryCodecs.make[ZFlowTemplate :: End]
 }

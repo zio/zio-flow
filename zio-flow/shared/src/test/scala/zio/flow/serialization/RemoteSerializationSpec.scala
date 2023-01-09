@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,43 @@
 
 package zio.flow.serialization
 
+import zio.constraintless.TypeList._
 import zio.flow._
-import zio.schema.codec.{BinaryCodec, JsonCodec, ProtobufCodec}
-import zio.schema.meta.MetaSchema
+import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
+import zio.schema.codec.{BinaryCodecs, JsonCodec, ProtobufCodec}
 import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 import zio.{ZIO, ZNothing}
 
+import java.nio.charset.StandardCharsets
+
 object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
+
+  private def jsonCodecs: BinaryCodecs[Remote[Any] :: End] = {
+    import JsonCodec.schemaBasedBinaryCodec
+    BinaryCodecs.make[Remote[Any] :: End]
+  }
+
+  private def protobufCodecs: BinaryCodecs[Remote[Any] :: End] = {
+    import ProtobufCodec.protobufCodec
+    BinaryCodecs.make[Remote[Any] :: End]
+  }
+
   override def spec: Spec[TestEnvironment, Any] =
     suite("Remote serialization")(
       suite("roundtrip equality")(
-        equalityWithCodec(JsonCodec),
-        equalityWithCodec(ProtobufCodec)
+        equalityWithCodec("JSON", jsonCodecs),
+        equalityWithCodec("Protobuf", protobufCodecs)
       ),
       test("Remote schema is serializable") {
-        val schema             = Remote.schemaAny
-        val serialized         = JsonCodec.encode(MetaSchema.schema)(schema.ast)
-        val deserialized       = JsonCodec.decode(MetaSchema.schema)(serialized)
+        val schema     = Remote.schemaAny
+        val serialized = JsonEncoder.encode(FlowSchemaAst.schema, FlowSchemaAst.fromSchema(schema))
+        val deserialized =
+          JsonDecoder.decode(FlowSchemaAst.schema, new String(serialized.toArray, StandardCharsets.UTF_8))
         val deserializedSchema = deserialized.map(_.toSchema)
-        assertTrue(
-          Schema.structureEquality.equal(schema, deserializedSchema.toOption.get)
-        )
-      } @@ TestAspect.ignore // TODO: fix recursion
+        val refEq              = schema eq deserializedSchema.toOption.get
+        assertTrue(refEq)
+      }
     )
 
   case class TestCaseClass(a: String, b: Int)
@@ -53,9 +67,10 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
   }
 
   private def equalityWithCodec(
-    codec: BinaryCodec
+    label: String,
+    codec: BinaryCodecs[Remote[Any] :: End]
   ): Spec[Sized with TestConfig, String] =
-    suite(codec.getClass.getSimpleName)(
+    suite(label)(
       test("literal") {
         check(genLiteral) { literal =>
           roundtrip(codec, literal)
@@ -105,16 +120,16 @@ object RemoteSerializationSpec extends ZIOSpecDefault with Generators {
     )
 
   private def roundtripCheck(
-    codec: BinaryCodec,
+    codec: BinaryCodecs[Remote[Any] :: End],
     gen: Gen[Sized, Remote[Any]]
   ): ZIO[Sized with TestConfig, Nothing, TestResult] =
     check(gen) { value =>
       roundtrip(codec, value)
     }
 
-  private def roundtrip(codec: BinaryCodec, value: Remote[Any]): TestResult = {
-    val encoded = codec.encode(Remote.schemaAny)(value)
-    val decoded = codec.decode(Remote.schemaAny)(encoded)
+  private def roundtrip(codec: BinaryCodecs[Remote[Any] :: End], value: Remote[Any]): TestResult = {
+    val encoded = codec.encode(value)
+    val decoded = codec.decode(encoded)
 
     //    println(s"$value => ${new String(encoded.toArray)} =>$decoded")
 

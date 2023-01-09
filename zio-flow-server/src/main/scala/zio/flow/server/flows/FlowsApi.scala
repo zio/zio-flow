@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                    case StartRequest.Flow(flow) =>
                      executor.start(flowId, flow).orDieWith(_.toException)
                    case StartRequest.FlowWithParameter(flow, schemaAst, inputJson) =>
-                     val schema = schemaAst.toSchema[Any]
+                     val schema = schemaAst.toSchema.asInstanceOf[Schema[Any]]
                      ZIO
                        .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
                        .mapError(message =>
@@ -75,7 +75,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                            )
                          )
                        case Some(ZFlowTemplate(flow, Some(schemaAst))) =>
-                         val schema = schemaAst.toSchema[Any]
+                         val schema = schemaAst.toSchema.asInstanceOf[Schema[Any]]
                          ZIO
                            .fromEither(JsonCodec.jsonDecoder(schema).fromJsonAST(inputJson))
                            .mapError(message =>

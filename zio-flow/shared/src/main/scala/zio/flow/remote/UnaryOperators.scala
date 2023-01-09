@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -307,7 +307,8 @@ object UnaryOperators {
     )
 
   def schema[In, Out]: Schema[UnaryOperators[In, Out]] = schemaAny.asInstanceOf[Schema[UnaryOperators[In, Out]]]
-  val schemaAny: Schema[UnaryOperators[Any, Any]] =
+
+  lazy val schemaAny: Schema[UnaryOperators[Any, Any]] =
     Schema.EnumN(
       TypeId.parse("zio.flow.remote.UnaryOperators"),
       CaseSet

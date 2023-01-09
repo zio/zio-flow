@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -406,11 +406,11 @@ object RemoteConversions {
         TypeId.parse("zio.flow.remote.RemoteConversions.ToString"),
         Schema.Field(
           "schema",
-          Schema[FlowSchemaAst],
+          Schema.defer(FlowSchemaAst.schema),
           get0 = conv => FlowSchemaAst.fromSchema(conv.inputSchema),
-          set0 = (_: ToString[Any], b: FlowSchemaAst) => ToString()(b.toSchema[Any])
+          set0 = (_: ToString[Any], b: FlowSchemaAst) => ToString()(b.toSchema.asInstanceOf[Schema[Any]])
         ),
-        (schemaAst: FlowSchemaAst) => ToString()(schemaAst.toSchema[Any])
+        (schemaAst: FlowSchemaAst) => ToString()(schemaAst.toSchema.asInstanceOf[Schema[Any]])
       ),
       _.asInstanceOf[ToString[Any]],
       _.asInstanceOf[RemoteConversions[Any, Any]],
@@ -570,7 +570,7 @@ object RemoteConversions {
 
   def schema[In, Out]: Schema[RemoteConversions[In, Out]] = schemaAny.asInstanceOf[Schema[RemoteConversions[In, Out]]]
 
-  val schemaAny: Schema[RemoteConversions[Any, Any]] =
+  lazy val schemaAny: Schema[RemoteConversions[Any, Any]] =
     Schema.EnumN(
       TypeId.parse("zio.flow.remote.RemoteConversions"),
       CaseSet

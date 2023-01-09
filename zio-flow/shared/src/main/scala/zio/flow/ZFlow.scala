@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1265,11 +1265,7 @@ object ZFlow {
   /** Creates a flow that waits for the given duration */
   def sleep(duration: Remote[Duration]): ZFlow[Any, ZNothing, Unit] =
     ZFlow.now.flatMap { now =>
-      ZFlow(now.plus(duration)).flatMap { later =>
-        ZFlow.waitTill(later).map { _ =>
-          Remote.unit
-        }
-      }
+      ZFlow.waitTill(now.plus(duration))
     }
 
   /** Creates a flow that returns the given remote value */

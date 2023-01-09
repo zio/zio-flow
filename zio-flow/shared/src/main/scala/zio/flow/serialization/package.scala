@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package zio.flow.runtime.metrics
+package zio.flow
 
-sealed trait StartType
+import zio.constraintless.TypeList._
+import zio.schema.meta.ExtensibleMetaSchema
+import zio.schema.{DynamicValue, Schema}
 
-object StartType {
-  case object Fresh extends StartType
+package object serialization {
+  type FlowSchemaAst = ExtensibleMetaSchema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
+  object FlowSchemaAst {
+    lazy val schema: Schema[FlowSchemaAst] =
+      ExtensibleMetaSchema.schema[Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End]
 
-  case object Continued extends StartType
-
-  def toLabel(startType: StartType): String =
-    startType match {
-      case StartType.Fresh     => "fresh"
-      case StartType.Continued => "continued"
-    }
+    def fromSchema[A](schema: Schema[A]): FlowSchemaAst =
+      ExtensibleMetaSchema.fromSchema[A, Remote[Any] :: ZFlow[Any, Any, Any] :: DynamicValue :: End](schema)
+  }
 }

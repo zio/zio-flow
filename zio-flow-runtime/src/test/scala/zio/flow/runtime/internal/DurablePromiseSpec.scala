@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,27 @@
 
 package zio.flow.runtime.internal
 
+import zio.constraintless.TypeList._
 import zio.flow._
 import zio.flow.runtime.{DurableLog, DurablePromise, ExecutorError, IndexedStore}
-import zio.flow.serialization._
+import zio.schema.codec.BinaryCodecs
+import zio.schema.codec.JsonCodec.schemaBasedBinaryCodec
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
-import zio.{Promise, ZEnvironment, ZIO}
+import zio.{Promise, ZEnvironment, ZIO, ZNothing}
 
 object DurablePromiseSpec extends ZIOSpecDefault {
+  private val codecs = BinaryCodecs.make[Either[ZNothing, Int] :: Either[String, Int] :: End]
+
   override def spec: Spec[TestEnvironment, Any] =
     suite("DurablePromise")(
       test("Can't fail, await success") {
         val promise = DurablePromise.make[Nothing, Int](PromiseId("dp-1"))
         for {
           log    <- ZIO.service[DurableLog]
-          config <- ZIO.service[Configuration]
-          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
+          env     = ZEnvironment(log)
           result <- Promise.make[ExecutorError, Either[Nothing, Int]]
-          fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
-          _      <- promise.succeed(100).provideEnvironment(env)
+          fiber  <- promise.awaitEither(codecs).provideEnvironment(env).intoPromise(result).fork
+          _      <- promise.succeed(100)(codecs).provideEnvironment(env)
           _      <- fiber.join
           value  <- result.await
         } yield assertTrue(value == Right(100))
@@ -42,11 +45,10 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-2"))
         for {
           log    <- ZIO.service[DurableLog]
-          config <- ZIO.service[Configuration]
-          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
+          env     = ZEnvironment(log)
           result <- Promise.make[ExecutorError, Either[String, Int]]
-          fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
-          _      <- promise.succeed(100).provideEnvironment(env)
+          fiber  <- promise.awaitEither(codecs).provideEnvironment(env).intoPromise(result).fork
+          _      <- promise.succeed(100)(codecs).provideEnvironment(env)
           _      <- fiber.join
           value  <- result.await
         } yield assertTrue(value == Right(100))
@@ -55,11 +57,10 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-3"))
         for {
           log    <- ZIO.service[DurableLog]
-          config <- ZIO.service[Configuration]
-          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
+          env     = ZEnvironment(log)
           result <- Promise.make[ExecutorError, Either[String, Int]]
-          fiber  <- promise.awaitEither.provideEnvironment(env).intoPromise(result).fork
-          _      <- promise.fail("not good").provideEnvironment(env)
+          fiber  <- promise.awaitEither(codecs).provideEnvironment(env).intoPromise(result).fork
+          _      <- promise.fail("not good")(codecs).provideEnvironment(env)
           _      <- fiber.join
           value  <- result.await
         } yield assertTrue(value == Left("not good"))
@@ -68,27 +69,24 @@ object DurablePromiseSpec extends ZIOSpecDefault {
         val promise = DurablePromise.make[Nothing, Int](PromiseId("dp-4"))
         for {
           log    <- ZIO.service[DurableLog]
-          config <- ZIO.service[Configuration]
-          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
-          before <- promise.poll.provideEnvironment(env)
-          _      <- promise.succeed(100).provideEnvironment(env)
-          after  <- promise.poll.provideEnvironment(env)
+          env     = ZEnvironment(log)
+          before <- promise.poll(codecs).provideEnvironment(env)
+          _      <- promise.succeed(100)(codecs).provideEnvironment(env)
+          after  <- promise.poll(codecs).provideEnvironment(env)
         } yield assertTrue(before == None) && assertTrue(after == Some(Right(100)))
       },
       test("Can fail, poll failure") {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-5"))
         for {
           log    <- ZIO.service[DurableLog]
-          config <- ZIO.service[Configuration]
-          env     = ZEnvironment(log, ExecutionEnvironment(Serializer.json, Deserializer.json, config))
-          before <- promise.poll.provideEnvironment(env)
-          _      <- promise.fail("not good").provideEnvironment(env)
-          after  <- promise.poll.provideEnvironment(env)
+          env     = ZEnvironment(log)
+          before <- promise.poll(codecs).provideEnvironment(env)
+          _      <- promise.fail("not good")(codecs).provideEnvironment(env)
+          after  <- promise.poll(codecs).provideEnvironment(env)
         } yield assertTrue(before == None) && assertTrue(after == Some(Left("not good")))
       }
     ).provide(
       DurableLog.layer,
-      IndexedStore.inMemory,
-      Configuration.inMemory
+      IndexedStore.inMemory
     )
 }

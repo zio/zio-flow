@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,9 +68,10 @@ object API {
         "outputSchema",
         FlowSchemaAst.schema,
         get0 = api => FlowSchemaAst.fromSchema(api.outputSchema),
-        set0 = (a, v) => a.copy(outputSchema = v.toSchema)
+        set0 = (a, v) => a.copy(outputSchema = v.toSchema.asInstanceOf[Schema[Output]])
       ),
-      (method, requestInput, outputSchema) => API(method, requestInput, outputSchema.toSchema[Output])
+      (method, requestInput, outputSchema) =>
+        API(method, requestInput, outputSchema.toSchema.asInstanceOf[Schema[Output]])
     )
 
   type WithId[Input, Output, Id0] = API[Input, Output] { type Id = Id0 }

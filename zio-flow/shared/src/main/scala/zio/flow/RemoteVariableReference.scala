@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ case class RemoteVariableReference[A](name: RemoteVariableName) {
 }
 object RemoteVariableReference {
 
-  private val anySchema: Schema[RemoteVariableReference[Any]] =
+  private val schemaAny: Schema[RemoteVariableReference[Any]] =
     Schema.CaseClass1(
       TypeId.parse("zio.flow.RemoteVariableReference"),
       Schema.Field(
@@ -46,5 +46,5 @@ object RemoteVariableReference {
       RemoteVariableReference.apply[Any]
     )
   implicit def schema[A]: Schema[RemoteVariableReference[A]] =
-    anySchema.asInstanceOf[Schema[RemoteVariableReference[A]]]
+    schemaAny.asInstanceOf[Schema[RemoteVariableReference[A]]]
 }

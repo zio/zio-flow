@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ private[flow] final case class LocaleParts(lang: String, country: Option[String]
 }
 
 private[flow] object LocaleParts {
-  implicit def schema: Schema[LocaleParts] = DeriveSchema.gen
+  implicit lazy val schema: Schema[LocaleParts] = DeriveSchema.gen
 
   def apply(jLocale: Locale): Right[Nothing, LocaleParts] =
     Right(new LocaleParts(jLocale.getLanguage, Option(jLocale.getCountry), Option(jLocale.getVariant)))

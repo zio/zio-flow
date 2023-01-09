@@ -1,12 +1,11 @@
 package zio.flow.operation.http
 
+import zhttp.http.Response
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
-import zio.ZIO
+import zio.{Chunk, ZIO}
+import zio.schema.codec.JsonCodec.JsonEncoder
 
 import scala.collection.mutable
-import zhttp.http.Response
-import zio.Chunk
-import zio.schema.codec.JsonCodec
 
 private[http] object ClientInterpreter {
   def interpret[Input, Output](host: String)(
@@ -146,7 +145,7 @@ private[http] object ClientInterpreter {
   )(params: Params): Unit =
     body.contentType match {
       case ContentType.json =>
-        state.setBody(JsonCodec.encode(body.schema)(params), "application/json")
+        state.setBody(JsonEncoder.encode(body.schema, params), "application/json")
       case ContentType.`x-www-form-urlencoded` =>
         state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params), "application/x-www-form-urlencoded")
     }

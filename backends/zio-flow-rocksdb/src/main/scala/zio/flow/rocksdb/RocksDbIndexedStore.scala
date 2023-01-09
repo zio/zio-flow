@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
-import zio.flow.rocksdb.RocksDbIndexedStore.positionKey
+import zio.constraintless.TypeList._
+import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey}
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
 import zio.rocksdb.{Transaction, TransactionDB}
-import zio.schema.Schema
-import zio.schema.codec.ProtobufCodec
+import zio.schema.codec.BinaryCodecs
+import zio.schema.codec.ProtobufCodec._
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
@@ -43,7 +44,7 @@ final case class RocksDbIndexedStore(
              .put(
                colFamHandle,
                positionKey,
-               ProtobufCodec.encode(Schema[Long])(0L).toArray
+               codecs.encode(0L).toArray
              )
 
     } yield colFamHandle
@@ -57,7 +58,7 @@ final case class RocksDbIndexedStore(
         positionBytes match {
           case Some(positionBytes) =>
             ZIO
-              .fromEither(ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(positionBytes)))
+              .fromEither(codecs.decode[Long](Chunk.fromArray(positionBytes)))
               .mapError(s => new Throwable(s))
           case None => ZIO.succeed(0L)
         }
@@ -103,7 +104,7 @@ final case class RocksDbIndexedStore(
           k <- ZStream.fromIterable(position to until)
           value <-
             ZStream
-              .fromZIO(rocksDB.get(cf, ProtobufCodec.encode(Schema[Long])(k).toArray))
+              .fromZIO(rocksDB.get(cf, codecs.encode(k).toArray))
         } yield value.map(Chunk.fromArray)
       }
       .collect { case Some(item) => item }
@@ -114,23 +115,23 @@ final case class RocksDbIndexedStore(
       position <- position(topic)
       _        <- rocksDB.delete(colFam, positionKey)
       _ <- ZIO.foreachDiscard(0L to position.toLong) { idx =>
-             rocksDB.delete(colFam, ProtobufCodec.encode(Schema[Long])(idx).toArray)
+             rocksDB.delete(colFam, codecs.encode(idx).toArray)
            }
     } yield ()
 
   private def incPosition(posBytes: Option[Array[Byte]]): Array[Byte] =
     posBytes match {
       case Some(posBytes) =>
-        ProtobufCodec
-          .encode(Schema[Long])(
-            ProtobufCodec.decode(Schema[Long])(Chunk.fromArray(posBytes)) match {
+        codecs
+          .encode(
+            codecs.decode[Long](Chunk.fromArray(posBytes)) match {
               case Left(error) => throw new Throwable(error)
               case Right(p)    => p + 1
             }
           )
           .toArray
       case None =>
-        ProtobufCodec.encode(Schema[Long])(1L).toArray
+        codecs.encode(1L).toArray
     }
 }
 
@@ -160,5 +161,6 @@ object RocksDbIndexedStore {
   def withEmptyTopic(topicName: String): ZLayer[Any, Throwable, IndexedStore] =
     ZLayer.scoped(make.tap(store => store.addTopic(topicName)))
 
-  private lazy val positionKey = ProtobufCodec.encode(Schema[String])("POSITION").toArray
+  private lazy val codecs      = BinaryCodecs.make[String :: Long :: End]
+  private lazy val positionKey = codecs.encode("POSITION").toArray
 }

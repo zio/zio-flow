@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,7 +136,7 @@ object Remote {
 
   object Literal {
     def schema[A]: Schema[Literal[A]] =
-      Schema[DynamicValue].transform(Literal(_), _.value)
+      Schema.Dynamic().transform(Literal(_), _.value)
 
     def schemaCase[A]: Schema.Case[Remote[A], Literal[A]] =
       Schema.Case("Literal", schema[A], _.asInstanceOf[Literal[A]], x => x, _.isInstanceOf[Literal[A]])
@@ -416,11 +416,11 @@ object Remote {
         Schema.Field("key", Schema[ConfigKey], get0 = _.key, set0 = (a: Config[A], v: ConfigKey) => a.copy(key = v)),
         Schema.Field(
           "schema",
-          FlowSchemaAst.schema,
+          Schema.defer(FlowSchemaAst.schema),
           get0 = cfg => FlowSchemaAst.fromSchema(cfg.schema),
-          set0 = (cfg, schema) => cfg.copy(schema = schema.toSchema)
+          set0 = (cfg, schema) => cfg.copy(schema = schema.toSchema.asInstanceOf[Schema[A]])
         ),
-        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema[A])
+        (key: ConfigKey, ast: FlowSchemaAst) => Config(key, ast.toSchema.asInstanceOf[Schema[A]])
       )
 
     def schemaCase[A]: Schema.Case[Remote[A], Config[A]] =
@@ -4046,6 +4046,6 @@ object Remote {
       .:+:(OpticSet.schemaCase[A])
   )
 
-  implicit val schemaAny: Schema[Remote[Any]] = createSchema[Any]
-  def schema[A]: Schema[Remote[A]]            = schemaAny.asInstanceOf[Schema[Remote[A]]]
+  implicit lazy val schemaAny: Schema[Remote[Any]] = createSchema[Any]
+  def schema[A]: Schema[Remote[A]]                 = schemaAny.asInstanceOf[Schema[Remote[A]]]
 }

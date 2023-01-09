@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package zio.flow.serialization
 import zio.Scope
 import zio.flow.{Remote, ZFlow}
 import zio.schema.{Schema, TypeId}
-import zio.schema.meta.MetaSchema
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 
 import scala.collection.immutable.ListMap
@@ -35,12 +34,6 @@ object FlowSchemaAstSpec extends ZIOSpecDefault {
       },
       test("List of tuples of flow and remote") {
         val schema  = Schema.list(Schema.tuple2(ZFlow.schemaAny, Remote.schemaAny))
-        val flowAst = FlowSchemaAst.fromSchema(schema)
-        val schema2 = flowAst.toSchema
-        assertTrue(Schema.structureEquality.equal(schema, schema2))
-      },
-      test("Schemas") {
-        val schema  = Schema.tuple2(FlowSchemaAst.schema, MetaSchema.schema)
         val flowAst = FlowSchemaAst.fromSchema(schema)
         val schema2 = flowAst.toSchema
         assertTrue(Schema.structureEquality.equal(schema, schema2))

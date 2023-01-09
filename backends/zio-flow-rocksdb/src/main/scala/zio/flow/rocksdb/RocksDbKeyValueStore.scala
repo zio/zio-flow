@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@
 package zio.flow.rocksdb
 
 import org.rocksdb.ColumnFamilyHandle
+import zio.constraintless.TypeList.{::, End}
+import zio.flow.rocksdb.RocksDbKeyValueStore.codecs
 import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.rocksdb.{Transaction, TransactionDB}
-import zio.schema.Schema
-import zio.schema.codec.ProtobufCodec
+import zio.schema.codec.BinaryCodecs
+import zio.schema.codec.ProtobufCodec._
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, ZIO, ZLayer}
@@ -140,7 +142,7 @@ final case class RocksDbKeyValueStore(
     }
 
   override def delete(namespace: String, key: Chunk[Byte], marker: Option[Timestamp]): IO[Throwable, Unit] =
-    (for {
+    for {
       dataNamespace    <- getOrCreateNamespace(dataNamespace(namespace))
       versionNamespace <- getOrCreateNamespace(versionNamespace(namespace))
       rawVersions      <- rocksDB.get(versionNamespace, key.toArray)
@@ -161,8 +163,8 @@ final case class RocksDbKeyValueStore(
                      rocksDB.put(
                        versionNamespace,
                        key.toArray,
-                       ProtobufCodec
-                         .encode(Schema[List[Timestamp]])(versions.take(versions.length - toDelete.length))
+                       codecs
+                         .encode(versions.take(versions.length - toDelete.length))
                          .toArray
                      )
                  _ <- ZIO.foreachDiscard(toDelete) { timestamp =>
@@ -172,7 +174,7 @@ final case class RocksDbKeyValueStore(
              case None =>
                ZIO.unit
            }
-    } yield ())
+    } yield ()
 
   private def getVersionedKey(key: Chunk[Byte], timestamp: Timestamp): Chunk[Byte] =
     key ++ ("_" + timestamp.value.toString).getBytes(StandardCharsets.UTF_8)
@@ -180,15 +182,15 @@ final case class RocksDbKeyValueStore(
   private def appendTimestamp(rawVersions: Option[Array[Byte]], timestamp: Timestamp): IO[Throwable, Chunk[Byte]] =
     rawVersions match {
       case Some(rawVersions) =>
-        ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
+        codecs.decode[List[Timestamp]](Chunk.fromArray(rawVersions)) match {
           case Left(failure) =>
             ZIO.fail(new Throwable(s"Failed to decode versions: $failure"))
           case Right(versions) =>
             val updatedVersions = timestamp :: versions
-            ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(updatedVersions))
+            ZIO.succeed(codecs.encode(updatedVersions))
         }
       case None =>
-        ZIO.succeed(ProtobufCodec.encode(Schema[List[Timestamp]])(List(timestamp)))
+        ZIO.succeed(codecs.encode(List(timestamp)))
     }
 
   private def getLastTimestamp(
@@ -206,7 +208,7 @@ final case class RocksDbKeyValueStore(
     }
 
   private def decodeRawVersions(rawVersions: Array[Byte]): ZIO[Any, Throwable, List[Timestamp]] =
-    ProtobufCodec.decode(Schema[List[Timestamp]])(Chunk.fromArray(rawVersions)) match {
+    codecs.decode[List[Timestamp]](Chunk.fromArray(rawVersions)) match {
       case Left(failure) =>
         ZIO.fail(new Throwable(s"Failed to decode versions: $failure"))
       case Right(versions) =>
@@ -241,4 +243,6 @@ object RocksDbKeyValueStore {
         namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
       } yield RocksDbKeyValueStore(rocksDb, namespaces)
     }
+
+  private lazy val codecs = BinaryCodecs.make[List[Timestamp] :: End]
 }

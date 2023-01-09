@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 John A. De Goes and the ZIO Contributors
+ * Copyright 2021-2023 John A. De Goes and the ZIO Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@
 package zio.flow.runtime.internal
 
 import zio.flow.runtime.IndexedStore.Index
-import zio.flow.runtime.{ExecutorError, metrics}
+import zio.flow.runtime.{ExecutionEnvironment, ExecutorError, metrics}
 import zio.flow.runtime.metrics.{VariableAccess, VariableKind}
 import zio.flow.runtime.{DurableLog, KeyValueStore, Timestamp}
-import zio.flow.{ExecutionEnvironment, RemoteVariableName}
+import zio.flow.RemoteVariableName
 import zio.stm.{TRef, TSet}
 import zio.stream.ZStream
 import zio.{Chunk, IO, UIO, ZIO, ZLayer}
@@ -48,7 +48,7 @@ final case class RemoteVariableKeyValueStore(
       durableLog
         .append(
           Topics.variableChanges(scope.rootScope.flowId),
-          executionEnvironment.serializer.serialize(ScopedRemoteVariableName(name, scope))
+          executionEnvironment.codecs.encode(ScopedRemoteVariableName(name, scope))
         )
         .mapError(ExecutorError.LogError)
         .flatMap { index =>
@@ -90,7 +90,8 @@ final case class RemoteVariableKeyValueStore(
       .mapError(ExecutorError.KeyValueStoreError("getLatestTimestamp", _))
       .flatMap {
         case Some(value) =>
-          ZIO.some((value, scope))
+          ZIO.logTrace(s"Found latest timestamp of $name in scope $scope: $value") *>
+            ZIO.some((value, scope))
         case None =>
           scope.parentScope match {
             case Some(parentScope) =>
