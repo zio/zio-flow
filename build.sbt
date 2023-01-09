@@ -261,7 +261,7 @@ lazy val sendgridJVM = sendgrid.jvm
 lazy val docs = project
   .in(file("zio-flow-docs"))
   .settings(
-    moduleName     := "zio-flow-docs",
+    moduleName := "zio-flow-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     scalacOptions += "-Xlog-implicits",
