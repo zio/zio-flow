@@ -19,9 +19,7 @@ package zio.flow
 import zio.prelude.Assertion._
 import zio.prelude.Newtype
 import zio.schema._
-import zio.{Chunk, Random, ZIO}
-
-import java.nio.charset.StandardCharsets
+import zio.{Random, ZIO}
 
 trait FlowPackageVersionSpecific {
   type RemoteVariableName = RemoteVariableName.Type

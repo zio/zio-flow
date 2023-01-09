@@ -16,7 +16,7 @@
 
 package zio.flow
 
-import zio.schema.{DeriveSchema, Schema, TypeId}
+import zio.schema.{Schema, TypeId}
 
 /** Failure of running an [[Activity]] */
 final case class ActivityError(failure: String, details: Option[Throwable])

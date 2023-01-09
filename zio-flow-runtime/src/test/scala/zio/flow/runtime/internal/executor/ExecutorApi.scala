@@ -21,7 +21,8 @@ import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.runtime._
 import zio.schema.{DynamicValue, Schema}
-import zio.test.{Spec, TestClock, TestEnvironment, assertTrue}
+import zio.test.Assertion.isTrue
+import zio.test.{Spec, TestClock, TestEnvironment, assert, assertTrue}
 
 import java.util.concurrent.TimeUnit
 
@@ -54,7 +55,7 @@ object ExecutorApi extends PersistentExecutorBaseSpec {
                    flow2 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 3L)).as(2).fork
                    r1    <- flow1.await
                    r2    <- flow2.await
-                   _     <- ZFlow.log(r1.toString)
+                   _     <- ZFlow.log(r1.toRemoteString)
                  } yield (r1.toOption, r2.toOption)
           fiber  <- flow.evaluateTestStartAndPoll("wait-poll-early", 0.seconds).fork
           _      <- TestClock.adjust(1.seconds)
@@ -89,12 +90,12 @@ object ExecutorApi extends PersistentExecutorBaseSpec {
           flow = for {
                    flow1 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L)).as(1).fork
                    r1    <- flow1.await
-                   _     <- ZFlow.log(r1.toString)
+                   _     <- ZFlow.log(r1.toRemoteString)
                  } yield ()
           id      = FlowId("delete-running-flow")
           _      <- executor.start(id, flow)
           result <- executor.delete(id).exit
-        } yield assertTrue(result.isFailure)
+        } yield assert(result.isFailure)(isTrue)
       }.provide(
         Configuration.inMemory,
         ZFlowExecutor.defaultInMemoryJson
@@ -106,13 +107,13 @@ object ExecutorApi extends PersistentExecutorBaseSpec {
           flow = for {
                    flow1 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L)).as(1).fork
                    r1    <- flow1.await
-                   _     <- ZFlow.log(r1.toString)
+                   _     <- ZFlow.log(r1.toRemoteString)
                  } yield ()
           id      = FlowId("delete-running-flow")
           _      <- executor.start(id, flow)
           _      <- TestClock.adjust(5.seconds)
           result <- executor.delete(id).exit
-        } yield assertTrue(result.isSuccess)
+        } yield assert(result.isSuccess)(isTrue)
       }.provide(
         Configuration.inMemory,
         ZFlowExecutor.defaultInMemoryJson

@@ -26,6 +26,9 @@ import scala.util.matching.Regex
 
 trait Syntax {
 
+  implicit def remoteSyntax[A](remote: Remote[A]): RemoteSyntax[A] =
+    new RemoteSyntax(remote)
+
   implicit def RemoteVariable[A](remote: Remote[RemoteVariableReference[A]]): RemoteVariableReferenceSyntax[A] =
     new RemoteVariableReferenceSyntax(
       remote

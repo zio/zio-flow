@@ -50,7 +50,7 @@ final case class RemoteVariableKeyValueStore(
           Topics.variableChanges(scope.rootScope.flowId),
           executionEnvironment.codecs.encode(ScopedRemoteVariableName(name, scope))
         )
-        .mapError(ExecutorError.LogError)
+        .mapError(ExecutorError.LogError.apply)
         .flatMap { index =>
           lastIndex.set(index).commit
         }

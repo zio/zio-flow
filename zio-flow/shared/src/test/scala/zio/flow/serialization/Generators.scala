@@ -16,6 +16,7 @@
 
 package zio.flow.serialization
 
+import zio.flow.remoteSyntax
 import zio.flow.Remote.UnboundRemoteFunction
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
@@ -458,7 +459,7 @@ trait Generators {
         (numeric, gen) = pair
       } yield (
         RemoteConversions.StringToNumeric(numeric).asInstanceOf[RemoteConversions[Any, Any]],
-        gen.map(_.toString(numeric.schema))
+        gen.map(_.toRemoteString(numeric.schema))
       ),
       Gen.const(
         (RemoteConversions.StringToDuration.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))

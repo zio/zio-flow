@@ -14,6 +14,6 @@ object RetryLimit {
   final case class NumberOfRetries(count: Int) extends RetryLimit
 
   val config: Config[RetryLimit] =
-    Config.duration("elapsed-time").map(ElapsedTime) orElse
-      Config.int("number-of-retries").map(NumberOfRetries)
+    Config.duration("elapsed-time").map(ElapsedTime.apply) orElse
+      Config.int("number-of-retries").map(NumberOfRetries.apply)
 }

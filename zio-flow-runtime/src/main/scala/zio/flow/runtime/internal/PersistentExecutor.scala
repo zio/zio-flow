@@ -872,7 +872,7 @@ final case class PersistentExecutor(
           watchPosition
         )
         .mapBoth(
-          ExecutorError.LogError,
+          ExecutorError.LogError.apply,
           raw => execEnv.codecs.decode[ScopedRemoteVariableName](raw)
         )
         .collect {
@@ -1571,7 +1571,7 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = cont :: state.stack)
     }
-    private final case object PopContinuation extends StateChange {
+    private case object PopContinuation extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = state.stack.tail)
     }
@@ -1686,7 +1686,7 @@ object PersistentExecutor {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(envStack = value :: state.envStack)
     }
-    private final case object PopEnvironment extends StateChange {
+    private case object PopEnvironment extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(envStack = state.envStack.tail)
     }

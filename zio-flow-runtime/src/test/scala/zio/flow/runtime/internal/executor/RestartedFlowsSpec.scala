@@ -63,7 +63,7 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
           result == TestData("test", 100)
         )
       },
-      testRestartFlowAndLogs("provide(log-|-input) (string)") { break =>
+      testRestartFlowAndLogs[ZNothing, String]("provide(log-|-input) (string)") { break =>
         (for {
           _ <- ZFlow.log("before break")
           _ <- break
@@ -79,7 +79,7 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
           !logs1.contains("abc")
         )
       },
-      testRestartFlowAndLogs("provide(log-|-input) (user-defined)") { break =>
+      testRestartFlowAndLogs[ZNothing, TestData]("provide(log-|-input) (user-defined)") { break =>
         (for {
           _ <- break
           v <- ZFlow.input[TestData]
@@ -157,7 +157,7 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
           logs2.contains("Setting var to 1")
         )
       },
-      testRestartFlowAndLogs("flow recursion-|-flow recursion") { break =>
+      testRestartFlowAndLogs[ZNothing, Int]("flow recursion-|-flow recursion") { break =>
         ZFlow.recurseSimple[Any, ZNothing, Int](0) { case (value, rec) =>
           ZFlow.log(rs"recursion step ${value.toString}") *>
             ZFlow.ifThenElse(value === 5)(

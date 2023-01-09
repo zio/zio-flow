@@ -16,7 +16,7 @@ object Repetition {
   final case class Exponential(base: Duration, factor: Double, max: Duration) extends Repetition
 
   val config: Config[Repetition] =
-    Config.duration("fixed").map(Fixed) orElse
+    Config.duration("fixed").map(Fixed.apply) orElse
       (
         Config.duration("base") ++
           Config.double("factor") ++

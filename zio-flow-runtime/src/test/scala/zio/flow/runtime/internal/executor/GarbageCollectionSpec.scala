@@ -17,7 +17,7 @@
 package zio.flow.runtime.internal.executor
 
 import zio.flow.runtime.internal._
-import zio.flow._
+import zio.flow.{RemoteVariableName, _}
 import zio.test._
 import zio._
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}

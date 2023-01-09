@@ -457,7 +457,7 @@ object Remote {
           "identifier",
           Schema[BindingName],
           get0 = _.identifier,
-          set0 = (a: Unbound[A], v: BindingName) => Unbound(v)
+          set0 = (_: Unbound[A], v: BindingName) => Unbound(v)
         ),
         (identifier: BindingName) => Unbound(identifier)
       )

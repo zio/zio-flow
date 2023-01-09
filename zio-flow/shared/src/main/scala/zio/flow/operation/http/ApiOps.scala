@@ -35,7 +35,7 @@ final class APIOps[Input, Output: API.NotUnit, Id](
           ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output]]
         else {
           val string = new String(bytes.toArray, StandardCharsets.UTF_8)
-          JsonDecoder.decode(self.outputSchema, bytes) match {
+          JsonDecoder.decode(self.outputSchema, string) match {
             case Left(err) =>
               ZIO.fail(HttpFailure.ResponseBodyDecodeFailure(err, string))
             case Right(value) =>
