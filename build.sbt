@@ -261,12 +261,24 @@ lazy val sendgridJVM = sendgrid.jvm
 lazy val docs = project
   .in(file("zio-flow-docs"))
   .settings(
-    publish / skip := true,
-    moduleName     := "zio-flow-docs",
+    moduleName := "zio-flow-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     scalacOptions += "-Xlog-implicits",
-    libraryDependencies ++= Seq("dev.zio" %% "zio" % Version.zio)
+    libraryDependencies ++= Seq("dev.zio" %% "zio" % Version.zio),
+    projectName    := "ZIO Flow",
+    mainModuleName := (zioFlowJVM / moduleName).value,
+    projectStage   := ProjectStage.Development,
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
+      zioFlowJVM,
+      zioFlowRuntime,
+      zioFlowServer,
+      rocksdb,
+      cassandra,
+      dynamodb,
+      twilioJVM,
+      sendgridJVM
+    )
   )
   .dependsOn(zioFlowJVM, twilioJVM, sendgridJVM, zioFlowRuntime, zioFlowTestJVM)
   .enablePlugins(WebsitePlugin)
