@@ -88,6 +88,17 @@ To use AWS DynamoDb as a key-value store or indexed store implementation add the
 libraryDependencies += "dev.zio" %% "zio-flow-dynamodb" % "@VERSION@"
 ```
 
+### Metrics
+The DynamoDb backend does not publish any metrics by default, but you can use `zio-aws`'s built-in metrics aspect to 
+enable AWS operation level metrics:
+
+```scala
+DynamoDb.live @@ zio.aws.core.aspects.callDuration(
+  prefix = "zioflow",
+  boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
+)
+```
+
 ### Database Setup
 
 The DynamoDB module requires two tables for persistence (one for key-value store, one for indexed store).
