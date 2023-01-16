@@ -56,7 +56,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
     QueryBuilder.deleteFrom(keyspace, table)
 
   override def position(topic: String): IO[Throwable, Index] =
-    executeAsync(
+    executeAsync("position")(
       cqlSelect
         .column(valueColumnName)
         .whereColumn(topicColumnName)
@@ -93,7 +93,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
                  .ifNotExists()
                  .build()
              for {
-               posInsertResult <- executeAsync(insertPosition).mapError(Some(_))
+               posInsertResult <- executeAsync("put/insert_position")(insertPosition).mapError(Some(_))
                _               <- ZIO.fail(None).unless(posInsertResult.wasApplied())
              } yield ()
            } else {
@@ -109,7 +109,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
                  .isEqualTo(byteBufferFrom(codecs.encode(currentIndex.toLong)))
                  .build()
              for {
-               posUpdateResult <- executeAsync(updatePosition).mapError(Some(_))
+               posUpdateResult <- executeAsync("put/update_position")(updatePosition).mapError(Some(_))
                _               <- ZIO.fail(None).unless(posUpdateResult.wasApplied())
              } yield ()
            }
@@ -119,7 +119,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
         case Some(_) => false
       })
       .flatMap { nextIndex =>
-        executeAsync(
+        executeAsync("put/insert")(
           cqlInsert
             .value(topicColumnName, literal(topic))
             .value(indexColumnName, literal(nextIndex.toLong))
@@ -136,7 +136,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
     // TODO: extract
     ZStream
       .paginateZIO(
-        executeAsync(
+        executeAsync("scan")(
           cqlSelect
             .column(valueColumnName)
             .whereColumn(topicColumnName)
@@ -175,7 +175,7 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
       .flatten
 
   override def delete(topic: String): IO[Throwable, Unit] =
-    executeAsync(
+    executeAsync("delete")(
       cqlDelete
         .whereColumn(topicColumnName)
         .isEqualTo(literal(topic))
@@ -186,10 +186,13 @@ final class CassandraIndexedStore(session: CqlSession) extends IndexedStore {
         _ => ()
       )
 
-  private def executeAsync(statement: Statement[_]): Task[AsyncResultSet] =
+  private def executeAsync(operationName: String)(statement: Statement[_]): Task[AsyncResultSet] =
     ZIO.fromCompletionStage(
       session.executeAsync(statement)
-    )
+    ) @@ (metrics.cassandraSuccess("indexed-store", operationName) >>> metrics.cassandraFailure(
+      "indexed-store",
+      operationName
+    ) >>> metrics.cassandraLatency("indexed-store", operationName))
 }
 
 object CassandraIndexedStore {

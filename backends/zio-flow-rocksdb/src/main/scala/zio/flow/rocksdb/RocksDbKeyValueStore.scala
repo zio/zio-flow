@@ -19,6 +19,7 @@ package zio.flow.rocksdb
 import org.rocksdb.ColumnFamilyHandle
 import zio.constraintless.TypeList.{::, End}
 import zio.flow.rocksdb.RocksDbKeyValueStore.codecs
+import zio.flow.rocksdb.metrics.MeteredTransactionDB
 import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.codec.BinaryCodecs
@@ -233,7 +234,8 @@ object RocksDbKeyValueStore {
                      options.toTransactionDBOptions,
                      options.toJRocksDbPath
                    )
-        initialNamespaces <- rocksDb.initialHandles
+        meteredRocksDb     = MeteredTransactionDB("key-value-store", rocksDb)
+        initialNamespaces <- meteredRocksDb.initialHandles
         initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
                                val name = new String(handle.getName, StandardCharsets.UTF_8)
                                Promise.make[Throwable, ColumnFamilyHandle].flatMap { promise =>
@@ -241,7 +243,7 @@ object RocksDbKeyValueStore {
                                }
                              }
         namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
-      } yield RocksDbKeyValueStore(rocksDb, namespaces)
+      } yield RocksDbKeyValueStore(meteredRocksDb, namespaces)
     }
 
   private lazy val codecs = BinaryCodecs.make[List[Timestamp] :: End]

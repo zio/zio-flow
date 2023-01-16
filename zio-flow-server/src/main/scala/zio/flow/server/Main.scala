@@ -37,6 +37,7 @@ import zio.flow.server.flows.FlowsApi
 import zio.flow.server.templates.TemplatesApi
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.logging.slf4j.bridge.Slf4jBridge
+import zio.metrics.MetricKeyType.Histogram
 import zio.metrics.connectors.prometheus
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.metrics.jvm.DefaultJvmMetrics
@@ -97,6 +98,9 @@ object Main extends ZIOAppDefault {
       NettyHttpClient.configured(),
       AwsConfig.configured(),
       DynamoDb.live
+    ) @@ zio.aws.core.aspects.callDuration(
+      prefix = "zioflow",
+      boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
     )
 
   private def configured(config: ServerConfig, configSource: Option[java.nio.file.Path]): ZIO[Any, Throwable, Unit] =
