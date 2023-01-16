@@ -4,7 +4,7 @@ import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigValue, ConfigValu
 import zio.Config.Secret
 import zio.flow.server.ServerConfig._
 import zio.metrics.connectors.MetricsConfig
-import zio.{Cause, Chunk, Config, ConfigProvider, Duration, IO, Trace, ZIO}
+import zio.{Cause, Chunk, Config, ConfigProvider, Duration, IO, LogLevel, Trace, ZIO}
 
 import java.nio.file.Path
 import java.time.{LocalDate, LocalDateTime, LocalTime, OffsetDateTime}
@@ -16,7 +16,8 @@ final case class ServerConfig(
   indexedStore: BackendImplementation,
   metrics: MetricsConfig,
   serializationFormat: SerializationFormat,
-  gcPeriod: Duration
+  gcPeriod: Duration,
+  logLevel: LogLevel
 )
 
 object ServerConfig {
@@ -52,6 +53,17 @@ object ServerConfig {
   private val metricsConfig: Config[MetricsConfig] =
     Config.duration("interval").map(MetricsConfig.apply)
 
+  private val logLevelConfig: Config[LogLevel] =
+    Config.string.mapOrFail {
+      case "trace"   => Right(LogLevel.Trace)
+      case "debug"   => Right(LogLevel.Debug)
+      case "info"    => Right(LogLevel.Info)
+      case "warning" => Right(LogLevel.Warning)
+      case "error"   => Right(LogLevel.Error)
+      case "fatal"   => Right(LogLevel.Fatal)
+      case other     => Left(Config.Error.InvalidData(Chunk.empty, s"Unknown log level: $other"))
+    }
+
   val config: Config[ServerConfig] =
     (
       Config.int("port") ++
@@ -59,9 +71,10 @@ object ServerConfig {
         BackendImplementation.config.nested("indexed-store") ++
         metricsConfig.nested("metrics") ++
         SerializationFormat.config.nested("serialization-format") ++
-        Config.duration("gc-period")
-    ).map { case (port, kvStore, ixStore, metrics, ser, gcPeriod) =>
-      ServerConfig(port, kvStore, ixStore, metrics, ser, gcPeriod)
+        Config.duration("gc-period") ++
+        logLevelConfig.nested("log-level").withDefault(LogLevel.Info)
+    ).map { case (port, kvStore, ixStore, metrics, ser, gcPeriod, logLevel) =>
+      ServerConfig(port, kvStore, ixStore, metrics, ser, gcPeriod, logLevel)
     }
 
   private def isString(value: Config[_]): Boolean =

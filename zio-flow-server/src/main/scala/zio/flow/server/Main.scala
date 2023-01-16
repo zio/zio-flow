@@ -137,7 +137,12 @@ object Main extends ZIOAppDefault {
       confPath <- System.env("ZIO_FLOW_SERVER_CONFIG").map(_.map(Paths.get(_)))
       _        <- DefaultServices.currentServices.locallyScopedWith(_.add(ServerConfig.fromTypesafe(confPath)))
       config   <- ZIO.config(ServerConfig.config)
-      _        <- ZIO.logDebug(s"Loaded server configuration $config")
-      _        <- configured(config, confPath)
+      logging = Runtime.removeDefaultLoggers ++ Runtime.addLogger(
+                  ZLogger.default.map(println(_)).filterLogLevel(_ >= config.logLevel)
+                ) ++ Runtime.setUnhandledErrorLogLevel(LogLevel.Error)
+      _ <- logging {
+             ZIO.logDebug(s"Loaded server configuration $config") *>
+               configured(config, confPath)
+           }
     } yield ()
 }
