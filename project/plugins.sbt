@@ -14,7 +14,7 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh"                       % "0.4.3")
 addSbtPlugin("dev.zio"            % "zio-sbt-website"               % "0.3.6")
 addSbtPlugin("org.scoverage"      % "sbt-scoverage"                 % "2.0.6")
 
-libraryDependencies += "org.scalameta" % "scalameta_2.12" % "4.7.1"
+libraryDependencies += "org.scalameta" % "scalameta_2.12" % "4.7.3"
 
 ThisBuild / libraryDependencySchemes ++= Seq(
   "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
