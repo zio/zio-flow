@@ -32,8 +32,6 @@ import zio.stm.TRef
 import zio.test._
 import zio.test.Assertion._
 
-import scala.concurrent.duration.DurationDouble
-
 object RetryLogicSpec extends ZIOSpecDefault {
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("RetryLogic")(

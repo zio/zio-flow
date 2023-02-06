@@ -107,9 +107,7 @@ final case class KeyValueStoreTests[R](name: String, initializeDb: ZIO[R with Sc
                 v2 <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(2L)))
                 v1 <- KeyValueStore.getLatest(namespace, key, Some(Timestamp(1L)))
               } yield assertTrue(
-                v3 == Some(value3),
-                v2 == Some(value2),
-                v1 == None
+                v3.contains(value3), v2.contains(value2), v1.isEmpty
               )
             }
           }

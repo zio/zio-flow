@@ -73,7 +73,7 @@ object DurablePromiseSpec extends ZIOSpecDefault {
           before <- promise.poll(codecs).provideEnvironment(env)
           _      <- promise.succeed(100)(codecs).provideEnvironment(env)
           after  <- promise.poll(codecs).provideEnvironment(env)
-        } yield assertTrue(before == None) && assertTrue(after == Some(Right(100)))
+        } yield assertTrue(before.isEmpty) && assertTrue(after.contains(Right(100)))
       },
       test("Can fail, poll failure") {
         val promise = DurablePromise.make[String, Int](PromiseId("dp-5"))
@@ -83,7 +83,7 @@ object DurablePromiseSpec extends ZIOSpecDefault {
           before <- promise.poll(codecs).provideEnvironment(env)
           _      <- promise.fail("not good")(codecs).provideEnvironment(env)
           after  <- promise.poll(codecs).provideEnvironment(env)
-        } yield assertTrue(before == None) && assertTrue(after == Some(Left("not good")))
+        } yield assertTrue(before.isEmpty) && assertTrue(after.contains(Left("not good")))
       }
     ).provide(
       DurableLog.layer,

@@ -122,7 +122,7 @@ object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
         } yield result
       } { (result, logs1, logs2) =>
         assertTrue(
-          result == Some(Right(10)),
+          result.contains(Right(10)),
           logs1.contains("fiber started"),
           !logs1.contains("fiber finished"),
           !logs2.contains("fiber started"),
