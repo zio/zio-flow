@@ -19,6 +19,7 @@ package zio.flow.rocksdb
 import org.rocksdb.ColumnFamilyHandle
 import zio.constraintless.TypeList._
 import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey}
+import zio.flow.rocksdb.metrics.MeteredTransactionDB
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
 import zio.rocksdb.{Transaction, TransactionDB}
@@ -146,7 +147,8 @@ object RocksDbIndexedStore {
                    options.toTransactionDBOptions,
                    options.toJRocksDbPath
                  )
-      initialNamespaces <- rocksDb.initialHandles
+      meteredRocksDb     = MeteredTransactionDB("indexed-store", rocksDb)
+      initialNamespaces <- meteredRocksDb.initialHandles
       initialPromiseMap <- ZIO.foreach(initialNamespaces) { handle =>
                              val name = new String(handle.getName, StandardCharsets.UTF_8)
                              Promise.make[Throwable, ColumnFamilyHandle].flatMap { promise =>
@@ -154,7 +156,7 @@ object RocksDbIndexedStore {
                              }
                            }
       namespaces <- TMap.make[String, Promise[Throwable, ColumnFamilyHandle]](initialPromiseMap: _*).commit
-    } yield RocksDbIndexedStore(rocksDb, namespaces)
+    } yield RocksDbIndexedStore(meteredRocksDb, namespaces)
 
   def layer: ZLayer[Any, Throwable, IndexedStore] = ZLayer.scoped(make)
 

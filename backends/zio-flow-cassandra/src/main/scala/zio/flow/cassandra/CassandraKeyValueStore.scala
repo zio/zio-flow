@@ -57,7 +57,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
   ): IO[Throwable, Boolean] = {
     val insert = toInsert(namespace, key, timestamp, value)
 
-    executeAsync(insert)
+    executeAsync("put")(insert)
       .mapBoth(
         new IOException(s"Error putting key-value pair for <$namespace> namespace", _),
         _ => true
@@ -98,7 +98,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       .limit(1)
       .build
 
-    executeAsync(query).flatMap { result =>
+    executeAsync("getLatest")(query).flatMap { result =>
       if (result.remaining > 0) {
         val element = result.one
         ZIO.attempt {
@@ -131,7 +131,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     ZStream
       .paginateZIO(
-        executeAsync(query)
+        executeAsync("scanAll")(query)
       )(_.map { result =>
         val pairs =
           ZStream
@@ -171,7 +171,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     ZStream
       .paginateZIO(
-        executeAsync(query)
+        executeAsync("scanAllKeys")(query)
       )(_.map { result =>
         val keys =
           ZStream
@@ -221,7 +221,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
 
     ZStream
       .paginateZIO(
-        executeAsync(query)
+        executeAsync("getAllTimestamps")(query)
       )(_.map { result =>
         val pairs =
           ZStream
@@ -271,7 +271,7 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
                  .in(toDelete.map(t => literal(t.value)): _*)
                  .build()
 
-      _ <- executeAsync(delete)
+      _ <- executeAsync("delete")(delete)
              .mapBoth(
                new IOException(s"Error deleting key-value pair from <$namespace> namespace", _),
                _ => ()
@@ -298,10 +298,13 @@ final class CassandraKeyValueStore(session: CqlSession) extends KeyValueStore {
       )
       .build
 
-  private def executeAsync(statement: Statement[_]): Task[AsyncResultSet] =
+  private def executeAsync(operationName: String)(statement: Statement[_]): Task[AsyncResultSet] =
     ZIO.fromCompletionStage(
       session.executeAsync(statement)
-    )
+    ) @@ (metrics.cassandraSuccess("key-value-store", operationName) >>> metrics.cassandraFailure(
+      "key-value-store",
+      operationName
+    ) >>> metrics.cassandraLatency("key-value-store", operationName))
 }
 
 object CassandraKeyValueStore {

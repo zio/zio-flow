@@ -948,7 +948,11 @@ final case class PersistentExecutor(
                         case FlowStatus.Running =>
                           ZIO.logTrace(state0.current.getClass.getSimpleName) *>
                             step(state0, recordingContext).provideSomeLayer[
-                              VirtualClock with KeyValueStore with RemoteVariableKeyValueStore with ExecutionEnvironment with DurableLog
+                              VirtualClock
+                                with KeyValueStore
+                                with RemoteVariableKeyValueStore
+                                with ExecutionEnvironment
+                                with DurableLog
                             ](
                               ZLayer(recordingContext.remoteContext(scope))
                             )

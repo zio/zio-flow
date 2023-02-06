@@ -37,6 +37,7 @@ import zio.flow.server.flows.FlowsApi
 import zio.flow.server.templates.TemplatesApi
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.logging.slf4j.bridge.Slf4jBridge
+import zio.metrics.MetricKeyType.Histogram
 import zio.metrics.connectors.prometheus
 import zio.metrics.connectors.prometheus.PrometheusPublisher
 import zio.metrics.jvm.DefaultJvmMetrics
@@ -97,6 +98,9 @@ object Main extends ZIOAppDefault {
       NettyHttpClient.configured(),
       AwsConfig.configured(),
       DynamoDb.live
+    ) @@ zio.aws.core.aspects.callDuration(
+      prefix = "zioflow",
+      boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
     )
 
   private def configured(config: ServerConfig, configSource: Option[java.nio.file.Path]): ZIO[Any, Throwable, Unit] =
@@ -137,7 +141,12 @@ object Main extends ZIOAppDefault {
       confPath <- System.env("ZIO_FLOW_SERVER_CONFIG").map(_.map(Paths.get(_)))
       _        <- DefaultServices.currentServices.locallyScopedWith(_.add(ServerConfig.fromTypesafe(confPath)))
       config   <- ZIO.config(ServerConfig.config)
-      _        <- ZIO.logDebug(s"Loaded server configuration $config")
-      _        <- configured(config, confPath)
+      logging = Runtime.removeDefaultLoggers ++ Runtime.addLogger(
+                  ZLogger.default.map(println(_)).filterLogLevel(_ >= config.logLevel)
+                ) ++ Runtime.setUnhandledErrorLogLevel(LogLevel.Error)
+      _ <- logging {
+             ZIO.logDebug(s"Loaded server configuration $config") *>
+               configured(config, confPath)
+           }
     } yield ()
 }
