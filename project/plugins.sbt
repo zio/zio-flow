@@ -11,7 +11,7 @@ addSbtPlugin("org.scala-native"   % "sbt-scala-native"              % "0.4.9")
 addSbtPlugin("org.scalameta"      % "sbt-scalafmt"                  % "2.5.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jcstress"                  % "0.2.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh"                       % "0.4.3")
-addSbtPlugin("dev.zio"            % "zio-sbt-website"               % "0.3.10")
+addSbtPlugin("dev.zio"            % "zio-sbt-website"               % "0.3.6")
 addSbtPlugin("org.scoverage"      % "sbt-scoverage"                 % "2.0.6")
 
 libraryDependencies += "org.scalameta" % "scalameta_2.12" % "4.7.1"
