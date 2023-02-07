@@ -18,6 +18,7 @@ package zio.flow.remote
 
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow._
+import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.test.{Spec, TestEnvironment, TestResult}
 import zio.{ZIO, ZLayer}
 

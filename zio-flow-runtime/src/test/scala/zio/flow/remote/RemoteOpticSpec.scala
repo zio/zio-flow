@@ -3,6 +3,7 @@ package zio.flow.remote
 import zio._
 import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
+import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
 import zio.schema._
 import zio.test._
 
