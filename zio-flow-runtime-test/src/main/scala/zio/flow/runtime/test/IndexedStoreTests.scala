@@ -100,7 +100,8 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             _             <- indexedStore.delete("TopicToBeDeleted")
             scannedChunk2 <- indexedStore.scan("TopicToBeDeleted", Index(1L), Index(10L)).runCollect
           } yield assertTrue(
-            scannedChunk1.size == 10, scannedChunk2.isEmpty
+            scannedChunk1.size == 10,
+            scannedChunk2.isEmpty
           )
         }
       }
