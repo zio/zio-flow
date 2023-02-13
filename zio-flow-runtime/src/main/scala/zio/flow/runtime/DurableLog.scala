@@ -63,7 +63,7 @@ object DurableLog {
             .mapError(DurableLogError.IndexedStoreError("put", _))
             .flatMap { position =>
               hub.publish(value -> position) *>
-                ZIO.succeedNow(position)
+                ZIO.succeed(position)
             }
         }
       }
