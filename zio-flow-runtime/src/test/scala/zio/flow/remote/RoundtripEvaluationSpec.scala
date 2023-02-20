@@ -20,8 +20,7 @@ import zio.constraintless.TypeList._
 import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.serialization.Generators
-import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
-import zio.flow.serialization.ZFlowSerializationSpec.{genExecutingFlow, genSmallChronoUnit}
+import zio.flow.remote.RemoteSpec.TestCaseClass
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodecs, JsonCodec, ProtobufCodec}
 import zio.test.{Gen, Sized, Spec, TestConfig, TestEnvironment, TestResult, ZIOSpecDefault, assertTrue, check}
@@ -29,7 +28,7 @@ import zio.{Scope, ZIO, ZLayer}
 
 import scala.util.{Failure, Success, Try}
 
-class RoundtripEvaluationSpec extends ZIOSpecDefault {
+class RoundtripEvaluationSpec extends ZIOSpecDefault with Generators {
 
   private def jsonCodecs: BinaryCodecs[Remote[Any] :: End] = {
     import JsonCodec.schemaBasedBinaryCodec

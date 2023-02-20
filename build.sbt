@@ -90,8 +90,8 @@ lazy val zioFlowJVM = zioFlow.jvm
 lazy val zioFlowRuntime = project
   .in(file("zio-flow-runtime"))
   .dependsOn(
-    zioFlowJVM % "compile->compile;test->test",
-    zioFlowTestJVM
+    zioFlowJVM,
+    zioFlowTestJVM % "test->compile",
   )
   .settings(stdSettings("zio-flow-runtime"))
   .settings(dottySettings)
@@ -111,8 +111,8 @@ lazy val zioFlowServer = project
     dynamodb,
     cassandra
   )
-  .settings(dottySettings)
   .settings(stdSettings("zio-flow-server"))
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "io.d11"      %% "zhttp"                    % Version.zioHttp,
@@ -136,8 +136,9 @@ lazy val zioFlowTest = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-test" % Version.zio
-    )
+    ) ++ commonTestDependencies.map(_ % Test)
   )
+  .settings(testFrameworks += zioTest)
   .dependsOn(zioFlow)
 
 lazy val zioFlowTestJS  = zioFlowTest.js

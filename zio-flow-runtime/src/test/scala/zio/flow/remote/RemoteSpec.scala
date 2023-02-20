@@ -21,8 +21,7 @@ import zio.{ZIO, ZLayer}
 import zio.flow._
 import zio.flow.remote.numeric._
 import zio.flow.runtime.internal.InMemoryRemoteContext
-import zio.flow.serialization.RemoteSerializationSpec.TestCaseClass
-import zio.schema.{DynamicValue, Schema, StandardType}
+import zio.schema.{DeriveSchema, DynamicValue, Schema, StandardType}
 import zio.test.Assertion._
 import zio.test._
 
@@ -252,4 +251,16 @@ object RemoteSpec extends RemoteSpecBase {
         }
       )
     )
+
+  case class TestCaseClass(a: String, b: Int)
+
+  object TestCaseClass {
+    implicit val schema: Schema[TestCaseClass] = DeriveSchema.gen
+
+    val gen: Gen[Sized, TestCaseClass] =
+      for {
+        a <- Gen.string
+        b <- Gen.int
+      } yield TestCaseClass(a, b)
+  }
 }
