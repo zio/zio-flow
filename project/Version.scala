@@ -15,7 +15,7 @@ object Version {
   val rocksDbJni           = "7.9.2"
   val testContainers       = "0.40.12"
   val zioHttp              = "2.0.0-RC11"
-  val zioLogging           = "2.1.9"
+  val zioLogging           = "2.1.10"
   val zioMetricsConnectors = "2.0.5"
   val zioConfig            = "3.0.7"
   val config               = "1.4.2"
