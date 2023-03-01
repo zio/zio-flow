@@ -6,7 +6,7 @@ object Version {
 
   val zio                  = "2.0.9"
   val zioNio               = "2.0.1"
-  val zioAws               = "5.20.7.1"
+  val zioAws               = "5.20.7.2"
   val zioPrelude           = "1.0.0-RC16"
   val zioRocksDb           = "0.4.2"
   val zioSchema            = "0.4.8"
