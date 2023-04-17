@@ -163,6 +163,79 @@ object ExecutorApi extends PersistentExecutorBaseSpec {
       }.provide(
         Configuration.inMemory,
         ZFlowExecutor.defaultInMemoryJson
+      ),
+      test("get value from running flow") {
+        for {
+          executor <- ZIO.service[ZFlowExecutor]
+          flow = for {
+                   v <- ZFlow.newVar("testvar", 11)
+                   _ <- v.update(_ + 1)
+                   _ <- ZFlow.sleep(2.seconds)
+                   r <- v.updateAndGet(_ + 1)
+                 } yield r
+          id           = FlowId("get-var-1")
+          _           <- executor.start(id, flow)
+          _           <- TestClock.adjust(1.second)
+          result      <- executor.getVariable(id, RemoteVariableName("testvar"))
+          _           <- TestClock.adjust(2.second)
+          finalResult <- executor.poll(id)
+        } yield assertTrue(
+          result == Some(DynamicValue.fromSchemaAndValue(Schema[Int], 12)),
+          finalResult == Some(Right(DynamicValue.fromSchemaAndValue(Schema[Int], 13)))
+        )
+      }.provide(
+        Configuration.inMemory,
+        ZFlowExecutor.defaultInMemoryJson
+      ),
+      test("get value from stopped flow") {
+        for {
+          executor <- ZIO.service[ZFlowExecutor]
+          flow = for {
+                   v <- ZFlow.newVar("testvar", 11)
+                   _ <- v.update(_ + 1)
+                   _ <- ZFlow.sleep(2.seconds)
+                   r <- v.updateAndGet(_ + 1)
+                 } yield r
+          id           = FlowId("get-var-2")
+          _           <- executor.start(id, flow)
+          _           <- TestClock.adjust(5.second)
+          finalResult <- executor.poll(id)
+          result      <- executor.getVariable(id, RemoteVariableName("testvar"))
+        } yield assertTrue(
+          result == Some(DynamicValue.fromSchemaAndValue(Schema[Int], 13)),
+          finalResult == Some(Right(DynamicValue.fromSchemaAndValue(Schema[Int], 13)))
+        )
+      }.provide(
+        Configuration.inMemory,
+        ZFlowExecutor.defaultInMemoryJson
+      ),
+      test("set value for running flow, unblocking suspended") {
+        for {
+          executor <- ZIO.service[ZFlowExecutor]
+          flow = for {
+                   v <- ZFlow.newVar("testvar", 11)
+                   _ <- ZFlow.log("waiting")
+                   _ <- v.waitUntil(_ === 100)
+                   _ <- ZFlow.log("unblocked")
+                   r <- v.updateAndGet(_ + 1)
+                 } yield r
+          id       = FlowId("get-var-3")
+          _       <- executor.start(id, flow)
+          _       <- TestClock.adjust(1.second)
+          initial <- executor.getVariable(id, RemoteVariableName("testvar"))
+          _ <-
+            executor.setVariable(id, RemoteVariableName("testvar"), DynamicValue.fromSchemaAndValue(Schema[Int], 100))
+          _           <- TestClock.adjust(1.second)
+          _           <- TestClock.adjust(1.second)
+          _           <- TestClock.adjust(1.second)
+          finalResult <- executor.poll(id)
+        } yield assertTrue(
+          initial == Some(DynamicValue.fromSchemaAndValue(Schema[Int], 11)),
+          finalResult == Some(Right(DynamicValue.fromSchemaAndValue(Schema[Int], 101)))
+        )
+      }.provide(
+        Configuration.inMemory,
+        ZFlowExecutor.defaultInMemoryJson
       )
     )
 }
