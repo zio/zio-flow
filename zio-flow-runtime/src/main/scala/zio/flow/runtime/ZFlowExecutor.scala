@@ -140,7 +140,7 @@ object ZFlowExecutor {
 
   val default: ZLayer[
     KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration,
-    Nothing,
+    Throwable,
     ZFlowExecutor
   ] =
     ZLayer
@@ -151,19 +151,19 @@ object ZFlowExecutor {
         PersistentExecutor.make()
       )
 
-  val defaultJson: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
+  val defaultJson: ZLayer[KeyValueStore with IndexedStore with Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.json),
       default
     )
 
-  val defaultProtobuf: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
+  val defaultProtobuf: ZLayer[KeyValueStore with IndexedStore with Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.protobuf),
       default
     )
 
-  val defaultInMemoryJson: ZLayer[Configuration, Nothing, ZFlowExecutor] =
+  val defaultInMemoryJson: ZLayer[Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
@@ -171,7 +171,7 @@ object ZFlowExecutor {
       default
     )
 
-  val defaultInMemoryProtobuf: ZLayer[Configuration, Nothing, ZFlowExecutor] =
+  val defaultInMemoryProtobuf: ZLayer[Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,

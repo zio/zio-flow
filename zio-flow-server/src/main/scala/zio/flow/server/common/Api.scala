@@ -16,8 +16,8 @@
 
 package zio.flow.server.common
 
-import zhttp.http._
 import zio.ZIO
+import zio.http._
 import zio.json.{JsonDecoder, JsonEncoder}
 import zio.schema.Schema
 import zio.schema.codec.JsonCodec
@@ -28,7 +28,7 @@ trait Api {
   protected def jsonCodecResponse[T: JsonEncoder](body: T, status: Status = Status.Ok): Response =
     Response(
       body = Body.fromCharSequence(implicitly[JsonEncoder[T]].encodeJson(body, None)),
-      headers = Headers(HeaderNames.contentType, HeaderValues.applicationJson),
+      headers = Headers(Header.ContentType(MediaType.application.json)),
       status = status
     )
 

@@ -16,8 +16,8 @@
 
 package zio.flow.runtime
 
-import zhttp.http.Status
 import zio.flow.operation.http.HttpFailure
+import zio.http.Status
 import zio.{Duration, ZIOAspect}
 import zio.metrics.MetricKeyType.{Counter, Gauge, Histogram}
 import zio.metrics._

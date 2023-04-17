@@ -1,6 +1,5 @@
 package zio.flow.runtime.internal
 
-import zhttp.http.Status
 import zio.Schedule.forever
 import zio.flow.ActivityError
 import zio.flow.operation.http.{HttpFailure, HttpMethod}
@@ -13,6 +12,7 @@ import zio.flow.runtime.internal.HttpRetryLogic.{
   retryLimitToSchedule
 }
 import zio.flow.runtime.metrics
+import zio.http.Status
 
 class HttpRetryLogic(policy: HttpOperationPolicy, semaphore: Semaphore, circuitBreaker: CircuitBreaker) {
   private val schedule =

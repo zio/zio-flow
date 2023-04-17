@@ -16,7 +16,6 @@
 
 package zio.flow.operation.http
 
-import zhttp.http.{Headers => _, Path => _}
 import zio.schema.{Schema, TypeId}
 import zio.flow.serialization.FlowSchemaAst
 

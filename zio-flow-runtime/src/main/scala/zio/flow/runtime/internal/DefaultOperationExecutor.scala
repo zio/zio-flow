@@ -16,16 +16,16 @@
 
 package zio.flow.runtime.internal
 
-import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.flow.Operation.{ContraMap, Http, Map}
 import zio.flow.runtime.operation.http.{HttpOperationPolicies, HttpOperationPolicy}
 import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
+import zio.http.Client
 import zio.schema.Schema
 import zio.stm.{TMap, TPromise}
 import zio.{ZEnvironment, ZIO, ZLayer}
 
 final case class DefaultOperationExecutor(
-  env: ZEnvironment[EventLoopGroup with ChannelFactory],
+  env: ZEnvironment[Client],
   policies: HttpOperationPolicies,
   perHostRetryLogic: TMap[String, TPromise[Nothing, HttpRetryLogic]]
 ) extends OperationExecutor {
@@ -88,12 +88,13 @@ final case class DefaultOperationExecutor(
 }
 
 object DefaultOperationExecutor {
-  val layer: ZLayer[HttpOperationPolicies, Nothing, OperationExecutor] =
-    ZLayer.scoped {
-      for {
-        env         <- (EventLoopGroup.auto(0) ++ ChannelFactory.auto).build
-        policies    <- ZIO.service[HttpOperationPolicies]
-        retryLogics <- TMap.empty[String, TPromise[Nothing, HttpRetryLogic]].commit
-      } yield DefaultOperationExecutor(env, policies, retryLogics)
-    }
+  val layer: ZLayer[HttpOperationPolicies, Throwable, OperationExecutor] =
+    (ZLayer.service[HttpOperationPolicies] ++ Client.default) >>>
+      ZLayer.scoped {
+        for {
+          client      <- ZIO.service[Client]
+          policies    <- ZIO.service[HttpOperationPolicies]
+          retryLogics <- TMap.empty[String, TPromise[Nothing, HttpRetryLogic]].commit
+        } yield DefaultOperationExecutor(ZEnvironment(client), policies, retryLogics)
+      }
 }

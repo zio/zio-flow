@@ -16,11 +16,13 @@
 
 package zio.flow.server
 
+import zio.config.typesafe.TypesafeConfigProvider
 import zio.flow.cassandra.CassandraConfig
 import zio.flow.rocksdb.RocksDbConfig
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
 import zio.flow.{ConfigKey, Configuration}
+import zio.http.Server
 import zio.test.{Spec, TestEnvironment, ZIOSpecDefault, assertTrue}
 import zio.{DefaultServices, Scope, ZIO, durationInt}
 
@@ -33,7 +35,9 @@ object ServerConfigSpec extends ZIOSpecDefault {
       test("example HOCON config is loadable") {
         val hocon =
           """
-            |port = 8888
+            |"zio.http.server" {
+            |  binding-port = 8888
+            |}
             |key-value-store = "rocksdb"
             |indexed-store = "cassandra"
             |metrics {
@@ -148,10 +152,11 @@ object ServerConfigSpec extends ZIOSpecDefault {
             |""".stripMargin
 
         for {
-          _ <- DefaultServices.currentServices.locallyScopedWith(_.add(ServerConfig.fromTypesafeString(hocon)))
+          _ <- DefaultServices.currentServices.locallyScopedWith(_.add(TypesafeConfigProvider.fromHoconString(hocon)))
           result <- {
                       for {
                         serverConfig         <- ZIO.config(ServerConfig.config)
+                        httpServerConfig     <- ZIO.config(Server.Config.config.nested("zio.http.server"))
                         rocksDbKvStoreConfig <- ZIO.config(RocksDbConfig.config.nested("rocksdb-key-value-store"))
                         rocksDbIxStoreConfig <- ZIO.config(RocksDbConfig.config.nested("rocksdb-indexed-store"))
                         cassandraDbKvStoreConfig <-
@@ -165,7 +170,7 @@ object ServerConfigSpec extends ZIOSpecDefault {
                         serverConfig.serializationFormat == SerializationFormat.Json,
                         serverConfig.indexedStore == BackendImplementation.Cassandra,
                         serverConfig.keyValueStore == BackendImplementation.RocksDb,
-                        serverConfig.port == 8888,
+                        httpServerConfig.address.getPort == 8888,
                         serverConfig.metrics.interval == 10.seconds,
                         serverConfig.gcPeriod == 1.minute,
                         rocksDbKvStoreConfig.path == Paths.get("/tmp/zio-flow.db"),

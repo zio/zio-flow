@@ -68,13 +68,13 @@ lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"                   % Version.zio,
+      "dev.zio" %% "zio-http"              % Version.zioHttp,
       "dev.zio" %% "zio-prelude"           % Version.zioPrelude,
       "dev.zio" %% "zio-schema"            % Version.zioSchema,
       "dev.zio" %% "zio-schema-derivation" % Version.zioSchema,
       "dev.zio" %% "zio-schema-optics"     % Version.zioSchema,
       "dev.zio" %% "zio-schema-json"       % Version.zioSchema,
-      "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema,
-      "io.d11"  %% "zhttp"                 % Version.zioHttp // TODO: remove
+      "dev.zio" %% "zio-schema-protobuf"   % Version.zioSchema
     ) ++
       commonTestDependencies.map(_ % Test)
   )
@@ -95,7 +95,7 @@ lazy val zioFlowRuntime = project
   .settings(stdSettings("zio-flow-runtime"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11" %% "zhttp" % Version.zioHttp
+      "dev.zio" %% "zio-http" % Version.zioHttp
     ) ++ commonTestDependencies.map(_ % Test)
   )
   .settings(fork := true)
@@ -112,7 +112,7 @@ lazy val zioFlowServer = project
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= Seq(
-      "io.d11"      %% "zhttp"                    % Version.zioHttp,
+      "dev.zio"     %% "zio-http"                 % Version.zioHttp,
       "dev.zio"     %% "zio-metrics-connectors"   % Version.zioMetricsConnectors,
       "com.typesafe" % "config"                   % Version.config,
       "dev.zio"     %% "zio-config"               % Version.zioConfig,

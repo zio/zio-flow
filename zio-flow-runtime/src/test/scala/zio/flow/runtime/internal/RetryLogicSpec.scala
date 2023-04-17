@@ -16,7 +16,6 @@
 
 package zio.flow.runtime.internal
 
-import zhttp.http.Status
 import zio._
 import zio.flow.ActivityError
 import zio.flow.operation.http.{HttpFailure, HttpMethod}
@@ -28,6 +27,7 @@ import zio.flow.runtime.operation.http.{
   RetryLimit,
   RetryPolicy
 }
+import zio.http.Status
 import zio.stm.TRef
 import zio.test._
 import zio.test.Assertion._
