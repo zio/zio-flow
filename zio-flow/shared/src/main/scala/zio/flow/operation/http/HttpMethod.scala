@@ -20,13 +20,13 @@ import zio.schema.DeriveSchema
 import zio.schema.Schema
 
 sealed trait HttpMethod extends Product with Serializable { self =>
-  def toZioHttpMethod: zhttp.http.Method =
+  def toZioHttpMethod: zio.http.Method =
     self match {
-      case HttpMethod.GET    => zhttp.http.Method.GET
-      case HttpMethod.POST   => zhttp.http.Method.POST
-      case HttpMethod.PATCH  => zhttp.http.Method.PATCH
-      case HttpMethod.PUT    => zhttp.http.Method.PUT
-      case HttpMethod.DELETE => zhttp.http.Method.DELETE
+      case HttpMethod.GET    => zio.http.Method.GET
+      case HttpMethod.POST   => zio.http.Method.POST
+      case HttpMethod.PATCH  => zio.http.Method.PATCH
+      case HttpMethod.PUT    => zio.http.Method.PUT
+      case HttpMethod.DELETE => zio.http.Method.DELETE
     }
 }
 

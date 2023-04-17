@@ -16,13 +16,12 @@
 
 package zio.flow.server.templates
 
-import zhttp.http._
-import zhttp.service.{Client, Server}
 import zio.flow.ZFlow
 import zio.flow.runtime.KeyValueStore
 import zio.flow.server.common.ApiSpecBase
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId, ZFlowTemplates}
 import zio.flow.server.templates.service.KVStoreBasedTemplates
+import zio.http._
 import zio.schema.Schema
 import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.test.{TestAspect, assertTrue}
@@ -39,15 +38,12 @@ object TemplatesApiSpec extends ApiSpecBase {
         for {
           _ <- reset()
 
-          client       <- ZIO.service[Client[Any]]
-          clientConfig <- ZIO.service[Client.Config]
-          baseUrl      <- ZIO.service[URL]
+          client  <- ZIO.service[Client]
+          baseUrl <- ZIO.service[URL]
           response <- client.request(
-                        Request(
-                          method = Method.GET,
-                          url = baseUrl.setPath("/templates")
-                        ),
-                        clientConfig
+                        Request.get(
+                          url = baseUrl.withPath("/templates")
+                        )
                       )
           body <- response.body.asString
         } yield assertTrue(body == """{"entries":[]}""")
@@ -56,37 +52,30 @@ object TemplatesApiSpec extends ApiSpecBase {
         for {
           _ <- reset()
 
-          client       <- ZIO.service[Client[Any]]
-          clientConfig <- ZIO.service[Client.Config]
-          baseUrl      <- ZIO.service[URL]
+          client  <- ZIO.service[Client]
+          baseUrl <- ZIO.service[URL]
 
           putResponse1 <- client.request(
-                            Request(
-                              method = Method.PUT,
-                              url = baseUrl.setPath(s"/templates/t1"),
+                            Request.put(
+                              url = baseUrl.withPath(s"/templates/t1"),
                               body = Body.fromChunk(
                                 JsonEncoder.encode(Schema[ZFlowTemplate], template1)
                               )
-                            ),
-                            clientConfig
+                            )
                           )
           putResponse2 <- client.request(
-                            Request(
-                              method = Method.PUT,
-                              url = baseUrl.setPath(s"/templates/t2"),
+                            Request.put(
+                              url = baseUrl.withPath(s"/templates/t2"),
                               body = Body.fromChunk(
                                 JsonEncoder.encode(Schema[ZFlowTemplate], template2)
                               )
-                            ),
-                            clientConfig
+                            )
                           )
 
           response <- client.request(
-                        Request(
-                          method = Method.GET,
-                          url = baseUrl.setPath("/templates")
-                        ),
-                        clientConfig
+                        Request.get(
+                          url = baseUrl.withPath("/templates")
+                        )
                       )
           body <- response.body.asString
           decoded <- ZIO.fromEither(
@@ -104,53 +93,42 @@ object TemplatesApiSpec extends ApiSpecBase {
         for {
           _ <- reset()
 
-          client       <- ZIO.service[Client[Any]]
-          clientConfig <- ZIO.service[Client.Config]
-          baseUrl      <- ZIO.service[URL]
+          client  <- ZIO.service[Client]
+          baseUrl <- ZIO.service[URL]
 
           putResponse1 <- client.request(
-                            Request(
-                              method = Method.PUT,
-                              url = baseUrl.setPath(s"/templates/t1"),
+                            Request.put(
+                              url = baseUrl.withPath(s"/templates/t1"),
                               body = Body.fromChunk(
                                 JsonEncoder.encode(Schema[ZFlowTemplate], template1)
                               )
-                            ),
-                            clientConfig
+                            )
                           )
           putResponse2 <- client.request(
-                            Request(
-                              method = Method.PUT,
-                              url = baseUrl.setPath(s"/templates/t2"),
+                            Request.put(
+                              url = baseUrl.withPath(s"/templates/t2"),
                               body = Body.fromChunk(
                                 JsonEncoder.encode(Schema[ZFlowTemplate], template2)
                               )
-                            ),
-                            clientConfig
+                            )
                           )
 
           deleteResponse <- client.request(
-                              Request(
-                                method = Method.DELETE,
-                                url = baseUrl.setPath(s"/templates/t2")
-                              ),
-                              clientConfig
+                              Request.delete(
+                                url = baseUrl.withPath(s"/templates/t2")
+                              )
                             )
 
           getResponse1 <- client.request(
-                            Request(
-                              method = Method.GET,
-                              url = baseUrl.setPath("/templates/t1")
-                            ),
-                            clientConfig
+                            Request.get(
+                              url = baseUrl.withPath("/templates/t1")
+                            )
                           )
 
           getResponse2 <- client.request(
-                            Request(
-                              method = Method.GET,
-                              url = baseUrl.setPath("/templates/t2")
-                            ),
-                            clientConfig
+                            Request.get(
+                              url = baseUrl.withPath("/templates/t2")
+                            )
                           )
 
           body <- getResponse1.body.asString
@@ -166,13 +144,13 @@ object TemplatesApiSpec extends ApiSpecBase {
           decoded == template1
         )
       }
-    ).provideSomeShared[Client[Any] with Client.Config](
+    ).provideSomeShared[Client](
       KeyValueStore.inMemory,
       KVStoreBasedTemplates.layer,
       TemplatesApi.layer,
       server,
       ZLayer(
-        ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
+        ZIO.fromEither(URL.decode(s"http://localhost:$port"))
       )
     ) @@ TestAspect.sequential @@ TestAspect.flaky @@ TestAspect.withLiveClock
 
@@ -186,7 +164,7 @@ object TemplatesApiSpec extends ApiSpecBase {
   private val server: ZLayer[TemplatesApi, Throwable, Unit] =
     ZLayer.scoped {
       ZIO.service[TemplatesApi].flatMap { api =>
-        Server.start(port, api.endpoint).forkScoped.unit
+        Server.serve(api.endpoint).provide(Server.defaultWithPort(port)).forkScoped.unit
       }
     }
 

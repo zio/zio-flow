@@ -16,8 +16,8 @@
 
 package zio.flow.operation.http
 
-import zhttp.service.{ChannelFactory, EventLoopGroup}
 import zio.ZIO
+import zio.http.Client
 import zio.schema.Schema
 import zio.schema.codec.JsonCodec.JsonDecoder
 
@@ -26,13 +26,13 @@ import java.nio.charset.StandardCharsets
 final class APIOps[Input, Output: API.NotUnit, Id](
   val self: API.WithId[Input, Output, Id]
 ) {
-  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output] =
+  def call(host: String)(params: Input): ZIO[Client, HttpFailure, Output] =
     ClientInterpreter
       .interpret(host)(self)(params)
       .flatMap(_.body.asChunk.mapError(HttpFailure.FailedToReceiveResponseBody))
       .flatMap { bytes =>
         if (self.outputSchema == Schema[Unit])
-          ZIO.unit.asInstanceOf[ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Output]]
+          ZIO.unit.asInstanceOf[ZIO[Client, HttpFailure, Output]]
         else {
           val string = new String(bytes.toArray, StandardCharsets.UTF_8)
           JsonDecoder.decode(self.outputSchema, string) match {
@@ -46,6 +46,6 @@ final class APIOps[Input, Output: API.NotUnit, Id](
 }
 
 final class APIOpsUnit[Input, Id](val self: API.WithId[Input, Unit, Id]) {
-  def call(host: String)(params: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Unit] =
+  def call(host: String)(params: Input): ZIO[Client, HttpFailure, Unit] =
     ClientInterpreter.interpret(host)(self)(params).unit
 }

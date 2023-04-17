@@ -16,23 +16,22 @@
 
 package zio.flow.server.templates
 
-import zhttp.http.Method._
-import zhttp.http._
 import zio._
 import zio.flow.server.common.{Api, ErrorResponse}
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplates}
 import zio.flow.server.templates.service.Templates
+import zio.http._
 
 final case class TemplatesApi(templates: Templates) extends Api {
 
-  val endpoint: HttpApp[Any, Nothing] =
+  val endpoint: App[Any] =
     Http
       .collectZIO[Request] {
-        case GET -> !! / "templates" =>
+        case Method.GET -> !! / "templates" =>
           templates.all.runCollect
             .map(flowTemplates => jsonResponse(ZFlowTemplates(flowTemplates)))
 
-        case GET -> !! / "templates" / templateId =>
+        case Method.GET -> !! / "templates" / templateId =>
           templates
             .get(TemplateId(templateId))
             .map { flow =>
@@ -43,22 +42,22 @@ final case class TemplatesApi(templates: Templates) extends Api {
               }
             }
 
-        case request @ PUT -> !! / "templates" / templateId =>
+        case request @ Method.PUT -> !! / "templates" / templateId =>
           for {
             flowTemplate <- jsonBody[ZFlowTemplate](request)
             _            <- templates.put(TemplateId(templateId), flowTemplate)
           } yield Response.ok
 
-        case DELETE -> !! / "templates" / templateId =>
+        case Method.DELETE -> !! / "templates" / templateId =>
           templates.delete(TemplateId(templateId)).as(Response.status(Status.NoContent))
 
       }
-      .catchAll { error =>
-        Http.response(jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError))
+      .mapError { error =>
+        jsonResponse(ErrorResponse(error.getMessage), Status.InternalServerError)
       }
 }
 object TemplatesApi {
-  def endpoint: ZIO[TemplatesApi, Nothing, HttpApp[Any, Nothing]] = ZIO.serviceWith(_.endpoint)
+  def endpoint: ZIO[TemplatesApi, Nothing, App[Any]] = ZIO.serviceWith(_.endpoint)
 
   val layer: ZLayer[Templates, Nothing, TemplatesApi] =
     ZLayer {

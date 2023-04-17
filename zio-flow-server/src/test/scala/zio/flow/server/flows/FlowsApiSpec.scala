@@ -16,8 +16,6 @@
 
 package zio.flow.server.flows
 
-import zhttp.http._
-import zhttp.service.{Client, Server}
 import zio.flow.runtime.internal.PersistentExecutor
 import zio.flow.runtime._
 import zio.flow.serialization.FlowSchemaAst
@@ -26,6 +24,7 @@ import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, 
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate}
 import zio.flow.server.templates.service.{KVStoreBasedTemplates, Templates}
 import zio.flow.{FlowId, PromiseId, RemoteVariableName, ZFlow}
+import zio.http.{Body, Client, Request, Response, Server, Status, URL}
 import zio.json.ast.Json
 import zio.schema.codec.JsonCodec
 import zio.schema.codec.JsonCodec.JsonDecoder
@@ -38,36 +37,30 @@ object FlowsApiSpec extends ApiSpecBase {
   private val flow1 = ZFlow.succeed(11)
   private val flow2 = ZFlow.input[Int]
 
-  override def spec: Spec[Client[Any] with Client.Config with TestEnvironment with Scope, Any] =
+  override def spec: Spec[Client with TestEnvironment with Scope, Any] =
     suite("FlowsApi")(
       suite("start and poll")(
         test("send flow without parameter and wait for result") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
 
             pollResponse1 <-
-              client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
-              )
+              client.request(Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")))
             pollResult1 <- decodePollResponse(pollResponse1)
 
             _ <- addPollHandler(
@@ -77,15 +70,13 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse2 <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult2 <- decodePollResponse(pollResponse2)
 
             pollResponse3 <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult3 <- decodePollResponse(pollResponse3)
           } yield assertTrue(
@@ -100,22 +91,19 @@ object FlowsApiSpec extends ApiSpecBase {
         },
         test("send flow without parameter and wait for failed result") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -127,8 +115,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult <- decodePollResponse(pollResponse)
           } yield assertTrue(
@@ -141,22 +128,19 @@ object FlowsApiSpec extends ApiSpecBase {
         },
         test("send flow without parameter and wait for crashed result") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -168,8 +152,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult <- decodePollResponse(pollResponse)
           } yield assertTrue(
@@ -183,14 +166,12 @@ object FlowsApiSpec extends ApiSpecBase {
         test("send flow with parameter and wait for successful result") {
           for {
             _             <- reset()
-            client        <- ZIO.service[Client[Any]]
-            clientConfig  <- ZIO.service[Client.Config]
+            client        <- ZIO.service[Client]
             baseUrl       <- ZIO.service[URL]
             parameterJson <- ZIO.fromEither(JsonCodec.jsonEncoder(Schema[Int]).toJsonAST(11))
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.FlowWithParameter(
@@ -201,8 +182,7 @@ object FlowsApiSpec extends ApiSpecBase {
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -214,8 +194,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult <- decodePollResponse(pollResponse)
           } yield assertTrue(
@@ -228,25 +207,22 @@ object FlowsApiSpec extends ApiSpecBase {
         },
         test("start registered flow without parameter and wait for successful result") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             _ <- Templates.put(TemplateId("test"), ZFlowTemplate(flow1))
 
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Template(TemplateId("test")),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -258,8 +234,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult <- decodePollResponse(pollResponse)
           } yield assertTrue(
@@ -272,18 +247,16 @@ object FlowsApiSpec extends ApiSpecBase {
         },
         test("start registered flow with parameter and wait for successful result") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             _             <- Templates.put(TemplateId("test"), ZFlowTemplate(flow2, Schema[Int]))
             parameterJson <- ZIO.fromEither(JsonCodec.jsonEncoder(Schema[Int]).toJsonAST(11))
 
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.TemplateWithParameter(
@@ -293,8 +266,7 @@ object FlowsApiSpec extends ApiSpecBase {
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -306,8 +278,7 @@ object FlowsApiSpec extends ApiSpecBase {
 
             pollResponse <-
               client.request(
-                Request(method = Method.GET, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")),
-                clientConfig
+                Request.get(baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}"))
               )
             pollResult <- decodePollResponse(pollResponse)
           } yield assertTrue(
@@ -322,22 +293,19 @@ object FlowsApiSpec extends ApiSpecBase {
       suite("delete")(
         test("delete running flow") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             startResponse <- decodeStartResponse(response)
             started       <- getStarted
@@ -349,11 +317,9 @@ object FlowsApiSpec extends ApiSpecBase {
 
             deleteResponse <-
               client.request(
-                Request(
-                  method = Method.DELETE,
-                  url = baseUrl.setPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")
-                ),
-                clientConfig
+                Request.delete(
+                  url = baseUrl.withPath(s"/flows/${FlowId.unwrap(startResponse.flowId)}")
+                )
               )
           } yield assertTrue(
             started.size == 1,
@@ -365,16 +331,14 @@ object FlowsApiSpec extends ApiSpecBase {
         },
         test("delete finished flow") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             flowId <- FlowId.newRandom
             deleteResponse <-
               client.request(
-                Request(method = Method.DELETE, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}")),
-                clientConfig
+                Request.delete(baseUrl.withPath(s"/flows/${FlowId.unwrap(flowId)}"))
               )
           } yield assertTrue(
             deleteResponse.status == Status.Ok
@@ -384,29 +348,25 @@ object FlowsApiSpec extends ApiSpecBase {
       suite("get all")(
         test("get all existing flows") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
             response <- client.request(
-                          Request(
-                            method = Method.POST,
-                            url = baseUrl.setPath("/flows"),
+                          Request.post(
+                            url = baseUrl.withPath("/flows"),
                             body = Body.fromCharSequence(
                               StartRequest.codec.encodeJson(
                                 StartRequest.Flow(flow1),
                                 None
                               )
                             )
-                          ),
-                          clientConfig
+                          )
                         )
             _       <- decodeStartResponse(response)
             started <- getStarted
 
             response <- client.request(
-                          Request(method = Method.GET, url = baseUrl.setPath("/flows")),
-                          clientConfig
+                          Request.get(baseUrl.withPath("/flows"))
                         )
             result <- decodeGetAllResponse(response)
           } yield assertTrue(
@@ -418,16 +378,14 @@ object FlowsApiSpec extends ApiSpecBase {
       suite("pause")(
         test("pause flow") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             flowId <- FlowId.newRandom
             response <-
               client.request(
-                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/pause")),
-                clientConfig
+                Request.post(url = baseUrl.withPath(s"/flows/${FlowId.unwrap(flowId)}/pause"), body = Body.empty)
               )
 
             reqs <- pauseRequests
@@ -440,16 +398,14 @@ object FlowsApiSpec extends ApiSpecBase {
       suite("resume")(
         test("resume flow") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             flowId <- FlowId.newRandom
             response <-
               client.request(
-                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/resume")),
-                clientConfig
+                Request.post(url = baseUrl.withPath(s"/flows/${FlowId.unwrap(flowId)}/resume"), body = Body.empty)
               )
 
             reqs <- resumeRequests
@@ -462,16 +418,14 @@ object FlowsApiSpec extends ApiSpecBase {
       suite("abort")(
         test("abort flow") {
           for {
-            _            <- reset()
-            client       <- ZIO.service[Client[Any]]
-            clientConfig <- ZIO.service[Client.Config]
-            baseUrl      <- ZIO.service[URL]
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
 
             flowId <- FlowId.newRandom
             response <-
               client.request(
-                Request(method = Method.POST, url = baseUrl.setPath(s"/flows/${FlowId.unwrap(flowId)}/abort")),
-                clientConfig
+                Request.post(url = baseUrl.withPath(s"/flows/${FlowId.unwrap(flowId)}/abort"), body = Body.empty)
               )
 
             reqs <- abortRequests
@@ -481,11 +435,11 @@ object FlowsApiSpec extends ApiSpecBase {
           )
         }
       )
-    ).provideSomeShared[Client[Any] with Client.Config](
+    ).provideSomeShared[Client](
       FlowsApi.layer,
       server,
       ZLayer(
-        ZIO.fromEither(URL.fromString(s"http://localhost:$port"))
+        ZIO.fromEither(URL.decode(s"http://localhost:$port"))
       ),
       executorMock,
       KeyValueStore.inMemory,
@@ -521,7 +475,11 @@ object FlowsApiSpec extends ApiSpecBase {
   private val server: ZLayer[FlowsApi, Throwable, Unit] =
     ZLayer.scoped {
       ZIO.service[FlowsApi].flatMap { api =>
-        Server.start(port, api.endpoint).forkScoped.unit
+        Server
+          .serve(api.endpoint)
+          .provide(Server.defaultWithPort(port))
+          .forkScoped
+          .unit
       }
     }
 

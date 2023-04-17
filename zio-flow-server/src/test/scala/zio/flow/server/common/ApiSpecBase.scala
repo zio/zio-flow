@@ -16,20 +16,11 @@
 
 package zio.flow.server.common
 
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 import zio.ZLayer
+import zio.http.Client
 import zio.test.{TestEnvironment, ZIOSpec, testEnvironment}
 
-trait ApiSpecBase extends ZIOSpec[Client[Any] with Client.Config with TestEnvironment] {
-  override val bootstrap: ZLayer[Any, Any, Client[Any] with Client.Config with TestEnvironment] =
-    testEnvironment ++ client
-
-  private val client: ZLayer[Any, Throwable, Client[Any] with Client.Config] =
-    ZLayer.make[Client[Any] with Client.Config](
-      EventLoopGroup.auto(),
-      ChannelFactory.auto,
-      ZLayer(Client.make[Any]),
-      ZLayer.succeed(Client.Config.empty)
-    )
-
+trait ApiSpecBase extends ZIOSpec[Client with TestEnvironment] {
+  override val bootstrap: ZLayer[Any, Any, Client with TestEnvironment] =
+    testEnvironment ++ Client.default
 }
