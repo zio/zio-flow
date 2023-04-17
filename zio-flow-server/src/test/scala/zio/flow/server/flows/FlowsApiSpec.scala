@@ -552,6 +552,12 @@ object FlowsApiSpec extends ApiSpecBase {
         .map(m => Chunk.fromIterable(m.keys))
         .flattenChunks
         .map(id => (id, FlowStatus.Running))
+
+    override def getVariable(id: FlowId, name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
+      ???
+
+    override def setVariable(id: FlowId, name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
+      ???
   }
 
   private def getStarted: ZIO[MockedExecutor, Unit, Map[FlowId, ZFlow[Any, Any, Any]]] =

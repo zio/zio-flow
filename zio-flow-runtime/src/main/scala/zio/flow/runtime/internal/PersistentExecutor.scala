@@ -207,6 +207,69 @@ final case class PersistentExecutor(
           )
       }
 
+  override def getVariable(id: FlowId, name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
+    workflows
+      .get(id)
+      .commit
+      .flatMap {
+        case Some(runtimeStatePromise) =>
+          for {
+            runtimeState <- runtimeStatePromise.await
+            state        <- runtimeState.state.get
+          } yield Some(state)
+        case None =>
+          loadState(id)
+      }
+      .flatMap {
+        case Some(state) =>
+          PersistentRemoteContext
+            .make(RemoteVariableScope.TopLevel(id))
+            .flatMap { ctx =>
+              ctx.getVariable(name)
+            }
+            .provide(
+              ZLayer.succeed(execEnv),
+              ZLayer.succeed(durableLog),
+              ZLayer.succeed(kvStore),
+              RemoteVariableKeyValueStore.layer,
+              ZLayer(VirtualClock.make(state.lastTimestamp))
+            )
+        case None =>
+          ZIO.none
+      }
+
+  override def setVariable(id: FlowId, name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
+    workflows
+      .get(id)
+      .commit
+      .flatMap {
+        case Some(runtimeStatePromise) =>
+          // The flow is running - we inject the variable change as a message
+          for {
+            runtimeState <- runtimeStatePromise.await
+            _            <- runtimeState.messages.offer(ExecutionCommand.SetVariable(name, value))
+          } yield ()
+        case None =>
+          // The flow is not running currently
+          loadState(id).flatMap {
+            case None =>
+              ZIO.fail(ExecutorError.InvalidOperationArguments("Unknown flow id:" + FlowId.unwrap(id)))
+            case Some(state) =>
+              PersistentRemoteContext
+                .make(RemoteVariableScope.TopLevel(id))
+                .flatMap { ctx =>
+                  ctx.setVariable(name, value)
+                }
+                .provide(
+                  ZLayer.succeed(execEnv),
+                  ZLayer.succeed(durableLog),
+                  ZLayer.succeed(kvStore),
+                  RemoteVariableKeyValueStore.layer,
+                  ZLayer(VirtualClock.make(state.lastTimestamp))
+                )
+          }
+      }
+
   private def getResultFromPromise(
     resultPromise: DurablePromise[Either[ExecutorError, DynamicValue], FlowResult]
   ): ZIO[Any, ExecutorError, Option[Either[Either[ExecutorError, DynamicValue], DynamicValue]]] =
@@ -884,22 +947,39 @@ final case class PersistentExecutor(
 
     def commandToStateChange(command: ExecutionCommand): StateChange =
       command match {
-        case ExecutionCommand.Pause  => StateChange.pause
-        case ExecutionCommand.Resume => StateChange.resume(resetWatchedVariables = false)
+        case ExecutionCommand.Pause             => StateChange.pause
+        case ExecutionCommand.Resume            => StateChange.resume(resetWatchedVariables = false)
+        case ExecutionCommand.SetVariable(_, _) => StateChange.none
       }
 
-    def processMessages(messages: Queue[PersistentExecutor.ExecutionCommand]): ZIO[Any, Nothing, StateChange] =
-      messages.takeAll.map { commands =>
-        commands.foldLeft(StateChange.none) { case (s, cmd) =>
-          s ++ commandToStateChange(cmd)
+    def executeCommand(cmd: ExecutionCommand) =
+      cmd match {
+        case ExecutionCommand.Pause  => ZIO.unit
+        case ExecutionCommand.Resume => ZIO.unit
+        case ExecutionCommand.SetVariable(name, value) =>
+          RemoteContext.getVariable(
+            name
+          ) *> // NOTE: this is needed for variable access tracking to work properly, as f0 may not access the variable at all
+            RemoteContext.setVariable(name, value)
+      }
+
+    def processMessages(
+      messages: Queue[PersistentExecutor.ExecutionCommand]
+    ): ZIO[RemoteContext, ExecutorError, StateChange] =
+      messages.takeAll.flatMap { commands =>
+        ZIO.foldLeft(commands)(StateChange.none) { case (s, cmd) =>
+          executeCommand(cmd).as(s ++ commandToStateChange(cmd))
         }
       }
 
-    def waitAndProcessMessages(messages: Queue[PersistentExecutor.ExecutionCommand]): ZIO[Any, Nothing, StateChange] =
+    def waitAndProcessMessages(
+      messages: Queue[PersistentExecutor.ExecutionCommand]
+    ): ZIO[RemoteContext, ExecutorError, StateChange] =
       messages.take.flatMap { first =>
-        processMessages(messages).map { rest =>
-          commandToStateChange(first) ++ rest
-        }
+        executeCommand(first) *>
+          processMessages(messages).map { rest =>
+            commandToStateChange(first) ++ rest
+          }
       }
 
     def runSteps(
@@ -918,67 +998,71 @@ final case class PersistentExecutor(
         ) {
           Logging
             .optionalTransactionId(lastState.transactionStack.headOption.map(_.id)) {
-              processMessages(messages).flatMap { changesFromMessages =>
+              RemoteVariableKeyValueStore.layer {
                 val scope = lastState.scope
 
-                RemoteVariableKeyValueStore.layer {
-                  for {
-                    recordingContext <- RecordingRemoteContext.startRecording
+                for {
+                  recordingContext    <- RecordingRemoteContext.startRecording
+                  remoteContext       <- recordingContext.remoteContext(scope)
+                  changesFromMessages <- processMessages(messages).provide(ZLayer.succeed(remoteContext))
 
-                    state0 <-
-                      persistState(
-                        lastState,
-                        changesFromMessages,
-                        recordingContext
-                      ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
+                  state0 <-
+                    persistState(
+                      lastState,
+                      changesFromMessages,
+                      recordingContext
+                    ).map(_.asInstanceOf[PersistentExecutor.State[E, A]])
 
-                    stepResult <-
-                      state0.status match {
-                        case FlowStatus.Running =>
-                          ZIO.logTrace(state0.current.getClass.getSimpleName) *>
-                            step(state0, recordingContext).provideSomeLayer[
-                              VirtualClock
-                                with KeyValueStore
-                                with RemoteVariableKeyValueStore
-                                with ExecutionEnvironment
-                                with DurableLog
-                            ](
-                              ZLayer(recordingContext.remoteContext(scope))
-                            )
-                        case FlowStatus.Done =>
-                          ZIO.succeed(StepResult(StateChange.none, continue = false))
-                        case FlowStatus.Suspended =>
-                          waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
-                            timestamp =>
-                              Clock.currentDateTime.flatMap { now =>
-                                val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
-                                metrics.flowSuspendedTime
-                                  .update(suspendedDuration)
-                                  .as(
-                                    StepResult(
-                                      StateChange.resume(resetWatchedVariables = true) ++ StateChange
-                                        .advanceClock(atLeastTo = timestamp),
-                                      continue = true
-                                    )
+                  stepResult <-
+                    state0.status match {
+                      case FlowStatus.Running =>
+                        ZIO.logTrace(state0.current.getClass.getSimpleName) *>
+                          step(state0, recordingContext).provideSomeLayer[
+                            VirtualClock
+                              with KeyValueStore
+                              with RemoteVariableKeyValueStore
+                              with ExecutionEnvironment
+                              with DurableLog
+                          ](ZLayer.succeed(remoteContext))
+                      case FlowStatus.Done =>
+                        ZIO.succeed(StepResult(StateChange.none, continue = false))
+                      case FlowStatus.Suspended =>
+                        waitForVariablesToChange(state0.watchedVariables, state0.watchPosition.next).flatMap {
+                          timestamp =>
+                            Clock.currentDateTime.flatMap { now =>
+                              val suspendedDuration = Duration.between(state0.suspendedAt.getOrElse(now), now)
+                              metrics.flowSuspendedTime
+                                .update(suspendedDuration)
+                                .as(
+                                  StepResult(
+                                    StateChange.resume(resetWatchedVariables = true) ++ StateChange
+                                      .advanceClock(atLeastTo = timestamp),
+                                    continue = true
                                   )
-                              }
-                          }
-                        case FlowStatus.Paused =>
-                          ZIO.logInfo(s"Flow paused, waiting for resume command") *>
-                            waitAndProcessMessages(messages).map { changes =>
-                              StepResult(changes, continue = true)
+                                )
                             }
-                      }
-                    now <- Clock.currentDateTime
-                    state2 <-
-                      persistState(
-                        state0,
-                        stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
-                        recordingContext
-                      )
-                    _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
-                  } yield stepResult
-                }
+                        }.race {
+                          PersistentRemoteContext.make(scope.rootScope).flatMap { topLevelRemoteContext =>
+                            // Processing execution commands in the background, as it may contain external variable modification
+                            waitAndProcessMessages(messages).forever
+                              .provide(ZLayer.succeed(topLevelRemoteContext))
+                          }
+                        }
+                      case FlowStatus.Paused =>
+                        ZIO.logInfo(s"Flow paused, waiting for resume command") *>
+                          waitAndProcessMessages(messages).provide(ZLayer.succeed(remoteContext)).map { changes =>
+                            StepResult(changes, continue = true)
+                          }
+                    }
+                  now <- Clock.currentDateTime
+                  state2 <-
+                    persistState(
+                      state0,
+                      stepResult.stateChange ++ StateChange.updateCurrentExecutionTime(now, executionStartedAt),
+                      recordingContext
+                    )
+                  _ <- stateRef.set(state2.asInstanceOf[PersistentExecutor.State[E, A]])
+                } yield stepResult
               }.flatMap { stepResult =>
                 runSteps(stateRef, messages, executionStartedAt).when(stepResult.continue).unit
               }
@@ -2078,8 +2162,9 @@ object PersistentExecutor {
 
   sealed trait ExecutionCommand
   object ExecutionCommand {
-    case object Pause  extends ExecutionCommand
-    case object Resume extends ExecutionCommand
+    case object Pause                                                           extends ExecutionCommand
+    case object Resume                                                          extends ExecutionCommand
+    final case class SetVariable(name: RemoteVariableName, value: DynamicValue) extends ExecutionCommand
   }
 
   final case class RuntimeState(

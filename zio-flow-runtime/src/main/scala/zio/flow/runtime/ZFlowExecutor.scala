@@ -21,7 +21,7 @@ import zio.flow.runtime.internal.PersistentExecutor.FlowResult
 import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.serialization.ExecutorBinaryCodecs
-import zio.flow.{Configuration, FlowId, ZFlow}
+import zio.flow.{Configuration, FlowId, RemoteVariableName, ZFlow}
 import zio.schema.{DynamicValue, Schema}
 import zio.stream.ZStream
 
@@ -90,6 +90,19 @@ trait ZFlowExecutor {
    * finished
    */
   def getAll: ZStream[Any, ExecutorError, (FlowId, FlowStatus)]
+
+  /**
+   * Gets the latest value of a remote variable belonging to the top level of a
+   * running flow
+   */
+  def getVariable(id: FlowId, name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]]
+
+  /**
+   * Changes the value of a remote variable belonging to the top level of a
+   * flow. It is the caller's responsibility to ensure that the dynamic value
+   * has the correct type.
+   */
+  def setVariable(id: FlowId, name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit]
 }
 
 object ZFlowExecutor {
