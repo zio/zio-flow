@@ -19,7 +19,7 @@ package zio.flow.server.flows.model
 import zio.flow.FlowId
 import zio.schema.{DeriveSchema, Schema}
 
-case class StartResponse(flowId: FlowId)
+final case class StartResponse(flowId: FlowId)
 
 object StartResponse {
   implicit val schema: Schema[StartResponse] = DeriveSchema.gen

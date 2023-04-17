@@ -20,7 +20,14 @@ import zio.flow.runtime.internal.PersistentExecutor
 import zio.flow.runtime._
 import zio.flow.serialization.FlowSchemaAst
 import zio.flow.server.common.ApiSpecBase
-import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
+import zio.flow.server.flows.model.{
+  GetAllResponse,
+  GetVariableResponse,
+  PollResponse,
+  SetVariableRequest,
+  StartRequest,
+  StartResponse
+}
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate}
 import zio.flow.server.templates.service.{KVStoreBasedTemplates, Templates}
 import zio.flow.{FlowId, PromiseId, RemoteVariableName, ZFlow}
@@ -434,6 +441,94 @@ object FlowsApiSpec extends ApiSpecBase {
             reqs == Set(flowId)
           )
         }
+      ),
+      suite("get and set variables")(
+        test("get existing variable") {
+          for {
+            _        <- reset()
+            client   <- ZIO.service[Client]
+            executor <- ZIO.service[ZFlowExecutor]
+            baseUrl  <- ZIO.service[URL]
+
+            flowId            <- FlowId.newRandom
+            remoteVariableName = RemoteVariableName("var123")
+
+            _ <-
+              executor.setVariable(flowId, remoteVariableName, DynamicValue.fromSchemaAndValue(Schema[String], "hello"))
+
+            response <-
+              client.request(
+                Request.get(
+                  url = baseUrl.withPath(
+                    s"/flows/${FlowId.unwrap(flowId)}/variables/${RemoteVariableName.unwrap(remoteVariableName)}"
+                  )
+                )
+              )
+
+            result <- decodeGetVariableResponse(response)
+          } yield assertTrue(
+            response.status == Status.Ok,
+            result == GetVariableResponse(
+              remoteVariableName,
+              Json.Obj("String" -> Json.Str("hello"))
+            )
+          )
+        },
+        test("get non-existing variable") {
+          for {
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
+
+            flowId            <- FlowId.newRandom
+            remoteVariableName = RemoteVariableName("var123")
+
+            response <-
+              client.request(
+                Request.get(
+                  url = baseUrl.withPath(
+                    s"/flows/${FlowId.unwrap(flowId)}/variables/${RemoteVariableName.unwrap(remoteVariableName)}"
+                  )
+                )
+              )
+          } yield assertTrue(
+            response.status == Status.NotFound
+          )
+        },
+        test("set variable") {
+          for {
+            _       <- reset()
+            client  <- ZIO.service[Client]
+            baseUrl <- ZIO.service[URL]
+
+            flowId            <- FlowId.newRandom
+            remoteVariableName = RemoteVariableName("var123")
+
+            response <-
+              client.request(
+                Request.put(
+                  url = baseUrl.withPath(
+                    s"/flows/${FlowId.unwrap(flowId)}/variables/${RemoteVariableName.unwrap(remoteVariableName)}"
+                  ),
+                  body = Body.fromCharSequence(
+                    SetVariableRequest.codec.encodeJson(
+                      SetVariableRequest(
+                        Json.Obj("String" -> Json.Str("hello"))
+                      ),
+                      None
+                    )
+                  )
+                )
+              )
+
+            vars <- getVariables
+          } yield assertTrue(
+            response.status == Status.Ok,
+            vars == Map(
+              (flowId, remoteVariableName) -> DynamicValue.fromSchemaAndValue(Schema[String], "hello")
+            )
+          )
+        }
       )
     ).provideSomeShared[Client](
       FlowsApi.layer,
@@ -471,6 +566,15 @@ object FlowsApiSpec extends ApiSpecBase {
         ZIO.fromEither(PollResponse.codec.decodeJson(body))
     } yield result
 
+  private def decodeGetVariableResponse(response: Response): ZIO[Any, java.io.Serializable, GetVariableResponse] =
+    for {
+      body <- response.body.asString
+      result <-
+        ZIO.fromEither(
+          GetVariableResponse.codec.decodeJson(body)
+        )
+    } yield result
+
   private val port = 8091
   private val server: ZLayer[FlowsApi, Throwable, Unit] =
     ZLayer.scoped {
@@ -491,6 +595,7 @@ object FlowsApiSpec extends ApiSpecBase {
       _    <- mock.abortRequests.set(Set.empty)
       _    <- mock.pauseRequests.set(Set.empty)
       _    <- mock.resumeRequests.set(Set.empty)
+      _    <- mock.variables.set(Map.empty)
       _ <- KeyValueStore
              .scanAll("_zflow_workflow_templates")
              .mapZIO(kv => KeyValueStore.delete("_zflow_workflow_templates", kv._1, None))
@@ -507,7 +612,8 @@ object FlowsApiSpec extends ApiSpecBase {
     val pollHandlers: Ref[Map[FlowId, PollHandler]],
     val pauseRequests: Ref[Set[FlowId]],
     val resumeRequests: Ref[Set[FlowId]],
-    val abortRequests: Ref[Set[FlowId]]
+    val abortRequests: Ref[Set[FlowId]],
+    val variables: Ref[Map[(FlowId, RemoteVariableName), DynamicValue]]
   ) extends ZFlowExecutor {
     override def run[E: Schema, A: Schema](id: FlowId, flow: ZFlow[Any, E, A]): IO[E, A] = ???
 
@@ -554,10 +660,10 @@ object FlowsApiSpec extends ApiSpecBase {
         .map(id => (id, FlowStatus.Running))
 
     override def getVariable(id: FlowId, name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]] =
-      ???
+      variables.get.map(_.get((id, name)))
 
     override def setVariable(id: FlowId, name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit] =
-      ???
+      variables.update(_ + ((id, name) -> value))
   }
 
   private def getStarted: ZIO[MockedExecutor, Unit, Map[FlowId, ZFlow[Any, Any, Any]]] =
@@ -575,6 +681,9 @@ object FlowsApiSpec extends ApiSpecBase {
   private def abortRequests: ZIO[MockedExecutor, Nothing, Set[FlowId]] =
     ZIO.serviceWithZIO(_.abortRequests.get)
 
+  private def getVariables: ZIO[MockedExecutor, Nothing, Map[(FlowId, RemoteVariableName), DynamicValue]] =
+    ZIO.serviceWithZIO(_.variables.get)
+
   private val executorMock: ULayer[ZFlowExecutor with MockedExecutor] =
     ZLayer {
       for {
@@ -583,6 +692,7 @@ object FlowsApiSpec extends ApiSpecBase {
         pauseRequests  <- Ref.make(Set.empty[FlowId])
         resumeRequests <- Ref.make(Set.empty[FlowId])
         abortRequests  <- Ref.make(Set.empty[FlowId])
-      } yield new MockedExecutor(started, pollHandlers, pauseRequests, resumeRequests, abortRequests)
+        variables      <- Ref.make(Map.empty[(FlowId, RemoteVariableName), DynamicValue])
+      } yield new MockedExecutor(started, pollHandlers, pauseRequests, resumeRequests, abortRequests, variables)
     }
 }
