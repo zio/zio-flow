@@ -25,7 +25,7 @@ import zio.flow.Configuration
 import zio.flow.cassandra.{CassandraIndexedStore, CassandraKeyValueStore}
 import zio.flow.dynamodb.{DynamoDbIndexedStore, DynamoDbKeyValueStore}
 import zio.flow.rocksdb.{RocksDbIndexedStore, RocksDbKeyValueStore}
-import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor, PersistentState}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, serialization}
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
@@ -119,6 +119,7 @@ object Main extends ZIOAppDefault {
         case SerializationFormat.Protobuf => ZLayer.succeed(serialization.protobuf)
       },
       PersistentExecutor.make(config.gcPeriod),
+      PersistentState.configured(config.persisterConfig),
       Server.configured()
     )
 

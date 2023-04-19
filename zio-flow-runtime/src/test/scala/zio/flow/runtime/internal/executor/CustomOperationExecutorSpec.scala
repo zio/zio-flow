@@ -1,8 +1,8 @@
 package zio.flow.runtime.internal.executor
 
 import zio.flow._
-import zio.flow.runtime.internal.PersistentExecutor
-import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, ZFlowExecutor}
+import zio.flow.runtime.internal.{PersistentExecutor, PersistentState}
+import zio.flow.runtime.{DurableLog, KeyValueStore, ZFlowExecutor}
 import zio.schema.{DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.test.{Spec, TestEnvironment, assertTrue}
 import zio.{Chunk, Queue, ZIO, ZLayer}
@@ -45,7 +45,7 @@ object CustomOperationExecutorSpec extends PersistentExecutorBaseSpec {
   }
 
   override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+    : Spec[TestEnvironment with PersistentState with DurableLog with KeyValueStore with Configuration, Any] =
     suite("CustomOperationExecutorSpec")(
       test("flows can use custom operations") {
         for {
@@ -54,7 +54,7 @@ object CustomOperationExecutorSpec extends PersistentExecutorBaseSpec {
           opExecutor: OperationExecutor = new CustomOperationExecutor(queue)
           _ <- ZFlowExecutor
                  .run(FlowId("test1"), flow)
-                 .provideSome[DurableLog with KeyValueStore with Configuration](
+                 .provideSome[DurableLog with KeyValueStore with PersistentState with Configuration](
                    PersistentExecutor.make(),
                    ZLayer.succeed(opExecutor),
                    ZLayer.succeed(zio.flow.runtime.serialization.json)

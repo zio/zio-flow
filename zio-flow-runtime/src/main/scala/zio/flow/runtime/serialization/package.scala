@@ -14,6 +14,7 @@ package object serialization {
         FlowResult ::
         Either[Either[ExecutorError, DynamicValue], FlowResult] ::
         DynamicValue ::
+        PersistentExecutor.StateChange ::
         End
     ]
 

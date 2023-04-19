@@ -20,6 +20,7 @@ import zio._
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.runtime._
+import zio.flow.runtime.internal.PersistentState
 import zio.schema.{DynamicValue, Schema}
 import zio.test.{Spec, TestClock, TestEnvironment, assertTrue}
 
@@ -27,7 +28,7 @@ import java.util.concurrent.TimeUnit
 
 object ExecutorApi extends PersistentExecutorBaseSpec {
   override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+    : Spec[TestEnvironment with PersistentState with DurableLog with KeyValueStore with Configuration, Any] =
     suite("PersistentExecutor API")(
       test("poll successful result") {
         for {

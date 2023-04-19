@@ -18,7 +18,7 @@ package zio.flow.runtime
 
 import zio._
 import zio.flow.runtime.internal.PersistentExecutor.FlowResult
-import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor, PersistentState}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.serialization.ExecutorBinaryCodecs
 import zio.flow.{Configuration, FlowId, RemoteVariableName, ZFlow}
@@ -152,26 +152,31 @@ object ZFlowExecutor {
     ZIO.serviceWithZIO(_.forceGarbageCollection())
 
   val default: ZLayer[
-    KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration,
+    KeyValueStore with IndexedStore with PersistentState with ExecutorBinaryCodecs with Configuration,
     Throwable,
     ZFlowExecutor
   ] =
     ZLayer
-      .makeSome[KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration, ZFlowExecutor](
+      .makeSome[
+        KeyValueStore with IndexedStore with PersistentState with ExecutorBinaryCodecs with Configuration,
+        ZFlowExecutor
+      ](
         DurableLog.layer,
         DefaultOperationExecutor.layer,
         HttpOperationPolicies.disabled,
         PersistentExecutor.make()
       )
 
-  val defaultJson: ZLayer[KeyValueStore with IndexedStore with Configuration, Throwable, ZFlowExecutor] =
-    ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
+  val defaultJson
+    : ZLayer[KeyValueStore with IndexedStore with PersistentState with Configuration, Throwable, ZFlowExecutor] =
+    ZLayer.makeSome[KeyValueStore with IndexedStore with PersistentState with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.json),
       default
     )
 
-  val defaultProtobuf: ZLayer[KeyValueStore with IndexedStore with Configuration, Throwable, ZFlowExecutor] =
-    ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
+  val defaultProtobuf
+    : ZLayer[KeyValueStore with IndexedStore with PersistentState with Configuration, Throwable, ZFlowExecutor] =
+    ZLayer.makeSome[KeyValueStore with IndexedStore with PersistentState with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.protobuf),
       default
     )
@@ -181,6 +186,7 @@ object ZFlowExecutor {
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
       ZLayer.succeed(serialization.json),
+      PersistentState.snapshotOnly,
       default
     )
 
@@ -189,6 +195,7 @@ object ZFlowExecutor {
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
       ZLayer.succeed(serialization.protobuf),
+      PersistentState.snapshotOnly,
       default
     )
 }
