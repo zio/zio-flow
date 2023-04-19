@@ -93,7 +93,7 @@ package object metrics {
   def serializedStateChangeSize(stateChange: StateChange): Metric.Histogram[Int] =
     Metric
       .histogram("zioflow_state_change_size_bytes", Histogram.Boundaries.exponential(512.0, 2.0, 16))
-      .tagged("kind", stateChange.getClass.getSimpleName)
+      .tagged("kind", stateChange.name)
       .contramap((bytes: Int) => bytes.toDouble)
 
   /**

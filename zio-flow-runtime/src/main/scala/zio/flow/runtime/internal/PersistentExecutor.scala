@@ -1620,6 +1620,8 @@ object PersistentExecutor {
       case StateChange.SequentialChange(changes) => changes
       case _                                     => Chunk.single(self)
     }
+
+    def name: String
   }
   object StateChange {
     private case object NoChange extends StateChange {
@@ -1634,17 +1636,23 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[NoChange.type]
         )
+
+      override def name: String = "NoChange"
     }
 
     private final case class SequentialChange(changes: Chunk[StateChange]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] = changes.foldLeft(state) { case (state, change) =>
         change(state)
       }
+
+      override def name: String = "SequentialChange"
     }
 
     private final case class SetCurrent(current: ZFlow[_, _, _]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(current = current)
+
+      override def name: String = "SetCurrent"
     }
     private object SetCurrent {
       val schema: Schema[SetCurrent] =
@@ -1662,6 +1670,8 @@ object PersistentExecutor {
     private final case class PushContinuation(cont: Instruction) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = cont :: state.stack)
+
+      override def name: String = "PushContinuation"
     }
     private object PushContinuation {
       val schema: Schema[PushContinuation] =
@@ -1689,6 +1699,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[PopContinuation.type]
         )
+
+      override def name: String = "PopContinuation"
     }
 
     private final case class AddCompensation(newCompensation: ZFlow[Any, ActivityError, Unit]) extends StateChange {
@@ -1703,6 +1715,8 @@ object PersistentExecutor {
         )
 
       override def forcePersistence: Boolean = true
+
+      override def name: String = "AddCompensation"
     }
     private object AddCompensation {
       val schema: Schema[AddCompensation] =
@@ -1735,6 +1749,8 @@ object PersistentExecutor {
           transactionCounter = state.transactionCounter + 1
         )
       }
+
+      override def name: String = "EnterTransaction"
     }
     private object EnterTransaction {
       val schema: Schema[EnterTransaction] =
@@ -1767,6 +1783,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[LeaveTransaction.type]
         )
+
+      override def name: String = "LeaveTransaction"
     }
 
     private case class RevertCurrentTransaction[E0](failure: Remote[E0]) extends StateChange {
@@ -1789,6 +1807,10 @@ object PersistentExecutor {
             )
           case None => state
         }
+
+      override def forcePersistence: Boolean = true
+
+      override def name: String = "RevertCurrentTransaction"
     }
     private object RevertCurrentTransaction {
       def schema[E]: Schema[RevertCurrentTransaction[E]] =
@@ -1849,6 +1871,8 @@ object PersistentExecutor {
         }
 
       override def forcePersistence: Boolean = true
+
+      override def name: String = "RestartCurrentTransaction"
     }
     private object RestartCurrentTransaction {
       val schema: Schema[RestartCurrentTransaction] =
@@ -1882,6 +1906,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[IncreaseForkCounter.type]
         )
+
+      override def name: String = "IncreaseForkCounter"
     }
 
     private case object IncreaseTempVarCounter extends StateChange {
@@ -1897,11 +1923,15 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[IncreaseTempVarCounter.type]
         )
+
+      override def name: String = "IncreaseTempVarCounter"
     }
 
     private final case class PushEnvironment(value: Remote[_]) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(envStack = value :: state.envStack)
+
+      override def name: String = "PushEnvironment"
     }
     private object PushEnvironment {
       def schema: Schema[PushEnvironment] =
@@ -1933,11 +1963,15 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[PopEnvironment.type]
         )
+
+      override def name: String = "PopEnvironment"
     }
 
     private final case class AdvanceClock(atLeastTo: Timestamp) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(lastTimestamp = state.lastTimestamp.max(atLeastTo))
+
+      override def name: String = "AdvanceClock"
     }
     private object AdvanceClock {
       val schema: Schema[AdvanceClock] =
@@ -1971,6 +2005,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[Done.type]
         )
+
+      override def name: String = "Done"
     }
 
     private case class Resume(resetWatchedVariables: Boolean) extends StateChange {
@@ -1981,6 +2017,8 @@ object PersistentExecutor {
         )
 
       override def forcePersistence: Boolean = true
+
+      override def name: String = "Resume"
     }
     private object Resume {
       val schema: Schema[Resume] =
@@ -2013,6 +2051,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[Pause.type]
         )
+
+      override def name: String = "Pause"
     }
 
     private final case class UpdateWatchPosition(newWatchPosition: Index) extends StateChange {
@@ -2020,6 +2060,8 @@ object PersistentExecutor {
         state.copy(
           watchPosition = Index(Math.max(state.watchPosition, newWatchPosition))
         )
+
+      override def name: String = "UpdateWatchPosition"
     }
     private object UpdateWatchPosition {
       val schema: Schema[UpdateWatchPosition] =
@@ -2043,6 +2085,8 @@ object PersistentExecutor {
         state.copy(
           currentExecutionTime = Duration.between(executionStartedAt, now)
         )
+
+      override def name: String = "UpdateCurrentExecutionTime"
     }
     private object UpdateCurrentExecutionTime {
       val schema: Schema[UpdateCurrentExecutionTime] =
@@ -2086,6 +2130,8 @@ object PersistentExecutor {
           case Nil =>
             state
         }
+
+      override def name: String = "RecordAccessedVariables"
     }
     private object RecordAccessedVariables {
       val schema: Schema[RecordAccessedVariables] =
@@ -2114,6 +2160,8 @@ object PersistentExecutor {
           case Nil =>
             state
         }
+
+      override def name: String = "RecordReadVariables"
     }
     private object RecordReadVariables {
       val schema: Schema[RecordReadVariables] =
@@ -2134,6 +2182,8 @@ object PersistentExecutor {
     private final case class UpdateLastTimestamp(timestamp: Timestamp) extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(lastTimestamp = timestamp)
+
+      override def name: String = "UpdateLastTimestamp"
     }
     private object UpdateLastTimestamp {
       val schema: Schema[UpdateLastTimestamp] =
@@ -2167,6 +2217,8 @@ object PersistentExecutor {
           _.asInstanceOf[StateChange],
           _.isInstanceOf[ResetExecutionTime.type]
         )
+
+      override def name: String = "ResetExecutionTime"
     }
 
     val none: StateChange                                = NoChange

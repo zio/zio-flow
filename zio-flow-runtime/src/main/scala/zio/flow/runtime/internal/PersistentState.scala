@@ -130,21 +130,18 @@ object PersistentState {
       snapshot: PersistentExecutor.State[_, _]
     ): IO[ExecutorError, PersistentExecutor.State[_, _]] = {
       val startIndex = snapshot.journalIndex.getOrElse(Index.initial)
-      for {
-        _ <- ZIO.logInfo(s"Looking for journal entries starting from $startIndex")
-        finalState <-
-          indexedStore
-            .scan(Topics.journal(id), startIndex, Index.max)
-            .mapError(ExecutorError.IndexedStoreError("scan", _))
-            .mapZIO { bytes =>
-              ZIO
-                .fromEither(codecs.decode[StateChange](bytes))
-                .mapError(decodeError => ExecutorError.DeserializationError(s"journal entry", decodeError.message))
-            }
-            .runFold(snapshot) { (state, change) =>
-              change(state)
-            }
-      } yield finalState
+      ZIO.logInfo(s"Looking for journal entries starting from $startIndex") *>
+        indexedStore
+          .scan(Topics.journal(id), startIndex, Index.max)
+          .mapError(ExecutorError.IndexedStoreError("scan", _))
+          .mapZIO { bytes =>
+            ZIO
+              .fromEither(codecs.decode[StateChange](bytes))
+              .mapError(decodeError => ExecutorError.DeserializationError(s"journal entry", decodeError.message))
+          }
+          .runFold(snapshot) { (state, change) =>
+            change(state)
+          }
     }
 
     override def createPersister(id: FlowId): ZIO[Any, Nothing, Persister] =
