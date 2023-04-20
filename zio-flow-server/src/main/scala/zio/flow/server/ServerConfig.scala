@@ -4,9 +4,10 @@ import zio.aws.core.config.CommonAwsConfig
 import zio.aws.core.config.descriptors.commonAwsConfig
 import zio.aws.netty.NettyClientConfig
 import zio.aws.netty.descriptors.nettyClientConfig
+import zio.flow.runtime.PersisterConfig
 import zio.flow.server.ServerConfig._
 import zio.metrics.connectors.MetricsConfig
-import zio.{Chunk, Config, Duration, LogLevel}
+import zio.{Chunk, Config, Duration, LogLevel, durationInt}
 
 final case class ServerConfig(
   keyValueStore: BackendImplementation,
@@ -16,7 +17,8 @@ final case class ServerConfig(
   gcPeriod: Duration,
   logLevel: LogLevel,
   commonAwsConfig: CommonAwsConfig,
-  awsNettyClientConfig: NettyClientConfig
+  awsNettyClientConfig: NettyClientConfig,
+  persisterConfig: PersisterConfig
 )
 
 object ServerConfig {
@@ -72,8 +74,11 @@ object ServerConfig {
         Config.duration("gc-period") ++
         logLevelConfig.nested("log-level").withDefault(LogLevel.Info) ++
         commonAwsConfig.nested("aws") ++
-        nettyClientConfig.nested("aws-netty")
-    ).map { case (kvStore, ixStore, metrics, ser, gcPeriod, logLevel, aws, awsNetty) =>
-      ServerConfig(kvStore, ixStore, metrics, ser, gcPeriod, logLevel, aws, awsNetty)
+        nettyClientConfig.nested("aws-netty") ++
+        PersisterConfig.config
+          .nested("persister")
+          .withDefault(PersisterConfig.PeriodicSnapshots(afterEvery = Some(100), afterDuration = Some(1.minute)))
+    ).map { case (kvStore, ixStore, metrics, ser, gcPeriod, logLevel, aws, awsNetty, persisterConfig) =>
+      ServerConfig(kvStore, ixStore, metrics, ser, gcPeriod, logLevel, aws, awsNetty, persisterConfig)
     }
 }

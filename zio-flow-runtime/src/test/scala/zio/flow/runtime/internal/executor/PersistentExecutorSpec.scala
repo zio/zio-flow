@@ -24,6 +24,7 @@ import zio.flow._
 import zio.test.Assertion._
 import zio.test._
 import zio._
+import zio.flow.runtime.internal.PersistentState
 
 import java.util.concurrent.TimeUnit
 
@@ -41,8 +42,10 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       compensate = Activity.compensateNotSupported
     )
 
-  override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+  override def flowSpec: Spec[
+    TestEnvironment with IndexedStore with DurableLog with KeyValueStore with PersistentState with Configuration,
+    Any
+  ] =
     suite("Operators in single run")(
       testFlow("succeed")(ZFlow.succeed(12)) { result =>
         assertTrue(result == 12)

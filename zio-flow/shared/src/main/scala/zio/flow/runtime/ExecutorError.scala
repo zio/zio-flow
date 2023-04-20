@@ -31,6 +31,8 @@ sealed trait ExecutorError { self =>
     case ExecutorError.AwaitedFlowDied(flowId, reason)     => s"Awaited flow ($flowId) died: ${reason.toMessage}"
     case ExecutorError.KeyValueStoreError(operation, reason) =>
       s"Key-value store failure in $operation: ${reason.getMessage}"
+    case ExecutorError.IndexedStoreError(operation, reason) =>
+      s"Indexed store failure in $operation: ${reason.getMessage}"
     case ExecutorError.LogError(error)           => s"Durable log failure: ${error.toMessage}"
     case ExecutorError.VariableChangeLogFinished => "Variable change log finished unexpectedly"
     case ExecutorError.FlowDied                  => s"Could not evaluate ZFlow"
@@ -58,6 +60,10 @@ object ExecutorError {
   }
 
   final case class KeyValueStoreError(operation: String, reason: Throwable) extends ExecutorError {
+    override val cause: Option[Throwable] = Some(reason)
+  }
+
+  final case class IndexedStoreError(operation: String, reason: Throwable) extends ExecutorError {
     override val cause: Option[Throwable] = Some(reason)
   }
   final case class LogError(error: DurableLogError) extends ExecutorError {
