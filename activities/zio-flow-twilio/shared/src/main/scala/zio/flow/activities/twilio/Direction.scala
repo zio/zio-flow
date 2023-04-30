@@ -10,10 +10,10 @@ object Direction {
   case object `outbound-call`  extends Direction
   case object `outbound-reply` extends Direction
 
-  def derivedSchema                      = DeriveSchema.gen[Direction]
-  implicit val schema: Schema[Direction] = derivedSchema
+  implicit val schema: Schema[Direction] = Accessors.derivedSchema
 
   object Accessors {
+    def derivedSchema                                       = DeriveSchema.gen[Direction]
     val (inbound, outboundApi, outboundCall, outboundReply) = Remote.makeAccessors[Direction](derivedSchema)
   }
 }
