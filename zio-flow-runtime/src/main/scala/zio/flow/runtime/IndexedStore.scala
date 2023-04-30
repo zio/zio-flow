@@ -33,11 +33,16 @@ object IndexedStore {
   type Index = Index.Type
   object Index extends Subtype[Long] {
     implicit val schema: Schema[Index] = Schema[Long].transform(Index(_), Index.unwrap)
+
+    val initial: Index = Index(0L)
+    val max: Index     = Index(Long.MaxValue)
   }
 
   implicit class IndexSyntax(private val index: Index) extends AnyVal {
     def next: Index = Index(index + 1)
   }
+
+  val any: ZLayer[IndexedStore, Nothing, IndexedStore] = ZLayer.service[IndexedStore]
 
   def position(topic: String): ZIO[IndexedStore, Throwable, Index] =
     ZIO.serviceWithZIO(_.position(topic))
@@ -80,8 +85,11 @@ object IndexedStore {
       ZStream.unwrap {
         topics.get.map { topics =>
           topics.get(topic) match {
-            case Some(values) => ZStream.fromIterable(values.slice(position.toInt, until.toInt))
-            case None         => ZStream.empty
+            case Some(values) =>
+              val slice = values.slice(position.toInt, math.min(values.size.toLong, until.toLong).toInt)
+              ZStream.fromIterable(slice)
+            case None =>
+              ZStream.empty
           }
         }
       }

@@ -24,4 +24,7 @@ object Topics {
 
   def variableChanges(flowId: FlowId): String =
     s"_zflow_variable_changes__${FlowId.unwrap(flowId)}"
+
+  def journal(flowId: FlowId): String =
+    s"_zflow_journal__${FlowId.unwrap(flowId)}"
 }

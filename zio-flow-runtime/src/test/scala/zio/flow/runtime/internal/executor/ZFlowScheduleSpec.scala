@@ -17,6 +17,7 @@
 package zio.flow.runtime.internal.executor
 
 import zio.flow._
+import zio.flow.runtime.internal.PersistentState
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.test.{Spec, TestEnvironment, assertTrue}
 import zio.{Duration, durationInt}
@@ -24,8 +25,10 @@ import zio.{Duration, durationInt}
 import java.time.ZoneOffset
 
 object ZFlowScheduleSpec extends PersistentExecutorBaseSpec {
-  override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+  override def flowSpec: Spec[
+    TestEnvironment with IndexedStore with DurableLog with KeyValueStore with PersistentState with Configuration,
+    Any
+  ] =
     suite("ZFlowSchedule")(
       suite("schedule")(
         testFlowAndLogs("fixed", periodicAdjustClock = Some(30.seconds)) {

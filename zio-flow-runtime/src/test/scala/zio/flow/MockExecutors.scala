@@ -17,7 +17,7 @@
 package zio.flow
 
 import zio.flow.mock.{MockedOperation, MockedOperationExecutor}
-import zio.flow.runtime.internal.PersistentExecutor
+import zio.flow.runtime.internal.{PersistentExecutor, PersistentState}
 import zio.flow.runtime.{DurableLog, KeyValueStore, ZFlowExecutor}
 import zio.{Duration, Scope, ZIO, ZLayer, durationInt}
 
@@ -25,9 +25,10 @@ object MockExecutors {
   def persistent(
     mockedOperations: MockedOperation = MockedOperation.Empty,
     gcPeriod: Duration = 5.minutes
-  ): ZIO[Scope with DurableLog with KeyValueStore with Configuration, Nothing, ZFlowExecutor] =
+  ): ZIO[Scope with DurableLog with KeyValueStore with PersistentState with Configuration, Nothing, ZFlowExecutor] =
     MockedOperationExecutor.make(mockedOperations).flatMap { operationExecutor =>
-      ((DurableLog.any ++ KeyValueStore.any ++ Configuration.any ++ ZLayer.succeed(operationExecutor) ++ ZLayer
+      ((DurableLog.any ++ KeyValueStore.any ++ PersistentState.any ++ Configuration.any ++ ZLayer
+        .succeed(operationExecutor) ++ ZLayer
         .succeed(zio.flow.runtime.serialization.json)) >>>
         PersistentExecutor
           .make(gcPeriod)).build.map(_.get[ZFlowExecutor])
