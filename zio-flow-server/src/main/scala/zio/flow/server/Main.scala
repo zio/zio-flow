@@ -63,6 +63,7 @@ object Main extends ZIOAppDefault {
       _            <- ZIO.logInfo(s"Starting server")
       port         <- Server.install(server)
       _            <- ZIO.logInfo(s"Started on port $port")
+      _            <- ZIO.never
     } yield ()
 
   private def zioConfigProvider(configSource: Option[java.nio.file.Path]): ConfigProvider =
