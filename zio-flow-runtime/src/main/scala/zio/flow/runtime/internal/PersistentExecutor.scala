@@ -1697,7 +1697,7 @@ object PersistentExecutor {
         )
     }
 
-    private final case object PopContinuation extends StateChange {
+    private case object PopContinuation extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = state.stack.tail)
 
