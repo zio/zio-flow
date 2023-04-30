@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class MailSettings(
   bypass_list_management: Option[Setting] = None,
@@ -13,7 +13,8 @@ final case class MailSettings(
 )
 
 object MailSettings {
-  implicit val schema = DeriveSchema.gen[MailSettings]
+  def derivedSchema                         = DeriveSchema.gen[MailSettings]
+  implicit val schema: Schema[MailSettings] = derivedSchema
 
   val (
     bypass_list_management,
@@ -22,5 +23,5 @@ object MailSettings {
     bypass_unsubscribe_management,
     footer,
     sandbox_mode
-  ) = Remote.makeAccessors[MailSettings]
+  ) = Remote.makeAccessors[MailSettings](derivedSchema)
 }

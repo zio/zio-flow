@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class Footer(
   enable: Boolean,
@@ -10,7 +10,8 @@ final case class Footer(
 )
 
 object Footer {
-  implicit val schema = DeriveSchema.gen[Footer]
+  def derivedSchema                   = DeriveSchema.gen[Footer]
+  implicit val schema: Schema[Footer] = derivedSchema
 
-  val (enable, text, html) = Remote.makeAccessors[Footer]
+  val (enable, text, html) = Remote.makeAccessors[Footer](derivedSchema)
 }

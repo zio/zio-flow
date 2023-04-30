@@ -91,7 +91,7 @@ lazy val zioFlowRuntime = project
   .in(file("zio-flow-runtime"))
   .dependsOn(
     zioFlowJVM,
-    zioFlowTestJVM % "test->compile",
+    zioFlowTestJVM % "test->compile"
   )
   .settings(stdSettings("zio-flow-runtime"))
   .settings(dottySettings)
@@ -243,9 +243,12 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
     dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
-    ) ++ commonTestDependencies.map(_ % Test)
+      "dev.zio" %% "zio-schema-derivation" % Version.zioSchema
+    ) ++ commonTestDependencies.map(_ % Test) ++ {
+      if (scalaVersion.value == ScalaDotty) Seq()
+      else
+        Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided")
+    }
   )
 
 lazy val twilioJS  = twilio.js
@@ -259,9 +262,12 @@ lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
     dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
-    ) ++ commonTestDependencies.map(_ % Test)
+      "dev.zio" %% "zio-schema-derivation" % Version.zioSchema
+    ) ++ commonTestDependencies.map(_ % Test) ++ {
+      if (scalaVersion.value == ScalaDotty) Seq()
+      else
+        Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided")
+    }
   )
 
 lazy val sendgridJS  = sendgrid.js

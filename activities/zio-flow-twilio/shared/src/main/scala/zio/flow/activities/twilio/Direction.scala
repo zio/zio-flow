@@ -1,7 +1,7 @@
 package zio.flow.activities.twilio
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 sealed trait Direction
 object Direction {
@@ -10,9 +10,10 @@ object Direction {
   case object `outbound-call`  extends Direction
   case object `outbound-reply` extends Direction
 
-  implicit val schema = DeriveSchema.gen[Direction]
+  def derivedSchema                      = DeriveSchema.gen[Direction]
+  implicit val schema: Schema[Direction] = derivedSchema
 
   object Accessors {
-    implicit val (inbound, outboundApi, outboundCall, outboundReply) = Remote.makeAccessors[Direction]
+    val (inbound, outboundApi, outboundCall, outboundReply) = Remote.makeAccessors[Direction](derivedSchema)
   }
 }

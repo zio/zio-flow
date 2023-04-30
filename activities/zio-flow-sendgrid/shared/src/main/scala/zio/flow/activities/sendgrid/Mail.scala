@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 // TODO: instead of Option[List[A]]s empty lists as null would be preferable. maybe separate serialization class from the API and convert in activity's contramap
 final case class Mail(
@@ -25,7 +25,8 @@ final case class Mail(
 )
 
 object Mail {
-  implicit val schema = DeriveSchema.gen[Mail]
+  def derivedSchema                 = DeriveSchema.gen[Mail]
+  implicit val schema: Schema[Mail] = derivedSchema
 
   val (
     personalizations,
@@ -44,5 +45,5 @@ object Mail {
     ip_pool_name,
     mail_settings,
     tracking_settings
-  ) = Remote.makeAccessors[Mail]
+  ) = Remote.makeAccessors[Mail](derivedSchema)
 }

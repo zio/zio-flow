@@ -18,7 +18,7 @@ addSbtPlugin("pl.project13.scala"                % "sbt-jmh"                    
 addSbtPlugin("dev.zio"                           % "zio-sbt-website"               % "0.3.6")
 addSbtPlugin("org.scoverage"                     % "sbt-scoverage"                 % "2.0.7")
 
-libraryDependencies += "org.scalameta" % "scalameta_2.12" % "4.7.6"
+libraryDependencies += "org.scalameta" % "scalameta_2.12"   % "4.7.6"
 libraryDependencies += "org.snakeyaml" % "snakeyaml-engine" % "2.4"
 
 resolvers += Resolver.sonatypeRepo("public")

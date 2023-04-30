@@ -3,7 +3,7 @@ package zio.flow.activities.twilio
 import zio.flow.Remote
 import zio.schema.{DeriveSchema, Schema}
 
-final case class PhoneNumber(value: String) extends AnyVal
+final case class PhoneNumber(value: String)
 
 object PhoneNumber {
   implicit val schema: Schema[PhoneNumber] = Schema[String].transform(PhoneNumber(_), _.value)

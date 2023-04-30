@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class ClickTracking(
   enable: Boolean,
@@ -9,7 +9,8 @@ final case class ClickTracking(
 )
 
 object ClickTracking {
-  implicit val schema = DeriveSchema.gen[ClickTracking]
+  def derivedSchema                          = DeriveSchema.gen[ClickTracking]
+  implicit val schema: Schema[ClickTracking] = derivedSchema
 
-  val (enable, enable_text) = Remote.makeAccessors[ClickTracking]
+  val (enable, enable_text) = Remote.makeAccessors[ClickTracking](derivedSchema)
 }

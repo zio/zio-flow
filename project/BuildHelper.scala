@@ -245,7 +245,7 @@ object BuildHelper {
         )*/
     },
     semanticdbEnabled := scalaVersion.value != ScalaDotty, // enable SemanticDB
-    //semanticdbOptions += "-P:semanticdb:synthetics:on",
+    // semanticdbOptions += "-P:semanticdb:synthetics:on",
     semanticdbVersion                      := scalafixSemanticdb.revision, // use Scalafix compatible version
     ThisBuild / scalafixScalaBinaryVersion := CrossVersion.binaryScalaVersion(scalaVersion.value),
     ThisBuild / scalafixDependencies ++= List(

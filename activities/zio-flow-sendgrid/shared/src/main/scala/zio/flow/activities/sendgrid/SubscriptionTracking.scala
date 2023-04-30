@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class SubscriptionTracking(
   enable: Boolean,
@@ -11,7 +11,8 @@ final case class SubscriptionTracking(
 )
 
 object SubscriptionTracking {
-  implicit val schema = DeriveSchema.gen[SubscriptionTracking]
+  def derivedSchema                                 = DeriveSchema.gen[SubscriptionTracking]
+  implicit val schema: Schema[SubscriptionTracking] = derivedSchema
 
-  val (enable, text, html, substitution_tag) = Remote.makeAccessors[SubscriptionTracking]
+  val (enable, text, html, substitution_tag) = Remote.makeAccessors[SubscriptionTracking](derivedSchema)
 }

@@ -1,7 +1,7 @@
 package zio.flow.activities.twilio
 
 import zio.flow._
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class Message(
   body: String,
@@ -27,7 +27,8 @@ final case class Message(
 )
 
 object Message {
-  implicit val schema = DeriveSchema.gen[Message]
+  def derivedSchema                    = DeriveSchema.gen[Message]
+  implicit val schema: Schema[Message] = derivedSchema
 
   val (
     body,
@@ -50,5 +51,5 @@ object Message {
     price_unit,
     api_version
 //    subresource_uris
-  ) = Remote.makeAccessors[Message]
+  ) = Remote.makeAccessors[Message](derivedSchema)
 }

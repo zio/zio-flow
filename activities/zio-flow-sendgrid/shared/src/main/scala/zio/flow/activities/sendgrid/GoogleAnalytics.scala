@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class GoogleAnalytics(
   enable: Boolean,
@@ -13,7 +13,9 @@ final case class GoogleAnalytics(
 )
 
 object GoogleAnalytics {
-  implicit val schema = DeriveSchema.gen[GoogleAnalytics]
+  def derivedSchema                            = DeriveSchema.gen[GoogleAnalytics]
+  implicit val schema: Schema[GoogleAnalytics] = derivedSchema
 
-  val (enable, utm_source, utm_medium, utm_term, utm_content, utm_campaign) = Remote.makeAccessors[GoogleAnalytics]
+  val (enable, utm_source, utm_medium, utm_term, utm_content, utm_campaign) =
+    Remote.makeAccessors[GoogleAnalytics](derivedSchema)
 }

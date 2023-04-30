@@ -19,6 +19,7 @@ package zio.flow.server.templates.service
 import zio.constraintless.TypeList._
 import zio.flow.runtime.{KeyValueStore, Timestamp}
 import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplateWithId}
+import zio.flow.server.templates.model.TemplateIdSyntax
 import zio.flow.server.templates.service.KVStoreBasedTemplates.{codecs, namespace}
 import zio.schema.codec.BinaryCodecs
 import zio.schema.codec.JsonCodec.schemaBasedBinaryCodec
