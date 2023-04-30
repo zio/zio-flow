@@ -16,8 +16,9 @@
 
 package zio.flow.runtime
 
-import zhttp.http.Status
 import zio.flow.operation.http.HttpFailure
+import zio.flow.runtime.internal.PersistentExecutor.StateChange
+import zio.http.Status
 import zio.{Duration, ZIOAspect}
 import zio.metrics.MetricKeyType.{Counter, Gauge, Histogram}
 import zio.metrics._
@@ -83,6 +84,16 @@ package object metrics {
         "zioflow_state_size_bytes",
         Histogram.Boundaries.exponential(512.0, 2.0, 16)
       )
+      .contramap((bytes: Int) => bytes.toDouble)
+
+  /**
+   * Histogram of the serialized workflow state changes (journal entries) in
+   * bytes
+   */
+  def serializedStateChangeSize(stateChange: StateChange): Metric.Histogram[Int] =
+    Metric
+      .histogram("zioflow_state_change_size_bytes", Histogram.Boundaries.exponential(512.0, 2.0, 16))
+      .tagged("kind", stateChange.name)
       .contramap((bytes: Int) => bytes.toDouble)
 
   /**

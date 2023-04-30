@@ -18,10 +18,10 @@ package zio.flow.runtime
 
 import zio._
 import zio.flow.runtime.internal.PersistentExecutor.FlowResult
-import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor, PersistentState}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.serialization.ExecutorBinaryCodecs
-import zio.flow.{Configuration, FlowId, ZFlow}
+import zio.flow.{Configuration, FlowId, RemoteVariableName, ZFlow}
 import zio.schema.{DynamicValue, Schema}
 import zio.stream.ZStream
 
@@ -90,6 +90,19 @@ trait ZFlowExecutor {
    * finished
    */
   def getAll: ZStream[Any, ExecutorError, (FlowId, FlowStatus)]
+
+  /**
+   * Gets the latest value of a remote variable belonging to the top level of a
+   * running flow
+   */
+  def getVariable(id: FlowId, name: RemoteVariableName): ZIO[Any, ExecutorError, Option[DynamicValue]]
+
+  /**
+   * Changes the value of a remote variable belonging to the top level of a
+   * flow. It is the caller's responsibility to ensure that the dynamic value
+   * has the correct type.
+   */
+  def setVariable(id: FlowId, name: RemoteVariableName, value: DynamicValue): ZIO[Any, ExecutorError, Unit]
 }
 
 object ZFlowExecutor {
@@ -139,43 +152,50 @@ object ZFlowExecutor {
     ZIO.serviceWithZIO(_.forceGarbageCollection())
 
   val default: ZLayer[
-    KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration,
-    Nothing,
+    KeyValueStore with IndexedStore with PersistentState with ExecutorBinaryCodecs with Configuration,
+    Throwable,
     ZFlowExecutor
   ] =
     ZLayer
-      .makeSome[KeyValueStore with IndexedStore with ExecutorBinaryCodecs with Configuration, ZFlowExecutor](
+      .makeSome[
+        KeyValueStore with IndexedStore with PersistentState with ExecutorBinaryCodecs with Configuration,
+        ZFlowExecutor
+      ](
         DurableLog.layer,
         DefaultOperationExecutor.layer,
         HttpOperationPolicies.disabled,
         PersistentExecutor.make()
       )
 
-  val defaultJson: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
-    ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
+  val defaultJson
+    : ZLayer[KeyValueStore with IndexedStore with PersistentState with Configuration, Throwable, ZFlowExecutor] =
+    ZLayer.makeSome[KeyValueStore with IndexedStore with PersistentState with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.json),
       default
     )
 
-  val defaultProtobuf: ZLayer[KeyValueStore with IndexedStore with Configuration, Nothing, ZFlowExecutor] =
-    ZLayer.makeSome[KeyValueStore with IndexedStore with Configuration, ZFlowExecutor](
+  val defaultProtobuf
+    : ZLayer[KeyValueStore with IndexedStore with PersistentState with Configuration, Throwable, ZFlowExecutor] =
+    ZLayer.makeSome[KeyValueStore with IndexedStore with PersistentState with Configuration, ZFlowExecutor](
       ZLayer.succeed(serialization.protobuf),
       default
     )
 
-  val defaultInMemoryJson: ZLayer[Configuration, Nothing, ZFlowExecutor] =
+  val defaultInMemoryJson: ZLayer[Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
       ZLayer.succeed(serialization.json),
+      PersistentState.snapshotOnly,
       default
     )
 
-  val defaultInMemoryProtobuf: ZLayer[Configuration, Nothing, ZFlowExecutor] =
+  val defaultInMemoryProtobuf: ZLayer[Configuration, Throwable, ZFlowExecutor] =
     ZLayer.makeSome[Configuration, ZFlowExecutor](
       KeyValueStore.inMemory,
       IndexedStore.inMemory,
       ZLayer.succeed(serialization.protobuf),
+      PersistentState.snapshotOnly,
       default
     )
 }

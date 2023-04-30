@@ -16,6 +16,7 @@
 
 package zio.flow.runtime.internal.executor
 
+import zio.flow.runtime.internal.PersistentState
 import zio.{Chunk, Duration, ZNothing, durationInt}
 import zio.flow.{ZFlow, _}
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
@@ -23,8 +24,10 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 
 object RestartedFlowsSpec extends PersistentExecutorBaseSpec {
-  override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+  override def flowSpec: Spec[
+    TestEnvironment with IndexedStore with DurableLog with KeyValueStore with PersistentState with Configuration,
+    Any
+  ] =
     suite("Restarted flows")(
       testRestartFlowAndLogs("log-|-log") { break =>
         for {

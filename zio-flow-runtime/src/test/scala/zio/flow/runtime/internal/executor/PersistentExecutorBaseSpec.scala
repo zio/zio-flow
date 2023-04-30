@@ -20,7 +20,7 @@ import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow._
 import zio.flow.mock.MockedOperation
 import zio.flow.runtime.internal._
-import zio.flow.runtime._
+import zio.flow.runtime.{serialization, _}
 import zio.schema.Schema
 import zio.test.{Live, Spec, TestClock, TestEnvironment, TestResult}
 import zio.{
@@ -53,18 +53,40 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
   private val counter      = new AtomicInteger(0)
   protected val unit: Unit = ()
 
-  def flowSpec: Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any]
+  def flowSpec: Spec[
+    TestEnvironment with IndexedStore with DurableLog with KeyValueStore with PersistentState with Configuration,
+    Any
+  ]
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
-    flowSpec
-      .provideSome[TestEnvironment](
-        IndexedStore.inMemory,
-        DurableLog.layer,
-        KeyValueStore.inMemory,
-        Configuration.inMemory,
-        Runtime.removeDefaultLoggers,
-        Runtime.addLogger(TestFlowLogger.filterLogLevel(_ >= LogLevel.Debug))
+    suite("Persistent executor tests")(
+      suite("Snapshot only")(
+        flowSpec
+          .provideSome[TestEnvironment](
+            IndexedStore.inMemory,
+            DurableLog.layer,
+            KeyValueStore.inMemory,
+            Configuration.inMemory,
+            PersistentState.snapshotOnly,
+            ZLayer.succeed(serialization.json),
+            Runtime.removeDefaultLoggers,
+            Runtime.addLogger(TestFlowLogger.filterLogLevel(_ >= LogLevel.Debug))
+          )
+      ),
+      suite("Journal and Snapshot")(
+        flowSpec
+          .provideSome[TestEnvironment](
+            IndexedStore.inMemory,
+            DurableLog.layer,
+            KeyValueStore.inMemory,
+            Configuration.inMemory,
+            PersistentState.journalAndSnapshot(afterEvery = Some(100), afterDuration = None),
+            ZLayer.succeed(serialization.json),
+            Runtime.removeDefaultLoggers,
+            Runtime.addLogger(TestFlowLogger.filterLogLevel(_ >= LogLevel.Debug))
+          )
       )
+    )
 
   protected def testFlowAndLogsExit[E: Schema, A: Schema](
     label: String,
@@ -100,7 +122,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
         fiber <-
           flow
             .evaluateTestPersistent(wfId, mock, gcPeriod)
-            .provideSomeLayer[DurableLog with KeyValueStore with Configuration](Runtime.addLogger(logger))
+            .provideSomeLayer[DurableLog with KeyValueStore with PersistentState with Configuration](
+              Runtime.addLogger(logger)
+            )
             .exit
             .fork
         flowResult <- periodicAdjustClock match {
@@ -193,7 +217,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
           for {
             fiber1 <- finalFlow
                         .evaluateTestPersistent(label)
-                        .provideSomeLayer[DurableLog with KeyValueStore with Configuration](Runtime.addLogger(logger))
+                        .provideSomeLayer[DurableLog with KeyValueStore with PersistentState with Configuration](
+                          Runtime.addLogger(logger)
+                        )
                         .fork
             _ <- ZIO.logDebug(s"Adjusting clock by 20s")
             _ <- TestClock.adjust(20.seconds)
@@ -205,7 +231,9 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
             logLines1 <- logQueue.takeAll
             fiber2 <- finalFlow
                         .evaluateTestPersistent(label)
-                        .provideSomeLayer[DurableLog with KeyValueStore with Configuration](Runtime.addLogger(logger))
+                        .provideSomeLayer[DurableLog with KeyValueStore with PersistentState with Configuration](
+                          Runtime.addLogger(logger)
+                        )
                         .fork
             _ <- ZIO.logDebug(s"Adjusting clock by 200s")
             _ <- TestClock.adjust(200.seconds)
@@ -256,13 +284,14 @@ trait PersistentExecutorBaseSpec extends ZIOFlowBaseSpec {
               ZFlow.waitTill(Instant.ofEpochSecond(100L)))
           val finalFlow = flow(break)
 
-          ZIO.scoped[Live with DurableLog with KeyValueStore with Configuration] {
+          ZIO.scoped[Live with DurableLog with KeyValueStore with PersistentState with Configuration] {
             for {
-              pair <- finalFlow
-                        .submitTestPersistent(label)
-                        .provideSomeLayer[Scope with DurableLog with KeyValueStore with Configuration](
-                          Runtime.addLogger(logger)
-                        )
+              pair <-
+                finalFlow
+                  .submitTestPersistent(label)
+                  .provideSomeLayer[Scope with DurableLog with KeyValueStore with PersistentState with Configuration](
+                    Runtime.addLogger(logger)
+                  )
               (executor, fiber) = pair
               _                <- ZIO.logDebug(s"Adjusting clock by 20s")
               _                <- TestClock.adjust(20.seconds)

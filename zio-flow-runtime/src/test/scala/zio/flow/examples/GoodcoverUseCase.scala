@@ -5,6 +5,7 @@ import zio.flow.operation.http
 import zio.flow.operation.http._
 import zio.flow._
 import zio.flow.mock.MockedOperation
+import zio.flow.runtime.internal.PersistentState
 import zio.flow.runtime.internal.executor.PersistentExecutorBaseSpec
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.schema.{DeriveSchema, Schema}
@@ -118,8 +119,10 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
 
   val policy: Remote[Policy] = Remote(Policy("DummyPolicy"))
 
-  override def flowSpec
-    : Spec[TestEnvironment with IndexedStore with DurableLog with KeyValueStore with Configuration, Any] =
+  override def flowSpec: Spec[
+    TestEnvironment with IndexedStore with DurableLog with KeyValueStore with PersistentState with Configuration,
+    Any
+  ] =
     suite("End to end goodcover use-case performed by in-memory executor")(
       suite("PolicyClaimStatus")(
         testFlow("PolicyClaimStatus", periodicAdjustClock = Some(1.second)) {

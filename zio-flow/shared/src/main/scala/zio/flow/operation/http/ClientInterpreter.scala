@@ -1,7 +1,6 @@
 package zio.flow.operation.http
 
-import zhttp.http.Response
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.http.{Client, Request, Response, URL, Version}
 import zio.{Chunk, ZIO}
 import zio.schema.codec.JsonCodec.JsonEncoder
 
@@ -10,15 +9,29 @@ import scala.collection.mutable
 private[http] object ClientInterpreter {
   def interpret[Input, Output](host: String)(
     api: API[Input, Output]
-  )(input: Input): ZIO[EventLoopGroup with ChannelFactory, HttpFailure, Response] = {
+  )(input: Input): ZIO[Client, HttpFailure, Response] = {
     val method = api.method.toZioHttpMethod
     val state  = new RequestState()
     parseUrl(api.requestInput, state)(input)
     val (url, headers, body) = state.result
-    val data                 = body.fold(zhttp.http.Body.empty)(zhttp.http.Body.fromChunk)
-    Client
-      .request(s"$host$url", method, zhttp.http.Headers(headers.toList), content = data)
-      .mapError(HttpFailure.FailedToSendRequest.apply)
+    val data                 = body.fold(zio.http.Body.empty)(zio.http.Body.fromChunk)
+    ZIO
+      .fromEither(URL.decode(s"$host$url"))
+      .flatMap { url =>
+        Client
+          .request(
+            Request(
+              url = url,
+              method = method,
+              headers =
+                zio.http.Headers(headers.toList.map { case (name, value) => zio.http.Header.Custom(name, value) }),
+              body = data,
+              version = Version.`HTTP/1.1`,
+              remoteAddress = None
+            )
+          )
+      }
+      .mapError(HttpFailure.FailedToSendRequest)
   }
 
   private[http] class RequestState {

@@ -16,13 +16,20 @@
 
 package zio.flow.server.flows
 
-import zhttp.http._
-import zio.flow.{FlowId, Remote}
+import zio.flow.{FlowId, Remote, RemoteVariableName}
 import zio.flow.runtime.{ExecutorError, ZFlowExecutor}
 import zio.flow.server.common.{Api, ErrorResponse}
-import zio.flow.server.flows.model.{GetAllResponse, PollResponse, StartRequest, StartResponse}
+import zio.flow.server.flows.model.{
+  GetAllResponse,
+  GetVariableResponse,
+  PollResponse,
+  SetVariableRequest,
+  StartRequest,
+  StartResponse
+}
 import zio.flow.server.templates.model.ZFlowTemplate
 import zio.flow.server.templates.service.Templates
+import zio.http._
 import zio.schema.codec.JsonCodec
 import zio.schema.{DynamicValue, Schema}
 import zio.{ZIO, ZLayer}
@@ -30,7 +37,7 @@ import zio.{ZIO, ZLayer}
 final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends Api {
 
   // Create HTTP route
-  val endpoint: HttpApp[Any, Nothing] =
+  val endpoint: App[Any] =
     Http
       .collectZIO[Request] {
         case req @ Method.POST -> !! / "flows" =>
@@ -179,22 +186,76 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .as(Response(status = Status.Ok))
                 .mapError(_.toException)
             }
+
+        case Method.GET -> !! / "flows" / uuid / "variables" / name =>
+          for {
+            flowId <- FlowId
+                        .make(uuid)
+                        .toZIO
+                        .mapError(new IllegalArgumentException(_))
+            variableName <- RemoteVariableName
+                              .make(name)
+                              .toZIO
+                              .mapError(new IllegalArgumentException(_))
+            result <- executor
+                        .getVariable(flowId, variableName)
+                        .mapError(_.toException)
+            response <- result match {
+                          case Some(dynamicValue) =>
+                            ZIO
+                              .fromEither(JsonCodec.jsonEncoder(Schema[DynamicValue]).toJsonAST(dynamicValue))
+                              .mapBoth(
+                                failure => new RuntimeException(s"Failed to encode variable value: $failure"),
+                                json =>
+                                  Response(body =
+                                    Body.fromCharSequence(
+                                      GetVariableResponse.codec
+                                        .encodeJson(GetVariableResponse(variableName, json), None)
+                                    )
+                                  )
+                              )
+                          case None =>
+                            ZIO.succeed(
+                              Response.status(Status.NotFound)
+                            )
+                        }
+          } yield response
+        case request @ Method.PUT -> !! / "flows" / uuid / "variables" / name =>
+          for {
+            flowId <- FlowId
+                        .make(uuid)
+                        .toZIO
+                        .mapError(new IllegalArgumentException(_))
+            variableName <- RemoteVariableName
+                              .make(name)
+                              .toZIO
+                              .mapError(new IllegalArgumentException(_))
+            setVariableRequest <- jsonCodecBody[SetVariableRequest](request)
+            value <- ZIO
+                       .fromEither(JsonCodec.jsonDecoder(Schema[DynamicValue]).fromJsonAST(setVariableRequest.value))
+                       .mapError(message =>
+                         new IllegalArgumentException(
+                           s"Failed to decode provided variable value: $message"
+                         )
+                       )
+            _ <- executor
+                   .setVariable(flowId, variableName, value)
+                   .mapError(_.toException)
+          } yield Response.ok
       }
-      .catchAll { error =>
-        Http.response(
-          jsonResponse(
-            ErrorResponse(error.getMessage),
-            error match {
-              case _: IllegalArgumentException => Status.BadRequest
-              case _                           => Status.InternalServerError
-            }
-          )
+      .mapError { error =>
+        jsonResponse(
+          ErrorResponse(error.getMessage),
+          error match {
+            case _: IllegalArgumentException => Status.BadRequest
+            case _                           => Status.InternalServerError
+          }
         )
       }
 }
 
 object FlowsApi {
-  def endpoint: ZIO[FlowsApi, Nothing, HttpApp[Any, Nothing]] = ZIO.serviceWith(_.endpoint)
+  def endpoint: ZIO[FlowsApi, Nothing, App[Any]] = ZIO.serviceWith(_.endpoint)
 
   val layer: ZLayer[ZFlowExecutor with Templates, Nothing, FlowsApi] =
     ZLayer {

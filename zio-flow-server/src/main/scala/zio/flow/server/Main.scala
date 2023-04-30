@@ -16,26 +16,23 @@
 
 package zio.flow.server
 
-import zhttp.http.Method._
-import zhttp.http._
-import zhttp.service.Server
 import zio._
 import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.netty.{NettyClientConfig, NettyHttpClient}
-import zio.config.typesafe.TypesafeConfigSource
-import zio.config.{ConfigDescriptor, ReadError}
+import zio.config.typesafe.TypesafeConfigProvider
 import zio.flow.Configuration
 import zio.flow.cassandra.{CassandraIndexedStore, CassandraKeyValueStore}
 import zio.flow.dynamodb.{DynamoDbIndexedStore, DynamoDbKeyValueStore}
 import zio.flow.rocksdb.{RocksDbIndexedStore, RocksDbKeyValueStore}
-import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor}
+import zio.flow.runtime.internal.{DefaultOperationExecutor, PersistentExecutor, PersistentState}
 import zio.flow.runtime.operation.http.HttpOperationPolicies
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, serialization}
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
 import zio.flow.server.flows.FlowsApi
 import zio.flow.server.templates.TemplatesApi
 import zio.flow.server.templates.service.KVStoreBasedTemplates
+import zio.http._
 import zio.logging.slf4j.bridge.Slf4jBridge
 import zio.metrics.MetricKeyType.Histogram
 import zio.metrics.connectors.prometheus
@@ -47,54 +44,41 @@ import java.nio.file.Paths
 object Main extends ZIOAppDefault {
 
   private val healthcheck =
-    Http.collect[Request] { case GET -> !! / "healthcheck" =>
+    Http.collect[Request] { case Method.GET -> !! / "healthcheck" =>
       Response(Status.Ok, body = Body.fromString("zio-flow-server is running"))
     }
 
   private val metrics =
-    Http.collectZIO[Request] { case GET -> !! / "metrics" =>
+    Http.collectZIO[Request] { case Method.GET -> !! / "metrics" =>
       ZIO.serviceWithZIO[PrometheusPublisher](_.get).map { doc =>
         Response(Status.Ok, body = Body.fromString(doc))
       }
     }
 
-  private def runServer(port: Int): ZIO[TemplatesApi with FlowsApi with PrometheusPublisher, Throwable, Unit] =
+  private def runServer: ZIO[Server with TemplatesApi with FlowsApi with PrometheusPublisher, Throwable, Unit] =
     for {
       templatesApi <- TemplatesApi.endpoint
       flowApi      <- FlowsApi.endpoint
       server        = healthcheck ++ metrics ++ templatesApi ++ flowApi
-      _            <- ZIO.logInfo(s"Starting server on port $port")
-      _            <- Server.start(port, server)
-      _            <- ZIO.logInfo(s"Started")
+      _            <- ZIO.logInfo(s"Starting server")
+      port         <- Server.install(server)
+      _            <- ZIO.logInfo(s"Started on port $port")
+      _            <- ZIO.never
     } yield ()
 
-  private def zioConfigSource(configSource: Option[java.nio.file.Path]): zio.config.ConfigSource =
+  private def zioConfigProvider(configSource: Option[java.nio.file.Path]): ConfigProvider =
     configSource match {
-      case Some(value) => TypesafeConfigSource.fromHoconFile(value.toFile)
-      case None        => TypesafeConfigSource.fromResourcePath
+      case Some(value) => TypesafeConfigProvider.fromHoconFile(value.toFile)
+      case None        => TypesafeConfigProvider.fromResourcePath()
     }
 
-  private def loadCommonAwsConfig(configSource: Option[java.nio.file.Path]): IO[ReadError[String], CommonAwsConfig] =
-    zio.config.read(
-      ConfigDescriptor.nested("aws") {
-        zio.aws.core.config.descriptors.commonAwsConfig
-      } from zioConfigSource(configSource)
-    )
-
-  private def loadNettyClientConfig(
-    configSource: Option[java.nio.file.Path]
-  ): IO[ReadError[String], NettyClientConfig] =
-    zio.config.read(
-      ConfigDescriptor.nested("aws-netty") {
-        zio.aws.netty.descriptors.nettyClientConfig
-      } from zioConfigSource(configSource)
-    )
-
-  private def dynamoDb(configSource: Option[java.nio.file.Path]): ZLayer[Any, Throwable, DynamoDb] =
-    // TODO: once zio-aws provides support for zio.Config use that
+  private def dynamoDb(
+    commonAwsConfig: CommonAwsConfig,
+    awsNettyConfig: NettyClientConfig
+  ): ZLayer[Any, Throwable, DynamoDb] =
     ZLayer.make[DynamoDb](
-      ZLayer(loadCommonAwsConfig(configSource)),
-      ZLayer(loadNettyClientConfig(configSource)),
+      ZLayer.succeed(commonAwsConfig),
+      ZLayer.succeed(awsNettyConfig),
       NettyHttpClient.configured(),
       AwsConfig.configured(),
       DynamoDb.live
@@ -103,8 +87,8 @@ object Main extends ZIOAppDefault {
       boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
     )
 
-  private def configured(config: ServerConfig, configSource: Option[java.nio.file.Path]): ZIO[Any, Throwable, Unit] =
-    runServer(config.port).provide(
+  private def configured(config: ServerConfig): ZIO[Any, Throwable, Unit] =
+    runServer.provide(
       Slf4jBridge.initialize,
       DefaultJvmMetrics.live.unit,
       TemplatesApi.layer,
@@ -118,13 +102,15 @@ object Main extends ZIOAppDefault {
         case BackendImplementation.InMemory  => KeyValueStore.inMemory
         case BackendImplementation.RocksDb   => RocksDbKeyValueStore.layer
         case BackendImplementation.Cassandra => CassandraKeyValueStore.layer
-        case BackendImplementation.DynamoDb  => dynamoDb(configSource) >>> DynamoDbKeyValueStore.layer
+        case BackendImplementation.DynamoDb =>
+          dynamoDb(config.commonAwsConfig, config.awsNettyClientConfig) >>> DynamoDbKeyValueStore.layer
       },
       config.indexedStore match {
         case BackendImplementation.InMemory  => IndexedStore.inMemory
         case BackendImplementation.RocksDb   => RocksDbIndexedStore.layer
         case BackendImplementation.Cassandra => CassandraIndexedStore.layer
-        case BackendImplementation.DynamoDb  => dynamoDb(configSource) >>> DynamoDbIndexedStore.layer
+        case BackendImplementation.DynamoDb =>
+          dynamoDb(config.commonAwsConfig, config.awsNettyClientConfig) >>> DynamoDbIndexedStore.layer
       },
       DurableLog.layer,
       DefaultOperationExecutor.layer,
@@ -133,20 +119,23 @@ object Main extends ZIOAppDefault {
         case SerializationFormat.Json     => ZLayer.succeed(serialization.json)
         case SerializationFormat.Protobuf => ZLayer.succeed(serialization.protobuf)
       },
-      PersistentExecutor.make(config.gcPeriod)
+      PersistentExecutor.make(config.gcPeriod),
+      PersistentState.configured(config.persisterConfig),
+      Server.configured()
     )
 
   override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] =
     for {
       confPath <- System.env("ZIO_FLOW_SERVER_CONFIG").map(_.map(Paths.get(_)))
-      _        <- DefaultServices.currentServices.locallyScopedWith(_.add(ServerConfig.fromTypesafe(confPath)))
+      _        <- DefaultServices.currentServices.locallyScopedWith(_.add(zioConfigProvider(confPath)))
       config   <- ZIO.config(ServerConfig.config)
       logging = Runtime.removeDefaultLoggers ++ Runtime.addLogger(
                   ZLogger.default.map(println(_)).filterLogLevel(_ >= config.logLevel)
                 ) ++ Runtime.setUnhandledErrorLogLevel(LogLevel.Error)
       _ <- logging {
              ZIO.logDebug(s"Loaded server configuration $config") *>
-               configured(config, confPath)
+               configured(config)
            }
+      _ <- ZIO.never
     } yield ()
 }

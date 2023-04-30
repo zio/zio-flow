@@ -1,7 +1,7 @@
 package zio.flow.operation.http
 
-import zhttp.http.Status
 import zio.flow.ActivityError
+import zio.http.Status
 import zio.schema.codec.DecodeError
 
 sealed trait HttpFailure {
