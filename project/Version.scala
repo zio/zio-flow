@@ -14,7 +14,7 @@ object Version {
   val cassandraJavaDriver  = "4.14.1.0"
   val rocksDbJni           = "8.0.0"
   val testContainers       = "0.40.15"
-  val zioHttp              = "3.0.0-RC1"
+  val zioHttp              = "3.0.0-RC2"
   val zioLogging           = "2.1.11"
   val zioMetricsConnectors = "2.0.8"
   val zioConfig            = "4.0.0-RC14"
