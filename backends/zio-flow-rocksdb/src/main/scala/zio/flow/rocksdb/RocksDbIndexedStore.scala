@@ -22,6 +22,7 @@ import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey}
 import zio.flow.rocksdb.metrics.MeteredTransactionDB
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
+import zio.rocksdb.iterator.{Direction, Position}
 import zio.rocksdb.{Transaction, TransactionDB}
 import zio.schema.codec.BinaryCodecs
 import zio.schema.codec.ProtobufCodec._
@@ -30,6 +31,7 @@ import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
+import java.util
 
 final case class RocksDbIndexedStore(
   rocksDB: TransactionDB,
@@ -101,14 +103,16 @@ final case class RocksDbIndexedStore(
     ZStream
       .fromZIO(getOrCreateNamespace(topic))
       .flatMap { cf =>
+        val untilEncoded = codecs.encode(until: Long).toArray
         for {
-          k <- ZStream.fromIterable(position to until)
           value <-
-            ZStream
-              .fromZIO(rocksDB.get(cf, codecs.encode(k).toArray))
-        } yield value.map(Chunk.fromArray)
+            rocksDB.newIterator(cf, Direction.Forward, Position.Target(codecs.encode(position: Long))).collectWhile {
+              case (key, value) if util.Arrays.compare(key, untilEncoded) <= 0 =>
+                Chunk.fromArray(value)
+
+            }
+        } yield value
       }
-      .collect { case Some(item) => item }
 
   override def delete(topic: String): IO[Throwable, Unit] =
     for {
