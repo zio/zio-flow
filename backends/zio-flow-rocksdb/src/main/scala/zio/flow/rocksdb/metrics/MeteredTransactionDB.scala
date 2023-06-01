@@ -102,6 +102,13 @@ case class MeteredTransactionDB(store: String, transactionalDb: TransactionDB) e
   override def write(writeOptions: WriteOptions, writeBatch: WriteBatch): Task[Unit] =
     metered("write")(transactionalDb.write(writeOptions, writeBatch))
 
+  override def newIterator(
+    cfHandle: ColumnFamilyHandle,
+    direction: Direction,
+    position: Position
+  ): stream.Stream[Throwable, (Array[Byte], Array[Byte])] =
+    transactionalDb.newIterator(cfHandle, direction, position)
+
   private def metered[R, E, A](operationName: String)(zio: ZIO[R, E, A]): ZIO[R, E, A] =
     zio @@ (rocksdbSuccess(store, operationName) >>> rocksdbFailure(store, operationName) >>> rocksdbLatency(
       store,
