@@ -4,7 +4,7 @@ object Version {
   val Scala3   = "3.2.1"
   val Silencer = "1.7.12"
 
-  val zio                  = "2.0.13"
+  val zio                  = "2.0.14"
   val zioNio               = "2.0.1"
   val zioAws               = "6.20.42.1"
   val zioPrelude           = "1.0.0-RC19"
@@ -13,7 +13,7 @@ object Version {
   val awsSdkV1             = "1.12.464"
   val cassandraJavaDriver  = "4.14.1.0"
   val rocksDbJni           = "8.0.0"
-  val testContainers       = "0.40.15"
+  val testContainers       = "0.40.16"
   val zioHttp              = "3.0.0-RC1"
   val zioLogging           = "2.1.11"
   val zioMetricsConnectors = "2.0.8"
