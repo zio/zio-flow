@@ -18,13 +18,15 @@ object BuildHelper {
       .loadFromReader(scala.io.Source.fromFile(".github/workflows/ci.yml").bufferedReader())
     val yaml = doc.asInstanceOf[JMap[String, JMap[String, JMap[String, JMap[String, JMap[String, JList[String]]]]]]]
     val list = yaml.get("jobs").get("test").get("strategy").get("matrix").get("scala").asScala
-    list.map(v => (v.split('.').take(2).mkString("."), v)).toMap
+    list.map { v =>
+      val vs = v.split('.'); val init = vs.take(vs(0) match { case "2" => 2; case _ => 1 }); (init.mkString("."), v)
+    }.toMap
   }
   val Scala212: String   = versions("2.12")
   val Scala213: String   = versions("2.13")
   val ScalaDotty: String = versions("3.3")
 
-  val SilencerVersion = "1.7.11"
+  val SilencerVersion = "1.7.12"
 
   private val stdOptions = Seq(
     "-deprecation",
@@ -141,7 +143,7 @@ object BuildHelper {
 
   def extraOptions(scalaVersion: String, optimize: Boolean) =
     CrossVersion.partialVersion(scalaVersion) match {
-      case Some((3, 0)) =>
+      case Some((3, _)) =>
         Seq(
           "-language:implicitConversions",
           "-Xignore-scala2-macros"
