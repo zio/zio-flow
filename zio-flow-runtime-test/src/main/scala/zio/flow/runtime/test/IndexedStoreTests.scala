@@ -104,6 +104,19 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             scannedChunk2.size == 0
           )
         }
+      },
+      test("scan all") {
+        ZIO.scoped[R with IndexedStore] {
+          for {
+            _            <- initializeDb
+            indexedStore <- ZIO.service[IndexedStore]
+            _ <- ZIO.foreach((0 until 10).toList)(i =>
+                   indexedStore.put("SomeTopic3", Chunk.fromArray(i.toString.getBytes()))
+                 )
+            scannedChunk <- indexedStore.scan("SomeTopic3", Index(4L), Index(Long.MaxValue)).runCollect
+            resultChunk   = scannedChunk.map(bytes => new String(bytes.toArray))
+          } yield assertTrue(resultChunk.toList.mkString(",") == "3,4,5,6,7,8,9")
+        }
       }
     ) @@ nondeterministic @@ sequential
 }

@@ -16,9 +16,10 @@
 
 package zio.flow.rocksdb
 
-import org.rocksdb.ColumnFamilyHandle
+import org.rocksdb.{ColumnFamilyHandle, ComparatorOptions}
+import org.rocksdb.util.BytewiseComparator
 import zio.constraintless.TypeList._
-import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey}
+import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey, bytesComparator}
 import zio.flow.rocksdb.metrics.MeteredTransactionDB
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
@@ -30,8 +31,8 @@ import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
 
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util
 
 final case class RocksDbIndexedStore(
   rocksDB: TransactionDB,
@@ -107,7 +108,7 @@ final case class RocksDbIndexedStore(
         for {
           value <-
             rocksDB.newIterator(cf, Direction.Forward, Position.Target(codecs.encode(position: Long))).collectWhile {
-              case (key, value) if util.Arrays.compare(key, untilEncoded) <= 0 =>
+              case (key, value) if bytesComparator.compare(ByteBuffer.wrap(key), ByteBuffer.wrap(untilEncoded)) <= 0 =>
                 Chunk.fromArray(value)
 
             }
@@ -169,4 +170,7 @@ object RocksDbIndexedStore {
 
   private lazy val codecs      = BinaryCodecs.make[String :: Long :: End]
   private lazy val positionKey = codecs.encode("POSITION").toArray
+
+  private lazy val bytesComparator = new BytewiseComparator(new ComparatorOptions)
+
 }
