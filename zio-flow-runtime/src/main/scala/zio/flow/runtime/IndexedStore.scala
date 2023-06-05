@@ -38,7 +38,7 @@ object IndexedStore {
     val max: Index     = Index(Long.MaxValue)
   }
 
-  implicit class IndexSyntax(private val index: Index) extends AnyVal {
+  implicit class IndexSyntax(index: Index) {
     def next: Index = Index(index + 1)
   }
 

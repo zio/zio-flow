@@ -3,7 +3,7 @@ package zio.flow.activities.twilio
 import zio.flow.Remote
 import zio.schema.{DeriveSchema, Schema}
 
-final case class ApplicationSid(value: String) extends AnyVal
+final case class ApplicationSid(value: String)
 
 object ApplicationSid {
   implicit val schema: Schema[ApplicationSid] = Schema[String].transform(ApplicationSid(_), _.value)

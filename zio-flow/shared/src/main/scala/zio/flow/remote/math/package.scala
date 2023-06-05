@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote
+import zio.flow._
 import zio.flow.remote.numeric._
 
 package object math {

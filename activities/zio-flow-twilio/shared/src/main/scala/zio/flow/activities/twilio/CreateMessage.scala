@@ -27,7 +27,8 @@ final case class CreateMessage(
 // TODO: contentRetention, addressRetention, scheduleType
 
 object CreateMessage {
-  implicit val schema = DeriveSchema.gen[CreateMessage]
+  def derivedSchema                          = DeriveSchema.gen[CreateMessage]
+  implicit val schema: Schema[CreateMessage] = derivedSchema
 
   val (
     to,
@@ -48,5 +49,5 @@ object CreateMessage {
     addressRetention,
     scheduleType
   ) =
-    Remote.makeAccessors[CreateMessage]
+    Remote.makeAccessors[CreateMessage](derivedSchema)
 }

@@ -63,6 +63,7 @@ lazy val root = project
 lazy val zioFlow = crossProject(JSPlatform, JVMPlatform)
   .in(file("zio-flow"))
   .settings(stdSettings("zio-flow"))
+  .settings(dottySettings)
   .settings(crossProjectSettings)
   .settings(buildInfoSettings("zio.flow"))
   .settings(
@@ -89,10 +90,11 @@ lazy val zioFlowJVM = zioFlow.jvm
 lazy val zioFlowRuntime = project
   .in(file("zio-flow-runtime"))
   .dependsOn(
-    zioFlowJVM % "compile->compile;test->test",
-    zioFlowTestJVM
+    zioFlowJVM,
+    zioFlowTestJVM % "test->compile"
   )
   .settings(stdSettings("zio-flow-runtime"))
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-http" % Version.zioHttp
@@ -110,6 +112,7 @@ lazy val zioFlowServer = project
     cassandra
   )
   .settings(stdSettings("zio-flow-server"))
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio"     %% "zio-http"                 % Version.zioHttp,
@@ -129,11 +132,13 @@ lazy val zioFlowTest = crossProject(JSPlatform, JVMPlatform)
   .in(file("zio-flow-test"))
   .settings(stdSettings("zio-flow-test"))
   .settings(crossProjectSettings)
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-test" % Version.zio
-    )
+    ) ++ commonTestDependencies.map(_ % Test)
   )
+  .settings(testFrameworks += zioTest)
   .dependsOn(zioFlow)
 
 lazy val zioFlowTestJS  = zioFlowTest.js
@@ -142,6 +147,7 @@ lazy val zioFlowTestJVM = zioFlowTest.jvm
 lazy val zioFlowRuntimeTest = project
   .in(file("zio-flow-runtime-test"))
   .settings(stdSettings("zio-flow-runtime-test"))
+  .settings(dottySettings)
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-test" % Version.zio
@@ -162,6 +168,7 @@ lazy val rocksdb = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-rocksdb"),
+    dottySettings,
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-rocksdb" % Version.zioRocksDb
@@ -185,6 +192,7 @@ lazy val cassandra = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-cassandra"),
+    dottySettings,
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "com.scylladb"  % "java-driver-core-shaded"   % Version.cassandraJavaDriver,
@@ -210,6 +218,7 @@ lazy val dynamodb = project
   .configs(IntegrationTest)
   .settings(
     stdSettings("zio-flow-dynamodb"),
+    dottySettings,
     Defaults.itSettings,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio-aws-dynamodb" % Version.zioAws,
@@ -231,11 +240,15 @@ lazy val twilio = crossProject(JSPlatform, JVMPlatform)
   .dependsOn(zioFlow, zioFlowTest % "test->compile")
   .settings(
     stdSettings("zio-flow-twilio"),
+    dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
-    ) ++ commonTestDependencies.map(_ % Test)
+      "dev.zio" %% "zio-schema-derivation" % Version.zioSchema
+    ) ++ commonTestDependencies.map(_ % Test) ++ {
+      if (scalaVersion.value == ScalaDotty) Seq()
+      else
+        Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided")
+    }
   )
 
 lazy val twilioJS  = twilio.js
@@ -246,11 +259,15 @@ lazy val sendgrid = crossProject(JSPlatform, JVMPlatform)
   .dependsOn(zioFlow, zioFlowTest % "test->compile")
   .settings(
     stdSettings("zio-flow-sendgrid"),
+    dottySettings,
     testFrameworks += zioTest,
     libraryDependencies ++= Seq(
-      "dev.zio"       %% "zio-schema-derivation" % Version.zioSchema,
-      "org.scala-lang" % "scala-reflect"         % scalaVersion.value % "provided"
-    ) ++ commonTestDependencies.map(_ % Test)
+      "dev.zio" %% "zio-schema-derivation" % Version.zioSchema
+    ) ++ commonTestDependencies.map(_ % Test) ++ {
+      if (scalaVersion.value == ScalaDotty) Seq()
+      else
+        Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided")
+    }
   )
 
 lazy val sendgridJS  = sendgrid.js

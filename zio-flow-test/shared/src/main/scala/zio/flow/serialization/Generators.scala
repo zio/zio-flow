@@ -17,6 +17,8 @@
 package zio.flow.serialization
 
 import zio.flow.Remote.UnboundRemoteFunction
+import zio.flow.operation.http
+import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
 import zio.flow.remote.numeric.{
   BinaryFractionalOperator,
   BinaryIntegralOperator,
@@ -30,6 +32,8 @@ import zio.flow.remote.numeric.{
   UnaryIntegralOperator,
   UnaryNumericOperator
 }
+import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
+import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
 import zio.flow.{
   Activity,
   ActivityError,
@@ -45,18 +49,15 @@ import zio.flow.{
   RemoteVariableReference,
   TransactionId,
   ZFlow,
-  regexSchema
+  ZFlowSyntax,
+  regexSchema,
+  remoteSyntax
 }
 import zio.schema._
 import zio.test.{Gen, Sized}
 import zio.{Duration, ZNothing, flow}
 
 import java.time.temporal.ChronoUnit
-import zio.flow.operation.http
-import zio.flow.remote.boolean.{BinaryBooleanOperator, UnaryBooleanOperator}
-import zio.flow.remote.text.{CharConversion, CharToCodeConversion, UnaryStringOperator}
-import zio.flow.remote.{BinaryOperators, RemoteConversions, RemoteOptic, UnaryOperators}
-
 import scala.util.matching.Regex
 
 trait Generators {
@@ -457,7 +458,7 @@ trait Generators {
         (numeric, gen) = pair
       } yield (
         RemoteConversions.StringToNumeric(numeric).asInstanceOf[RemoteConversions[Any, Any]],
-        gen.map(_.toString(numeric.schema))
+        gen.map(_.toRemoteString(numeric.schema))
       ),
       Gen.const(
         (RemoteConversions.StringToDuration.asInstanceOf[RemoteConversions[Any, Any]], Gen.string.map(Remote(_)))
@@ -857,11 +858,11 @@ trait Generators {
 
   lazy val genListToString: Gen[Sized, Remote[Any]] =
     for {
-      list  <- Gen.listOf(Gen.int)
+      list  <- Gen.listOf(Gen.string)
       start <- Gen.string
       sep   <- Gen.string
       end   <- Gen.string
-    } yield Remote.ListToString(Remote(list).map(_.toString), Remote(start), Remote(sep), Remote(end))
+    } yield Remote.ListToString(list, Remote(start), Remote(sep), Remote(end))
 
   lazy val genOpticGet: Gen[Sized, Remote[Any]] =
     Gen.oneOf(

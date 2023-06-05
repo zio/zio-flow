@@ -3,7 +3,7 @@ package zio.flow.activities.twilio
 import zio.flow.Remote
 import zio.schema.{DeriveSchema, Schema}
 
-final case class MessagingServiceSid(value: String) extends AnyVal
+final case class MessagingServiceSid(value: String)
 
 object MessagingServiceSid {
   implicit val schema: Schema[MessagingServiceSid] = Schema[String].transform(MessagingServiceSid(_), _.value)

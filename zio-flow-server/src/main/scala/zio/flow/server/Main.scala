@@ -17,6 +17,7 @@
 package zio.flow.server
 
 import zio._
+import zio.aws.core.aspects.ZLayerSyntax
 import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.netty.{NettyClientConfig, NettyHttpClient}
@@ -31,6 +32,7 @@ import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore, serialization}
 import zio.flow.server.ServerConfig.{BackendImplementation, SerializationFormat}
 import zio.flow.server.flows.FlowsApi
 import zio.flow.server.templates.TemplatesApi
+import zio.flow.server.templates.model.TemplateIdSyntax
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.http._
 import zio.logging.slf4j.bridge.Slf4jBridge

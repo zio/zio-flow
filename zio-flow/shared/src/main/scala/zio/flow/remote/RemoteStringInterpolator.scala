@@ -16,7 +16,7 @@
 
 package zio.flow.remote
 
-import zio.flow.Remote
+import zio.flow._
 
 final class RemoteStringInterpolator(val ctx: StringContext) extends AnyVal {
 

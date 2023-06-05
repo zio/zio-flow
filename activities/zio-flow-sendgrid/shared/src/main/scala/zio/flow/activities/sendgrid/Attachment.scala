@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class Attachment(
   content: String,
@@ -12,7 +12,8 @@ final case class Attachment(
 )
 
 object Attachment {
-  implicit val schema = DeriveSchema.gen[Attachment]
+  def derivedSchema                       = DeriveSchema.gen[Attachment]
+  implicit val schema: Schema[Attachment] = derivedSchema
 
-  val (content, typ, filename, disposition, content_id) = Remote.makeAccessors[Attachment]
+  val (content, typ, filename, disposition, content_id) = Remote.makeAccessors[Attachment](derivedSchema)
 }

@@ -43,7 +43,7 @@ object FractionalSpec extends RemoteSpecBase {
 
   private def fractionalTests[R, A: Schema](name: String, gen: Gen[R, A], gen11: Gen[R, A])(ops: FractionalOps[A])(
     implicit fractionalA: remote.numeric.Fractional[A]
-  ) =
+  ): Spec[R with RemoteContext with LocalContext, Nothing] =
     suite(name)(
       testOp[R, A]("sin", gen)(math.sin)(ops.sin),
       testOp[R, A]("cos", gen)(math.cos)(ops.cos),

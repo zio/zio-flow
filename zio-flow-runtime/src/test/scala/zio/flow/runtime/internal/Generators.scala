@@ -32,7 +32,7 @@ object Generators {
   lazy val genScope: Gen[Sized, RemoteVariableScope] =
     Gen.suspend {
       Gen.oneOf(
-        genFlowId.map(RemoteVariableScope.TopLevel),
+        genFlowId.map(RemoteVariableScope.TopLevel.apply),
         (genFlowId <*> genScope).map { case (id, scope) => RemoteVariableScope.Fiber(id, scope) },
         (genTransactionId <*> genScope).map { case (id, scope) => RemoteVariableScope.Transactional(scope, id) }
       )

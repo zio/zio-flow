@@ -32,7 +32,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     DurableLog
       .subscribe(Topics.promise(promiseId), Index(0L))
       .runHead
-      .mapError(ExecutorError.LogError)
+      .mapError(ExecutorError.LogError.apply)
       .flatMap {
         case Some(data) =>
           ZIO
@@ -49,7 +49,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
   ): ZIO[DurableLog, ExecutorError, Boolean] =
     DurableLog
       .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Left(error)))
-      .mapBoth(ExecutorError.LogError, _ == 0L)
+      .mapBoth(ExecutorError.LogError.apply, _ == 0L)
 
   def succeed[Types <: TypeList](
     value: A
@@ -58,7 +58,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
   ): ZIO[DurableLog, ExecutorError, Boolean] =
     DurableLog
       .append(Topics.promise(promiseId), codecs.encode[Either[E, A]](Right(value)))
-      .mapBoth(ExecutorError.LogError, _ == 0L)
+      .mapBoth(ExecutorError.LogError.apply, _ == 0L)
 
   def poll[Types <: TypeList](codecs: BinaryCodecs[Types])(implicit
     ev: Either[E, A] IsElementOf Types
@@ -66,7 +66,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
     DurableLog
       .getAllAvailable(Topics.promise(promiseId), Index(0L))
       .runHead
-      .mapError(ExecutorError.LogError)
+      .mapError(ExecutorError.LogError.apply)
       .flatMap(optData =>
         ZIO.foreach(optData)(data =>
           ZIO
@@ -78,7 +78,7 @@ final case class DurablePromise[E, A](promiseId: PromiseId) {
   def delete(): ZIO[DurableLog, ExecutorError, Unit] =
     DurableLog
       .delete(Topics.promise(promiseId))
-      .mapError(ExecutorError.LogError)
+      .mapError(ExecutorError.LogError.apply)
 }
 
 object DurablePromise {

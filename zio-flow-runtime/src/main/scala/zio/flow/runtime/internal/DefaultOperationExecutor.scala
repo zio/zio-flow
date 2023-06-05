@@ -17,6 +17,7 @@
 package zio.flow.runtime.internal
 
 import zio.flow.Operation.{ContraMap, Http, Map}
+import zio.flow.operation.http.apiToOps
 import zio.flow.runtime.operation.http.{HttpOperationPolicies, HttpOperationPolicy}
 import zio.flow.{ActivityError, Operation, OperationExecutor, Remote, RemoteContext}
 import zio.http.Client
@@ -40,13 +41,22 @@ final case class DefaultOperationExecutor(
           .eval(f(Remote(input)(schema.asInstanceOf[Schema[Input]])))(inner.inputSchema)
           .mapError(executionError => ActivityError("Failed to transform input", Some(executionError.toException)))
           .flatMap { input2 =>
-            execute(input2, inner)
+            execute[Any, Result](input2, inner.asInstanceOf[Operation[Any, Result]])
           }
       case Map(inner, f, schema) =>
         execute(input, inner).flatMap { result =>
           RemoteContext
-            .eval(f(Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])))(schema)
-            .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
+            .eval[Any](
+              f.asInstanceOf[Remote.UnboundRemoteFunction[Any, Any]](
+                Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])
+              )
+            )(
+              schema.asInstanceOf[Schema[Any]]
+            )
+            .mapBoth(
+              executionError => ActivityError("Failed to transform output", Some(executionError.toException)),
+              _.asInstanceOf[Result]
+            )
         }
       case Http(host, api) =>
         val policy = policies.policyForHost(host)

@@ -4,7 +4,7 @@ import zio._
 import zio.flow._
 import zio.flow.runtime.internal.InMemoryRemoteContext
 import zio.flow.utils.RemoteAssertionSyntax.RemoteAssertionOps
-import zio.schema._
+import zio.schema.{DeriveSchema, Schema}
 import zio.test._
 
 object RemoteOpticSpec extends RemoteSpecBase {
@@ -12,8 +12,11 @@ object RemoteOpticSpec extends RemoteSpecBase {
   final case class Person(name: String, age: Int)
 
   object Person {
-    implicit val schema = DeriveSchema.gen[Person]
-    val (name, age)     = Remote.makeAccessors[Person]
+    def derivedPersonSchema = DeriveSchema.gen[Person]
+
+    implicit def schema: Schema[Person] = derivedPersonSchema
+
+    val (name, age) = Remote.makeAccessors[Person](derivedPersonSchema)
   }
 
   val genPerson: Gen[Any, Person] =
@@ -35,10 +38,15 @@ object RemoteOpticSpec extends RemoteSpecBase {
   case object Red   extends Color
 
   object Color {
-    implicit val schema     = DeriveSchema.gen[Color]
-    implicit val blueSchema = DeriveSchema.gen[Blue.type]
+    def derivedColorSchema = DeriveSchema.gen[Color]
 
-    val (blue, green, red) = Remote.makeAccessors[Color]
+    def derivedBlueSchema = DeriveSchema.gen[Blue.type]
+
+    implicit def schema: Schema[Color] = derivedColorSchema
+
+    implicit def blueSchema: Schema[Blue.type] = derivedBlueSchema
+
+    val (blue, green, red) = Remote.makeAccessors[Color](derivedColorSchema)
   }
 
   val genColor: Gen[Any, Color] =

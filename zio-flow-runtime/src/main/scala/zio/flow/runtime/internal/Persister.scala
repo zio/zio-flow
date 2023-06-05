@@ -18,6 +18,7 @@ package zio.flow.runtime.internal
 
 import zio.{Clock, Duration, NonEmptyChunk, Ref, ZIO}
 import zio.flow.FlowId
+import zio.flow.FlowIdSyntax
 import zio.flow.runtime.internal.PersistentExecutor.{State, StateChange}
 import zio.flow.runtime.serialization.ExecutorBinaryCodecs
 import zio.flow.runtime._

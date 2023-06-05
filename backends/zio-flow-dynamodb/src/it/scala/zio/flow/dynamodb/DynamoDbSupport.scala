@@ -24,7 +24,7 @@ import zio.aws.dynamodb.model._
 import org.testcontainers.containers.localstack.LocalStackContainer.{Service => AwsService}
 import zio.aws.dynamodb.model.primitives.{KeySchemaAttributeName, PositiveLongObject, TableName}
 import zio.aws.netty.NettyHttpClient
-import zio.{&, RLayer, Scope, ULayer, ZIO, ZLayer}
+import zio.{RLayer, Scope, ULayer, ZIO, ZLayer}
 
 /**
  * A helper module for LocalStack DynamoDB integration. It contains helper
@@ -34,7 +34,7 @@ object DynamoDbSupport {
 
   type DynamoDB = ULayer[DynamoDb]
 
-  lazy val dynamoDb: RLayer[AwsConfig & LocalStackV2Container, DynamoDb] =
+  lazy val dynamoDb: RLayer[AwsConfig with LocalStackV2Container, DynamoDb] =
     ZLayer.scoped {
       for {
         awsContainer <- ZIO.service[LocalStackV2Container]

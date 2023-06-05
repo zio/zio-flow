@@ -1,7 +1,7 @@
 package zio.flow.activities.twilio
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 sealed trait Status
 object Status {
@@ -17,7 +17,8 @@ object Status {
   case object receiving   extends Status
   case object received    extends Status
 
-  implicit val schema = DeriveSchema.gen[Status]
+  def derivedSchema                   = DeriveSchema.gen[Status]
+  implicit val schema: Schema[Status] = derivedSchema
 
   val (
     _accepted,
@@ -32,5 +33,5 @@ object Status {
     _receiving,
     _received
   ) =
-    Remote.makeAccessors[Status]
+    Remote.makeAccessors[Status](derivedSchema)
 }

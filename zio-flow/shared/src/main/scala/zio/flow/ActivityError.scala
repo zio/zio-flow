@@ -16,10 +16,26 @@
 
 package zio.flow
 
-import zio.schema.{DeriveSchema, Schema}
+import zio.schema.{Schema, TypeId}
 
 /** Failure of running an [[Activity]] */
-case class ActivityError(failure: String, details: Option[Throwable])
+final case class ActivityError(failure: String, details: Option[Throwable])
 object ActivityError {
-  implicit val schema: Schema[ActivityError] = DeriveSchema.gen
+  implicit lazy val schema: Schema[ActivityError] =
+    Schema.CaseClass2[String, Option[Throwable], ActivityError](
+      TypeId.parse("zio.flow.ActivityError"),
+      field01 = Schema.Field[ActivityError, String](
+        "failure",
+        Schema[String],
+        get0 = _.failure,
+        set0 = (a, b) => a.copy(failure = b)
+      ),
+      field02 = Schema.Field[ActivityError, Option[Throwable]](
+        "details",
+        Schema.option(schemaThrowable),
+        get0 = _.details,
+        set0 = (a, b) => a.copy(details = b)
+      ),
+      ActivityError.apply
+    )
 }

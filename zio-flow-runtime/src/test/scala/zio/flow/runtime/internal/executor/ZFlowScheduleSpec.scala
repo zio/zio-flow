@@ -20,7 +20,7 @@ import zio.flow._
 import zio.flow.runtime.internal.PersistentState
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.test.{Spec, TestEnvironment, assertTrue}
-import zio.{Duration, durationInt}
+import zio.{Duration, ZNothing, durationInt}
 
 import java.time.ZoneOffset
 
@@ -104,7 +104,7 @@ object ZFlowScheduleSpec extends PersistentExecutorBaseSpec {
         }
       ),
       suite("repeat")(
-        testFlowAndLogs("forever.maxCount", periodicAdjustClock = Some(30.seconds)) {
+        testFlowAndLogs[ZNothing, List[Int]]("forever.maxCount", periodicAdjustClock = Some(30.seconds)) {
           ZFlow.log("event").as(1).repeat(ZFlowSchedule.forever.maxCount(5))
         } { (result, logs) =>
           assertTrue(

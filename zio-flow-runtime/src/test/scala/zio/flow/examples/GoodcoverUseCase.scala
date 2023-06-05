@@ -2,6 +2,7 @@ package zio.flow.examples
 
 import zio.{Duration, ZNothing, durationInt}
 import zio.flow.operation.http
+import zio.flow.operation.http._
 import zio.flow._
 import zio.flow.mock.MockedOperation
 import zio.flow.runtime.internal.PersistentState

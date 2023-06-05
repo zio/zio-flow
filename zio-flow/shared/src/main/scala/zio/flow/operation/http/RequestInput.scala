@@ -27,7 +27,7 @@ import zio.schema.{CaseSet, DeriveSchema, Schema, TypeId}
  *   - Body: anything that has a schema
  */
 sealed trait RequestInput[A] extends Product with Serializable { self =>
-  val schema: Schema[A]
+  def schema: Schema[A]
 
   private[flow] def ++[B](that: RequestInput[B])(implicit zipper: Zipper[A, B]): RequestInput[zipper.Out] =
     RequestInput.ZipWith[A, B, zipper.Out](self, that, zipper)
@@ -55,7 +55,7 @@ object RequestInput {
     right: RequestInput[B],
     zipper: Zipper.WithOut[A, B, C]
   ) extends RequestInput[C] {
-    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
+    override lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -163,7 +163,7 @@ object Header {
   private[flow] final case class ZipWith[A, B, C](left: Header[A], right: Header[B], zipper: Zipper.WithOut[A, B, C])
       extends Header[C] {
 
-    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
+    override lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -193,7 +193,7 @@ object Header {
   }
 
   private[flow] case class Optional[A](headers: Header[A]) extends Header[Option[A]] {
-    lazy val schema: Schema[Option[A]] = Schema.option(headers.schema)
+    override lazy val schema: Schema[Option[A]] = Schema.option(headers.schema)
   }
 
   object Optional {
@@ -306,7 +306,7 @@ object Query {
 
   private[flow] final case class ZipWith[A, B, C](left: Query[A], right: Query[B], zipper: Zipper.WithOut[A, B, C])
       extends Query[C] {
-    val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
+    override val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {
@@ -336,7 +336,7 @@ object Query {
   }
 
   private[flow] case class Optional[A](params: Query[A]) extends Query[Option[A]] {
-    lazy val schema: Schema[Option[A]] = Schema.option(params.schema)
+    override lazy val schema: Schema[Option[A]] = Schema.option(params.schema)
   }
 
   object Optional {
@@ -403,7 +403,7 @@ object Path {
     Schema.Case("Path", schema[A], _.asInstanceOf[Path[A]], _.asInstanceOf[RequestInput[A]], _.isInstanceOf[Path[A]])
 
   private[flow] final case class Literal(string: String) extends Path[Unit] {
-    lazy val schema: Schema[Unit] = Schema.singleton(())
+    override lazy val schema: Schema[Unit] = Schema.singleton(())
   }
 
   object Literal {
@@ -439,7 +439,7 @@ object Path {
 
   private[flow] final case class ZipWith[A, B, C](left: Path[A], right: Path[B], zipper: Zipper.WithOut[A, B, C])
       extends Path[C] {
-    lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
+    override lazy val schema: Schema[C] = zipper.zipSchema(left.schema, right.schema)
   }
 
   object ZipWith {

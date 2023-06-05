@@ -801,7 +801,7 @@ object ZFlow {
       )
   }
 
-  final case object Random extends ZFlow[Any, Nothing, Double] {
+  case object Random extends ZFlow[Any, Nothing, Double] {
     override protected def substituteRec[B](f: Substitutions): ZFlow[Any, Nothing, Double] =
       Random
 
@@ -819,7 +819,7 @@ object ZFlow {
       )
   }
 
-  final case object RandomUUID extends ZFlow[Any, Nothing, UUID] {
+  case object RandomUUID extends ZFlow[Any, Nothing, UUID] {
     override protected def substituteRec[B](f: Substitutions): ZFlow[Any, Nothing, UUID] =
       RandomUUID
 

@@ -17,7 +17,7 @@
 package zio.flow.remote
 
 import zio.flow.remote.RemoteEitherSyntax.RemoteLeftProjection
-import zio.flow.Remote
+import zio.flow._
 
 import scala.util.Try
 

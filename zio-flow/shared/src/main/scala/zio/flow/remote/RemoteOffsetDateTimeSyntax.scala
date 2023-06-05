@@ -21,30 +21,31 @@ import zio.flow._
 import java.time.ZoneOffset
 
 final class RemoteOffsetDateTimeSyntax(val self: Remote[OffsetDateTime]) extends AnyVal {
+  private type Tup = (Int, Int, Int, Int, Int, Int, Int, ZoneOffset)
 
   def getYear: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._1
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._1
 
   def getMonthValue: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._2
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._2
 
   def getDayOfMonth: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._3
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._3
 
   def getHour: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._4
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._4
 
   def getMinute: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._5
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._5
 
   def getSecond: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._6
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._6
 
   def getNano: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._7
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._7
 
   def getOffset: Remote[ZoneOffset] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple))._8
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToTuple)): Remote[Tup])._8
 
   def toInstant: Remote[Instant] =
     Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.OffsetDateTimeToInstant))

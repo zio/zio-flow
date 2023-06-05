@@ -67,10 +67,10 @@ final class RemoteDurationSyntax(val self: Remote[Duration]) extends AnyVal {
     )(Remote.fail("Unsupported unit"))
 
   def getSeconds: Remote[Long] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple))._1
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple)): Remote[(Long, Int)])._1
 
   def getNano: Remote[Int] =
-    Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple))._2
+    (Remote.Unary(self, UnaryOperators.Conversion(RemoteConversions.DurationToTuple)): Remote[(Long, Int)])._2
 
   def isNegative: Remote[Boolean] =
     self.getSeconds < 0L

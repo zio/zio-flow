@@ -28,17 +28,25 @@ case class MockedOperationExecutor private (mocks: Ref[MockedOperation]) extends
   ): ZIO[RemoteContext, ActivityError, Result] =
     operation match {
       case ContraMap(inner, f, schema) =>
+        val transformed: Remote[Any] = f(Remote(input)(operation.inputSchema.asInstanceOf[Schema[Input]]))
         RemoteContext
-          .eval(f(Remote(input)(operation.inputSchema.asInstanceOf[Schema[Input]])))(schema)
+          .eval[Any](transformed)(schema.asInstanceOf[Schema[Any]])
           .mapError(executionError => ActivityError("Failed to transform input", Some(executionError.toException)))
           .flatMap { input2 =>
-            execute(input2, inner)
+            execute(input2, inner.asInstanceOf[Operation[Any, Result]])
           }
       case Map(inner, f, schema) =>
         execute(input, inner).flatMap { result =>
           RemoteContext
-            .eval(f(Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])))(schema)
-            .mapError(executionError => ActivityError("Failed to transform output", Some(executionError.toException)))
+            .eval[Any](
+              f.asInstanceOf[Remote.UnboundRemoteFunction[Any, Any]](
+                Remote(result)(inner.resultSchema.asInstanceOf[Schema[Any]])
+              )
+            )(schema.asInstanceOf[Schema[Any]])
+            .mapBoth(
+              executionError => ActivityError("Failed to transform output", Some(executionError.toException)),
+              _.asInstanceOf[Result]
+            )
         }
       case _ =>
         mocks.modify { mock =>

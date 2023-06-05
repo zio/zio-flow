@@ -18,6 +18,7 @@ package zio.flow.runtime.internal
 
 import zio.{Duration, IO, Ref, ZIO, ZLayer}
 import zio.flow.FlowId
+import zio.flow.FlowIdSyntax
 import zio.flow.runtime.IndexedStore.Index
 import zio.flow.runtime.internal.PersistentExecutor.{FlowResult, StateChange}
 import zio.flow.runtime.serialization.ExecutorBinaryCodecs

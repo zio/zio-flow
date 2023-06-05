@@ -638,7 +638,9 @@ final case class PersistentExecutor(
               inp <- RemoteContext.eval(input)(activity.inputSchema)
               result <- if (activity.check == Activity.checkNotSupported) {
                           for {
-                            output <- operationExecutor.execute(inp, activity.operation).either
+                            output <- operationExecutor
+                                        .execute(inp, activity.operation.asInstanceOf[Operation[Any, Any]])
+                                        .either
                             result <- output match {
                                         case Left(error) => failWith(DynamicValueHelpers.of(error))
                                         case Right(success) =>
@@ -646,7 +648,11 @@ final case class PersistentExecutor(
                                             Remote(success)(activity.resultSchema.asInstanceOf[Schema[Any]])
                                           onSuccess(
                                             remoteSuccess,
-                                            StateChange.addCompensation(activity.compensate.provide(remoteSuccess))
+                                            StateChange.addCompensation(
+                                              activity.compensate
+                                                .asInstanceOf[ZFlow[Any, ActivityError, Unit]]
+                                                .provide(remoteSuccess)
+                                            )
                                           )
                                       }
                           } yield result
@@ -901,7 +907,12 @@ final case class PersistentExecutor(
               stateVar   <- ZFlow.newVar[i.ValueA](tempVarName, initial)
               stateValue <- stateVar.get
               boolRemote <- ZFlow(predicate(stateValue))
-              stateValue <- iterate(step0, predicate, stateVar, boolRemote)
+              stateValue <- iterate(
+                              step0.asInstanceOf[UnboundRemoteFunction[i.ValueA, ZFlow[Any, i.ValueE, i.ValueA]]],
+                              predicate,
+                              stateVar,
+                              boolRemote
+                            )
             } yield stateValue
 
             ZIO.succeed(
@@ -926,7 +937,7 @@ final case class PersistentExecutor(
           watchPosition
         )
         .mapBoth(
-          ExecutorError.LogError,
+          ExecutorError.LogError.apply,
           raw => execEnv.codecs.decode[ScopedRemoteVariableName](raw)
         )
         .collect {
@@ -1686,7 +1697,7 @@ object PersistentExecutor {
         )
     }
 
-    private final case object PopContinuation extends StateChange {
+    private case object PopContinuation extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(stack = state.stack.tail)
 
@@ -1950,7 +1961,7 @@ object PersistentExecutor {
         )
     }
 
-    private final case object PopEnvironment extends StateChange {
+    private case object PopEnvironment extends StateChange {
       override def apply[E, A](state: State[E, A]): State[E, A] =
         state.copy(envStack = state.envStack.tail)
 

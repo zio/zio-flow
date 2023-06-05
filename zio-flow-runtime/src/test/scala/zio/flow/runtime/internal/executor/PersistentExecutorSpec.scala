@@ -18,7 +18,7 @@ package zio.flow.runtime.internal.executor
 
 import zio.flow.ZFlowAssertionSyntax.InMemoryZFlowAssertion
 import zio.flow.mock.MockedOperation
-import zio.flow.operation.http.API
+import zio.flow.operation.http._
 import zio.flow.runtime.{DurableLog, IndexedStore, KeyValueStore}
 import zio.flow._
 import zio.test.Assertion._
@@ -47,10 +47,10 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
     Any
   ] =
     suite("Operators in single run")(
-      testFlow("succeed")(ZFlow.succeed(12)) { result =>
+      testFlow[ZNothing, Int]("succeed")(ZFlow.succeed(12)) { result =>
         assertTrue(result == 12)
       },
-      testFlow("newVar") {
+      testFlow[ZNothing, Boolean]("newVar") {
         for {
           variable         <- ZFlow.newVar("variable1", 10)
           modifiedVariable <- variable.modify(isOdd)
@@ -60,14 +60,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         assertTrue(result == false)
 
       },
-      testFlow("foldM - success side") {
+      testFlow[ZNothing, Unit]("foldM - success side") {
         ZFlow
           .succeed(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
       } { result =>
         assertTrue(result == unit)
       },
-      testFlow("foldM - error side") {
+      testFlow[ZNothing, Unit]("foldM - error side") {
         ZFlow
           .fail(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
@@ -89,7 +89,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assertTrue(result == 22)
       },
-      testFlow("input") {
+      testFlow[ZNothing, Int]("input") {
         ZFlow.input[Int].provide(12)
       } { result =>
         assertTrue(result == 12)
@@ -104,7 +104,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assertTrue(result == 27)
       },
-      testFlow("provide") {
+      testFlow[ZNothing, Int]("provide") {
         {
           for {
             a <- ZFlow.succeed(15)
@@ -117,7 +117,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       test("now") {
         TestClock.adjust(5.seconds) *> {
           val flow = ZFlow.now
-          flow.evaluateTestPersistent("now").map { result =>
+          InMemoryZFlowAssertion[ZNothing, Instant](flow).evaluateTestPersistent("now").map { result =>
             assertTrue(result.getEpochSecond == 5L)
           }
         }
@@ -129,7 +129,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
                    _   <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 2L))
                    now <- ZFlow.now
                  } yield now
-          fiber  <- flow.evaluateTestPersistent("waitTill").fork
+          fiber  <- InMemoryZFlowAssertion[ZNothing, Instant](flow).evaluateTestPersistent("waitTill").fork
           _      <- TestClock.adjust(2.seconds)
           result <- fiber.join
         } yield assertTrue(result.getEpochSecond == 2L)
@@ -141,7 +141,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
                    _   <- ZFlow.sleep(2.seconds)
                    now <- ZFlow.now
                  } yield now
-          fiber  <- flow.evaluateTestPersistent("sleep").fork
+          fiber  <- InMemoryZFlowAssertion[ZNothing, Instant](flow).evaluateTestPersistent("sleep").fork
           _      <- TestClock.adjust(2.seconds)
           result <- fiber.join
         } yield assertTrue(result.getEpochSecond == 2L)
@@ -164,7 +164,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         assert = result => assertTrue(result == 111),
         mock = MockedOperation.Empty
       ),
-      testFlow("iterate") {
+      testFlow[ZNothing, Int]("iterate") {
         ZFlow.succeed(1).iterate[Any, ZNothing, Int](_ + 1)(_ !== 10)
       } { result =>
         assertTrue(result == 10)
@@ -200,7 +200,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
         )
       },
       suite("transactions")(
-        testFlow("nop transaction") {
+        testFlow[ZNothing, Int]("nop transaction") {
           ZFlow.transaction { _ =>
             ZFlow.succeed(100)
           }
@@ -540,7 +540,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           )
         }
       ),
-      testFlow("unwrap") {
+      testFlow[ZNothing, Int]("unwrap") {
         val flow = for {
           wrapped   <- ZFlow.input[ZFlow[Any, ZNothing, Int]]
           unwrapped <- ZFlow.unwrap(wrapped)
@@ -578,7 +578,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
                    flow2 <- ZFlow.waitTill(Instant.ofEpochSecond(curr + 3L)).as(2).fork
                    r1    <- flow1.await
                    r2    <- flow2.await
-                   _     <- ZFlow.log(r1.toString)
+                   _     <- ZFlow.log(r1.toRemoteString)
                  } yield (r1.toOption, r2.toOption)
           fiber   <- flow.evaluateTestPersistent("fork").fork
           _       <- TestClock.adjust(3.seconds)
@@ -611,7 +611,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
                    .waitTill(Instant.ofEpochSecond(curr + 2L))
                    .as(1)
                    .timeout(Duration.ofSeconds(1L))
-          fiber  <- flow.evaluateTestPersistent("timeout").fork
+          fiber  <- InMemoryZFlowAssertion[ZNothing, Option[Int]](flow).evaluateTestPersistent("timeout").fork
           _      <- TestClock.adjust(3.seconds)
           result <- fiber.join
         } yield assertTrue(result == None)
@@ -630,18 +630,18 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assertTrue(result == false)
       },
-      testFlowExit[String, Nothing]("die") {
+      testFlowExit[String, ZNothing]("die") {
         ZFlow.fail("test").orDie
       } { (result: Exit[String, Nothing]) =>
         assert(result)(dies(hasMessage(equalTo("Could not evaluate ZFlow"))))
       },
-      testFlow("cons") {
+      testFlow[ZNothing, List[Int]]("cons") {
         ZFlow(Remote(1))
           .map(Remote.Cons(Remote(List.empty[Int]), _))
       } { result =>
         assertTrue(result == List(1))
       },
-      testFlow("zflow fold") {
+      testFlow[ZNothing, String]("zflow fold") {
         ZFlow
           .succeed(1)
           .foldFlow(
@@ -651,7 +651,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == "succeeded")
       },
-      testFlow("list fold") {
+      testFlow[ZNothing, Int]("list fold") {
         ZFlow.succeed(
           Remote(List(1, 2, 3))
             .foldLeft(Remote(0))(_ + _)
@@ -659,7 +659,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == 6)
       },
-      testFlow("list fold zflows, ignore accumulator") {
+      testFlow[ZNothing, Int]("list fold zflows, ignore accumulator") {
         ZFlow.unwrap {
           Remote(List(1, 2, 3))
             .foldLeft(ZFlow.succeed(0)) { case (_, n) =>
@@ -669,7 +669,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == 3)
       },
-      testFlow("list fold zflows, ignore elem") {
+      testFlow[ZNothing, Int]("list fold zflows, ignore elem") {
         ZFlow.unwrap {
           Remote(List(1, 2, 3))
             .foldLeft(ZFlow.succeed(0)) { case (acc, _) =>
@@ -679,7 +679,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == 0)
       },
-      testFlow("unwrap list fold zflows") {
+      testFlow[ZNothing, Int]("unwrap list fold zflows") {
         val foldedFlow = Remote(List(1, 2))
           .foldLeft(ZFlow.succeed(0)) { case (flow, n) =>
             flow.flatMap { prevFlow =>
@@ -692,14 +692,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == 3)
       },
-      testFlow("unwrap list manually fold zflows") {
+      testFlow[ZNothing, Int]("unwrap list manually fold zflows") {
         ZFlow.unwrap {
           ZFlow.unwrap(Remote(ZFlow.unwrap(Remote(ZFlow.succeed(0))).map(_ + 1))).map(_ + 2)
         }
       } { res =>
         assertTrue(res == 3)
       },
-      testFlow("foreach") {
+      testFlow[ZNothing, List[Int]]("foreach") {
         ZFlow.foreach(Remote(List.range(1, 10)))(ZFlow(_))
       } { res =>
         assertTrue(res == List.range(1, 10))
@@ -720,7 +720,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { collected =>
         assertTrue(collected == List.range(1, 10))
       },
-      testFlow("remote recursion") {
+      testFlow[ZNothing, Int]("remote recursion") {
         ZFlow.unwrap {
           Remote.recurseSimple[ZFlow[Any, ZNothing, Int]](ZFlow.succeed(0)) { case (getValue, rec) =>
             (for {
@@ -736,7 +736,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { res =>
         assertTrue(res == 10)
       },
-      testFlow("flow recursion") {
+      testFlow[ZNothing, Int]("flow recursion") {
         ZFlow.recurseSimple[Any, ZNothing, Int](0) { case (value, rec) =>
           ZFlow.log("recursion step") *>
             ZFlow.ifThenElse(value === 10)(
@@ -813,24 +813,24 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           logs.filter(_.contains("!!LOOP!!")).length >= 3
         )
       },
-      testFlow("catchAll") {
+      testFlow[ZNothing, Int]("catchAll") {
         ZFlow.fail(10).catchAll { (error: Remote[Int]) =>
           ZFlow.succeed(error + 1)
         }
       } { result =>
         assertTrue(result == 11)
       },
-      testFlow("orElse") {
+      testFlow[ZNothing, Int]("orElse") {
         ZFlow.fail(10).orElse(ZFlow.succeed(11))
       } { result =>
         assertTrue(result == 11)
       },
-      testFlow("orElseEither - left") {
+      testFlow[ZNothing, Either[Int, String]]("orElseEither - left") {
         ZFlow.succeed(10).orElseEither(ZFlow.succeed("hello"))
       } { result =>
         assertTrue(result == Left(10))
       },
-      testFlow("orElseEither - right") {
+      testFlow[ZNothing, Either[Int, String]]("orElseEither - right") {
         ZFlow.fail(10).orElseEither(ZFlow.succeed("hello"))
       } { result =>
         assertTrue(result == Right("hello"))
@@ -851,7 +851,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assertTrue(result == 2)
       },
-      testFlow("unwrap remote") {
+      testFlow[ZNothing, String]("unwrap remote") {
         ZFlow.unwrapRemote(Remote(Remote("hello"))(Remote.schema[String]))
       } { result =>
         assertTrue(result == "hello")
@@ -866,12 +866,12 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
       } { result =>
         assert(result)(fails(equalTo(11)))
       },
-      testFlow("replicate") {
+      testFlow[ZNothing, Chunk[Int]]("replicate") {
         ZFlow.succeed(11).replicate(5)
       } { result =>
         assertTrue(result == Chunk(11, 11, 11, 11, 11))
       },
-      testFlow("random") {
+      testFlow[ZNothing, Double]("random") {
         ZFlow.random
       } { result =>
         assertTrue(result >= 0.0 && result <= 1.0)

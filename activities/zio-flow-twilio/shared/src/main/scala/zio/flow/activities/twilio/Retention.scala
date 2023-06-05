@@ -1,10 +1,11 @@
 package zio.flow.activities.twilio
 
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 sealed trait Retention
 object Retention {
   case object retain extends Retention
 
-  implicit val schema = DeriveSchema.gen[Retention]
+  def derivedSchema                      = DeriveSchema.gen[Retention]
+  implicit val schema: Schema[Retention] = derivedSchema
 }

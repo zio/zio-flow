@@ -33,7 +33,7 @@ object HttpRetryCondition {
       case "open-circuit-breaker" => Right(HttpRetryCondition.OpenCircuitBreaker)
       case other                  => Left(Config.Error.InvalidData(Chunk.empty, s"Unknown HTTP retry condition: $other"))
     }.orElse {
-      Config.int("for-specific-status").map(HttpRetryCondition.ForSpecificStatus)
+      Config.int("for-specific-status").map(HttpRetryCondition.ForSpecificStatus.apply)
     }.orElse {
       (Config.defer(config).nested("first") ++
         Config.defer(config).nested("second")).nested("or").map { case (first, second) =>

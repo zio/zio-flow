@@ -1,7 +1,7 @@
 package zio.flow.activities.sendgrid
 
 import zio.flow.Remote
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 final case class Personalization(
   from: Option[EmailAddress] = None,
@@ -17,7 +17,8 @@ final case class Personalization(
 )
 
 object Personalization {
-  implicit val schema = DeriveSchema.gen[Personalization]
+  def derivedSchema                            = DeriveSchema.gen[Personalization]
+  implicit val schema: Schema[Personalization] = derivedSchema
 
-  val (from, to, cc, bcc, subject, send_at) = Remote.makeAccessors[Personalization]
+  val (from, to, cc, bcc, subject, send_at) = Remote.makeAccessors[Personalization](derivedSchema)
 }
