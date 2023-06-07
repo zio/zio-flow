@@ -108,12 +108,20 @@ final case class RocksDbIndexedStore(
         for {
           value <-
             rocksDB.newIterator(cf, Direction.Forward, Position.Target(codecs.encode(position: Long))).collectWhile {
-              case (key, value) if bytesComparator.compare(ByteBuffer.wrap(key), ByteBuffer.wrap(untilEncoded)) <= 0 =>
-                Chunk.fromArray(value)
+              case (key, value)
+                  // Via byte ordering test if the key is before the end
+                  if bytesComparator.compare(ByteBuffer.wrap(key), ByteBuffer.wrap(untilEncoded)) <= 0 =>
+                if (
+                  bytesComparator
+                    .compare(ByteBuffer.wrap(key), ByteBuffer.wrap(positionKey)) != 0
+                )
+                  List(Chunk.fromArray(value))
+                else Nil
 
             }
         } yield value
       }
+      .flattenIterables
 
   override def delete(topic: String): IO[Throwable, Unit] =
     for {
