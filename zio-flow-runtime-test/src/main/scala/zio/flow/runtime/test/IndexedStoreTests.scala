@@ -114,9 +114,9 @@ final case class IndexedStoreTests[R](name: String, initializeDb: ZIO[R with Sco
             scanPosition  = 4L
             // Bigger than a byte
             _ <- ZIO.foreach((0 until maxValue).toList)(i =>
-                   indexedStore.put("SomeTopic3", Chunk.fromArray(i.toString.getBytes()))
+                   indexedStore.put("SomeTopic6", Chunk.fromArray(i.toString.getBytes()))
                  )
-            scannedChunk <- indexedStore.scan("SomeTopic3", Index(scanPosition), Index(Long.MaxValue)).runCollect
+            scannedChunk <- indexedStore.scan("SomeTopic6", Index(scanPosition), Index(Long.MaxValue)).runCollect
             resultChunk   = scannedChunk.map(bytes => new String(bytes.toArray))
           } yield assertTrue(
             resultChunk.toList

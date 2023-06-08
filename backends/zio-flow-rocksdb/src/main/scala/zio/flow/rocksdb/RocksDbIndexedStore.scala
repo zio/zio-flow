@@ -16,23 +16,22 @@
 
 package zio.flow.rocksdb
 
-import org.rocksdb.{ColumnFamilyHandle, ComparatorOptions}
 import org.rocksdb.util.BytewiseComparator
+import org.rocksdb.{ColumnFamilyHandle, ComparatorOptions}
 import zio.constraintless.TypeList._
-import zio.flow.rocksdb.RocksDbIndexedStore.{codecs, positionKey, bytesComparator}
+import zio.flow.rocksdb.RocksDbIndexedStore.{bytesComparator, codecs, positionKey}
 import zio.flow.rocksdb.metrics.MeteredTransactionDB
 import zio.flow.runtime.IndexedStore
 import zio.flow.runtime.IndexedStore.Index
 import zio.rocksdb.iterator.{Direction, Position}
 import zio.rocksdb.{Transaction, TransactionDB}
-import zio.schema.codec.BinaryCodecs
-import zio.schema.codec.ProtobufCodec._
+import zio.schema.codec.{BinaryCodec, BinaryCodecs, DecodeError}
 import zio.stm.TMap
-import zio.stream.ZStream
-import zio.{Chunk, IO, Promise, Scope, ZIO, ZLayer}
+import zio.stream.{ZPipeline, ZStream}
+import zio.{Cause, Chunk, IO, Promise, Scope, ZIO, ZLayer}
 
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.{BufferUnderflowException, ByteBuffer}
 
 final case class RocksDbIndexedStore(
   rocksDB: TransactionDB,
@@ -61,6 +60,7 @@ final case class RocksDbIndexedStore(
       position <-
         positionBytes match {
           case Some(positionBytes) =>
+            println(Chunk.fromArray(positionBytes))
             ZIO
               .fromEither(codecs.decode[Long](Chunk.fromArray(positionBytes)))
               .mapError(s => new Throwable(s))
@@ -181,4 +181,51 @@ object RocksDbIndexedStore {
 
   private lazy val bytesComparator = new BytewiseComparator(new ComparatorOptions)
 
+  implicit val longCodec: BinaryCodec[Long] =
+    new BinaryCodec[Long] {
+      override def decode(whole: Chunk[Byte]): Either[DecodeError, Long] =
+        try Right(ByteBuffer.wrap(whole.toArray).getLong)
+        catch {
+          case ex: BufferUnderflowException =>
+            Left(DecodeError.ReadError(Cause.fail(ex), "Not enough bytes to decode a long"))
+        }
+
+      override def streamDecoder: ZPipeline[Any, DecodeError, Byte, Long] =
+        ZPipeline.rechunk(4).mapChunksZIO((chunk: Chunk[Byte]) => ZIO.fromEither(decode(chunk)).map(Chunk.single))
+
+      override def encode(value: Long): Chunk[Byte] = {
+        val buffer = ByteBuffer.allocate(8)
+        buffer.putLong(value)
+        buffer.flip()
+        Chunk.fromByteBuffer(buffer)
+      }
+
+      override def streamEncoder: ZPipeline[Any, Nothing, Long, Byte] =
+        ZPipeline.map(long => encode(long)).flattenChunks
+    }
+
+  implicit val stringCodec: BinaryCodec[String] =
+    new BinaryCodec[String] {
+      override def decode(whole: Chunk[Byte]): Either[DecodeError, String] = {
+        val buffer = ByteBuffer.wrap(whole.toArray)
+        val l      = buffer.getInt
+        val bytes  = buffer.slice(4, l)
+        Right(new String(bytes.array(), StandardCharsets.UTF_8))
+      }
+
+      override def streamDecoder: ZPipeline[Any, DecodeError, Byte, String] =
+        ??? // TODO (not used now)
+
+      override def encode(value: String): Chunk[Byte] = {
+        val bytes  = value.getBytes(StandardCharsets.UTF_8)
+        val buffer = ByteBuffer.allocate(4 + bytes.length)
+        buffer.putInt(bytes.length)
+        buffer.put(bytes)
+        buffer.flip()
+        Chunk.fromByteBuffer(buffer)
+      }
+
+      override def streamEncoder: ZPipeline[Any, Nothing, String, Byte] =
+        ZPipeline.map(string => encode(string)).flattenChunks
+    }
 }
