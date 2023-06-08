@@ -60,7 +60,6 @@ final case class RocksDbIndexedStore(
       position <-
         positionBytes match {
           case Some(positionBytes) =>
-            println(Chunk.fromArray(positionBytes))
             ZIO
               .fromEither(codecs.decode[Long](Chunk.fromArray(positionBytes)))
               .mapError(s => new Throwable(s))
@@ -209,8 +208,7 @@ object RocksDbIndexedStore {
       override def decode(whole: Chunk[Byte]): Either[DecodeError, String] = {
         val buffer = ByteBuffer.wrap(whole.toArray)
         val l      = buffer.getInt
-        val bytes  = buffer.slice(4, l)
-        Right(new String(bytes.array(), StandardCharsets.UTF_8))
+        Right(new String(buffer.array().slice(4, l), StandardCharsets.UTF_8))
       }
 
       override def streamDecoder: ZPipeline[Any, DecodeError, Byte, String] =
