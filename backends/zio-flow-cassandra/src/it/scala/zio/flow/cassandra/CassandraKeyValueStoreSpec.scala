@@ -20,6 +20,7 @@ import com.datastax.oss.driver.api.core.CqlSession
 import zio._
 import zio.flow.cassandra.CassandraTestContainerSupport._
 import zio.flow.runtime.test.KeyValueStoreTests
+import zio.test.TestAspect.sequential
 import zio.test._
 
 object CassandraKeyValueStoreSpec extends CassandraSpec {
@@ -29,7 +30,7 @@ object CassandraKeyValueStoreSpec extends CassandraSpec {
       testUsing(ZIO.service[CassandraV3].map(_.session), "Cassandra V3"),
       testUsing(ZIO.service[CassandraV4].map(_.session), "Cassandra V4"),
       testUsing(ZIO.service[ScyllaDb].map(_.session), "ScyllaDB")
-    )
+    ) @@ sequential
 
   private def testUsing[R](database: ZIO[R, Nothing, CqlSession], label: String): Spec[TestEnvironment with R, Any] =
     KeyValueStoreTests(label, initializeDb = ZIO.unit).tests
