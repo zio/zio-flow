@@ -44,12 +44,12 @@ import java.nio.file.Paths
 object Main extends ZIOAppDefault {
 
   private val healthcheck =
-    Http.collect[Request] { case Method.GET -> !! / "healthcheck" =>
+    Http.collect[Request] { case Method.GET -> Root / "healthcheck" =>
       Response(Status.Ok, body = Body.fromString("zio-flow-server is running"))
     }
 
   private val metrics =
-    Http.collectZIO[Request] { case Method.GET -> !! / "metrics" =>
+    Http.collectZIO[Request] { case Method.GET -> Root / "metrics" =>
       ZIO.serviceWithZIO[PrometheusPublisher](_.get).map { doc =>
         Response(Status.Ok, body = Body.fromString(doc))
       }

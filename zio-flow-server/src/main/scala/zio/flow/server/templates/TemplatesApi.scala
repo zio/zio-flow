@@ -27,11 +27,11 @@ final case class TemplatesApi(templates: Templates) extends Api {
   val endpoint: App[Any] =
     Http
       .collectZIO[Request] {
-        case Method.GET -> !! / "templates" =>
+        case Method.GET -> Root / "templates" =>
           templates.all.runCollect
             .map(flowTemplates => jsonResponse(ZFlowTemplates(flowTemplates)))
 
-        case Method.GET -> !! / "templates" / templateId =>
+        case Method.GET -> Root / "templates" / templateId =>
           templates
             .get(TemplateId(templateId))
             .map { flow =>
@@ -42,13 +42,13 @@ final case class TemplatesApi(templates: Templates) extends Api {
               }
             }
 
-        case request @ Method.PUT -> !! / "templates" / templateId =>
+        case request @ Method.PUT -> Root / "templates" / templateId =>
           for {
             flowTemplate <- jsonBody[ZFlowTemplate](request)
             _            <- templates.put(TemplateId(templateId), flowTemplate)
           } yield Response.ok
 
-        case Method.DELETE -> !! / "templates" / templateId =>
+        case Method.DELETE -> Root / "templates" / templateId =>
           templates.delete(TemplateId(templateId)).as(Response.status(Status.NoContent))
 
       }

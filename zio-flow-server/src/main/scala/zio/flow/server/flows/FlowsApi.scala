@@ -40,7 +40,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
   val endpoint: App[Any] =
     Http
       .collectZIO[Request] {
-        case req @ Method.POST -> !! / "flows" =>
+        case req @ Method.POST -> Root / "flows" =>
           for {
             request <- jsonCodecBody[StartRequest](req)
             flowId  <- FlowId.newRandom
@@ -100,13 +100,13 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                  }
           } yield jsonResponse(StartResponse(flowId))
 
-        case Method.GET -> !! / "flows" =>
+        case Method.GET -> Root / "flows" =>
           for {
             flows <-
               executor.getAll.runCollect.mapError(failure => new RuntimeException(s"Failed to list flows: $failure"))
           } yield jsonResponse(GetAllResponse(flows.toMap))
 
-        case Method.GET -> !! / "flows" / uuid =>
+        case Method.GET -> Root / "flows" / uuid =>
           FlowId
             .make(uuid)
             .toZIO
@@ -138,7 +138,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
             }
             .map((response: PollResponse) => jsonCodecResponse(response))
 
-        case Method.DELETE -> !! / "flows" / uuid =>
+        case Method.DELETE -> Root / "flows" / uuid =>
           FlowId
             .make(uuid)
             .toZIO
@@ -153,7 +153,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .mapError(_.toException)
             }
 
-        case Method.POST -> !! / "flows" / uuid / "pause" =>
+        case Method.POST -> Root / "flows" / uuid / "pause" =>
           FlowId
             .make(uuid)
             .toZIO
@@ -164,7 +164,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .as(Response(status = Status.Ok))
                 .mapError(_.toException)
             }
-        case Method.POST -> !! / "flows" / uuid / "resume" =>
+        case Method.POST -> Root / "flows" / uuid / "resume" =>
           FlowId
             .make(uuid)
             .toZIO
@@ -175,7 +175,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .as(Response(status = Status.Ok))
                 .mapError(_.toException)
             }
-        case Method.POST -> !! / "flows" / uuid / "abort" =>
+        case Method.POST -> Root / "flows" / uuid / "abort" =>
           FlowId
             .make(uuid)
             .toZIO
@@ -187,7 +187,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                 .mapError(_.toException)
             }
 
-        case Method.GET -> !! / "flows" / uuid / "variables" / name =>
+        case Method.GET -> Root / "flows" / uuid / "variables" / name =>
           for {
             flowId <- FlowId
                         .make(uuid)
@@ -220,7 +220,7 @@ final case class FlowsApi(executor: ZFlowExecutor, templates: Templates) extends
                             )
                         }
           } yield response
-        case request @ Method.PUT -> !! / "flows" / uuid / "variables" / name =>
+        case request @ Method.PUT -> Root / "flows" / uuid / "variables" / name =>
           for {
             flowId <- FlowId
                         .make(uuid)
