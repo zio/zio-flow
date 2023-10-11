@@ -24,6 +24,8 @@ import zio.flow.utils.RemoteAssertionSyntax._
 import zio.schema.Schema
 import zio.test.{Gen, Spec, TestSuccess, check}
 
+import scala.annotation.nowarn
+
 object NumericSpec extends RemoteSpecBase {
 
   override def spec =
@@ -56,7 +58,7 @@ object NumericSpec extends RemoteSpecBase {
       testOp[R, A]("max", gen, gen)(_ max _)(ops.max)
     )
 
-  private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
+  @nowarn private def testOp[R, A: Schema: Numeric](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     numericOp: (Remote[A], Remote[A]) => Remote[A]
   )(op: (A, A) => A): Spec[R with RemoteContext with LocalContext, Nothing] =
     test(name) {
@@ -65,7 +67,7 @@ object NumericSpec extends RemoteSpecBase {
       }
     }
 
-  private def testOp[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
+  @nowarn private def testOp[R, A: Schema: Numeric](name: String, gen: Gen[R, A])(
     numericOp: Remote[A] => Remote[A]
   )(op: A => A): Spec[R with RemoteContext with LocalContext, Nothing] =
     test(name) {

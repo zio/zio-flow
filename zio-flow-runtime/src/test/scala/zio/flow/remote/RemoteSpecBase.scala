@@ -24,6 +24,10 @@ trait RemoteSpecBase extends ZIOFlowBaseSpec {
   protected def remoteTest(name: String)(
     cases: ZIO[RemoteContext with LocalContext, Nothing, TestResult]*
   ): Spec[RemoteContext with LocalContext, Nothing] =
-    test(name)(ZIO.collectAll(cases.toList).map(TestResult.all(_: _*)))
+    test(name)(
+      ZIO
+        .collectAll(cases.toList)
+        .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
+    )
 
 }

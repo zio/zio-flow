@@ -23,9 +23,9 @@ import java.util.Locale
 private[flow] final case class LocaleParts(lang: String, country: Option[String], variant: Option[String]) {
   self =>
   def toJavaLocale: Either[String, Locale] = (country, variant) match {
-    case (Some(c), Some(v)) => Right(new Locale(lang, c, v))
-    case (Some(c), None)    => Right(new Locale(lang, c))
-    case (None, None)       => Right(new Locale(lang))
+    case (Some(c), Some(v)) => Right(new Locale.Builder().setLanguage(lang).setRegion(c).setVariant(v).build())
+    case (Some(c), None)    => Right(new Locale.Builder().setLanguage(lang).setRegion(c).build())
+    case (None, None)       => Right(new Locale.Builder().setLanguage(lang).build())
     case (None, Some(_))    => Left("failed to convert LocaleParts to a java.util.Locale")
   }
 }

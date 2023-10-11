@@ -11,6 +11,8 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.test.Assertion.equalTo
 import zio.test.{Spec, TestEnvironment, assertTrue}
 
+import scala.annotation.nowarn
+
 object GoodcoverUseCase extends PersistentExecutorBaseSpec {
 
   def setBoolVarAfterSleep(
@@ -137,7 +139,7 @@ object GoodcoverUseCase extends PersistentExecutorBaseSpec {
           } yield ()
         }(
           assert = { result =>
-            assertTrue(result == unit)
+            assertTrue(result == unit): @nowarn
           },
           mock = MockedOperation.Http[Policy, Boolean](
             urlMatcher = equalTo("getPolicyClaimStatus.com"),

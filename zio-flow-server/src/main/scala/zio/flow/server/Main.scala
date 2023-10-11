@@ -17,6 +17,7 @@
 package zio.flow.server
 
 import zio._
+import zio.aws.core.aspects.AwsCallAspect
 import zio.aws.core.config.{AwsConfig, CommonAwsConfig}
 import zio.aws.dynamodb.DynamoDb
 import zio.aws.netty.{NettyClientConfig, NettyHttpClient}
@@ -72,6 +73,11 @@ object Main extends ZIOAppDefault {
       case None        => TypesafeConfigProvider.fromResourcePath()
     }
 
+  private val awsMetrics: AwsCallAspect[Any] = zio.aws.core.aspects.callDuration(
+    prefix = "zioflow",
+    boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
+  )
+
   private def dynamoDb(
     commonAwsConfig: CommonAwsConfig,
     awsNettyConfig: NettyClientConfig
@@ -81,10 +87,7 @@ object Main extends ZIOAppDefault {
       ZLayer.succeed(awsNettyConfig),
       NettyHttpClient.configured(),
       AwsConfig.configured(),
-      DynamoDb.live
-    ) @@ zio.aws.core.aspects.callDuration(
-      prefix = "zioflow",
-      boundaries = Histogram.Boundaries.exponential(0.01, 2, 14)
+      zio.aws.core.aspects.ZLayerSyntax(DynamoDb.live) @@ awsMetrics
     )
 
   private def configured(config: ServerConfig): ZIO[Any, Throwable, Unit] =

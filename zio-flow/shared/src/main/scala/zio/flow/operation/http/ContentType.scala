@@ -16,7 +16,7 @@
 
 package zio.flow.operation.http
 
-import zio.schema.DeriveSchema
+import zio.schema.{DeriveSchema, Schema}
 
 sealed trait ContentType
 
@@ -24,5 +24,5 @@ object ContentType {
   case object json                    extends ContentType
   case object `x-www-form-urlencoded` extends ContentType
 
-  implicit val schema = DeriveSchema.gen[ContentType]
+  implicit val schema: Schema[ContentType] = DeriveSchema.gen[ContentType]
 }

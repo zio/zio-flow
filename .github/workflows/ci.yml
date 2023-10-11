@@ -15,7 +15,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout current branch
@@ -30,7 +30,7 @@ jobs:
         run: sbt fmtCheck
 
   mdoc:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout current branch
@@ -45,7 +45,7 @@ jobs:
         run: sbt compileDocs
 
   publishLocal:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout current branch
@@ -60,13 +60,13 @@ jobs:
         run: ./sbt +publishLocal
 
   test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.12.17', '2.13.8']
+        java: ['adopt@1.11', 'adopt@1.17']
+        scala: ['2.12.18', '2.13.12']
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v2.3.4
@@ -82,13 +82,13 @@ jobs:
         run: sbt ++${{ matrix.scala }}! test
 
   integrationTest:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.12.17', '2.13.8']
+        java: [ 'adopt@1.11', 'adopt@1.17' ]
+        scala: [ '2.12.18', '2.13.12' ]
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v2.3.4
@@ -104,7 +104,7 @@ jobs:
         run: sbt ++${{ matrix.scala }}! "IntegrationTest / test"
 
   publish:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     needs: [lint, test, integrationTest]
     if: github.event_name != 'pull_request'
     steps:

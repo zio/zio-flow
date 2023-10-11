@@ -112,13 +112,14 @@ lazy val zioFlowServer = project
   .settings(stdSettings("zio-flow-server"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"     %% "zio-http"                 % Version.zioHttp,
-      "dev.zio"     %% "zio-metrics-connectors"   % Version.zioMetricsConnectors,
-      "com.typesafe" % "config"                   % Version.config,
-      "dev.zio"     %% "zio-config"               % Version.zioConfig,
-      "dev.zio"     %% "zio-config-typesafe"      % Version.zioConfig,
-      "dev.zio"     %% "zio-logging"              % Version.zioLogging,
-      "dev.zio"     %% "zio-logging-slf4j-bridge" % Version.zioLogging
+      "dev.zio"     %% "zio-http"                          % Version.zioHttp,
+      "dev.zio"     %% "zio-metrics-connectors"            % Version.zioMetricsConnectors,
+      "dev.zio"     %% "zio-metrics-connectors-prometheus" % Version.zioMetricsConnectors,
+      "com.typesafe" % "config"                            % Version.config,
+      "dev.zio"     %% "zio-config"                        % Version.zioConfig,
+      "dev.zio"     %% "zio-config-typesafe"               % Version.zioConfig,
+      "dev.zio"     %% "zio-logging"                       % Version.zioLogging,
+      "dev.zio"     %% "zio-logging-slf4j-bridge"          % Version.zioLogging
     ) ++ commonTestDependencies.map(_ % Test),
     fork := true
   )

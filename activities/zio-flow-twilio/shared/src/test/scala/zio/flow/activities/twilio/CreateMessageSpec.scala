@@ -2,6 +2,7 @@ package zio.flow.activities.twilio
 
 import zio.Scope
 import zio.flow.test._
+import zio.schema.codec.JsonCodec
 import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.schema.meta.MetaSchema
 import zio.schema.{DynamicValue, Schema}
@@ -94,13 +95,18 @@ object CreateMessageSpec extends ZIOSpecDefault {
         val ast = CreateMessage.schema.ast
         val roundtripAst = JsonDecoder.decode(
           MetaSchema.schema,
-          new String(JsonEncoder.encode(MetaSchema.schema, ast).toArray, StandardCharsets.UTF_8)
+          new String(
+            JsonEncoder.encode(MetaSchema.schema, ast, JsonCodec.Config.default).toArray,
+            StandardCharsets.UTF_8
+          )
         )
         val roundtripAst2 =
           JsonDecoder.decode(
             MetaSchema.schema,
             new String(
-              JsonEncoder.encode(MetaSchema.schema, roundtripAst.toOption.get.toSchema.ast).toArray,
+              JsonEncoder
+                .encode(MetaSchema.schema, roundtripAst.toOption.get.toSchema.ast, JsonCodec.Config.default)
+                .toArray,
               StandardCharsets.UTF_8
             )
           )

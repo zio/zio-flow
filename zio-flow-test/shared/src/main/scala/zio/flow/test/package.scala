@@ -2,6 +2,7 @@ package zio.flow
 
 import zio.flow.operation.http.FormUrlEncodedEncoder
 import zio.schema.Schema
+import zio.schema.codec.JsonCodec
 import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.test.{TestResult, assertTrue}
 
@@ -17,7 +18,10 @@ package object test {
     assertTrue(
       JsonDecoder.decode(
         implicitly[Schema[A]],
-        new String(JsonEncoder.encode(implicitly[Schema[A]], value).toArray, StandardCharsets.UTF_8)
+        new String(
+          JsonEncoder.encode(implicitly[Schema[A]], value, JsonCodec.Config.default).toArray,
+          StandardCharsets.UTF_8
+        )
       ) == Right(value)
     )
 }

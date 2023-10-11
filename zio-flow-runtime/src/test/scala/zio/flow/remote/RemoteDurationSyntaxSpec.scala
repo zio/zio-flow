@@ -121,7 +121,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
               Remote(d).minus(l, ChronoUnit.NANOS) <-> d.minus(l, ChronoUnit.NANOS)
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
 
       }
     },
@@ -178,7 +178,7 @@ object RemoteDurationSyntaxSpec extends RemoteSpecBase {
               Remote(d).plus(l, ChronoUnit.NANOS) <-> d.plus(l, ChronoUnit.NANOS)
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
 
       }
     },

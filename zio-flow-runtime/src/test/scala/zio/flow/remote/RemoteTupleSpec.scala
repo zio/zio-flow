@@ -35,7 +35,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple2._2 <-> "A"
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
       },
       test("Tuple3") {
         val tuple3 = Remote((1, "A", true))
@@ -47,7 +47,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple3._3 <-> true
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
       },
       test("Tuple4") {
         val tuple4 = Remote((1, "A", true, 10.5))
@@ -60,7 +60,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple4._4 <-> 10.5
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
       },
       test("Tuple5") {
         val tuple5 = Remote((1, "A", true, 10.5, "X"))
@@ -74,7 +74,7 @@ object RemoteTupleSpec extends RemoteSpecBase {
               tuple5._5 <-> "X"
             )
           )
-          .map(TestResult.all(_: _*))
+          .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
       }
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory)
 
