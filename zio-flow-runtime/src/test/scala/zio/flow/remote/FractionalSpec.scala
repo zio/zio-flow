@@ -24,6 +24,7 @@ import zio.test.Assertion.{equalTo, hasField}
 import zio.test.{Gen, Spec, TestEnvironment, check}
 import zio.{Scope, ZLayer}
 
+import scala.annotation.nowarn
 import scala.util.{Failure, Success, Try}
 
 object FractionalSpec extends RemoteSpecBase {
@@ -79,7 +80,7 @@ object FractionalSpec extends RemoteSpecBase {
       testOp[R, A]("ieeeRemainder", gen, gen)(math.IEEEremainder)(ops.ieeeRemainder)
     )
 
-  private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
+  @nowarn private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, gen: Gen[R, A])(
     fractionalOp: Remote[A] => Remote[A]
   )(op: A => A): Spec[R with RemoteContext with LocalContext, Nothing] =
     test(name) {
@@ -96,7 +97,7 @@ object FractionalSpec extends RemoteSpecBase {
       }
     }
 
-  private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, genX: Gen[R, A], genY: Gen[R, A])(
+  @nowarn private def testOp[R, A: Schema: remote.numeric.Fractional](name: String, genX: Gen[R, A], genY: Gen[R, A])(
     fractionalOp: (Remote[A], Remote[A]) => Remote[A]
   )(op: (A, A) => A): Spec[R with RemoteContext with LocalContext, Nothing] =
     test(name) {

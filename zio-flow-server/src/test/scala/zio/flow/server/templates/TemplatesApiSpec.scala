@@ -23,6 +23,7 @@ import zio.flow.server.templates.model.{TemplateId, ZFlowTemplate, ZFlowTemplate
 import zio.flow.server.templates.service.KVStoreBasedTemplates
 import zio.http._
 import zio.schema.Schema
+import zio.schema.codec.JsonCodec
 import zio.schema.codec.JsonCodec.{JsonDecoder, JsonEncoder}
 import zio.test.{TestAspect, assertTrue}
 import zio.{ZIO, ZLayer}
@@ -59,7 +60,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request.put(
                               url = baseUrl.withPath(s"/templates/t1"),
                               body = Body.fromChunk(
-                                JsonEncoder.encode(Schema[ZFlowTemplate], template1)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template1, JsonCodec.Config.default)
                               )
                             )
                           )
@@ -67,7 +68,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request.put(
                               url = baseUrl.withPath(s"/templates/t2"),
                               body = Body.fromChunk(
-                                JsonEncoder.encode(Schema[ZFlowTemplate], template2)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template2, JsonCodec.Config.default)
                               )
                             )
                           )
@@ -100,7 +101,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request.put(
                               url = baseUrl.withPath(s"/templates/t1"),
                               body = Body.fromChunk(
-                                JsonEncoder.encode(Schema[ZFlowTemplate], template1)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template1, JsonCodec.Config.default)
                               )
                             )
                           )
@@ -108,7 +109,7 @@ object TemplatesApiSpec extends ApiSpecBase {
                             Request.put(
                               url = baseUrl.withPath(s"/templates/t2"),
                               body = Body.fromChunk(
-                                JsonEncoder.encode(Schema[ZFlowTemplate], template2)
+                                JsonEncoder.encode(Schema[ZFlowTemplate], template2, JsonCodec.Config.default)
                               )
                             )
                           )

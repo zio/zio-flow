@@ -2,6 +2,7 @@ package zio.flow.operation.http
 
 import zio.http.{Client, Request, Response, URL, Version}
 import zio.{Chunk, ZIO}
+import zio.schema.codec.JsonCodec
 import zio.schema.codec.JsonCodec.JsonEncoder
 
 import scala.collection.mutable
@@ -158,7 +159,7 @@ private[http] object ClientInterpreter {
   )(params: Params): Unit =
     body.contentType match {
       case ContentType.json =>
-        state.setBody(JsonEncoder.encode(body.schema, params), "application/json")
+        state.setBody(JsonEncoder.encode(body.schema, params, JsonCodec.Config.default), "application/json")
       case ContentType.`x-www-form-urlencoded` =>
         state.setBody(FormUrlEncodedEncoder.encode(body.schema)(params), "application/x-www-form-urlencoded")
     }

@@ -44,8 +44,9 @@ object ZFlowSerializationSpec extends ZIOSpecDefault with Generators {
         equalityWithCodec("Protobuf", protobufCodecs)
       ),
       test("ZFlow schema is serializable") {
-        val schema     = ZFlow.schema[Any, Any, Any]
-        val serialized = JsonEncoder.encode(FlowSchemaAst.schema, FlowSchemaAst.fromSchema(schema))
+        val schema = ZFlow.schema[Any, Any, Any]
+        val serialized =
+          JsonEncoder.encode(FlowSchemaAst.schema, FlowSchemaAst.fromSchema(schema), JsonCodec.Config.default)
         val deserialized =
           JsonDecoder.decode(FlowSchemaAst.schema, new String(serialized.toArray, StandardCharsets.UTF_8))
         val deserializedSchema = deserialized.map(_.toSchema)

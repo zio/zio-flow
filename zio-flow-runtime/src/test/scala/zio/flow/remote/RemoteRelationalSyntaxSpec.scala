@@ -42,7 +42,7 @@ object RemoteRelationalSyntaxSpec extends RemoteSpecBase {
                 (Remote(x) === Remote(y)) <-> (x == y)
               )
             )
-            .map(TestResult.all(_: _*))
+            .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
         }
       },
       test("String") {
@@ -58,7 +58,7 @@ object RemoteRelationalSyntaxSpec extends RemoteSpecBase {
                 (Remote(x) === Remote(y)) <-> (x == y)
               )
             )
-            .map(TestResult.all(_: _*))
+            .map(rs => TestResult.allSuccesses(rs.head, rs.tail: _*))
         }
       }
     ).provide(ZLayer(InMemoryRemoteContext.make), LocalContext.inMemory)

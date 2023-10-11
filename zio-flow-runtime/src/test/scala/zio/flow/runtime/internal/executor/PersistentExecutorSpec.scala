@@ -27,6 +27,7 @@ import zio._
 import zio.flow.runtime.internal.PersistentState
 
 import java.util.concurrent.TimeUnit
+import scala.annotation.nowarn
 
 object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
 
@@ -65,14 +66,14 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
           .succeed(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
       } { result =>
-        assertTrue(result == unit)
+        assertTrue(result == unit): @nowarn
       },
       testFlow("foldM - error side") {
         ZFlow
           .fail(15)
           .foldFlow(_ => ZFlow.unit, _ => ZFlow.unit)
       } { result =>
-        assertTrue(result == unit)
+        assertTrue(result == unit): @nowarn
       },
       testFlow("flatMap 1") {
         ZFlow
@@ -346,7 +347,7 @@ object PersistentExecutorSpec extends PersistentExecutorBaseSpec {
             _   <- fib1.await
           } yield ()
         }(
-          result => assertTrue(result == (())),
+          result => assertTrue(result == (())): @nowarn,
           mock =
             // First run (with input=1)
             MockedOperation.Http(

@@ -7,6 +7,8 @@ import zio.schema.{DeriveSchema, DynamicValue, Schema, TypeId}
 import zio.test.{Spec, TestEnvironment, assertTrue}
 import zio.{Chunk, Queue, ZIO, ZLayer}
 
+import scala.annotation.nowarn
+
 object CustomOperationExecutorSpec extends PersistentExecutorBaseSpec {
 
   final case class CustomOp(prefix: String)
@@ -38,7 +40,7 @@ object CustomOperationExecutorSpec extends PersistentExecutorBaseSpec {
             op <-
               ZIO.fromEither(operation.toTypedValue(CustomOp.schema)).mapError(failure => ActivityError(failure, None))
             _ <- queue.offer(op.prefix + input.asInstanceOf[String])
-          } yield ().asInstanceOf[Result]
+          } yield ().asInstanceOf[Result]: @nowarn
         case _ =>
           ZIO.fail(ActivityError("Unsupported operation", None))
       }
