@@ -17,6 +17,6 @@ object Version {
   val zioHttp              = "3.0.0-RC2"
   val zioLogging           = "2.1.11"
   val zioMetricsConnectors = "2.0.8"
-  val zioConfig            = "4.0.0-RC16"
+  val zioConfig            = "4.0.0"
   val config               = "1.4.2"
 }
